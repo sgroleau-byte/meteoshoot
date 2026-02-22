@@ -3242,7 +3242,7 @@
       const [hoveredItem, setHoveredItem] = useState(null);
       const navItems = [
         { id: 'todo', label: 'PROJETS', icon: '☀︎' }, 
-        { id: 'retouching', label: 'RETOUCHE', icon: '✎' }, 
+        { id: 'retouching', label: 'EDITION', icon: '✎' }, 
         { id: 'preferences', label: 'PREFS', icon: '⚙' }
       ];
 
@@ -3286,58 +3286,42 @@
 
       if (isMobile) {
         return (
-          <nav className="mobile-bottom-nav fixed bottom-0 left-0 right-0 z-40 flex items-center justify-center" 
+          <nav className="mobile-bottom-nav fixed bottom-0 left-0 right-0 z-40" 
             style={{ 
-              background: 'transparent',
-              padding: '0 0 14px',
-              pointerEvents: 'none'
-            }}>
-            <div style={{
+              height: '43px',
+              background: 'rgba(20,24,26,0.4)',
+              backdropFilter: 'blur(20px) saturate(1.3)',
+              WebkitBackdropFilter: 'blur(20px) saturate(1.3)',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              padding: '10px 14px',
-              borderRadius: '100px',
-              background: 'rgba(20,24,26,0.15)',
-              backdropFilter: 'blur(5px) saturate(1.3)',
-              WebkitBackdropFilter: 'blur(5px) saturate(1.3)',
-              border: 'none',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.4), inset 0 -1px 0 rgba(255,255,255,0.2), inset 0 2px 6px rgba(255,255,255,0.15), inset 0 -2px 6px rgba(255,255,255,0.08), inset 2px 0 4px rgba(255,255,255,0.08), inset -2px 0 4px rgba(255,255,255,0.08), 0 4px 16px rgba(0,0,0,0.35), 0 1px 4px rgba(0,0,0,0.2)',
-              pointerEvents: 'auto',
-              position: 'relative',
-              overflow: 'hidden'
+              paddingBottom: 'env(safe-area-inset-bottom)'
             }}>
-              {/* Animated glow spot that moves along border with scroll */}
-              <div ref={glowRef} style={{
-                position: 'absolute', inset: 0, borderRadius: '100px',
-                pointerEvents: 'none', zIndex: 0,
-                boxShadow: 'inset 0 0 12px 2px rgba(255,255,255,0.3)',
-                WebkitMaskImage: 'radial-gradient(circle 60px at var(--gx, 0%) var(--gy, 0%), black 0%, transparent 70%)',
-                maskImage: 'radial-gradient(circle 60px at var(--gx, 0%) var(--gy, 0%), black 0%, transparent 70%)',
-                transition: 'none'
-              }}/>
-              {/* + button - always present to maintain pill width, invisible on non-todo */}
-              <button
-                onClick={view === 'todo' ? onAddProject : undefined}
-                style={{
-                  background: view === 'todo' ? 'rgba(216,49,82,0.8)' : 'transparent',
-                  border: 'none',
-                  borderRadius: '100px',
-                  width: '42px', height: '42px',
-                  cursor: view === 'todo' ? 'pointer' : 'default',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: view === 'todo' ? 'inset 0 0.5px 0 rgba(255,255,255,0.3)' : 'none',
-                  transition: 'all 0.3s cubic-bezier(0.25,1,0.5,1)',
-                  WebkitTapHighlightColor: 'transparent',
-                  flexShrink: 0,
-                  marginRight: '10px',
-                  position: 'relative', zIndex: 1,
-                  opacity: view === 'todo' ? 1 : 0,
-                  pointerEvents: view === 'todo' ? 'auto' : 'none'
-                }}
-              >
-                <span style={{ color: '#fff', fontSize: '24px', lineHeight: '1', fontWeight: '300' }}>+</span>
-              </button>
+            {/* + button with halo */}
+            <button
+              onClick={view === 'todo' ? onAddProject : undefined}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: view === 'todo' ? 'pointer' : 'default',
+                position: 'relative',
+                width: '60px',
+                height: '43px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginLeft: '23px',
+                flexShrink: 0,
+                opacity: view === 'todo' ? 1 : 0.3,
+                pointerEvents: view === 'todo' ? 'auto' : 'none',
+                WebkitTapHighlightColor: 'transparent'
+              }}
+            >
+              {/* Soft white halo */}
+              <div style={{ position: 'absolute', width: '70px', height: '70px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 40%, transparent 70%)', pointerEvents: 'none' }}/>
+              <span className="font-bebas-book" style={{ color: '#fff', fontSize: '57px', lineHeight: '1', position: 'relative', zIndex: 1, marginTop: '-4px' }}>+</span>
+            </button>
+            {/* Nav labels - centered between + and right edge */}
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '33px' }}>
               {navItems.map(item => {
                 const isActive = view === item.id;
                 return (
@@ -3345,23 +3329,19 @@
                     key={item.id}
                     onClick={() => onChangeView(item.id)}
                     style={{ 
-                      background: isActive ? 'linear-gradient(180deg, rgba(230,230,230,0.12) 0%, rgba(230,230,230,0.06) 100%)' : 'transparent',
+                      background: 'none',
                       border: 'none',
-                      borderRadius: '100px',
-                      padding: '10px 20px',
+                      padding: 0,
                       cursor: 'pointer',
-                      transition: 'all 0.3s cubic-bezier(0.25,1,0.5,1)',
-                      boxShadow: isActive ? 'inset 0 0.5px 0 rgba(255,255,255,0.25), inset 0 -0.5px 0 rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.12)' : 'none',
-                      WebkitTapHighlightColor: 'transparent',
-                      position: 'relative', zIndex: 1
+                      WebkitTapHighlightColor: 'transparent'
                     }}
                   >
                     <span 
-                      className="font-bebas-regular" 
+                      className="font-bebas-book" 
                       style={{ 
-                        fontSize: '13px',
-                        color: isActive ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)',
-                        letterSpacing: '0.08em',
+                        fontSize: '17px',
+                        color: isActive ? '#ffffff' : '#919b99',
+                        letterSpacing: '0.05em',
                         transition: 'color 0.3s'
                       }}
                     >
@@ -3371,7 +3351,7 @@
                 );
               })}
             </div>
-            <div style={{ position: 'absolute', bottom: '4px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>v261</div>
+            <div style={{ position: 'absolute', bottom: '4px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>v262</div>
           </nav>
         );
       }
@@ -4449,7 +4429,7 @@
           }}/>}
           {/* Soft radial gradient background - dark mode only */}
           <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', background: `radial-gradient(ellipse 60% 40% at ${plusRect ? plusRect.cx : window.innerWidth * 0.5}px ${plusRect && !selectedId ? plusRect.cy : 120}px, rgba(45,80,70,0.35) 0%, rgba(44,44,44,0) 70%)` }}/>
-          <div style={{ position: 'fixed', bottom: '80px', left: '12px', fontSize: '16px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', zIndex: 999, background: 'rgba(0,0,0,0.5)', padding: '3px 10px', borderRadius: '4px', pointerEvents: 'none' }}>v261</div>
+          <div style={{ position: 'fixed', bottom: '80px', left: '12px', fontSize: '16px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', zIndex: 999, background: 'rgba(0,0,0,0.5)', padding: '3px 10px', borderRadius: '4px', pointerEvents: 'none' }}>v262</div>
           {!(isMobile && showNew) && <Header onChangeView={changeView} onAddProject={() => setShowNew(true)}/>}
           <div style={{ 
             display: isMobile && showNew ? 'none' : 'block',
