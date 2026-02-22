@@ -1583,7 +1583,7 @@
             {/* Turquoise glow - center below card, only top visible */}
             <div style={{ position: 'absolute', left: '50%', bottom: '-350px', width: '700px', height: '500px', borderRadius: '50%', background: 'radial-gradient(ellipse 60% 45%, rgba(100,200,190,0.4) 0%, rgba(100,200,190,0.15) 40%, rgba(100,200,190,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translateX(-50%)', zIndex: 0 }}/>
             {/* Teal flare - bottom left */}
-            <div style={{ position: 'absolute', left: '-400px', bottom: '-400px', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(251,227,127,0.4) 0%, rgba(251,227,127,0.1) 40%, rgba(251,227,127,0) 70%)', pointerEvents: 'none', zIndex: 0 }}/>
+            <div style={{ position: 'absolute', left: '-430px', bottom: '-430px', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(13,116,124,0.6) 0%, rgba(13,116,124,0.2) 40%, rgba(13,116,124,0) 70%)', pointerEvents: 'none', zIndex: 0 }}/>
             <div ref={contentRef} style={{ transform: `translateX(${-tx}px)`, transition: ease, padding: '20px 24px', position: 'relative', willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
               {actionsOpen && (
                 <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} 
@@ -3371,7 +3371,7 @@
                 );
               })}
             </div>
-            <div style={{ position: 'absolute', bottom: '4px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>v259</div>
+            <div style={{ position: 'absolute', bottom: '4px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>v260</div>
           </nav>
         );
       }
@@ -3427,36 +3427,40 @@
       const [geoData, setGeoData] = useState(null);
       const [status, setStatus] = useState('loading');
 
-      /* ============================================================
-         TODO: REMETTRE LA GÉOLOCALISATION (navigator.geolocation)
-         La géoloc fonctionne en HTTPS (Vercel). En dev local HTTP,
-         iOS la bloque. Quand prêt pour la prod, remplacer le
-         useEffect ci-dessous par requestLocation() avec
-         navigator.geolocation.getCurrentPosition().
-         Le code original est dans les conversations Claude v118-v135.
-         ============================================================ */
+      // Géolocalisation active (HTTPS requis)
 
-      // TEMPORAIRE: Stoneham hardcodé pour le développement
       useEffect(() => {
-        (async () => {
-          try {
-            const lat = 46.8975;
-            const lng = -71.3664;
-            const cityName = 'Stoneham-et-Tewkesbury, QC';
-            const weather = await fetchWeather(lat, lng);
-            const today = weather.daily?.[0];
-            if (!today) { setStatus('error'); return; }
-            const nowH = new Date().getHours();
-            const currentHourly = weather.hourly?.find(h => new Date(h.time).getHours() === nowH);
-            const cloudcover = today.cloudcover ?? currentHourly?.cloudcover ?? null;
-            const icon = today.icon || (cloudcover !== null ? null : 'cloudy');
-            const weatherIcon = cloudcover !== null 
-              ? (cloudcover <= 10 ? 'sunny-bright' : cloudcover <= 20 ? 'sunny' : cloudcover <= 30 ? 'sunny-few-clouds' : cloudcover <= 40 ? 'mostly-sunny' : cloudcover <= 55 ? 'partly-cloudy' : cloudcover <= 70 ? 'mostly-cloudy' : cloudcover <= 85 ? 'cloudy-glimpse' : 'cloudy')
-              : (icon || 'cloudy');
-            setGeoData({ cityName, sunrise: today.sunrise, sunset: today.sunset, high: today.high, low: today.low, cloudcover, weatherIcon });
-            setStatus('done');
-          } catch(e) { console.error('GeoWeather error', e); setStatus('error'); }
-        })();
+        if (!navigator.geolocation) { setStatus('error'); return; }
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            try {
+              const lat = pos.coords.latitude;
+              const lng = pos.coords.longitude;
+              // Reverse geocode for city name
+              let cityName = 'Ma position';
+              try {
+                const geocoder = new google.maps.Geocoder();
+                const res = await new Promise((resolve, reject) => geocoder.geocode({ location: { lat, lng } }, (results, status) => status === 'OK' ? resolve(results) : reject(status)));
+                const city = res.find(r => r.types.includes('locality')) || res.find(r => r.types.includes('administrative_area_level_2')) || res[0];
+                if (city) cityName = city.formatted_address.split(',').slice(0, 2).join(',');
+              } catch(e) { console.log('Reverse geocode failed', e); }
+              const weather = await fetchWeather(lat, lng);
+              const today = weather.daily?.[0];
+              if (!today) { setStatus('error'); return; }
+              const nowH = new Date().getHours();
+              const currentHourly = weather.hourly?.find(h => new Date(h.time).getHours() === nowH);
+              const cloudcover = today.cloudcover ?? currentHourly?.cloudcover ?? null;
+              const icon = today.icon || (cloudcover !== null ? null : 'cloudy');
+              const weatherIcon = cloudcover !== null 
+                ? (cloudcover <= 10 ? 'sunny-bright' : cloudcover <= 20 ? 'sunny' : cloudcover <= 30 ? 'sunny-few-clouds' : cloudcover <= 40 ? 'mostly-sunny' : cloudcover <= 55 ? 'partly-cloudy' : cloudcover <= 70 ? 'mostly-cloudy' : cloudcover <= 85 ? 'cloudy-glimpse' : 'cloudy')
+                : (icon || 'cloudy');
+              setGeoData({ cityName, sunrise: today.sunrise, sunset: today.sunset, high: today.high, low: today.low, cloudcover, weatherIcon });
+              setStatus('done');
+            } catch(e) { console.error('GeoWeather error', e); setStatus('error'); }
+          },
+          (err) => { console.error('Geolocation denied', err); setStatus('error'); },
+          { enableHighAccuracy: false, timeout: 10000 }
+        );
       }, []);
 
       const now = new Date();
@@ -3505,9 +3509,9 @@
               <div style={{ position: 'relative', marginTop: '2px', display: 'inline-block', zoom: 0.5 }}>
                 <img src="imgProjet/sunsetsunrise.png" alt="" style={{ display: 'block', mixBlendMode: 'screen', opacity: 0.28 }}/>
                 {/* Yellow flare over sunrise (left circle) */}
-                <div style={{ position: 'absolute', left: '-5%', top: '-40px', width: '120px', height: '120px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,226,107,0.5) 0%, rgba(255,226,107,0.06) 55%, rgba(255,226,107,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none' }}/>
+                <div style={{ position: 'absolute', left: '-5%', top: '-40px', width: '120px', height: '120px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,226,107,0.2) 0%, rgba(255,226,107,0.06) 45%, rgba(255,226,107,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none' }}/>
                 {/* Orange flare over sunset (right circle) */}
-                <div style={{ position: 'absolute', right: '-2%', top: '-40px', width: '120px', height: '120px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(210,100,20,0.5) 0%, rgba(210,100,20,0.07) 55%, rgba(210,100,20,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none' }}/>
+                <div style={{ position: 'absolute', right: '-5%', top: '-40px', width: '120px', height: '120px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(210,100,20,0.25) 0%, rgba(210,100,20,0.07) 45%, rgba(210,100,20,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none' }}/>
               </div>
             </div>
             {/* Right side: icon + cloud + temps */}
@@ -4445,7 +4449,7 @@
           }}/>}
           {/* Soft radial gradient background - dark mode only */}
           <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', background: `radial-gradient(ellipse 60% 40% at ${plusRect ? plusRect.cx : window.innerWidth * 0.5}px ${plusRect && !selectedId ? plusRect.cy : 120}px, rgba(45,80,70,0.35) 0%, rgba(44,44,44,0) 70%)` }}/>
-          <div style={{ position: 'fixed', bottom: '80px', left: '12px', fontSize: '16px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', zIndex: 999, background: 'rgba(0,0,0,0.5)', padding: '3px 10px', borderRadius: '4px', pointerEvents: 'none' }}>v259</div>
+          <div style={{ position: 'fixed', bottom: '80px', left: '12px', fontSize: '16px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', zIndex: 999, background: 'rgba(0,0,0,0.5)', padding: '3px 10px', borderRadius: '4px', pointerEvents: 'none' }}>v260</div>
           {!(isMobile && showNew) && <Header onChangeView={changeView} onAddProject={() => setShowNew(true)}/>}
           <div style={{ 
             display: isMobile && showNew ? 'none' : 'block',
