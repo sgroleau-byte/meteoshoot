@@ -1,16 +1,11 @@
-const CACHE_VERSION = 255;
+const CACHE_VERSION = 256;
 const CACHE_NAME = 'meteoshoot-v' + CACHE_VERSION;
 
-// Only cache static assets (icons), NEVER cache HTML
 const STATIC_ASSETS = [
   'icon-180.png',
   'icon-192.png',
   'icon-512.png',
   'icon-1024.png',
-  'icon-180-dev.png',
-  'icon-192-dev.png',
-  'icon-512-dev.png',
-  'icon-1024-dev.png',
   'icon-180-dev.png',
   'icon-192-dev.png',
   'icon-512-dev.png',
@@ -40,7 +35,6 @@ self.addEventListener('message', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   
-  // HTML files: ALWAYS network, never cache
   if (e.request.mode === 'navigate' || url.pathname.endsWith('.html')) {
     e.respondWith(
       fetch(e.request, { cache: 'no-store' }).catch(() => caches.match(e.request))
@@ -48,7 +42,6 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   
-  // Static assets: cache-first
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request))
   );
