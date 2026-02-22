@@ -7,8 +7,14 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MeteoShoot">
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="manifest" href="manifest.json" id="manifest-link">
+  <link rel="apple-touch-icon" href="icon-180.png" id="touch-icon-link">
+  <script>
+    if (!location.hostname.match(/^meteoshoot\.vercel\.app$/)) {
+      document.getElementById('manifest-link').href = 'manifest-dev.json';
+      document.getElementById('touch-icon-link').href = 'icon-180-dev.png';
+    }
+  </script>
   <title>MeteoShoot | Shooting Planner</title>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
@@ -3344,7 +3350,7 @@
                 );
               })}
             </div>
-            <div style={{ position: 'absolute', bottom: '4px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>v246</div>
+            <div style={{ position: 'absolute', bottom: '4px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>v247</div>
           </nav>
         );
       }
@@ -4418,7 +4424,7 @@
           }}/>}
           {/* Soft radial gradient background - dark mode only */}
           <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', background: `radial-gradient(ellipse 60% 40% at ${plusRect ? plusRect.cx : window.innerWidth * 0.5}px ${plusRect && !selectedId ? plusRect.cy : 120}px, rgba(45,80,70,0.35) 0%, rgba(44,44,44,0) 70%)` }}/>
-          <div style={{ position: 'fixed', bottom: '80px', left: '12px', fontSize: '16px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', zIndex: 999, background: 'rgba(0,0,0,0.5)', padding: '3px 10px', borderRadius: '4px', pointerEvents: 'none' }}>v246</div>
+          <div style={{ position: 'fixed', bottom: '80px', left: '12px', fontSize: '16px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', zIndex: 999, background: 'rgba(0,0,0,0.5)', padding: '3px 10px', borderRadius: '4px', pointerEvents: 'none' }}>v247</div>
           {!(isMobile && showNew) && <Header onChangeView={changeView} onAddProject={() => setShowNew(true)}/>}
           <div style={{ 
             display: isMobile && showNew ? 'none' : 'block',

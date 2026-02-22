@@ -1,4 +1,4 @@
-const CACHE_VERSION = 253;
+const CACHE_VERSION = 254;
 const CACHE_NAME = 'meteoshoot-v' + CACHE_VERSION;
 
 // Only cache static assets (icons), NEVER cache HTML
@@ -6,7 +6,11 @@ const STATIC_ASSETS = [
   'icon-180.png',
   'icon-192.png',
   'icon-512.png',
-  'icon-1024.png'
+  'icon-1024.png',
+  'icon-180-dev.png',
+  'icon-192-dev.png',
+  'icon-512-dev.png',
+  'icon-1024-dev.png'
 ];
 
 self.addEventListener('install', (e) => {
