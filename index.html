@@ -18,15 +18,15 @@
         start_url: "/",
         display: "standalone",
         background_color: "#262c30",
-        theme_color: "#d3c56a",
+        theme_color: "#8d5c71",
         icons: [
-          { src: "icon-192-DevRose.png", sizes: "192x192", type: "image/png" },
-          { src: "icon-512-DevRose.png", sizes: "512x512", type: "image/png" }
+          { src: "icon-192-DevRose.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+          { src: "icon-512-DevRose.png", sizes: "512x512", type: "image/png", purpose: "any maskable" }
         ]
       });
       document.getElementById('manifest-link').href = URL.createObjectURL(new Blob([devManifest], {type: 'application/json'}));
       document.getElementById('touch-icon-link').href = 'icon-180-DevRose.png';
-      document.getElementById('themeColor').setAttribute('content', '#d3c56a');
+      document.getElementById('themeColor').setAttribute('content', '#8d5c71');
     } else {
       document.getElementById('manifest-link').href = 'manifest.json';
       document.getElementById('touch-icon-link').href = 'icon-180.png';
@@ -377,7 +377,7 @@
   setTimeout(function() {
     var splash = document.getElementById('splashScreen');
     splash.classList.add('splash-hidden');
-    document.getElementById('themeColor').setAttribute('content', location.hostname.match(/^meteoshoot\.vercel\.app$/) ? '#3d4a47' : '#d3c56a');
+    document.getElementById('themeColor').setAttribute('content', location.hostname.match(/^meteoshoot\.vercel\.app$/) ? '#3d4a47' : '#8d5c71');
     setTimeout(function() { splash.remove(); }, 900);
   }, 2500);
 </script>
@@ -3367,7 +3367,7 @@
                 );
               })}
             </div>
-            <div style={{ position: 'absolute', bottom: '4px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>v255</div>
+            <div style={{ position: 'absolute', bottom: '4px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>v257</div>
           </nav>
         );
       }
@@ -4441,7 +4441,7 @@
           }}/>}
           {/* Soft radial gradient background - dark mode only */}
           <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', background: `radial-gradient(ellipse 60% 40% at ${plusRect ? plusRect.cx : window.innerWidth * 0.5}px ${plusRect && !selectedId ? plusRect.cy : 120}px, rgba(45,80,70,0.35) 0%, rgba(44,44,44,0) 70%)` }}/>
-          <div style={{ position: 'fixed', bottom: '80px', left: '12px', fontSize: '16px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', zIndex: 999, background: 'rgba(0,0,0,0.5)', padding: '3px 10px', borderRadius: '4px', pointerEvents: 'none' }}>v255</div>
+          <div style={{ position: 'fixed', bottom: '80px', left: '12px', fontSize: '16px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', zIndex: 999, background: 'rgba(0,0,0,0.5)', padding: '3px 10px', borderRadius: '4px', pointerEvents: 'none' }}>v257</div>
           {!(isMobile && showNew) && <Header onChangeView={changeView} onAddProject={() => setShowNew(true)}/>}
           <div style={{ 
             display: isMobile && showNew ? 'none' : 'block',
