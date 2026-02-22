@@ -5,7 +5,10 @@ const STATIC_ASSETS = [
   'icon-180.png',
   'icon-192.png',
   'icon-512.png',
-  'icon-1024.png',
+  'icon-1024.png'
+];
+
+const DEV_ASSETS = [
   'icon-180-DevRose.png',
   'icon-192-DevRose.png',
   'icon-512-DevRose.png',
@@ -14,7 +17,13 @@ const STATIC_ASSETS = [
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(STATIC_ASSETS))
+    caches.open(CACHE_NAME).then(async cache => {
+      await cache.addAll(STATIC_ASSETS);
+      // Try dev icons but don't fail if 401
+      for (const asset of DEV_ASSETS) {
+        try { await cache.add(asset); } catch(e) {}
+      }
+    })
   );
   self.skipWaiting();
 });
