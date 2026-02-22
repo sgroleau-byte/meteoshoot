@@ -1,4 +1,4 @@
-const CACHE_VERSION = 259;
+const CACHE_VERSION = 260;
 const CACHE_NAME = 'meteoshoot-v' + CACHE_VERSION;
 
 const STATIC_ASSETS = [
@@ -6,10 +6,10 @@ const STATIC_ASSETS = [
   'icon-192.png',
   'icon-512.png',
   'icon-1024.png',
-  'icon-180-dev.png',
-  'icon-192-dev.png',
-  'icon-512-dev.png',
-  'icon-1024-dev.png'
+  'dev-icon-180.png',
+  'dev-icon-192.png',
+  'dev-icon-512.png',
+  'dev-icon-1024.png'
 ];
 
 self.addEventListener('install', (e) => {
