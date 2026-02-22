@@ -432,6 +432,8 @@
     const SUPABASE_URL = 'https://mioiieshhjqpakdlsfzw.supabase.co';
     const SUPABASE_KEY = 'sb_publishable__6Z9fMxmUTmIieh5ABFBEQ_sHKygy2S';
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const TBL_PROJECTS = isDev ? 'projects_dev' : 'projects';
+    const TBL_PREFS = isDev ? 'preferences_dev' : 'preferences';
 
     // Auth context
     const AuthContext = createContext();
@@ -700,13 +702,13 @@
           try {
             // Load projects from Supabase
             const { data: dbProjects, error: pErr } = await supabase
-              .from('projects')
+              .from(TBL_PROJECTS)
               .select('*')
               .order('sort_order', { ascending: true });
             
             // Load preferences
             const { data: dbPrefs, error: prErr } = await supabase
-              .from('preferences')
+              .from(TBL_PREFS)
               .select('*')
               .single();
 
@@ -732,7 +734,7 @@
               console.log('Migrating', projects.length, 'projects to Supabase...');
               for (let i = 0; i < projects.length; i++) {
                 const p = projects[i];
-                await supabase.from('projects').upsert({
+                await supabase.from(TBL_PROJECTS).upsert({
                   id: p.id, user_id: user.id, name: p.name, address: p.address,
                   lat: p.lat, lng: p.lng, status: p.status || 'todo',
                   mandates: p.mandates || [], orientation: p.orientation || [],
@@ -755,7 +757,7 @@
               });
             } else if (prefs.homeLat) {
               // Migrate prefs
-              await supabase.from('preferences').upsert({
+              await supabase.from(TBL_PREFS).upsert({
                 user_id: user.id, home_address: prefs.homeAddress,
                 home_lat: prefs.homeLat, home_lng: prefs.homeLng,
                 prep_time: prefs.prepTime || 60
@@ -804,7 +806,7 @@
         setPrefsState(p => {
           const next = {...p, ...update};
           if (user) {
-            supabase.from('preferences').upsert({
+            supabase.from(TBL_PREFS).upsert({
               user_id: user.id, home_address: next.homeAddress,
               home_lat: next.homeLat, home_lng: next.homeLng,
               prep_time: next.prepTime || 60
@@ -818,7 +820,7 @@
         const proj = { id: generateId(), name: data.name || 'Nouveau', address: data.address || '', lat: data.lat, lng: data.lng, mandates: data.mandates || [], orientation: data.orientation || [], deliveryDate: data.deliveryDate || null, isContest: data.isContest || false, status: ProjectStatus.TODO, notes: '', links: [], travelTime: data.travelTime || null, departureAddress: data.departureAddress || null, departureLat: data.departureLat || null, departureLng: data.departureLng || null, createdAt: new Date().toISOString(), shotAt: null };
         setProjects(p => [proj, ...p]);
         if (user) {
-          supabase.from('projects').insert({
+          supabase.from(TBL_PROJECTS).insert({
             id: proj.id, user_id: user.id, name: proj.name, address: proj.address,
             lat: proj.lat, lng: proj.lng, status: proj.status,
             mandates: proj.mandates, orientation: proj.orientation,
@@ -853,7 +855,7 @@
           if ('shotAt' in upd) dbUpd.shot_at = upd.shotAt;
           if ('completedAt' in upd) dbUpd.completed_at = upd.completedAt;
           if (Object.keys(dbUpd).length > 0) {
-            supabase.from('projects').update(dbUpd).eq('id', id)
+            supabase.from(TBL_PROJECTS).update(dbUpd).eq('id', id)
               .then(({ error }) => { if (error) console.error('Update error:', error); });
           }
         }
@@ -863,7 +865,7 @@
         setProjects(p => p.filter(x => x.id !== id));
         if (selectedId === id) setSelectedId(null);
         if (user) {
-          supabase.from('projects').delete().eq('id', id)
+          supabase.from(TBL_PROJECTS).delete().eq('id', id)
             .then(({ error }) => { if (error) console.error('Delete error:', error); });
         }
       };
@@ -872,12 +874,12 @@
         if (x.id !== id) return x;
         if (x.status === ProjectStatus.TODO) {
           const upd = { status: ProjectStatus.RETOUCHING, shotAt: new Date().toISOString() };
-          if (user) supabase.from('projects').update({ status: upd.status, shot_at: upd.shotAt }).eq('id', id);
+          if (user) supabase.from(TBL_PROJECTS).update({ status: upd.status, shot_at: upd.shotAt }).eq('id', id);
           return {...x, ...upd};
         }
         if (x.status === ProjectStatus.RETOUCHING) {
           const upd = { status: ProjectStatus.DONE, completedAt: new Date().toISOString() };
-          if (user) supabase.from('projects').update({ status: upd.status, completed_at: upd.completedAt }).eq('id', id);
+          if (user) supabase.from(TBL_PROJECTS).update({ status: upd.status, completed_at: upd.completedAt }).eq('id', id);
           return {...x, ...upd};
         }
         return x;
@@ -887,12 +889,12 @@
         if (x.id !== id) return x;
         if (x.status === ProjectStatus.DONE) {
           const upd = { status: ProjectStatus.RETOUCHING, completedAt: null };
-          if (user) supabase.from('projects').update({ status: upd.status, completed_at: null }).eq('id', id);
+          if (user) supabase.from(TBL_PROJECTS).update({ status: upd.status, completed_at: null }).eq('id', id);
           return {...x, ...upd};
         }
         if (x.status === ProjectStatus.RETOUCHING) {
           const upd = { status: ProjectStatus.TODO, shotAt: null };
-          if (user) supabase.from('projects').update({ status: upd.status, shot_at: null }).eq('id', id);
+          if (user) supabase.from(TBL_PROJECTS).update({ status: upd.status, shot_at: null }).eq('id', id);
           return {...x, ...upd};
         }
         return x;
@@ -909,7 +911,7 @@
           // Update sort_order in Supabase
           if (user) {
             newProjects.forEach((proj, i) => {
-              supabase.from('projects').update({ sort_order: i }).eq('id', proj.id);
+              supabase.from(TBL_PROJECTS).update({ sort_order: i }).eq('id', proj.id);
             });
           }
           return newProjects;
@@ -3367,7 +3369,7 @@
                 );
               })}
             </div>
-            <div style={{ position: 'absolute', bottom: '4px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>v257</div>
+            <div style={{ position: 'absolute', bottom: '4px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>v258</div>
           </nav>
         );
       }
@@ -4441,7 +4443,7 @@
           }}/>}
           {/* Soft radial gradient background - dark mode only */}
           <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', background: `radial-gradient(ellipse 60% 40% at ${plusRect ? plusRect.cx : window.innerWidth * 0.5}px ${plusRect && !selectedId ? plusRect.cy : 120}px, rgba(45,80,70,0.35) 0%, rgba(44,44,44,0) 70%)` }}/>
-          <div style={{ position: 'fixed', bottom: '80px', left: '12px', fontSize: '16px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', zIndex: 999, background: 'rgba(0,0,0,0.5)', padding: '3px 10px', borderRadius: '4px', pointerEvents: 'none' }}>v257</div>
+          <div style={{ position: 'fixed', bottom: '80px', left: '12px', fontSize: '16px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', zIndex: 999, background: 'rgba(0,0,0,0.5)', padding: '3px 10px', borderRadius: '4px', pointerEvents: 'none' }}>v258</div>
           {!(isMobile && showNew) && <Header onChangeView={changeView} onAddProject={() => setShowNew(true)}/>}
           <div style={{ 
             display: isMobile && showNew ? 'none' : 'block',
