@@ -3288,13 +3288,15 @@
         return (
           <nav className="mobile-bottom-nav fixed bottom-0 left-0 right-0 z-40" 
             style={{ 
-              height: '86px',
+              height: 'calc(86px + env(safe-area-inset-bottom))',
               background: 'rgba(20,24,26,0.4)',
               backdropFilter: 'blur(20px) saturate(1.3)',
               WebkitBackdropFilter: 'blur(20px) saturate(1.3)',
               display: 'flex',
-              alignItems: 'center',
-              paddingBottom: 'env(safe-area-inset-bottom)'
+              alignItems: 'stretch'
+            }}>
+            {/* Content wrapper - 86px centered, safe area below */}
+            <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: '86px' }}>
             }}>
             {/* + button with halo */}
             <button
@@ -3351,7 +3353,7 @@
                 );
               })}
             </div>
-            <div style={{ position: 'absolute', bottom: '4px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>v262</div>
+            </div>
           </nav>
         );
       }
