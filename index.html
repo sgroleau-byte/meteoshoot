@@ -251,7 +251,7 @@
     .newproj-label { font-size: 22px; color: rgba(255,255,255,0.35); margin-bottom: 6px; display: block; }
     .newproj-toggle { font-size: 20px; color: rgba(255,255,255,0.3); cursor: pointer; transition: color 0.15s ease; border: none; background: none; padding: 0; }
     .newproj-toggle.active { color: rgba(255,255,255,0.7); }
-    .newproj-actions { position: fixed; z-index: 52; opacity: 0; transition: opacity 0.2s ease; }
+    .newproj-actions { position: fixed; z-index: 63; opacity: 0; transition: opacity 0.2s ease; }
     .newproj-actions.open { opacity: 1; transition: opacity 0.3s ease 0.3s; }
     .newproj-actions button { font-size: 18px; color: rgba(255,255,255,0.6); background: none; border: none; cursor: pointer; transition: color 0.15s ease; }
     .newproj-actions button:hover { color: rgba(255,255,255,0.9); }
@@ -3350,7 +3350,7 @@
                 );
               })}
             </div>
-            <div style={{ position: 'absolute', bottom: '4px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>v247</div>
+            <div style={{ position: 'absolute', bottom: '4px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>v248</div>
           </nav>
         );
       }
@@ -4424,7 +4424,7 @@
           }}/>}
           {/* Soft radial gradient background - dark mode only */}
           <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', background: `radial-gradient(ellipse 60% 40% at ${plusRect ? plusRect.cx : window.innerWidth * 0.5}px ${plusRect && !selectedId ? plusRect.cy : 120}px, rgba(45,80,70,0.35) 0%, rgba(44,44,44,0) 70%)` }}/>
-          <div style={{ position: 'fixed', bottom: '80px', left: '12px', fontSize: '16px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', zIndex: 999, background: 'rgba(0,0,0,0.5)', padding: '3px 10px', borderRadius: '4px', pointerEvents: 'none' }}>v247</div>
+          <div style={{ position: 'fixed', bottom: '80px', left: '12px', fontSize: '16px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', zIndex: 999, background: 'rgba(0,0,0,0.5)', padding: '3px 10px', borderRadius: '4px', pointerEvents: 'none' }}>v248</div>
           {!(isMobile && showNew) && <Header onChangeView={changeView} onAddProject={() => setShowNew(true)}/>}
           <div style={{ 
             display: isMobile && showNew ? 'none' : 'block',
