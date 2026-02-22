@@ -244,7 +244,7 @@
     .newproj-plus { position: fixed; z-index: 61; line-height: 0.8; color: rgba(255,255,255,0.25); transition: left 0.55s cubic-bezier(0.16, 1, 0.3, 1), top 0.55s cubic-bezier(0.16, 1, 0.3, 1), font-size 0.55s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), filter 0.55s cubic-bezier(0.16, 1, 0.3, 1), color 0.3s ease, opacity 0.15s ease; }
     .newproj-panel { position: fixed; z-index: 62; border: 1px solid rgba(255,255,255,0.15); opacity: 0; transition: opacity 0.2s ease; }
     .newproj-panel.open { opacity: 1; transition: opacity 0.3s ease 0.25s; }
-    .newproj-plusblur { position: fixed; z-index: 51; pointer-events: none; backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); background: rgba(30,30,30,0.35); overflow: hidden; opacity: 0; transition: opacity 0.2s ease; }
+    .newproj-plusblur { position: fixed; z-index: 61; pointer-events: none; backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); background: rgba(30,30,30,0.35); overflow: hidden; opacity: 0; transition: opacity 0.2s ease; }
     .newproj-plusblur.open { opacity: 1; transition: opacity 0.3s ease 0.25s; }
     .newproj-panel input { background: transparent; border: 1px solid rgba(255,255,255,0.15); padding: 8px 12px; color: rgba(255,255,255,0.85); width: 100%; outline: none; font-size: 15px; }
     .newproj-panel input::placeholder { color: rgba(255,255,255,0.25); }
@@ -3350,7 +3350,7 @@
                 );
               })}
             </div>
-            <div style={{ position: 'absolute', bottom: '4px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>v249</div>
+            <div style={{ position: 'absolute', bottom: '4px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>v250</div>
           </nav>
         );
       }
@@ -4424,7 +4424,7 @@
           }}/>}
           {/* Soft radial gradient background - dark mode only */}
           <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', background: `radial-gradient(ellipse 60% 40% at ${plusRect ? plusRect.cx : window.innerWidth * 0.5}px ${plusRect && !selectedId ? plusRect.cy : 120}px, rgba(45,80,70,0.35) 0%, rgba(44,44,44,0) 70%)` }}/>
-          <div style={{ position: 'fixed', bottom: '80px', left: '12px', fontSize: '16px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', zIndex: 999, background: 'rgba(0,0,0,0.5)', padding: '3px 10px', borderRadius: '4px', pointerEvents: 'none' }}>v249</div>
+          <div style={{ position: 'fixed', bottom: '80px', left: '12px', fontSize: '16px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', zIndex: 999, background: 'rgba(0,0,0,0.5)', padding: '3px 10px', borderRadius: '4px', pointerEvents: 'none' }}>v250</div>
           {!(isMobile && showNew) && <Header onChangeView={changeView} onAddProject={() => setShowNew(true)}/>}
           <div style={{ 
             display: isMobile && showNew ? 'none' : 'block',
