@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 11px; color: rgba(255,255,255,0.3); font-family: monospace; margin-top: 12px; letter-spacing: 0.05em">v262</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v262</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -3296,64 +3296,62 @@
               display: 'flex',
               alignItems: 'stretch'
             }}>
-            {/* Content wrapper - 86px centered, safe area below */}
             <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: '70px' }}>
-            }}>
-            {/* + button with halo */}
-            <button
-              onClick={view === 'todo' ? onAddProject : undefined}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: view === 'todo' ? 'pointer' : 'default',
-                position: 'relative',
-                width: '60px',
-                height: '70px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginLeft: '23px',
-                flexShrink: 0,
-                opacity: view === 'todo' ? 1 : 0.3,
-                pointerEvents: view === 'todo' ? 'auto' : 'none',
-                WebkitTapHighlightColor: 'transparent'
-              }}
-            >
-              {/* Soft white halo */}
-              <div style={{ position: 'absolute', width: '70px', height: '70px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 40%, transparent 70%)', pointerEvents: 'none' }}/>
-              <span className="font-bebas-book" style={{ color: '#fff', fontSize: '67px', lineHeight: '1', position: 'relative', zIndex: 1, marginTop: '-4px' }}>+</span>
-            </button>
-            {/* Nav labels - centered between + and right edge */}
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '33px' }}>
-              {navItems.map(item => {
-                const isActive = view === item.id;
-                return (
-                  <button 
-                    key={item.id}
-                    onClick={() => onChangeView(item.id)}
-                    style={{ 
-                      background: 'none',
-                      border: 'none',
-                      padding: 0,
-                      cursor: 'pointer',
-                      WebkitTapHighlightColor: 'transparent'
-                    }}
-                  >
-                    <span 
-                      className="font-bebas-book" 
+              {/* + button with halo */}
+              <button
+                onClick={view === 'todo' ? onAddProject : undefined}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: view === 'todo' ? 'pointer' : 'default',
+                  position: 'relative',
+                  width: '60px',
+                  height: '70px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginLeft: '23px',
+                  flexShrink: 0,
+                  opacity: view === 'todo' ? 1 : 0.3,
+                  pointerEvents: view === 'todo' ? 'auto' : 'none',
+                  WebkitTapHighlightColor: 'transparent'
+                }}
+              >
+                {/* Soft white halo */}
+                <div style={{ position: 'absolute', width: '70px', height: '70px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.05) 40%, transparent 70%)', pointerEvents: 'none' }}/>
+                <span className="font-bebas-book" style={{ color: '#fff', fontSize: '67px', lineHeight: '1', position: 'relative', zIndex: 1, marginTop: '6px' }}>+</span>
+              </button>
+              {/* Nav labels */}
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '33px', paddingTop: '4px' }}>
+                {navItems.map(item => {
+                  const isActive = view === item.id;
+                  return (
+                    <button 
+                      key={item.id}
+                      onClick={() => onChangeView(item.id)}
                       style={{ 
-                        fontSize: '20px',
-                        color: isActive ? '#ffffff' : '#919b99',
-                        letterSpacing: '0.1em',
-                        transition: 'color 0.3s'
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        cursor: 'pointer',
+                        WebkitTapHighlightColor: 'transparent'
                       }}
                     >
-                      {item.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                      <span 
+                        className="font-bebas-book" 
+                        style={{ 
+                          fontSize: '20px',
+                          color: isActive ? '#ffffff' : '#919b99',
+                          letterSpacing: '0.1em',
+                          transition: 'color 0.3s'
+                        }}
+                      >
+                        {item.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </nav>
         );
