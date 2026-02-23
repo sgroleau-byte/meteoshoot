@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v263</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v264</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -3298,7 +3298,7 @@
               overflow: 'hidden'
             }}>
             {/* Black flare - bottom right */}
-            <div style={{ position: 'absolute', right: '-400px', bottom: '-400px', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.1) 40%, rgba(0,0,0,0) 70%)', mixBlendMode: 'multiply', pointerEvents: 'none', zIndex: 0 }}/>
+            <div style={{ position: 'absolute', right: '-400px', bottom: '-400px', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0) 70%)', pointerEvents: 'none', zIndex: 0 }}/>
             <div style={{ display: 'flex', alignItems: 'center', width: '100%', height: '70px', position: 'relative', zIndex: 1 }}>
               {/* + button with halo */}
               <button
@@ -3425,11 +3425,15 @@
               try {
                 const geocoder = new google.maps.Geocoder();
                 const res = await new Promise((resolve, reject) => geocoder.geocode({ location: { lat, lng } }, (results, status) => status === 'OK' ? resolve(results) : reject(status)));
-                const city = res.find(r => r.types.includes('locality')) || res.find(r => r.types.includes('sublocality')) || res.find(r => r.types.includes('administrative_area_level_3')) || res.find(r => r.types.includes('neighborhood'));
-                if (city) {
-                  const parts = city.formatted_address.split(',');
-                  cityName = parts[0].trim();
-                  if (parts[1]) cityName += ',' + parts[1].trim();
+                const comps = res[0]?.address_components || [];
+                const locality = comps.find(c => c.types.includes('locality'));
+                const sublocality = comps.find(c => c.types.includes('sublocality'));
+                const admin3 = comps.find(c => c.types.includes('administrative_area_level_3'));
+                const prov = comps.find(c => c.types.includes('administrative_area_level_1'));
+                const best = locality || sublocality || admin3;
+                if (best) {
+                  cityName = best.long_name;
+                  if (prov) cityName += ', ' + prov.short_name;
                 }
               } catch(e) { console.log('Reverse geocode failed', e); }
               const weather = await fetchWeather(lat, lng);
