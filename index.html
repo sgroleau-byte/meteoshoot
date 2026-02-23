@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v307</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v308</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -1956,7 +1956,7 @@
       );
     };
     
-    const DateWheelPicker = ({ date, onChange, onClose }) => {
+    const DateWheelPicker = ({ date, onChange, onClose, title }) => {
       const [selDay, setSelDay] = useState(date.getDate());
       const [selMonth, setSelMonth] = useState(date.getMonth());
       const itemH = 40;
@@ -1976,7 +1976,7 @@
         <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '350px', zIndex: 20, background: 'rgba(20,24,27,0.7)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderRadius: '16px 16px 0 0', padding: '12px 0 18px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px 8px' }}>
             <button onClick={resetToday} className="font-bebas-regular" style={{ background: 'none', border: 'none', color: '#7dd3c6', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.05em' }}>AUJOURD'HUI</button>
-            <span className="font-bebas-bold" style={{ fontSize: '16px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.05em' }}>DATE SOLEIL</span>
+            <span className="font-bebas-bold" style={{ fontSize: '16px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.05em' }}>{title || 'DATE SOLEIL'}</span>
             <button onClick={onClose} className="font-bebas-regular" style={{ background: 'none', border: 'none', color: '#7dd3c6', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.05em' }}>OK</button>
           </div>
           <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', position: 'relative' }}>
@@ -1999,6 +1999,8 @@
       const [showMapFull, setShowMapFull] = useState(false);
       const [sunDate, setSunDate] = useState(() => new Date());
       const [showDatePicker, setShowDatePicker] = useState(false);
+      const [editingCreatedDate, setEditingCreatedDate] = useState(false);
+      const [editingShotDate, setEditingShotDate] = useState(false);
       const isToday = React.useMemo(() => { const n = new Date(); return sunDate.getDate() === n.getDate() && sunDate.getMonth() === n.getMonth() && sunDate.getFullYear() === n.getFullYear(); }, [sunDate]);
       const [sunHour, setSunHour] = useState(() => { const n = new Date(); return n.getHours() + n.getMinutes()/60; });
       const mapIsNight = React.useMemo(() => {
@@ -2754,23 +2756,25 @@
                   </div>
                   <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive">
                     <span style={{ color: colorInactive }}>CRÉÉ</span>
-                    <span style={{ color: colorActive, cursor: 'pointer', position: 'relative' }} onClick={(e) => { const inp = e.currentTarget.querySelector('input'); if (inp) inp.showPicker(); }}>
+                    <span style={{ color: colorActive, cursor: 'pointer', textDecoration: editingCreatedDate ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }} onClick={() => { setEditingCreatedDate(p => !p); setEditingShotDate(false); }}>
                       {formatDateShort(project.createdAt)}
-                      <input type="date" value={project.createdAt ? project.createdAt.slice(0,10) : ''} onChange={e => { if (e.target.value) updateProject(project.id, { createdAt: new Date(e.target.value + 'T12:00:00').toISOString() }); }} style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', top: 0, left: 0, cursor: 'pointer' }}/>
                     </span>
                     <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
                   </div>
                   {project.shotAt && <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive">
                     <span style={{ color: colorInactive }}>EN ÉDITION</span>
-                    <span style={{ color: colorActive, cursor: 'pointer', position: 'relative' }} onClick={(e) => { const inp = e.currentTarget.querySelector('input'); if (inp) inp.showPicker(); }}>
+                    <span style={{ color: colorActive, cursor: 'pointer', textDecoration: editingShotDate ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }} onClick={() => { setEditingShotDate(p => !p); setEditingCreatedDate(false); }}>
                       {formatDateShort(project.shotAt)}
-                      <input type="date" value={project.shotAt ? project.shotAt.slice(0,10) : ''} onChange={e => { if (e.target.value) updateProject(project.id, { shotAt: new Date(e.target.value + 'T12:00:00').toISOString() }); }} style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', top: 0, left: 0, cursor: 'pointer' }}/>
                     </span>
                     <span style={{ color: colorCharcoal }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
                   </div>}
                 </div>
               </div>
             )}
+            {(editingCreatedDate || editingShotDate) && <div style={{ position: 'relative', maxWidth: '350px', margin: '8px auto', height: '220px' }}>
+              {editingCreatedDate && <DateWheelPicker title="DATE CRÉÉ" date={new Date(project.createdAt)} onChange={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onClose={() => setEditingCreatedDate(false)} />}
+              {editingShotDate && project.shotAt && <DateWheelPicker title="DATE ÉDITION" date={new Date(project.shotAt)} onChange={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onClose={() => setEditingShotDate(false)} />}
+            </div>}
           </div>
 
           {/* Météo horaire — redesigned */}
