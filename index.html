@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v299</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v300</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -1693,11 +1693,9 @@
                 <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
               </div>
             </div>
-            <div className="hidden lg:flex items-center gap-1 ml-auto card-actions">
-              {confirmDone && <span onClick={handleDone} className="text-charcoal text-sm font-bebas-bold cursor-pointer">PASSER AUX RETOUCHES?</span>}
-              {confirmDelete && <span onClick={handleDelete} className="text-red-500 text-sm font-bebas-bold cursor-pointer">SUPPRIMER?</span>}
-              <button onClick={handleDone} className="p-2 text-charcoal-muted hover:text-charcoal" title="Marquer photographié"><CheckIcon/></button>
-              <button onClick={handleDelete} className={`p-2 trash-btn ${confirmDelete ? 'text-red-500' : 'text-charcoal-muted hover:text-red-500'}`} title="Supprimer"><TrashIcon/></button>
+            <div className="hidden lg:flex items-center gap-4 ml-auto card-actions">
+              <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? colorActive : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 8px rgba(255,255,255,0.6), 0 0 20px rgba(255,255,255,0.3)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 8px rgba(255,255,255,0.6), 0 0 20px rgba(255,255,255,0.3)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } }}>{confirmDone ? 'EN PRODUCTION ?' : 'EN PRODUCTION'}</button>
+              <button onClick={handleDelete} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDelete ? '#FF3B30' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDelete ? '0 0 8px rgba(255,59,48,0.6), 0 0 20px rgba(255,59,48,0.3)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 8px rgba(255,255,255,0.6), 0 0 20px rgba(255,255,255,0.3)'; }} onMouseLeave={e => { if (!confirmDelete) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } }}>{confirmDelete ? 'SUPPRIMER ?' : 'SUPPRIMER'}</button>
             </div>
           </div>
         </div>
@@ -1709,6 +1707,7 @@
       const { advanceProject, revertProject, deleteProject, prefs } = useStore();
       const [confirmDelete, setConfirmDelete] = useState(false);
       const [confirmDone, setConfirmDone] = useState(false);
+      const [confirmRevert, setConfirmRevert] = useState(false);
       const days = project.shotAt ? daysSince(project.shotAt) : null;
       const daysColor = !days ? '#5E6C6A' : days > 30 ? '#f4143d' : days > 14 ? '#f59e0b' : '#5E6C6A';
 
@@ -1719,11 +1718,15 @@
 
       const handleDelete = (e) => {
         e.stopPropagation(); e.preventDefault();
-        if (confirmDelete) { deleteProject(project.id); } else { setConfirmDelete(true); setConfirmDone(false); setTimeout(() => setConfirmDelete(false), 3000); }
+        if (confirmDelete) { deleteProject(project.id); } else { setConfirmDelete(true); setConfirmDone(false); setConfirmRevert(false); setTimeout(() => setConfirmDelete(false), 3000); }
       };
       const handleDone = (e) => {
         e.stopPropagation(); e.preventDefault();
-        if (confirmDone) { advanceProject(project.id); setConfirmDone(false); } else { setConfirmDone(true); setConfirmDelete(false); setTimeout(() => setConfirmDone(false), 3000); }
+        if (confirmDone) { advanceProject(project.id); setConfirmDone(false); } else { setConfirmDone(true); setConfirmDelete(false); setConfirmRevert(false); setTimeout(() => setConfirmDone(false), 3000); }
+      };
+      const handleRevert = (e) => {
+        e.stopPropagation(); e.preventDefault();
+        if (confirmRevert) { revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setConfirmDelete(false); setConfirmDone(false); setTimeout(() => setConfirmRevert(false), 3000); }
       };
 
       const isMobile = useIsMobile();
@@ -1792,11 +1795,9 @@
               </div>
             </div>
             <div className="hidden lg:flex items-center gap-4 ml-auto card-actions" style={{ marginTop: '5px' }}>
-              {confirmDone && <span onClick={handleDone} className="text-charcoal text-sm font-bebas-bold cursor-pointer">TERMINÉ?</span>}
-              {confirmDelete && <span onClick={handleDelete} className="text-red-500 text-sm font-bebas-bold cursor-pointer">SUPPRIMER?</span>}
-              <button onClick={(e) => { e.stopPropagation(); revertProject(project.id); }} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 8px rgba(255,255,255,0.6), 0 0 20px rgba(255,255,255,0.3)'; }} onMouseLeave={e => { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; }}>REMETTRE DANS LA LISTE</button>
-              <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 8px rgba(255,255,255,0.6), 0 0 20px rgba(255,255,255,0.3)'; }} onMouseLeave={e => { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; }}>COMPLÉTÉ</button>
-              <button onClick={handleDelete} className={`p-2 trash-btn ${confirmDelete ? 'text-red-500' : 'text-charcoal-muted hover:text-red-500'}`} title="Supprimer"><TrashIcon/></button>
+              <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? colorActive : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 8px rgba(255,255,255,0.6), 0 0 20px rgba(255,255,255,0.3)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 8px rgba(255,255,255,0.6), 0 0 20px rgba(255,255,255,0.3)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } }}>{confirmRevert ? '← RETOUR LISTE ?' : '← RETOUR LISTE'}</button>
+              <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? colorActive : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 8px rgba(255,255,255,0.6), 0 0 20px rgba(255,255,255,0.3)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 8px rgba(255,255,255,0.6), 0 0 20px rgba(255,255,255,0.3)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } }}>{confirmDone ? 'ARCHIVER ?' : 'ARCHIVER'}</button>
+              <button onClick={handleDelete} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDelete ? '#FF3B30' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDelete ? '0 0 8px rgba(255,59,48,0.6), 0 0 20px rgba(255,59,48,0.3)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 8px rgba(255,255,255,0.6), 0 0 20px rgba(255,255,255,0.3)'; }} onMouseLeave={e => { if (!confirmDelete) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } }}>{confirmDelete ? 'SUPPRIMER ?' : 'SUPPRIMER'}</button>
             </div>
           </div>
         </div>
@@ -1806,8 +1807,14 @@
 
     const DoneCard = ({ project }) => {
       const { revertProject, prefs } = useStore();
+      const [confirmRevert, setConfirmRevert] = useState(false);
       const colorCharcoal = '#8B9B99';
+      const colorActive = '#FAF9F7';
       const days = project.completedAt ? daysSince(project.completedAt) : null;
+      const handleRevert = (e) => {
+        e.stopPropagation(); e.preventDefault();
+        if (confirmRevert) { revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setTimeout(() => setConfirmRevert(false), 3000); }
+      };
       return (
         <div className="project-card py-5 px-4 mb-3 hover:bg-cream-dark/30" style={{ opacity: 0.2 }}>
           <h3 className="font-bebas-book flex items-center gap-2" style={{ fontSize: '35px', color: colorCharcoal, lineHeight: '1' }}>
@@ -1823,7 +1830,7 @@
                 <span style={{ color: colorCharcoal }}>IL Y A {days} {days <= 1 ? 'JOUR' : 'JOURS'}</span>
               </div>}
             </div>
-            <button onClick={() => revertProject(project.id)} className="p-2 text-charcoal-muted hover:text-blue-500 ml-auto card-actions" title="Remettre en retouche"><UndoIcon/></button>
+            <button onClick={handleRevert} className="font-bebas-bold uppercase ml-auto card-actions" style={{ background: 'none', border: 'none', color: confirmRevert ? colorActive : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 8px rgba(255,255,255,0.6), 0 0 20px rgba(255,255,255,0.3)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 8px rgba(255,255,255,0.6), 0 0 20px rgba(255,255,255,0.3)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } }}>{confirmRevert ? '← RETOUR LISTE ?' : '← RETOUR LISTE'}</button>
           </div>
         </div>
       );
