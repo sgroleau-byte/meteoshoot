@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v298</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v299</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -1666,6 +1666,8 @@
               <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '100px' }}>
                 {Object.values(MandateType).map(m => {
                   const active = project.mandates?.includes(m);
+                  const alwaysShow = m === 'INT' || m === 'EXT' || m === 'DRONE';
+                  if (!alwaysShow && !active) return null;
                   return <React.Fragment key={m}>{renderMandate(m, active ? colorActive : colorInactive)}</React.Fragment>;
                 })}
               </div>
@@ -1775,6 +1777,8 @@
               <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '100px' }}>
                 {Object.values(MandateType).map(m => {
                   const active = project.mandates?.includes(m);
+                  const alwaysShow = m === 'INT' || m === 'EXT' || m === 'DRONE';
+                  if (!alwaysShow && !active) return null;
                   return <React.Fragment key={m}>{renderMandate(m, active ? colorActive : colorInactive)}</React.Fragment>;
                 })}
               </div>
@@ -1787,11 +1791,11 @@
                 <span style={{ color: colorActive }}>{days !== null ? `${days} ${days <= 1 ? 'JOUR' : 'JOURS'}` : '- - -'}</span>
               </div>
             </div>
-            <div className="hidden lg:flex items-center gap-4 ml-auto card-actions">
+            <div className="hidden lg:flex items-center gap-4 ml-auto card-actions" style={{ marginTop: '5px' }}>
               {confirmDone && <span onClick={handleDone} className="text-charcoal text-sm font-bebas-bold cursor-pointer">TERMINÉ?</span>}
               {confirmDelete && <span onClick={handleDelete} className="text-red-500 text-sm font-bebas-bold cursor-pointer">SUPPRIMER?</span>}
-              <button onClick={(e) => { e.stopPropagation(); revertProject(project.id); }} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'color 0.2s' }} onMouseEnter={e => e.target.style.color = '#FAF9F7'} onMouseLeave={e => e.target.style.color = colorCharcoal}>REMETTRE DANS LA LISTE</button>
-              <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'color 0.2s' }} onMouseEnter={e => e.target.style.color = '#7dd3c6'} onMouseLeave={e => e.target.style.color = colorCharcoal}>COMPLÉTÉ</button>
+              <button onClick={(e) => { e.stopPropagation(); revertProject(project.id); }} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 8px rgba(255,255,255,0.6), 0 0 20px rgba(255,255,255,0.3)'; }} onMouseLeave={e => { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; }}>REMETTRE DANS LA LISTE</button>
+              <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 8px rgba(255,255,255,0.6), 0 0 20px rgba(255,255,255,0.3)'; }} onMouseLeave={e => { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; }}>COMPLÉTÉ</button>
               <button onClick={handleDelete} className={`p-2 trash-btn ${confirmDelete ? 'text-red-500' : 'text-charcoal-muted hover:text-red-500'}`} title="Supprimer"><TrashIcon/></button>
             </div>
           </div>
@@ -3179,11 +3183,11 @@
               <div className={`newproj-panel ${animated ? 'open' : ''}`} style={{ left: panelX, top: panelY, width: panelW, padding: '28px 32px' }} onClick={e => e.stopPropagation()}>
                 <div className="mb-5">
                   <label className="newproj-label font-bebas-book">NOM DU PROJET</label>
-                  <input ref={nameInputRef} type="text" autoComplete="off" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet"/>
+                  <input ref={nameInputRef} type="text" autoComplete="one-time-code" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet"/>
                 </div>
                 <div className="mb-5">
                   <label className="newproj-label font-bebas-book">ADRESSE DU PROJET</label>
-                  <input ref={addressInputRef} type="text" autoComplete="off" defaultValue={form.address} placeholder="Entrer l'adresse..."/>
+                  <input ref={addressInputRef} type="text" autoComplete="one-time-code" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder="Entrer l'adresse..."/>
                 </div>
                 <div className="mb-5">
                   <label className="newproj-label font-bebas-book">MANDAT</label>
