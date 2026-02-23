@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v273</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v275</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -536,6 +536,7 @@
 
     // ===== CONSTANTS =====
     const MandateType = { INT: 'INT', EXT: 'EXT', DRONE: 'DRONE', DRONE_C: 'DRONE+C', VID: 'VID' };
+    const renderMandate = (m, baseColor) => m === 'DRONE+C' ? React.createElement('span', null, React.createElement('span', {style:{color:baseColor}}, 'DRONE.'), React.createElement('span', {style:{color:'#d83152'}}, 'C')) : React.createElement('span', {style:{color:baseColor}}, m);
     const ProjectStatus = { TODO: 'todo', RETOUCHING: 'retouching', DONE: 'done' };
 
     // ===== UTILS =====
@@ -1660,9 +1661,7 @@
             <div onMouseEnter={() => { if (activeWeatherRowDismiss) { activeWeatherRowDismiss(); activeWeatherRowDismiss = null; } }} onClick={() => onSelect(project)} className="info-dodge cursor-pointer flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
               <div className="flex flex-col justify-center pl-2 border-l border-adaptive">
                 {Object.values(MandateType).filter(m => project.mandates?.includes(m)).map(m => {
-                  const isDroneC = m === 'DRONE+C';
-                  let color = isDroneC ? colorRed : colorActive;
-                  return <span key={m} style={{ color }}>{isDroneC ? 'DRONE.C' : m}</span>;
+                  return <React.Fragment key={m}>{renderMandate(m, colorActive)}</React.Fragment>;
                 })}
               </div>
               <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
@@ -1731,7 +1730,7 @@
                   {project.name} {project.isContest && <StarIcon/>}
                 </h3>
                 <div className="flex items-center gap-3 font-bebas-light uppercase mt-2" style={{ fontSize: '14px', lineHeight: '1' }}>
-                  {project.mandates?.length > 0 && <span>{project.mandates.map((m, i) => <React.Fragment key={m}>{i > 0 && ' · '}<span style={{ color: m === 'DRONE+C' ? '#d83152' : '#FAF9F7' }}>{m === 'DRONE+C' ? 'DRONE.C' : m}</span></React.Fragment>)}</span>}
+                  {project.mandates?.length > 0 && <span>{project.mandates.map((m, i) => <React.Fragment key={m}>{i > 0 && ' · '}{renderMandate(m, '#FAF9F7')}</React.Fragment>)}</span>}
                   <span style={{ color: '#404A48' }}>|</span>
                   <span style={{ color: '#FAF9F7' }}>{project.shotAt ? formatDateShort(project.shotAt) : '- - -'}</span>
                   <span style={{ color: '#404A48' }}>|</span>
@@ -1772,9 +1771,8 @@
             <div onClick={() => onSelect(project)} className="info-dodge cursor-pointer flex items-stretch flex-shrink-0 font-bebas-light uppercase" style={{ fontSize: '19px', lineHeight: '1' }}>
               <div className="flex flex-col justify-center pl-2 border-l border-adaptive">
                 {Object.values(MandateType).filter(m => project.mandates?.includes(m)).map(m => {
-                  const isDroneC = m === 'DRONE+C';
-                  let color = isDroneC ? colorRed : colorActive;
-                  return <span key={m} style={{ color }}>{isDroneC ? 'DRONE.C' : m}</span>;
+                  return <React.Fragment key={m}>{renderMandate(m, colorActive)}</React.Fragment>;
+                })}
                 })}
               </div>
               <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
@@ -2652,32 +2650,33 @@
             {isMobile ? (
               /* ===== MOBILE: vertical stack ===== */
               <div>
-                <div className="flex items-center gap-2 overflow-x-auto font-bebas-light uppercase" style={{ fontSize: '17px', lineHeight: '1', marginTop: '2px', padding: '4px 0', scrollbarWidth: 'none' }}>
-                  {project.mandates?.length > 0 && (
-                    <span style={{ flexShrink: 0 }}>
-                      {project.mandates.map((m, i) => <React.Fragment key={m}>{i > 0 && ' · '}<span style={{ color: m === 'DRONE+C' ? '#d83152' : colorActive }}>{m === 'DRONE+C' ? 'DRONE.C' : m}</span></React.Fragment>)}
+                <div className="flex items-stretch font-bebas-bold uppercase" style={{ fontSize: '22px', lineHeight: '1', marginTop: '8px', padding: '4px 0' }}>
+                  <div className="flex flex-col justify-center pl-2" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
+                    {Object.values(MandateType).filter(m => project.mandates?.includes(m)).map(m => {
+                      return <React.Fragment key={m}>{renderMandate(m, colorActive)}</React.Fragment>;
+                    })}
+                  </div>
+                  <div className="flex flex-col justify-center pl-2 ml-4" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
+                    <span style={{ color: project.orientation?.includes('AM') ? colorActive : colorInactive }}>
+                      AM {sun ? formatTime(sun.sunrise) : '—'}
                     </span>
-                  )}
-                  <span style={{ color: '#404A48', flexShrink: 0 }}>|</span>
-                  {sun ? <>
-                    <span style={{ color: project.orientation?.includes('AM') ? colorActive : colorInactive, flexShrink: 0 }}>
-                      AM {formatTime(sun.sunrise)}
+                    <span style={{ color: project.orientation?.includes('PM') ? colorActive : colorInactive }}>
+                      PM {sun ? formatTime(sun.sunset) : '—'}
                     </span>
-                    <span style={{ color: project.orientation?.includes('PM') ? colorActive : colorInactive, flexShrink: 0 }}>
-                      PM {formatTime(sun.sunset)}
-                    </span>
-                  </> : <span style={{ color: colorInactive, flexShrink: 0 }}>—</span>}
-                  <span style={{ color: '#404A48', flexShrink: 0 }}>|</span>
-                  <span style={{ color: project.travelTime?.durationSeconds ? colorActive : colorInactive, flexShrink: 0 }}>{project.travelTime ? formatDuration(project.travelTime.durationSeconds) : '—'}</span>
-                  {project.orientation?.includes('AM') && wakeUp && <>
-                    <span style={{ color: '#404A48', flexShrink: 0 }}>|</span>
-                    <span style={{ color: colorActive, flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M5 3L2 6"/><path d="M22 6l-3-3"/></svg>
-                      {formatTime(wakeUp).replace(':','H')}
-                    </span>
-                  </>}
-                  <span style={{ color: '#404A48', flexShrink: 0 }}>|</span>
-                  <span style={{ color: colorActive, flexShrink: 0 }}>{formatDateShort(project.createdAt)}</span>
+                  </div>
+                  <div className="flex flex-col justify-center pl-2 ml-4" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
+                    <span style={{ color: colorInactive }}>TRAJET</span>
+                    <span style={{ color: project.travelTime?.durationSeconds ? colorActive : colorInactive }}>{project.travelTime?.durationSeconds ? formatDuration(project.travelTime.durationSeconds) : '—'}</span>
+                    {project.travelTime?.distanceMeters > 0 && <span style={{ color: colorCharcoal, letterSpacing: '0.1em', marginTop: '-5px' }} className="text-lg">{Math.round(project.travelTime.distanceMeters / 1000)} KM</span>}
+                  </div>
+                  <div className="flex flex-col justify-center pl-2 ml-4" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
+                    <span style={{ color: colorInactive }}>RÉVEIL</span>
+                    <span style={{ color: (project.orientation?.includes('AM') && wakeUp) ? colorActive : colorInactive }}>{project.orientation?.includes('AM') && wakeUp ? formatTime(wakeUp).replace(':','H') : '—'}</span>
+                  </div>
+                  <div className="flex flex-col justify-center pl-2 ml-4" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
+                    <span style={{ color: colorActive }}>{formatDateShort(project.createdAt)}</span>
+                    <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
+                  </div>
                 </div>
                 <div style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', marginTop: '6px', marginLeft: '-16px', marginRight: '-16px', paddingLeft: '16px', paddingRight: '16px' }}>
                   {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10}/> : <p className="text-charcoal-muted text-sm italic py-2">Météo non disponible</p>}
@@ -2692,8 +2691,7 @@
                 <div className="info-dodge flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
                   <div className="flex flex-col justify-center pl-2 border-l border-adaptive">
                     {Object.values(MandateType).filter(m => project.mandates?.includes(m)).map(m => {
-                      const isDroneC = m === 'DRONE+C';
-                      return <span key={m} style={{ color: isDroneC ? colorRed : colorActive }}>{isDroneC ? 'DRONE.C' : m}</span>;
+                      return <React.Fragment key={m}>{renderMandate(m, colorActive)}</React.Fragment>;
                     })}
                   </div>
                   <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
@@ -2762,7 +2760,7 @@
                 <div className="pb-4 border-b border-adaptive">
                   <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>MANDAT</label>
                   <div className="flex gap-4 flex-wrap mt-1">
-                    {Object.values(MandateType).map(m => <button key={m} onClick={() => updateProject(project.id, { mandates: toggleMandate(project.mandates, m) })} className="font-bebas-bold" style={{ fontSize: '22px', color: project.mandates?.includes(m) ? (m === 'DRONE+C' ? colorRed : 'rgba(255,255,255,0.7)') : 'rgba(255,255,255,0.3)' }}>{m === 'DRONE+C' ? 'DRONE.C' : m}</button>)}
+                    {Object.values(MandateType).map(m => <button key={m} onClick={() => updateProject(project.id, { mandates: toggleMandate(project.mandates, m) })} className="font-bebas-bold" style={{ fontSize: '22px', color: project.mandates?.includes(m) ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)' }}>{m === 'DRONE+C' ? (project.mandates?.includes(m) ? <span>DRONE.<span style={{color:'#d83152'}}>C</span></span> : 'DRONE.C') : m}</button>)}
                   </div>
                 </div>
                 <div className="pb-4 border-b border-adaptive">
@@ -3114,7 +3112,7 @@
                     <label className="newproj-label font-bebas-book">MANDAT</label>
                     <div className="flex gap-4 flex-wrap">
                       {Object.values(MandateType).map(m => (
-                        <button key={m} type="button" onClick={() => setForm({...form, mandates: toggleMandate(form.mandates, m)})} className={`newproj-toggle font-bebas-bold ${form.mandates.includes(m) ? 'active' : ''}`} style={form.mandates.includes(m) && m === 'DRONE+C' ? { color: '#d83152' } : {}}>{m === 'DRONE+C' ? 'DRONE.C' : m}</button>
+                        <button key={m} type="button" onClick={() => setForm({...form, mandates: toggleMandate(form.mandates, m)})} className={`newproj-toggle font-bebas-bold ${form.mandates.includes(m) ? 'active' : ''}`} style={form.mandates.includes(m) && m === 'DRONE+C' ? {} : {}}>{m === 'DRONE+C' ? (form.mandates.includes(m) ? React.createElement('span', null, 'DRONE.', React.createElement('span', {style:{color:'#d83152'}}, 'C')) : 'DRONE.C') : m}</button>
                       ))}
                     </div>
                   </div>
@@ -3191,7 +3189,7 @@
                   <label className="newproj-label font-bebas-book">MANDAT</label>
                   <div className="flex gap-5">
                     {Object.values(MandateType).map(m => (
-                      <button key={m} type="button" onClick={() => setForm({...form, mandates: toggleMandate(form.mandates, m)})} className={`newproj-toggle font-bebas-bold ${form.mandates.includes(m) ? 'active' : ''}`} style={form.mandates.includes(m) && m === 'DRONE+C' ? { color: '#d83152' } : {}}>{m === 'DRONE+C' ? 'DRONE.C' : m}</button>
+                      <button key={m} type="button" onClick={() => setForm({...form, mandates: toggleMandate(form.mandates, m)})} className={`newproj-toggle font-bebas-bold ${form.mandates.includes(m) ? 'active' : ''}`} style={form.mandates.includes(m) && m === 'DRONE+C' ? {} : {}}>{m === 'DRONE+C' ? (form.mandates.includes(m) ? React.createElement('span', null, 'DRONE.', React.createElement('span', {style:{color:'#d83152'}}, 'C')) : 'DRONE.C') : m}</button>
                     ))}
                   </div>
                 </div>
@@ -4152,7 +4150,7 @@
             <label className="newproj-label font-bebas-book">MANDAT</label>
             <div className="flex gap-3 flex-wrap">
               {Object.values(MandateType).map(m => (
-                <button key={m} type="button" onClick={() => setForm({...form, mandates: toggleMandate(form.mandates, m)})} className={`newproj-toggle font-bebas-bold ${form.mandates.includes(m) ? 'active' : ''}`} style={form.mandates.includes(m) && m === 'DRONE+C' ? { color: '#d83152' } : {}}>{m === 'DRONE+C' ? 'DRONE.C' : m}</button>
+                <button key={m} type="button" onClick={() => setForm({...form, mandates: toggleMandate(form.mandates, m)})} className={`newproj-toggle font-bebas-bold ${form.mandates.includes(m) ? 'active' : ''}`} style={form.mandates.includes(m) && m === 'DRONE+C' ? {} : {}}>{m === 'DRONE+C' ? (form.mandates.includes(m) ? React.createElement('span', null, 'DRONE.', React.createElement('span', {style:{color:'#d83152'}}, 'C')) : 'DRONE.C') : m}</button>
               ))}
             </div>
           </div>
