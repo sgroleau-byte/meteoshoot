@@ -381,7 +381,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v323</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v324</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -3068,14 +3068,14 @@
                 <button onClick={handleDone} className="font-bebas-bold text-xl" style={{ background: 'none', border: 'none', cursor: 'pointer', color: confirmDone ? '#d83152' : '#8B9B99', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }}
                   onMouseEnter={e => { if (!confirmDone) { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }}}
                   onMouseLeave={e => { if (!confirmDone) { e.target.style.color = '#8B9B99'; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; }}}
-                >{confirmDone ? 'CONFIRMER?' : 'PASSER EN ÉDITION'}</button>
+                >{confirmDone ? 'PASSER EN ÉDITION ?' : 'PASSER EN ÉDITION'}</button>
               )}
               <button onClick={handleDelete} className="font-bebas-bold text-xl" style={{ background: 'none', border: 'none', cursor: 'pointer', color: confirm ? '#d83152' : '#8B9B99', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirm ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }}
                 onMouseEnter={e => { if (!confirm) { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }}}
                 onMouseLeave={e => { if (!confirm) { e.target.style.color = '#8B9B99'; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; }}}
-              >{confirm ? 'CONFIRMER?' : 'SUPPRIMER'}</button>
+              >{confirm ? 'SUPPRIMER ?' : 'SUPPRIMER'}</button>
             </div>
-            {!isMobile && <span className="ml-auto" style={{ fontSize: '13px', color: 'rgba(255,255,255,0.2)', letterSpacing: '0.03em' }}>⇧ Shift + roulette pour zoomer</span>}
+            {!isMobile && <span className="ml-auto font-bebas-regular" style={{ fontSize: '16px', color: '#8a9898', letterSpacing: '0.03em' }}>⇧ Shift + roulette pour zoomer</span>}
           </div>
         </div>
       );
