@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v309</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v310</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -1660,7 +1660,7 @@
             </div>
           </div>
           <div className="flex items-center gap-0">
-            <div className="min-w-0" style={{ minWidth: '432px', overflow: "hidden" }}>
+            <div className="min-w-0" style={{ minWidth: '432px', overflowX: "hidden", overflowY: "visible" }}>
               {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} onDayClick={() => onSelect(project)}/> : <p className="text-charcoal-muted text-sm italic py-2 cursor-pointer" onClick={() => onSelect(project)}>Météo non disponible</p>}
             </div>
             <div onMouseEnter={() => { if (activeWeatherRowDismiss) { activeWeatherRowDismiss(); activeWeatherRowDismiss = null; } }} onClick={() => onSelect(project)} className="info-dodge cursor-pointer flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
@@ -1696,7 +1696,7 @@
               </div>
             </div>
             <div className="hidden lg:flex items-center gap-4 ml-auto card-actions">
-              <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? 'EN PRODUCTION ?' : 'EN PRODUCTION'}</button>
+              <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? 'EN ÉDITION ?' : 'EN ÉDITION'}</button>
               <button onClick={handleDelete} className={`p-2 trash-btn text-red-500`} title="Supprimer"><TrashIcon/></button>
             </div>
           </div>
@@ -1790,10 +1790,12 @@
               <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
                 <span style={{ color: colorInactive }}>CRÉÉ</span>
                 <span style={{ color: colorActive }}>{formatDateShort(project.createdAt)}</span>
+                <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
               </div>
               <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
-                <span style={{ color: colorInactive }}>TEMPS ÉCOULÉ</span>
-                <span style={{ color: colorActive }}>{days !== null ? `${days} ${days <= 1 ? 'JOUR' : 'JOURS'}` : '- - -'}</span>
+                <span style={{ color: colorInactive }}>ÉDITION</span>
+                <span style={{ color: colorActive }}>{project.shotAt ? formatDateShort(project.shotAt) : '- - -'}</span>
+                <span style={{ color: colorCharcoal }}>{days !== null ? `${days} ${days <= 1 ? 'JOUR' : 'JOURS'}` : ''}</span>
               </div>
             </div>
             <div className="hidden lg:flex items-center gap-4 ml-auto card-actions" style={{ marginTop: '5px' }}>
@@ -1842,12 +1844,14 @@
                 })}
               </div>
               <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
-                <span style={{ color: colorInactive }}>ARCHIVÉ</span>
-                <span style={{ color: colorCharcoal }}>{project.completedAt ? formatDateShort(project.completedAt) : ''}</span>
+                <span style={{ color: colorInactive }}>CRÉÉ</span>
+                <span style={{ color: colorCharcoal }}>{formatDateShort(project.createdAt)}</span>
+                <span style={{ color: colorInactive }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
               </div>
-              {days !== null && <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
-                <span style={{ color: colorInactive }}>IL Y A</span>
-                <span style={{ color: colorCharcoal }}>{days} {days <= 1 ? 'JOUR' : 'JOURS'}</span>
+              {project.shotAt && <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
+                <span style={{ color: colorInactive }}>ÉDITION</span>
+                <span style={{ color: colorCharcoal }}>{formatDateShort(project.shotAt)}</span>
+                <span style={{ color: colorInactive }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
               </div>}
             </div>
             <div className="hidden lg:flex items-center gap-4 ml-auto card-actions" style={{ marginTop: '5px' }}>
@@ -2723,7 +2727,7 @@
                     <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
                   </div>
                   {project.shotAt && <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
-                    <span style={{ color: colorInactive }}>EN ÉDITION</span>
+                    <span style={{ color: colorInactive }}>ÉDITION</span>
                     <span style={{ color: colorActive }}>{formatDateShort(project.shotAt)}</span>
                     <span style={{ color: colorCharcoal }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
                   </div>}
@@ -2770,7 +2774,7 @@
                     <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
                   </div>
                   {project.shotAt && <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive">
-                    <span style={{ color: colorInactive }}>EN ÉDITION</span>
+                    <span style={{ color: colorInactive }}>ÉDITION</span>
                     <span style={{ color: colorActive, cursor: 'pointer', textDecoration: editingShotDate ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }} onClick={() => { setEditingShotDate(p => !p); setEditingCreatedDate(false); }}>
                       {formatDateShort(project.shotAt)}
                     </span>
@@ -3019,7 +3023,7 @@
             <div className={`flex items-center ${isMobile ? 'gap-6' : 'gap-8'}`} style={isMobile ? {} : { marginLeft: '100px' }}>
               {project.status === 'todo' && (
                 <button onClick={handleDone} className="font-bebas-bold text-xl text-charcoal-muted hover:text-charcoal">
-                  {confirmDone ? 'CONFIRMER?' : 'EN RETOUCHE'}
+                  {confirmDone ? 'CONFIRMER?' : 'EN ÉDITION'}
                 </button>
               )}
               <button onClick={handleDelete} className={`font-bebas-bold text-xl ${confirm ? 'text-red-500' : 'text-charcoal-muted hover:text-red-500'}`}>
@@ -3964,7 +3968,7 @@
       const done = projects.filter(p => p.status === ProjectStatus.DONE);
       return (
         <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px' }}>
-          {retouching.length === 0 ? <div className="text-center py-16"><p className="font-bebas-book text-charcoal-muted" style={{ fontSize: '24px' }}>Aucun projet à retoucher</p></div>
+          {retouching.length === 0 ? <div className="text-center py-16"><p className="font-bebas-book text-charcoal-muted" style={{ fontSize: '24px' }}>Aucun projet en édition</p></div>
           : <div style={{ paddingBottom: '80px' }}>{retouching.map(p => <RetouchingCard key={p.id} project={p} onSelect={onSelect}/>)}</div>}
           {done.length > 0 && <>
             <div className="px-4 py-4 mt-8 border-b border-adaptive"><h2 className="font-bebas-light" style={{ fontSize: '28px', color: '#8B9B99' }}>ARCHIVÉ</h2></div>
