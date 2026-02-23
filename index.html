@@ -274,14 +274,14 @@
     .newproj-actions button:hover { color: rgba(255,255,255,0.9); }
     .card-actions { opacity: 0; transform: translateX(20px); transition: opacity 0.3s ease, transform 0.3s ease; position: relative; }
     .card-glow-wrap:hover .card-actions { opacity: 1; transform: translateX(0); }
-    .trash-btn { position: relative; transition: filter 0.3s ease, brightness 0.3s ease; filter: drop-shadow(0 0 0px transparent); overflow: visible; }
+    .trash-btn { position: relative; transition: filter 0.3s ease; filter: drop-shadow(0 0 0px transparent); }
     .trash-btn:hover { filter: drop-shadow(0 0 8px rgba(216,49,82,0.6)) drop-shadow(0 0 16px rgba(216,49,82,0.3)) brightness(1.4); }
     .newproj-actions button:disabled { opacity: 0.3; cursor: default; }
     .project-card { 
       transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1), background-color 0.15s ease;
       position: relative;
     }
-    .card-glow-wrap { position: relative; overflow: visible; }
+    .card-glow-wrap { position: relative; }
     .card-glow-wrap::after { content: ''; position: absolute; right: -450px; top: 50%; width: 550px; height: 550px; border-radius: 50%; background: radial-gradient(circle, rgba(216,49,82,0.7) 0%, rgba(216,49,82,0.25) 40%, transparent 70%); mix-blend-mode: color-dodge; pointer-events: none; opacity: 0; transition: opacity 0.3s ease; transform: translateY(-50%); z-index: 10; }
     .card-glow-wrap:hover::after { opacity: 1; }
     .project-card.is-being-dragged {
@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v311</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v312</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -1648,7 +1648,7 @@
       return (
         <div className="card-glow-wrap">
         <div 
-          className={`project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 animate-card-in border-b border-adaptive`}
+          className={`project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden animate-card-in border-b border-adaptive`}
           style={{ minWidth: '1100px', animationDelay: `${index * 0.1}s` }}
           onMouseDown={onMouseDownDrag ? (e) => onMouseDownDrag(e, project.id, index) : undefined}
         >
@@ -1771,7 +1771,7 @@
       // Desktop layout
       return (
         <div className="card-glow-wrap">
-        <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 border-b border-adaptive">
+        <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden border-b border-adaptive">
           <div className="flex items-center gap-0">
             <div onClick={() => onSelect(project)} className="cursor-pointer" style={{ minWidth: '432px', flexShrink: 0 }}>
               <h3 className="font-bebas-book text-charcoal flex items-center gap-2" style={{ fontSize: '35px', lineHeight: '1' }}>
@@ -1827,7 +1827,7 @@
       };
       return (
         <div className="card-glow-wrap">
-        <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 border-b border-adaptive" style={{ opacity: 0.5 }}>
+        <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden border-b border-adaptive" style={{ opacity: 0.5 }}>
           <div className="flex items-center gap-0">
             <div className="flex-shrink-0" style={{ minWidth: '432px' }}>
               <h3 className="font-bebas-book flex items-center gap-2" style={{ fontSize: '35px', color: colorCharcoal, lineHeight: '1' }}>
