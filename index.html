@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v287</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v288</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -4191,11 +4191,12 @@
       useEffect(() => {
         if (!isMobile) return;
         let startY = 0, pulling = false, ready = false, indicator = null;
-        const threshold = 140;
+        const threshold = 200;
+        const dampen = (dy) => dy * 0.4;
         const createIndicator = () => {
           if (indicator) return;
           indicator = document.createElement('div');
-          indicator.style.cssText = 'position:fixed;top:80px;left:50%;width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,0.3);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;z-index:9999;opacity:0;transition:opacity 0.2s;pointer-events:none;transform:translateX(-50%)';
+          indicator.style.cssText = 'position:fixed;top:80px;left:50%;width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,0.3);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;z-index:9999;opacity:0;pointer-events:none;transform:translateX(-50%) scale(0.3);transition:opacity 0.2s, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
           indicator.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(125,211,198,0.8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.5s"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>';
           document.body.appendChild(indicator);
         };
@@ -4211,36 +4212,43 @@
         };
         const onMove = (e) => {
           if (!pulling) return;
-          const dy = e.touches[0].clientY - startY;
-          if (dy < 0) { pulling = false; removeIndicator(); return; }
-          if (dy > 20) {
+          const rawDy = e.touches[0].clientY - startY;
+          if (rawDy < 0) { pulling = false; removeIndicator(); return; }
+          const dy = dampen(rawDy);
+          if (rawDy > 50) {
             createIndicator();
-            const progress = Math.min(dy / threshold, 1);
+            const progress = Math.min(dy / (threshold * 0.4), 1);
             indicator.style.opacity = progress;
+            const scale = 0.3 + progress * 0.7;
             const svg = indicator.querySelector('svg');
             if (svg) svg.style.transform = `rotate(${progress * 540}deg)`;
             ready = progress >= 1;
             if (ready) {
               indicator.style.background = 'rgba(125,211,198,0.15)';
               indicator.style.boxShadow = '0 0 12px rgba(125,211,198,0.3)';
+              indicator.style.transform = `translateX(-50%) scale(1.15)`;
+              setTimeout(() => { if (indicator) indicator.style.transform = `translateX(-50%) scale(1)`; }, 150);
             } else {
               indicator.style.background = 'rgba(0,0,0,0.3)';
               indicator.style.boxShadow = 'none';
+              indicator.style.transform = `translateX(-50%) scale(${scale})`;
             }
           }
         };
         const onEnd = () => {
           if (ready) {
             if (indicator) {
-              indicator.style.transition = 'opacity 0.4s';
+              indicator.style.transition = 'opacity 0.4s, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
+              indicator.style.transform = 'translateX(-50%) scale(1.3)';
               indicator.style.opacity = '0';
             }
             setTimeout(() => window.location.reload(), 500);
           } else {
             if (indicator) {
-              indicator.style.transition = 'opacity 0.2s';
+              indicator.style.transition = 'opacity 0.25s, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+              indicator.style.transform = 'translateX(-50%) scale(0)';
               indicator.style.opacity = '0';
-              setTimeout(() => removeIndicator(), 250);
+              setTimeout(() => removeIndicator(), 350);
             }
           }
           pulling = false;
