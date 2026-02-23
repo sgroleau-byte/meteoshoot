@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v291</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v292</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -876,12 +876,14 @@
         if (x.id !== id) return x;
         if (x.status === ProjectStatus.TODO) {
           const upd = { status: ProjectStatus.RETOUCHING, shotAt: new Date().toISOString() };
-          if (user) supabase.from(TBL_PROJECTS).update({ status: upd.status, shot_at: upd.shotAt }).eq('id', id);
+          if (user) supabase.from(TBL_PROJECTS).update({ status: upd.status, shot_at: upd.shotAt }).eq('id', id)
+            .then(({ error }) => { if (error) console.error('Advance error:', error); });
           return {...x, ...upd};
         }
         if (x.status === ProjectStatus.RETOUCHING) {
           const upd = { status: ProjectStatus.DONE, completedAt: new Date().toISOString() };
-          if (user) supabase.from(TBL_PROJECTS).update({ status: upd.status, completed_at: upd.completedAt }).eq('id', id);
+          if (user) supabase.from(TBL_PROJECTS).update({ status: upd.status, completed_at: upd.completedAt }).eq('id', id)
+            .then(({ error }) => { if (error) console.error('Advance error:', error); });
           return {...x, ...upd};
         }
         return x;
@@ -891,12 +893,14 @@
         if (x.id !== id) return x;
         if (x.status === ProjectStatus.DONE) {
           const upd = { status: ProjectStatus.RETOUCHING, completedAt: null };
-          if (user) supabase.from(TBL_PROJECTS).update({ status: upd.status, completed_at: null }).eq('id', id);
+          if (user) supabase.from(TBL_PROJECTS).update({ status: upd.status, completed_at: null }).eq('id', id)
+            .then(({ error }) => { if (error) console.error('Revert error:', error); });
           return {...x, ...upd};
         }
         if (x.status === ProjectStatus.RETOUCHING) {
           const upd = { status: ProjectStatus.TODO, shotAt: null };
-          if (user) supabase.from(TBL_PROJECTS).update({ status: upd.status, shot_at: null }).eq('id', id);
+          if (user) supabase.from(TBL_PROJECTS).update({ status: upd.status, shot_at: null }).eq('id', id)
+            .then(({ error }) => { if (error) console.error('Revert error:', error); });
           return {...x, ...upd};
         }
         return x;
