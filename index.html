@@ -381,7 +381,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v320</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v321</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -2709,7 +2709,7 @@
 
       return (
         <div className="pb-8 pt-6 animate-fade-in" style={isMobile ? { paddingTop: 'calc(24px + 25px)' } : undefined}>
-          {!isMobile && <h1 className="font-bebas-regular" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>INFOS PROJET</h1>}
+          {!isMobile && <h1 className="font-bebas-regular" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>DÉTAILS PROJET</h1>}
           {/* Bande météo + infos — même layout que l'accueil */}
           <div className={`border-b border-adaptive py-4 ${isMobile ? 'px-4' : 'px-8'} overflow-hidden`}>
             <button onClick={onClose} className="text-charcoal-muted hover:text-charcoal transition-colors mb-4" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
@@ -2852,7 +2852,7 @@
                   <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>ADRESSE DU PROJET</label>
                   <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <input ref={addressInputRef} type="text" defaultValue={project.address || ''} placeholder="Entrer l'adresse..." className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1 }}/>
-                    {isMobile && project.address && <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(project.address)}`} target="_blank" rel="noopener" onClick={e => e.stopPropagation()} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Itinéraire"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>}
+                    {project.address && <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(project.address)}`} target="_blank" rel="noopener" onClick={e => e.stopPropagation()} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Itinéraire"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>}
                   </div>
                 </div>
                 <div>
@@ -2867,7 +2867,7 @@
                         }
                       }}
                     />
-                    {isMobile && (project.departureAddress || prefs.homeAddress) && <a href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(project.departureAddress || prefs.homeAddress || '')}&destination=${encodeURIComponent(project.address || '')}`} target="_blank" rel="noopener" onClick={e => e.stopPropagation()} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Itinéraire"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>}
+                    {(project.departureAddress || prefs.homeAddress) && <a href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(project.departureAddress || prefs.homeAddress || '')}&destination=${encodeURIComponent(project.address || '')}`} target="_blank" rel="noopener" onClick={e => e.stopPropagation()} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Itinéraire"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>}
                   </div>
                 </div>
                 <div className="pb-4 border-b border-adaptive">
@@ -3048,7 +3048,6 @@
                     {/* Date wheel picker */}
                     {showDatePicker && <DateWheelPicker date={sunDate} onChange={setSunDate} onClose={() => setShowDatePicker(false)} />}
                   </div>
-                  {!isMobile && !showMapFull && <div style={{ textAlign: 'right', fontSize: '13px', color: 'rgba(255,255,255,0.25)', letterSpacing: '0.03em', marginTop: '4px' }}>⇧ Shift + scroll pour zoomer</div>}
                   </>
                 ) : (
                   <div style={{ width: '100%', flex: 1, minHeight: '500px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -3056,6 +3055,7 @@
                   </div>
                 )}
               </div>
+              {!isMobile && !showMapFull && <div style={{ textAlign: 'right', fontSize: '13px', color: 'rgba(255,255,255,0.25)', letterSpacing: '0.03em', marginTop: '4px' }}>⇧ Shift + roulette pour zoomer</div>}
             </div>
           </div>
 
