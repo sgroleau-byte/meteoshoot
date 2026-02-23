@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v310</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v311</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -1660,7 +1660,7 @@
             </div>
           </div>
           <div className="flex items-center gap-0">
-            <div className="min-w-0" style={{ minWidth: '432px', overflowX: "hidden", overflowY: "visible" }}>
+            <div className="min-w-0" style={{ minWidth: '432px', overflow: "visible" }}>
               {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} onDayClick={() => onSelect(project)}/> : <p className="text-charcoal-muted text-sm italic py-2 cursor-pointer" onClick={() => onSelect(project)}>Météo non disponible</p>}
             </div>
             <div onMouseEnter={() => { if (activeWeatherRowDismiss) { activeWeatherRowDismiss(); activeWeatherRowDismiss = null; } }} onClick={() => onSelect(project)} className="info-dodge cursor-pointer flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
@@ -2675,7 +2675,7 @@
       return (
         <div className="pb-8 pt-6 animate-fade-in" style={isMobile ? { paddingTop: 'calc(24px + 25px)' } : undefined}>
           {/* Bande météo + infos — même layout que l'accueil */}
-          <div className={`border-b border-adaptive py-4 ${isMobile ? 'px-4' : 'px-8'}`} style={{ position: 'relative' }}>
+          <div className={`border-b border-adaptive py-4 ${isMobile ? 'px-4' : 'px-8'}`}>
             <button onClick={onClose} className="text-charcoal-muted hover:text-charcoal transition-colors mb-4" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
             </button>
@@ -2783,10 +2783,13 @@
                 </div>
               </div>
             )}
-            {(editingCreatedDate || editingShotDate) && <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '100%', zIndex: 30, width: '350px' }}>
-              {editingCreatedDate && <DateWheelPicker dropDown title="DATE CRÉÉ" date={new Date(project.createdAt)} onChange={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onClose={() => setEditingCreatedDate(false)} />}
-              {editingShotDate && project.shotAt && <DateWheelPicker dropDown title="DATE ÉDITION" date={new Date(project.shotAt)} onChange={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onClose={() => setEditingShotDate(false)} />}
-            </div>}
+            {(editingCreatedDate || editingShotDate) && ReactDOM.createPortal(
+              <div style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: 9999 }}>
+                {editingCreatedDate && <DateWheelPicker dropDown title="DATE CRÉÉ" date={new Date(project.createdAt)} onChange={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onClose={() => setEditingCreatedDate(false)} />}
+                {editingShotDate && project.shotAt && <DateWheelPicker dropDown title="DATE ÉDITION" date={new Date(project.shotAt)} onChange={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onClose={() => setEditingShotDate(false)} />}
+              </div>,
+              document.body
+            )}
           </div>
 
           {/* Météo horaire — redesigned */}
@@ -4482,7 +4485,7 @@
       });
 
       return (
-        <div className="min-h-screen bg-cream" style={{ position: 'relative', overflowX: 'hidden' }}>
+        <div className="min-h-screen bg-cream" style={{ position: 'relative', overflow: 'hidden' }}>
           {/* Mobile top blur overlay for standalone mode */}
           {isMobile && <div id="top-blur-overlay" style={{ 
             position: 'fixed', top: 0, left: 0, right: 0, 
@@ -4501,7 +4504,7 @@
             display: isMobile && showNew ? 'none' : 'block',
             minHeight: '100vh'
           }}>
-          <main className="animate-fade-in" style={{ position: 'relative', zIndex: 1, overflowX: 'hidden' }}>
+          <main className="animate-fade-in" style={{ position: 'relative', zIndex: 1, overflow: 'hidden' }}>
             <div style={{
               transform: selectedId ? 'translateX(-30%)' : 'translateX(0)',
               opacity: selectedId ? 0 : 1,
