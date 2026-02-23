@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v306</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v307</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -855,6 +855,7 @@
           if ('departureLng' in upd) dbUpd.departure_lng = upd.departureLng;
           if ('travelTime' in upd) dbUpd.travel_time = upd.travelTime;
           if ('shotAt' in upd) dbUpd.shot_at = upd.shotAt;
+          if ('createdAt' in upd) dbUpd.created_at = upd.createdAt;
           if ('completedAt' in upd) dbUpd.completed_at = upd.completedAt;
           if (Object.keys(dbUpd).length > 0) {
             supabase.from(TBL_PROJECTS).update(dbUpd).eq('id', id)
@@ -1689,6 +1690,7 @@
                 <span style={{ color: (project.orientation?.includes('AM') && wakeUp) ? colorActive : colorInactive }}>{project.orientation?.includes('AM') && wakeUp ? formatTime(wakeUp).replace(':','H') : '—'}</span>
               </div>
               <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive">
+                <span style={{ color: colorInactive }}>CRÉÉ</span>
                 <span style={{ color: colorActive }}>{formatDateShort(project.createdAt)}</span>
                 <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
               </div>
@@ -2706,9 +2708,15 @@
                     <span style={{ color: (project.orientation?.includes('AM') && wakeUp) ? colorActive : colorInactive }}>{project.orientation?.includes('AM') && wakeUp ? formatTime(wakeUp).replace(':','H') : '—'}</span>
                   </div>
                   <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
+                    <span style={{ color: colorInactive }}>CRÉÉ</span>
                     <span style={{ color: colorActive }}>{formatDateShort(project.createdAt)}</span>
                     <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
                   </div>
+                  {project.shotAt && <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
+                    <span style={{ color: colorInactive }}>EN ÉDITION</span>
+                    <span style={{ color: colorActive }}>{formatDateShort(project.shotAt)}</span>
+                    <span style={{ color: colorCharcoal }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
+                  </div>}
                 </div>
                 <div className="border-b border-adaptive" style={{ marginTop: '12px' }}/>
                 <div style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', marginTop: '12px', marginLeft: '-16px', marginRight: '-16px', paddingLeft: '16px', paddingRight: '16px' }}>
@@ -2745,9 +2753,21 @@
                     <span style={{ color: (project.orientation?.includes('AM') && wakeUp) ? colorActive : colorInactive }}>{project.orientation?.includes('AM') && wakeUp ? formatTime(wakeUp).replace(':','H') : '—'}</span>
                   </div>
                   <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive">
-                    <span style={{ color: colorActive }}>{formatDateShort(project.createdAt)}</span>
+                    <span style={{ color: colorInactive }}>CRÉÉ</span>
+                    <span style={{ color: colorActive, cursor: 'pointer', position: 'relative' }} onClick={(e) => { const inp = e.currentTarget.querySelector('input'); if (inp) inp.showPicker(); }}>
+                      {formatDateShort(project.createdAt)}
+                      <input type="date" value={project.createdAt ? project.createdAt.slice(0,10) : ''} onChange={e => { if (e.target.value) updateProject(project.id, { createdAt: new Date(e.target.value + 'T12:00:00').toISOString() }); }} style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', top: 0, left: 0, cursor: 'pointer' }}/>
+                    </span>
                     <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
                   </div>
+                  {project.shotAt && <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive">
+                    <span style={{ color: colorInactive }}>EN ÉDITION</span>
+                    <span style={{ color: colorActive, cursor: 'pointer', position: 'relative' }} onClick={(e) => { const inp = e.currentTarget.querySelector('input'); if (inp) inp.showPicker(); }}>
+                      {formatDateShort(project.shotAt)}
+                      <input type="date" value={project.shotAt ? project.shotAt.slice(0,10) : ''} onChange={e => { if (e.target.value) updateProject(project.id, { shotAt: new Date(e.target.value + 'T12:00:00').toISOString() }); }} style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', top: 0, left: 0, cursor: 'pointer' }}/>
+                    </span>
+                    <span style={{ color: colorCharcoal }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
+                  </div>}
                 </div>
               </div>
             )}
@@ -3935,7 +3955,7 @@
           {retouching.length === 0 ? <div className="text-center py-16"><p className="font-bebas-book text-charcoal-muted" style={{ fontSize: '24px' }}>Aucun projet à retoucher</p></div>
           : <div style={{ paddingBottom: '80px' }}>{retouching.map(p => <RetouchingCard key={p.id} project={p} onSelect={onSelect}/>)}</div>}
           {done.length > 0 && <>
-            <div className="px-4 py-4 mt-8 border-b border-adaptive"><h2 className="font-bebas-light" style={{ fontSize: '28px', color: '#8B9B99' }}>ARCHIVÉ <span>({done.length})</span></h2></div>
+            <div className="px-4 py-4 mt-8 border-b border-adaptive"><h2 className="font-bebas-light" style={{ fontSize: '28px', color: '#8B9B99' }}>ARCHIVÉ</h2></div>
             <div style={{ paddingBottom: '80px' }}>{done.map(p => <DoneCard key={p.id} project={p}/>)}</div>
           </>}
         </div>
