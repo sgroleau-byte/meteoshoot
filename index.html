@@ -381,7 +381,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v324</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v325</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -2689,8 +2689,8 @@
                                 <span className={!(isSunrise || isSunset) ? 'text-charcoal-muted' : ''}>{timeLabel}</span>
                               </span>
                               <WeatherIcon type={icon} className={`w-10 h-10 ${isNight ? 'opacity-50' : ''}`}/>
-                              <span className="font-bebas-bold text-base leading-none text-charcoal" style={{ marginTop: '4px' }}>{h.temp}°</span>
-                              <span className="font-bebas-bold text-base leading-none text-charcoal-muted" style={{ marginTop: '4px' }}>{h.cloudcover != null ? `${h.cloudcover}%` : '--'}</span>
+                              <span className="font-bebas-bold text-base leading-none text-charcoal" style={{ marginTop: '4px' }}>{h.cloudcover != null ? `${h.cloudcover}%` : '--'}</span>
+                              <span className="font-bebas-bold text-base leading-none text-charcoal-muted" style={{ marginTop: '4px' }}>{h.temp}°</span>
                               <span className="font-bebas-bold text-sm leading-none text-charcoal-muted mt-1">{h.wind} <span className="text-xs">KM/H</span></span>
                               {h.precip > 0 && <span className="font-bebas-bold text-sm leading-none mt-1" style={{ color: '#7dd3c6' }}>{h.precip < 1 ? h.precip.toFixed(1) : Math.round(h.precip)} <span className="text-xs">MM</span></span>}
                             </div>
