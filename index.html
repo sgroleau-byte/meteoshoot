@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v303</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v304</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -1806,32 +1806,54 @@
     };
 
     const DoneCard = ({ project }) => {
-      const { revertProject, prefs } = useStore();
+      const { revertProject, deleteProject, prefs } = useStore();
       const [confirmRevert, setConfirmRevert] = useState(false);
+      const [confirmDelete, setConfirmDelete] = useState(false);
       const colorCharcoal = '#8B9B99';
       const colorActive = '#FAF9F7';
+      const colorInactive = '#404A48';
       const days = project.completedAt ? daysSince(project.completedAt) : null;
       const handleRevert = (e) => {
         e.stopPropagation(); e.preventDefault();
-        if (confirmRevert) { revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setTimeout(() => setConfirmRevert(false), 3000); }
+        if (confirmRevert) { revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setConfirmDelete(false); setTimeout(() => setConfirmRevert(false), 3000); }
+      };
+      const handleDelete = (e) => {
+        e.stopPropagation(); e.preventDefault();
+        if (confirmDelete) { deleteProject(project.id); } else { setConfirmDelete(true); setConfirmRevert(false); setTimeout(() => setConfirmDelete(false), 3000); }
       };
       return (
-        <div className="project-card py-5 px-4 mb-3 hover:bg-cream-dark/30" style={{ opacity: 0.2 }}>
-          <h3 className="font-bebas-book flex items-center gap-2" style={{ fontSize: '35px', color: colorCharcoal, lineHeight: '1' }}>
-            {project.name} {project.isContest && <StarIcon/>}
-          </h3>
-          <div className="flex items-center gap-0" style={{ marginTop: '10px' }}>
-            <div className="info-dodge flex items-stretch flex-shrink-0 font-bebas-light uppercase" style={{ fontSize: '19px', lineHeight: '1' }}>
-              <div className="flex flex-col justify-center pl-2 border-l border-adaptive">
-                <span style={{ color: colorCharcoal }}>TERMINÉ</span>
+        <div className="card-glow-wrap">
+        <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden border-b border-adaptive" style={{ opacity: 0.5 }}>
+          <div className="flex items-center gap-0">
+            <div className="flex-shrink-0" style={{ minWidth: '432px' }}>
+              <h3 className="font-bebas-book flex items-center gap-2" style={{ fontSize: '35px', color: colorCharcoal, lineHeight: '1' }}>
+                {project.name} {project.isContest && <StarIcon/>}
+              </h3>
+            </div>
+            <div className="info-dodge flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
+              <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '100px' }}>
+                {Object.values(MandateType).map(m => {
+                  const active = project.mandates?.includes(m);
+                  const alwaysShow = m === 'INT' || m === 'EXT' || m === 'DRONE';
+                  if (!alwaysShow && !active) return null;
+                  return <React.Fragment key={m}>{renderMandate(m, active ? colorCharcoal : colorInactive)}</React.Fragment>;
+                })}
+              </div>
+              <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
+                <span style={{ color: colorInactive }}>ARCHIVÉ</span>
                 <span style={{ color: colorCharcoal }}>{project.completedAt ? formatDateShort(project.completedAt) : ''}</span>
               </div>
               {days !== null && <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
-                <span style={{ color: colorCharcoal }}>IL Y A {days} {days <= 1 ? 'JOUR' : 'JOURS'}</span>
+                <span style={{ color: colorInactive }}>IL Y A</span>
+                <span style={{ color: colorCharcoal }}>{days} {days <= 1 ? 'JOUR' : 'JOURS'}</span>
               </div>}
             </div>
-            <button onClick={handleRevert} className="font-bebas-bold uppercase ml-auto card-actions" style={{ background: 'none', border: 'none', color: confirmRevert ? colorActive : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } }}>{confirmRevert ? '← RETOUR LISTE ?' : '← RETOUR LISTE'}</button>
+            <div className="hidden lg:flex items-center gap-4 ml-auto card-actions" style={{ marginTop: '5px' }}>
+              <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? colorActive : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } }}>{confirmRevert ? '← RÉACTIVER ?' : '← RÉACTIVER'}</button>
+              <button onClick={handleDelete} className={`p-2 trash-btn text-red-500`} title="Supprimer"><TrashIcon/></button>
+            </div>
           </div>
+        </div>
         </div>
       );
     };
