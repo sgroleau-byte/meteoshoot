@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v283</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v285</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -3280,9 +3280,9 @@
               maskImage: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 100%)',
               overflow: 'hidden'
             }}>
-            {/* Black flare - bottom right */}
-            <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '257px', overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
-              <div style={{ position: 'absolute', right: '-400px', bottom: '-400px', width: '900px', height: '900px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0) 70%)' }}/>
+            {/* Black flare - bottom right, in 86px mask (257px @3x) */}
+            <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '86px', overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
+              <div style={{ position: 'absolute', right: '-400px', bottom: '-400px', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0) 70%)' }}/>
             </div>
             {/* Content row - positioned from bottom */}
             <div style={{ position: 'absolute', bottom: '20px', left: 0, right: 0, display: 'flex', alignItems: 'center', height: '50px', zIndex: 1 }}>
