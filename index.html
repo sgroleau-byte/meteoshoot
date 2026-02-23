@@ -381,7 +381,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v322</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v323</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -3065,44 +3065,17 @@
             </button>
             <div className={`flex items-center ${isMobile ? 'gap-6' : 'gap-8'}`} style={isMobile ? {} : { marginLeft: '100px' }}>
               {project.status === 'todo' && (
-                <button onClick={handleDone} className="font-bebas-bold text-xl text-charcoal-muted hover:text-charcoal">
-                  {confirmDone ? 'CONFIRMER?' : 'EN ÉDITION'}
-                </button>
+                <button onClick={handleDone} className="font-bebas-bold text-xl" style={{ background: 'none', border: 'none', cursor: 'pointer', color: confirmDone ? '#d83152' : '#8B9B99', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }}
+                  onMouseEnter={e => { if (!confirmDone) { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }}}
+                  onMouseLeave={e => { if (!confirmDone) { e.target.style.color = '#8B9B99'; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; }}}
+                >{confirmDone ? 'CONFIRMER?' : 'PASSER EN ÉDITION'}</button>
               )}
-              <button onClick={handleDelete} className={`font-bebas-bold text-xl ${confirm ? 'text-red-500' : 'text-charcoal-muted hover:text-red-500'}`}>
-                {confirm ? 'CONFIRMER?' : 'SUPPRIMER'}
-              </button>
+              <button onClick={handleDelete} className="font-bebas-bold text-xl" style={{ background: 'none', border: 'none', cursor: 'pointer', color: confirm ? '#d83152' : '#8B9B99', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirm ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }}
+                onMouseEnter={e => { if (!confirm) { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }}}
+                onMouseLeave={e => { if (!confirm) { e.target.style.color = '#8B9B99'; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; }}}
+              >{confirm ? 'CONFIRMER?' : 'SUPPRIMER'}</button>
             </div>
-            {/* Help tooltip - desktop only */}
-            {!isMobile && <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.2)', letterSpacing: '0.03em' }}>⇧ Shift + roulette pour zoomer</span>}
-            {!isMobile && <div className="ml-auto" style={{ position: 'relative' }}>
-              <button 
-                onClick={() => setShowHelp(!showHelp)} 
-                style={{ 
-                  width: '24px', height: '24px', borderRadius: '50%', 
-                  border: '1px solid rgba(255,255,255,0.2)', background: 'transparent',
-                  color: 'rgba(255,255,255,0.3)', fontSize: '13px', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontFamily: 'inherit'
-                }}
-                onMouseEnter={e => e.target.style.color = 'rgba(255,255,255,0.6)'}
-                onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.3)'}
-              >?</button>
-              {showHelp && (
-                <div style={{ 
-                  position: 'absolute', bottom: '32px', right: '0', 
-                  background: '#2a2a2a', border: '1px solid rgba(255,255,255,0.1)',
-                  padding: '12px 16px', width: '280px', zIndex: 50
-                }}>
-                  <p className="font-bebas-book" style={{ fontSize: '14px', color: 'rgba(255,255,255,0.5)', lineHeight: '1.6' }}>
-                    MeteoShoot v1.3.0 — Supabase sync<br/>
-                    Météo : GEM Canada (Env. Canada) via Open-Meteo<br/>
-                    Géocodage : Google Maps<br/>
-                    Direction soleil : SunCalc
-                  </p>
-                </div>
-              )}
-            </div>}
+            {!isMobile && <span className="ml-auto" style={{ fontSize: '13px', color: 'rgba(255,255,255,0.2)', letterSpacing: '0.03em' }}>⇧ Shift + roulette pour zoomer</span>}
           </div>
         </div>
       );
