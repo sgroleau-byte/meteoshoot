@@ -381,7 +381,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v315</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v316</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -3993,6 +3993,7 @@
       
       return (
         <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px' }}>
+          {!isMobile && <h1 className="font-bebas-bold" style={{ fontSize: '24px', color: '#3b4745', padding: '10px 0 0 10px', letterSpacing: '0.03em' }}>PROJETS</h1>}
           {!isMobile && <div className="px-4 md:px-6">
             <div ref={plusRef} style={{ width: '68px', height: '88px', marginLeft: '-6px' }}/>
           </div>}
@@ -4011,6 +4012,7 @@
       const done = projects.filter(p => p.status === ProjectStatus.DONE);
       return (
         <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px' }}>
+          {!isMobile && <h1 className="font-bebas-bold" style={{ fontSize: '24px', color: '#3b4745', padding: '10px 0 0 10px', letterSpacing: '0.03em' }}>ÉDITION</h1>}
           {retouching.length === 0 ? <div className="text-center py-16"><p className="font-bebas-book text-charcoal-muted" style={{ fontSize: '24px' }}>Aucun projet en édition</p></div>
           : <div style={{ paddingBottom: '80px' }}>{retouching.map(p => <RetouchingCard key={p.id} project={p} onSelect={onSelect}/>)}</div>}
           {done.length > 0 && <>
@@ -4077,6 +4079,7 @@
 
       return (
         <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px' }}>
+          {!isMobile && <h1 className="font-bebas-bold" style={{ fontSize: '24px', color: '#3b4745', padding: '10px 0 0 10px', letterSpacing: '0.03em' }}>PRÉFÉRENCES</h1>}
           <div className={isMobile ? 'px-4' : 'px-8 md:px-12'}>
             {msg && <div className={`mb-6 p-3 rounded ${msg.type === "success" ? "bg-transparent" : "bg-red-50 text-red-700"}`} style={msg.type === "success" ? { color: "#7dd3c6" } : {}}>{msg.text}</div>}
             <div className="space-y-5" style={{ maxWidth: '600px' }}>
