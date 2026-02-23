@@ -274,8 +274,8 @@
     .newproj-actions button:hover { color: rgba(255,255,255,0.9); }
     .card-actions { opacity: 0; transform: translateX(20px); transition: opacity 0.3s ease, transform 0.3s ease; position: relative; }
     .card-glow-wrap:hover .card-actions { opacity: 1; transform: translateX(0); }
-    .trash-btn { position: relative; transition: filter 0.3s ease; filter: drop-shadow(0 0 0px transparent); }
-    .trash-btn:hover { filter: drop-shadow(0 0 8px rgba(216,49,82,0.6)) drop-shadow(0 0 16px rgba(216,49,82,0.3)); }
+    .trash-btn { position: relative; transition: filter 0.3s ease, brightness 0.3s ease; filter: drop-shadow(0 0 0px transparent); }
+    .trash-btn:hover { filter: drop-shadow(0 0 8px rgba(216,49,82,0.6)) drop-shadow(0 0 16px rgba(216,49,82,0.3)) brightness(1.4); }
     .newproj-actions button:disabled { opacity: 0.3; cursor: default; }
     .project-card { 
       transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1), background-color 0.15s ease;
@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v304</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v305</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -3920,7 +3920,7 @@
           {isMobile && <div ref={plusRef} style={{ width: 0, height: 0 }}/>}
           {isMobile && <GeoWeatherCard/>}
           {todoProjects.length === 0 ? <div className="text-center py-16"><div className="text-6xl mb-4">📷</div><p className="text-charcoal-muted">{isMobile ? 'Appuyez sur + pour ajouter un projet' : 'Cliquez sur + pour ajouter un projet'}</p></div>
-          : <div ref={listRef}>{todoProjects.map((p, i) => <ProjectCard key={p.id} project={p} index={i} onSelect={onSelect} onMouseDownDrag={isMobile ? undefined : handleMouseDownDrag} openActionsId={openActionsId} setOpenActionsId={setOpenActionsId}/>)}</div>}
+          : <div ref={listRef} style={{ paddingBottom: '80px' }}>{todoProjects.map((p, i) => <ProjectCard key={p.id} project={p} index={i} onSelect={onSelect} onMouseDownDrag={isMobile ? undefined : handleMouseDownDrag} openActionsId={openActionsId} setOpenActionsId={setOpenActionsId}/>)}</div>}
         </div>
       );
     };
@@ -3936,7 +3936,7 @@
           : <div style={{ paddingBottom: '80px' }}>{retouching.map(p => <RetouchingCard key={p.id} project={p} onSelect={onSelect}/>)}</div>}
           {done.length > 0 && <>
             <div className="px-4 py-4 mt-8 border-b border-adaptive"><h2 className="font-bebas-light" style={{ fontSize: '28px', color: '#424141' }}>TERMINÉ <span>({done.length})</span></h2></div>
-            <div>{done.map(p => <DoneCard key={p.id} project={p}/>)}</div>
+            <div style={{ paddingBottom: '80px' }}>{done.map(p => <DoneCard key={p.id} project={p}/>)}</div>
           </>}
         </div>
       );
@@ -4446,7 +4446,7 @@
       });
 
       return (
-        <div className="min-h-screen bg-cream" style={{ position: 'relative', overflow: 'hidden' }}>
+        <div className="min-h-screen bg-cream" style={{ position: 'relative', overflowX: 'hidden' }}>
           {/* Mobile top blur overlay for standalone mode */}
           {isMobile && <div id="top-blur-overlay" style={{ 
             position: 'fixed', top: 0, left: 0, right: 0, 
