@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v286</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v287</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -4290,17 +4290,20 @@
       const openProject = (p) => {
         setShowNew(false);
         setSelectedId(p.id);
+        window.scrollTo(0, 0);
         history.pushState({ projectId: p.id, view }, '', `#project/${p.id}`);
       };
       
       const closeProject = () => {
         setSelectedId(null);
+        window.scrollTo(0, 0);
         history.pushState({ view }, '', `#${view}`);
       };
 
       const changeView = (v) => {
         setView(v);
         setSelectedId(null);
+        window.scrollTo(0, 0);
         history.pushState({ view: v }, '', `#${v}`);
       };
 
@@ -4310,6 +4313,7 @@
         
         const onPopState = (e) => {
           const state = e.state;
+          window.scrollTo(0, 0);
           if (state?.projectId) {
             setSelectedId(state.projectId);
             if (state.view) setView(state.view);
