@@ -3422,8 +3422,12 @@
               try {
                 const geocoder = new google.maps.Geocoder();
                 const res = await new Promise((resolve, reject) => geocoder.geocode({ location: { lat, lng } }, (results, status) => status === 'OK' ? resolve(results) : reject(status)));
-                const city = res.find(r => r.types.includes('locality')) || res.find(r => r.types.includes('administrative_area_level_2')) || res[0];
-                if (city) cityName = city.formatted_address.split(',').slice(0, 2).join(',');
+                const city = res.find(r => r.types.includes('locality')) || res.find(r => r.types.includes('sublocality')) || res.find(r => r.types.includes('administrative_area_level_3')) || res.find(r => r.types.includes('neighborhood'));
+                if (city) {
+                  const parts = city.formatted_address.split(',');
+                  cityName = parts[0].trim();
+                  if (parts[1]) cityName += ',' + parts[1].trim();
+                }
               } catch(e) { console.log('Reverse geocode failed', e); }
               const weather = await fetchWeather(lat, lng);
               const today = weather.daily?.[0];
