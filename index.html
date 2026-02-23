@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v294</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v295</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -1764,15 +1764,13 @@
       return (
         <div className="card-glow-wrap">
         <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden border-b border-adaptive">
-          <div onClick={() => onSelect(project)} className="cursor-pointer">
-            <div className="flex items-start justify-between gap-4" style={{ marginBottom: '-10px' }}>
-              <h3 className="font-bebas-book text-charcoal flex items-center gap-2" style={{ fontSize: '35px' }}>
+          <div className="flex items-center gap-0">
+            <div onClick={() => onSelect(project)} className="cursor-pointer flex-shrink-0">
+              <h3 className="font-bebas-book text-charcoal flex items-center gap-2" style={{ fontSize: '35px', lineHeight: '1' }}>
                 {project.name} {project.isContest && <StarIcon/>}
               </h3>
             </div>
-          </div>
-          <div className="flex items-center gap-0">
-            <div onClick={() => onSelect(project)} className="info-dodge cursor-pointer flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-0" style={{ fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
+            <div onClick={() => onSelect(project)} className="info-dodge cursor-pointer flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ fontSize: '22px', minHeight: '60px', lineHeight: '1' }}>
               <div className="flex flex-col justify-center pl-2 border-l border-adaptive">
                 {Object.values(MandateType).filter(m => project.mandates?.includes(m)).map(m => {
                   return <React.Fragment key={m}>{renderMandate(m, colorActive)}</React.Fragment>;
