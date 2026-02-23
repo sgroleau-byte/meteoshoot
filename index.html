@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v313</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v314</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -1714,6 +1714,7 @@
       const [editingCreatedDate, setEditingCreatedDate] = useState(false);
       const [editingShotDate, setEditingShotDate] = useState(false);
       const [pickerPos, setPickerPos] = useState({ top: 0, left: 0 });
+      const originalDateRef = useRef(null);
       const days = project.shotAt ? daysSince(project.shotAt) : null;
       const daysColor = !days ? '#5E6C6A' : days > 30 ? '#f4143d' : days > 14 ? '#f59e0b' : '#5E6C6A';
 
@@ -1793,12 +1794,12 @@
               </div>
             </div>
             <div className="flex items-stretch flex-shrink-0 font-bebas-bold uppercase" style={{ fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
-              <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setPickerPos({ top: r.bottom + 4, left: r.left }); setEditingCreatedDate(p => !p); setEditingShotDate(false); }}>
+              <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setPickerPos({ top: r.bottom + 4, left: r.left }); originalDateRef.current = project.createdAt; setEditingCreatedDate(p => !p); setEditingShotDate(false); }}>
                 <span style={{ color: colorInactive }}>CRÉÉ</span>
                 <span style={{ color: colorActive, textDecoration: editingCreatedDate ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }}>{formatDateShort(project.createdAt)}</span>
                 <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
               </div>
-              <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setPickerPos({ top: r.bottom + 4, left: r.left }); setEditingShotDate(p => !p); setEditingCreatedDate(false); }}>
+              <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setPickerPos({ top: r.bottom + 4, left: r.left }); originalDateRef.current = project.shotAt; setEditingShotDate(p => !p); setEditingCreatedDate(false); }}>
                 <span style={{ color: colorInactive }}>ÉDITION</span>
                 <span style={{ color: colorActive, textDecoration: editingShotDate ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }}>{project.shotAt ? formatDateShort(project.shotAt) : '- - -'}</span>
                 <span style={{ color: colorCharcoal }}>{days !== null ? `${days} ${days <= 1 ? 'JOUR' : 'JOURS'}` : ''}</span>
@@ -1812,10 +1813,13 @@
           </div>
         </div>
         {(editingCreatedDate || editingShotDate) && ReactDOM.createPortal(
-          <div style={{ position: 'fixed', top: pickerPos.top, left: pickerPos.left, zIndex: 9999 }}>
-            {editingCreatedDate && <DateWheelPicker dropDown title="DATE CRÉÉ" date={new Date(project.createdAt)} onChange={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onClose={() => setEditingCreatedDate(false)} />}
-            {editingShotDate && project.shotAt && <DateWheelPicker dropDown title="DATE ÉDITION" date={new Date(project.shotAt)} onChange={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onClose={() => setEditingShotDate(false)} />}
-          </div>,
+          <React.Fragment>
+            <div onClick={() => { if (editingCreatedDate && originalDateRef.current) updateProject(project.id, { createdAt: originalDateRef.current }); if (editingShotDate && originalDateRef.current) updateProject(project.id, { shotAt: originalDateRef.current }); setEditingCreatedDate(false); setEditingShotDate(false); }} style={{ position: 'fixed', inset: 0, zIndex: 9998 }}/>
+            <div style={{ position: 'fixed', top: pickerPos.top, left: pickerPos.left, zIndex: 9999 }}>
+              {editingCreatedDate && <DateWheelPicker dropDown title="DATE CRÉÉ" date={new Date(project.createdAt)} onChange={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onCancel={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onClose={() => setEditingCreatedDate(false)} />}
+              {editingShotDate && project.shotAt && <DateWheelPicker dropDown title="DATE ÉDITION" date={new Date(project.shotAt)} onChange={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onCancel={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onClose={() => setEditingShotDate(false)} />}
+            </div>
+          </React.Fragment>,
           document.body
         )}
         </div>
@@ -1973,10 +1977,11 @@
       );
     };
     
-    const DateWheelPicker = ({ date, onChange, onClose, title, dropDown }) => {
+    const DateWheelPicker = ({ date, onChange, onClose, onCancel, title, dropDown }) => {
       const [selDay, setSelDay] = useState(date.getDate());
       const [selMonth, setSelMonth] = useState(date.getMonth());
       const [selYear, setSelYear] = useState(date.getFullYear());
+      const originalDate = useRef(new Date(date));
       const itemH = 40;
       
       const currentYear = new Date().getFullYear();
@@ -1991,15 +1996,20 @@
       }, [selDay, selMonth, selYear]);
       
       const resetToday = () => { onChange(new Date()); onClose(); };
+      const handleCancel = () => { if (onCancel) onCancel(originalDate.current); onClose(); };
+      
+      const leftBtn = onCancel
+        ? { label: 'ANNULER', action: handleCancel, color: 'rgba(255,255,255,0.4)' }
+        : { label: "AUJOURD'HUI", action: resetToday, color: '#7dd3c6' };
       
       const posStyle = dropDown
-        ? { position: 'relative', width: '100%', maxWidth: '350px', zIndex: 20, background: 'rgba(20,24,27,0.95)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderRadius: '0 0 16px 16px', padding: '12px 0 18px' }
+        ? { position: 'relative', width: '100%', maxWidth: '350px', zIndex: 20, background: 'rgba(20,24,27,0.95)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderRadius: '16px', padding: '12px 0 18px' }
         : { position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '350px', zIndex: 20, background: 'rgba(20,24,27,0.7)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderRadius: '16px 16px 0 0', padding: '12px 0 18px' };
 
       return (
         <div style={posStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px 8px' }}>
-            <button onClick={resetToday} className="font-bebas-regular" style={{ background: 'none', border: 'none', color: '#7dd3c6', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.05em' }}>AUJOURD'HUI</button>
+            <button onClick={leftBtn.action} className="font-bebas-regular" style={{ background: 'none', border: 'none', color: leftBtn.color, fontSize: '15px', cursor: 'pointer', letterSpacing: '0.05em' }}>{leftBtn.label}</button>
             <span className="font-bebas-bold" style={{ fontSize: '16px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.05em' }}>{title || 'DATE SOLEIL'}</span>
             <button onClick={onClose} className="font-bebas-regular" style={{ background: 'none', border: 'none', color: '#7dd3c6', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.05em' }}>OK</button>
           </div>
@@ -2027,6 +2037,7 @@
       const [editingCreatedDate, setEditingCreatedDate] = useState(false);
       const [editingShotDate, setEditingShotDate] = useState(false);
       const [detailPickerPos, setDetailPickerPos] = useState({ top: 0, left: 0 });
+      const originalDateRef = useRef(null);
       const isToday = React.useMemo(() => { const n = new Date(); return sunDate.getDate() === n.getDate() && sunDate.getMonth() === n.getMonth() && sunDate.getFullYear() === n.getFullYear(); }, [sunDate]);
       const [sunHour, setSunHour] = useState(() => { const n = new Date(); return n.getHours() + n.getMinutes()/60; });
       const mapIsNight = React.useMemo(() => {
@@ -2689,7 +2700,7 @@
       return (
         <div className="pb-8 pt-6 animate-fade-in" style={isMobile ? { paddingTop: 'calc(24px + 25px)' } : undefined}>
           {/* Bande météo + infos — même layout que l'accueil */}
-          <div className={`border-b border-adaptive py-4 ${isMobile ? 'px-4' : 'px-8'}`}>
+          <div className={`border-b border-adaptive py-4 ${isMobile ? 'px-4' : 'px-8'} overflow-hidden`}>
             <button onClick={onClose} className="text-charcoal-muted hover:text-charcoal transition-colors mb-4" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
             </button>
@@ -2784,14 +2795,14 @@
                   </div>
                   <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive">
                     <span style={{ color: colorInactive }}>CRÉÉ</span>
-                    <span style={{ color: colorActive, cursor: 'pointer', textDecoration: editingCreatedDate ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setDetailPickerPos({ top: r.bottom + 4, left: r.left }); setEditingCreatedDate(p => !p); setEditingShotDate(false); }}>
+                    <span style={{ color: colorActive, cursor: 'pointer', textDecoration: editingCreatedDate ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setDetailPickerPos({ top: r.bottom + 4, left: r.left }); originalDateRef.current = project.createdAt; setEditingCreatedDate(p => !p); setEditingShotDate(false); }}>
                       {formatDateShort(project.createdAt)}
                     </span>
                     <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
                   </div>
                   {project.shotAt && <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive">
                     <span style={{ color: colorInactive }}>ÉDITION</span>
-                    <span style={{ color: colorActive, cursor: 'pointer', textDecoration: editingShotDate ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setDetailPickerPos({ top: r.bottom + 4, left: r.left }); setEditingShotDate(p => !p); setEditingCreatedDate(false); }}>
+                    <span style={{ color: colorActive, cursor: 'pointer', textDecoration: editingShotDate ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setDetailPickerPos({ top: r.bottom + 4, left: r.left }); originalDateRef.current = project.shotAt; setEditingShotDate(p => !p); setEditingCreatedDate(false); }}>
                       {formatDateShort(project.shotAt)}
                     </span>
                     <span style={{ color: colorCharcoal }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
@@ -2800,10 +2811,13 @@
               </div>
             )}
             {(editingCreatedDate || editingShotDate) && ReactDOM.createPortal(
-              <div style={{ position: 'fixed', top: detailPickerPos.top, left: detailPickerPos.left, zIndex: 9999 }}>
-                {editingCreatedDate && <DateWheelPicker dropDown title="DATE CRÉÉ" date={new Date(project.createdAt)} onChange={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onClose={() => setEditingCreatedDate(false)} />}
-                {editingShotDate && project.shotAt && <DateWheelPicker dropDown title="DATE ÉDITION" date={new Date(project.shotAt)} onChange={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onClose={() => setEditingShotDate(false)} />}
-              </div>,
+              <React.Fragment>
+                <div onClick={() => { if (editingCreatedDate && originalDateRef.current) updateProject(project.id, { createdAt: originalDateRef.current }); if (editingShotDate && originalDateRef.current) updateProject(project.id, { shotAt: originalDateRef.current }); setEditingCreatedDate(false); setEditingShotDate(false); }} style={{ position: 'fixed', inset: 0, zIndex: 9998 }}/>
+                <div style={{ position: 'fixed', top: detailPickerPos.top, left: detailPickerPos.left, zIndex: 9999 }}>
+                  {editingCreatedDate && <DateWheelPicker dropDown title="DATE CRÉÉ" date={new Date(project.createdAt)} onChange={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onCancel={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onClose={() => setEditingCreatedDate(false)} />}
+                  {editingShotDate && project.shotAt && <DateWheelPicker dropDown title="DATE ÉDITION" date={new Date(project.shotAt)} onChange={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onCancel={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onClose={() => setEditingShotDate(false)} />}
+                </div>
+              </React.Fragment>,
               document.body
             )}
           </div>
