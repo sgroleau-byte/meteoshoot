@@ -371,7 +371,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v292</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v293</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -1760,7 +1760,7 @@
         );
       }
 
-      // Desktop layout (unchanged)
+      // Desktop layout
       return (
         <div className="card-glow-wrap">
         <div className="project-card py-5 px-4 mb-3 hover:bg-cream-dark/30">
@@ -1777,26 +1777,21 @@
                 {Object.values(MandateType).filter(m => project.mandates?.includes(m)).map(m => {
                   return <React.Fragment key={m}>{renderMandate(m, colorActive)}</React.Fragment>;
                 })}
-                })}
-              </div>
-              <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
-                <span style={{ color: colorCharcoal }}>PHOTOGRAPHIÉ</span>
-                <span style={{ color: colorActive }}>{project.shotAt ? formatDateShort(project.shotAt) : '- - -'}</span>
-              </div>
-              <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
-                <span style={{ color: colorCharcoal }}>EN RETOUCHE</span>
-                <span style={{ color: daysColor }}>{days !== null ? `${days} ${days <= 1 ? 'JOUR' : 'JOURS'}` : '- - -'}</span>
               </div>
               <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
                 <span style={{ color: colorCharcoal }}>CRÉÉ</span>
                 <span style={{ color: colorActive }}>{formatDateShort(project.createdAt)}</span>
               </div>
+              <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
+                <span style={{ color: colorCharcoal }}>TEMPS ÉCOULÉ</span>
+                <span style={{ color: daysColor }}>{days !== null ? `${days} ${days <= 1 ? 'JOUR' : 'JOURS'}` : '- - -'}</span>
+              </div>
             </div>
-            <div className="hidden lg:flex items-center gap-1 ml-auto card-actions">
+            <div className="hidden lg:flex items-center gap-3 ml-auto card-actions">
               {confirmDone && <span onClick={handleDone} className="text-charcoal text-sm font-bebas-bold cursor-pointer">TERMINÉ?</span>}
               {confirmDelete && <span onClick={handleDelete} className="text-red-500 text-sm font-bebas-bold cursor-pointer">SUPPRIMER?</span>}
-              <button onClick={(e) => { e.stopPropagation(); revertProject(project.id); }} className="p-2 text-charcoal-muted hover:text-blue-500" title="Remettre dans À faire"><UndoIcon/></button>
-              <button onClick={handleDone} className="p-2 text-charcoal-muted hover:text-green-600" title="Marquer terminé"><CheckIcon/></button>
+              <button onClick={(e) => { e.stopPropagation(); revertProject(project.id); }} className="font-bebas-light uppercase hover:text-blue-500" style={{ background: 'none', border: 'none', color: colorCharcoal, fontSize: '14px', cursor: 'pointer', padding: '4px 0', letterSpacing: '0.02em' }}>REMETTRE DANS LA LISTE</button>
+              <button onClick={handleDone} className="font-bebas-light uppercase hover:text-green-600" style={{ background: 'none', border: 'none', color: colorCharcoal, fontSize: '14px', cursor: 'pointer', padding: '4px 0', letterSpacing: '0.02em' }}>COMPLÉTÉ</button>
               <button onClick={handleDelete} className={`p-2 trash-btn ${confirmDelete ? 'text-red-500' : 'text-charcoal-muted hover:text-red-500'}`} title="Supprimer"><TrashIcon/></button>
             </div>
           </div>
@@ -3184,11 +3179,11 @@
               <div className={`newproj-panel ${animated ? 'open' : ''}`} style={{ left: panelX, top: panelY, width: panelW, padding: '28px 32px' }} onClick={e => e.stopPropagation()}>
                 <div className="mb-5">
                   <label className="newproj-label font-bebas-book">NOM DU PROJET</label>
-                  <input ref={nameInputRef} type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet"/>
+                  <input ref={nameInputRef} type="text" autoComplete="off" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet"/>
                 </div>
                 <div className="mb-5">
                   <label className="newproj-label font-bebas-book">ADRESSE DU PROJET</label>
-                  <input ref={addressInputRef} type="text" defaultValue={form.address} placeholder="Entrer l'adresse..."/>
+                  <input ref={addressInputRef} type="text" autoComplete="off" defaultValue={form.address} placeholder="Entrer l'adresse..."/>
                 </div>
                 <div className="mb-5">
                   <label className="newproj-label font-bebas-book">MANDAT</label>
