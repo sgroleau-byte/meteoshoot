@@ -381,7 +381,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v327</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v328</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -1658,7 +1658,7 @@
       return (
         <div className="card-glow-wrap">
         <div 
-          className={`project-card py-4 pl-4 pr-8 mb-3 hover:bg-cream-dark/30 overflow-hidden animate-card-in border-b border-adaptive`}
+          className={`project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden animate-card-in border-b border-adaptive`}
           style={{ minWidth: '1100px', animationDelay: `${index * 0.1}s` }}
           onMouseDown={onMouseDownDrag ? (e) => onMouseDownDrag(e, project.id, index) : undefined}
         >
@@ -1707,11 +1707,11 @@
                 <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
               </div>
             </div>
-            <div className="hidden lg:flex items-center gap-4 ml-auto card-actions">
-              <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? 'EN ÉDITION ?' : 'EN ÉDITION'}</button>
-              <button onClick={handleDelete} className={`p-2 trash-btn text-red-500`} title="Supprimer"><TrashIcon/></button>
-            </div>
           </div>
+        </div>
+        <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
+          <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? 'EN ÉDITION ?' : 'EN ÉDITION'}</button>
+          <button onClick={handleDelete} className={`p-2 trash-btn text-red-500`} title="Supprimer"><TrashIcon/></button>
         </div>
         </div>
       );
@@ -1787,7 +1787,7 @@
       // Desktop layout
       return (
         <div className="card-glow-wrap">
-        <div className="project-card py-4 pl-4 pr-8 mb-3 hover:bg-cream-dark/30 overflow-hidden border-b border-adaptive">
+        <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden border-b border-adaptive">
           <div className="flex items-center gap-0">
             <div onClick={() => onSelect(project)} className="cursor-pointer" style={{ minWidth: '432px', flexShrink: 0 }}>
               <h3 className="font-bebas-book text-charcoal flex items-center gap-2" style={{ fontSize: '35px', lineHeight: '1' }}>
@@ -1816,12 +1816,12 @@
                 <span style={{ color: colorCharcoal }}>{days !== null ? `${days} ${days <= 1 ? 'JOUR' : 'JOURS'}` : ''}</span>
               </div>
             </div>
-            <div className="hidden lg:flex items-center gap-4 ml-auto card-actions" style={{ marginTop: '5px' }}>
-              <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? '← RETOUR LISTE ?' : '← RETOUR LISTE'}</button>
-              <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? 'ARCHIVER ?' : 'ARCHIVER'}</button>
-              <button onClick={handleDelete} className={`p-2 trash-btn text-red-500`} title="Supprimer"><TrashIcon/></button>
-            </div>
           </div>
+        </div>
+        <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
+          <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? '← RETOUR LISTE ?' : '← RETOUR LISTE'}</button>
+          <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? 'ARCHIVER ?' : 'ARCHIVER'}</button>
+          <button onClick={handleDelete} className={`p-2 trash-btn text-red-500`} title="Supprimer"><TrashIcon/></button>
         </div>
         {(editingCreatedDate || editingShotDate) && ReactDOM.createPortal(
           <React.Fragment>
@@ -1855,7 +1855,7 @@
       };
       return (
         <div className="card-glow-wrap">
-        <div className="project-card py-4 pl-4 pr-8 mb-3 hover:bg-cream-dark/30 overflow-hidden border-b border-adaptive" style={{ opacity: 0.5 }}>
+        <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden border-b border-adaptive" style={{ opacity: 0.5 }}>
           <div className="flex items-center gap-0">
             <div className="flex-shrink-0" style={{ minWidth: '432px' }}>
               <h3 className="font-bebas-book flex items-center gap-2" style={{ fontSize: '35px', color: colorCharcoal, lineHeight: '1' }}>
@@ -1882,11 +1882,11 @@
                 <span style={{ color: colorInactive }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
               </div>}
             </div>
-            <div className="hidden lg:flex items-center gap-4 ml-auto card-actions" style={{ marginTop: '5px' }}>
-              <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? '← RÉACTIVER ?' : '← RÉACTIVER'}</button>
-              <button onClick={handleDelete} className={`p-2 trash-btn text-red-500`} title="Supprimer"><TrashIcon/></button>
-            </div>
           </div>
+        </div>
+        <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
+          <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? '← RÉACTIVER ?' : '← RÉACTIVER'}</button>
+          <button onClick={handleDelete} className={`p-2 trash-btn text-red-500`} title="Supprimer"><TrashIcon/></button>
         </div>
         </div>
       );
