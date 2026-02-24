@@ -381,7 +381,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v337</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v338</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -3439,18 +3439,22 @@
 
       useEffect(() => {
         if (isMobile) return;
-        const btn = navBtnRefs.current[view];
-        const container = navContainerRef.current;
-        if (!btn || !container) return;
-        const cRect = container.getBoundingClientRect();
-        const bRect = btn.getBoundingClientRect();
-        setBarStyle({
-          left: bRect.left - cRect.left,
-          width: bRect.width,
-        });
-        if (!barInitialized.current) {
-          requestAnimationFrame(() => { barInitialized.current = true; });
-        }
+        const measure = () => {
+          const btn = navBtnRefs.current[view];
+          const container = navContainerRef.current;
+          if (!btn || !container) return;
+          const cRect = container.getBoundingClientRect();
+          const bRect = btn.getBoundingClientRect();
+          setBarStyle({
+            left: bRect.left - cRect.left,
+            width: bRect.width,
+          });
+          if (!barInitialized.current) {
+            requestAnimationFrame(() => { barInitialized.current = true; });
+          }
+        };
+        measure();
+        document.fonts.ready.then(() => measure());
       }, [view, isMobile]);
 
       return (
