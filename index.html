@@ -119,6 +119,8 @@
     .hour-scroll { scrollbar-width: none; -ms-overflow-style: none; cursor: grab; }
     .hour-scroll::-webkit-scrollbar { display: none; }
     .hour-scroll.dragging { cursor: grabbing; user-select: none; }
+    input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; }
     input[type="range"] { height: 44px; }
     input[type="range"]::-webkit-slider-runnable-track { height: 3px; background: rgba(255,255,255,0.2); border-radius: 2px; }
     input[type="range"]::-moz-range-track { height: 3px; background: rgba(255,255,255,0.2); border-radius: 2px; }
@@ -381,7 +383,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v353</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v355</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -3061,13 +3063,13 @@
                     {(project.departureAddress || prefs.homeAddress) && <a href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(project.departureAddress || prefs.homeAddress || '')}&destination=${encodeURIComponent(project.address || '')}`} target="_blank" rel="noopener" onClick={e => e.stopPropagation()} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Itinéraire"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>}
                   </div>
                 </div>
-                <div className="pb-4 border-b border-adaptive">
+                <div className="py-5 border-b border-adaptive">
                   <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>MANDAT</label>
                   <div className="flex gap-4 flex-wrap mt-1">
                     {Object.values(MandateType).map(m => <button key={m} onClick={() => updateProject(project.id, { mandates: toggleMandate(project.mandates, m) })} className="font-bebas-bold" style={{ fontSize: '22px', color: project.mandates?.includes(m) ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)' }}>{m === 'DRONE+C' ? (project.mandates?.includes(m) ? <span>DRONE.<span style={{color:'#d83152'}}>C</span></span> : 'DRONE.C') : m}</button>)}
                   </div>
                 </div>
-                <div className="pb-4 border-b border-adaptive">
+                <div className="py-5 border-b border-adaptive">
                   <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>ORIENTATION</label>
                   <div className="flex gap-5 mt-1">
                     {['AM','PM'].map(o => <button key={o} onClick={() => updateProject(project.id, { orientation: project.orientation?.includes(o) ? project.orientation.filter(x => x !== o) : [...(project.orientation||[]), o] })} className="font-bebas-bold" style={{ fontSize: '22px', color: project.orientation?.includes(o) ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)' }}>{o}</button>)}
@@ -4284,10 +4286,10 @@
       return (
         <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px' }}>
           {!isMobile && <h1 className="font-bebas-regular" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>PRÉFÉRENCES</h1>}
-          <div className={isMobile ? 'px-4' : 'px-8 md:px-12'}>
+          <div className={isMobile ? 'px-4' : 'pl-8 md:pl-12'}>
             {msg && <div className={`mb-6 p-3 rounded ${msg.type === "success" ? "bg-transparent" : "bg-red-50 text-red-700"}`} style={msg.type === "success" ? { color: "#7dd3c6" } : {}}>{msg.text}</div>}
-            <div className="space-y-5">
-              <div className="pb-4 border-b border-adaptive">
+            <div>
+              <div className="py-5 border-b border-adaptive">
                 <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>ADRESSE DE DÉPART PAR DÉFAUT</label>
                 <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '8px', maxWidth: '600px' }}>
                   <input 
@@ -4301,7 +4303,7 @@
                 {prefs.homeLat && <p className="text-xs mt-2" style={{ color: "#7dd3c6" }}>✓ {prefs.homeAddress}</p>}
               </div>
 
-              <div className="pb-4 border-b border-adaptive">
+              <div className="py-5 border-b border-adaptive">
                 <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>TEMPS DE PRÉPARATION</label>
                 <div className="flex items-center gap-3" style={{ marginTop: '8px' }}>
                   <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', display: 'inline-block' }}>
@@ -4311,7 +4313,7 @@
                 </div>
               </div>
 
-              <div className="pb-4 border-b border-adaptive">
+              <div className="py-5 border-b border-adaptive">
                 <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>SERVICE MÉTÉO</label>
                 <div style={{ marginTop: '8px', maxWidth: '600px' }}>
                   <div className="flex items-center gap-3">
@@ -4334,8 +4336,8 @@
                 </div>
               </div>
 
-              <div className="pt-4">
-                <p className="font-bebas-light text-charcoal-muted" style={{ fontSize: '16px' }}>Meteoshoot v353</p>
+              <div className="py-5">
+                <p className="font-bebas-light text-charcoal-muted" style={{ fontSize: '16px' }}>Meteoshoot v355</p>
               </div>
             </div>
           </div>
