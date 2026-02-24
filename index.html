@@ -381,7 +381,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v346</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v347</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -1674,7 +1674,7 @@
               {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} onDayClick={() => onSelect(project)}/> : <p className="text-charcoal-muted text-sm italic py-2 cursor-pointer" onClick={() => onSelect(project)}>Météo non disponible</p>}
             </div>
             <div onMouseEnter={() => { if (activeWeatherRowDismiss) { activeWeatherRowDismiss(); activeWeatherRowDismiss = null; } }} onClick={() => onSelect(project)} className="info-dodge cursor-pointer flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
-              <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '100px' }}>
+              <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '75px' }}>
                 {Object.values(MandateType).map(m => {
                   const active = project.mandates?.includes(m);
                   const alwaysShow = m === 'INT' || m === 'EXT' || m === 'DRONE';
@@ -1894,7 +1894,7 @@
               </h3>
             </div>
             <div onClick={() => onSelect(project)} className="info-dodge cursor-pointer flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
-              <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '100px' }}>
+              <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '75px' }}>
                 {Object.values(MandateType).map(m => {
                   const active = project.mandates?.includes(m);
                   const alwaysShow = m === 'INT' || m === 'EXT' || m === 'DRONE';
@@ -2051,7 +2051,7 @@
               </h3>
             </div>
             <div className="info-dodge flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
-              <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '100px' }}>
+              <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '75px' }}>
                 {Object.values(MandateType).map(m => {
                   const active = project.mandates?.includes(m);
                   const alwaysShow = m === 'INT' || m === 'EXT' || m === 'DRONE';
