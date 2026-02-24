@@ -383,7 +383,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v355</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v356</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -832,7 +832,16 @@
 
       const addProject = (data) => {
         const proj = { id: generateId(), name: data.name || 'Nouveau', address: data.address || '', lat: data.lat, lng: data.lng, mandates: data.mandates || [], orientation: data.orientation || [], deliveryDate: data.deliveryDate || null, isContest: data.isContest || false, status: ProjectStatus.TODO, notes: '', links: [], travelTime: data.travelTime || null, departureAddress: data.departureAddress || null, departureLat: data.departureLat || null, departureLng: data.departureLng || null, createdAt: new Date().toISOString(), shotAt: null };
-        setProjects(p => [proj, ...p]);
+        setProjects(p => {
+          const newList = [proj, ...p];
+          // Update all sort_orders in Supabase
+          if (user) {
+            newList.forEach((pr, i) => {
+              if (pr.id !== proj.id) supabase.from(TBL_PROJECTS).update({ sort_order: i }).eq('id', pr.id);
+            });
+          }
+          return newList;
+        });
         if (user) {
           supabase.from(TBL_PROJECTS).insert({
             id: proj.id, user_id: user.id, name: proj.name, address: proj.address,
@@ -929,8 +938,13 @@
           newProjects.splice(dropIndex, 0, dragged);
           // Update sort_order in Supabase
           if (user) {
-            newProjects.forEach((proj, i) => {
-              supabase.from(TBL_PROJECTS).update({ sort_order: i }).eq('id', proj.id);
+            Promise.all(
+              newProjects.map((proj, i) => 
+                supabase.from(TBL_PROJECTS).update({ sort_order: i }).eq('id', proj.id)
+              )
+            ).then(results => {
+              const errors = results.filter(r => r.error);
+              if (errors.length) console.error('Reorder save errors:', errors);
             });
           }
           return newProjects;
@@ -4290,7 +4304,7 @@
             {msg && <div className={`mb-6 p-3 rounded ${msg.type === "success" ? "bg-transparent" : "bg-red-50 text-red-700"}`} style={msg.type === "success" ? { color: "#7dd3c6" } : {}}>{msg.text}</div>}
             <div>
               <div className="py-5 border-b border-adaptive">
-                <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>ADRESSE DE DÉPART PAR DÉFAUT</label>
+                <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>ADRESSE DE DÉPART PAR DÉFAUT (TRAJET)</label>
                 <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '8px', maxWidth: '600px' }}>
                   <input 
                     ref={homeInputRef}
@@ -4304,10 +4318,10 @@
               </div>
 
               <div className="py-5 border-b border-adaptive">
-                <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>TEMPS DE PRÉPARATION</label>
+                <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>TEMPS DE PRÉPARATION (RÉVEIL)</label>
                 <div className="flex items-center gap-3" style={{ marginTop: '8px' }}>
                   <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', display: 'inline-block' }}>
-                    <input type="number" value={prepTime} onChange={e => { setPrepTime(e.target.value); setPrefs({ prepTime: parseInt(e.target.value) || 0 }); }} min="0" max="180" className="bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', width: '60px' }}/>
+                    <input type="number" value={prepTime} onChange={e => { setPrepTime(e.target.value); setPrefs({ prepTime: parseInt(e.target.value) || 0 }); }} min="0" max="180" className="bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', width: '40px' }}/>
                   </div>
                   <span className="font-bebas-light text-charcoal-muted" style={{ fontSize: '19px' }}>MINUTES</span>
                 </div>
@@ -4337,7 +4351,7 @@
               </div>
 
               <div className="py-5">
-                <p className="font-bebas-light text-charcoal-muted" style={{ fontSize: '16px' }}>Meteoshoot v355</p>
+                <p className="font-bebas-light text-charcoal-muted" style={{ fontSize: '16px' }}>Meteoshoot v356</p>
               </div>
             </div>
           </div>
