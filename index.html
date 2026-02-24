@@ -381,7 +381,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v349</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v350</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -4287,10 +4287,9 @@
           <div className={isMobile ? 'px-4' : 'px-8 md:px-12'}>
             {msg && <div className={`mb-6 p-3 rounded ${msg.type === "success" ? "bg-transparent" : "bg-red-50 text-red-700"}`} style={msg.type === "success" ? { color: "#7dd3c6" } : {}}>{msg.text}</div>}
             <div className="space-y-5" style={{ maxWidth: '600px' }}>
-              <div>
-                <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>ADRESSE DE LA MAISON</label>
-                <p className="font-bebas-light text-charcoal-muted" style={{ fontSize: '19px', marginTop: '2px' }}>Adresse de départ par défaut pour calculer les temps de trajet</p>
-                <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '4px' }}>
+              <div className="pb-4 border-b border-adaptive">
+                <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>ADRESSE DE DÉPART PAR DÉFAUT</label>
+                <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '8px' }}>
                   <input 
                     ref={homeInputRef}
                     type="text" 
@@ -4304,8 +4303,7 @@
 
               <div className="pb-4 border-b border-adaptive">
                 <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>TEMPS DE PRÉPARATION</label>
-                <p className="font-bebas-light text-charcoal-muted" style={{ fontSize: '19px', marginTop: '2px' }}>Temps pour vous préparer avant de partir (calcul de l'heure de réveil)</p>
-                <div className="flex items-center gap-3" style={{ marginTop: '4px' }}>
+                <div className="flex items-center gap-3" style={{ marginTop: '8px' }}>
                   <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', display: 'inline-block' }}>
                     <input type="number" value={prepTime} onChange={e => { setPrepTime(e.target.value); setPrefs({ prepTime: parseInt(e.target.value) || 0 }); }} min="0" max="180" className="bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', width: '60px' }}/>
                   </div>
@@ -4314,8 +4312,22 @@
               </div>
 
               <div className="pb-4 border-b border-adaptive">
+                <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>SERVICE MÉTÉO — API</label>
+                <div style={{ marginTop: '8px' }}>
+                  <div className="flex items-center gap-3">
+                    <div style={{ 
+                      width: '10px', height: '10px', borderRadius: '50%', 
+                      backgroundColor: '#7dd3c6', boxShadow: '0 0 6px rgba(125,211,198,0.5)',
+                      flexShrink: 0
+                    }}/>
+                    <span className="font-bebas-light" style={{ fontSize: '19px', color: 'rgba(255,255,255,0.7)' }}>OPEN-METEO — GEM CANADA (ENV. CANADA)</span>
+                  </div>
+                  <p className="font-bebas-light" style={{ fontSize: '15px', color: '#5A6B69', marginTop: '6px', marginLeft: '22px' }}>Gratuit · Aucune clé API requise</p>
+                </div>
+              </div>
+
+              <div className="pb-4 border-b border-adaptive">
                 <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>DONNÉES</label>
-                <p className="font-bebas-light text-charcoal-muted" style={{ fontSize: '19px', marginTop: '2px' }}>Exporter ou importer vos projets et préférences pour les transférer sur un autre appareil</p>
                 <div className="flex items-center gap-4" style={{ marginTop: '8px' }}>
                   <button 
                     onClick={() => {
@@ -4355,20 +4367,8 @@
                 </div>
               </div>
 
-              <div className="pt-4 pb-4 border-b border-adaptive">
-                <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>COMPTE</label>
-                <p className="font-bebas-light" style={{ fontSize: '15px', color: '#7dd3c6', marginTop: '4px' }}>✓ Connecté — sync activée</p>
-                <button 
-                  onClick={() => { if (window.confirm('Déconnexion?')) { supabase.auth.signOut(); } }}
-                  className="font-bebas-bold"
-                  style={{ fontSize: '18px', color: '#d83152', background: 'none', border: 'none', cursor: 'pointer', marginTop: '8px' }}
-                >
-                  DÉCONNEXION
-                </button>
-              </div>
-
               <div className="pt-4">
-                <p className="font-bebas-light text-charcoal-muted" style={{ fontSize: '19px' }}>MeteoShoot v1.3.0 — Supabase sync<br/>Météo: GEM Canada (Env. Canada) via Open-Meteo • Géocodage: Google Maps</p>
+                <p className="font-bebas-light text-charcoal-muted" style={{ fontSize: '16px' }}>Meteoshoot v350</p>
               </div>
             </div>
           </div>
