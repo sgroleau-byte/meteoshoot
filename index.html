@@ -396,7 +396,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v380</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v382</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -788,7 +788,7 @@
               await supabase.from(TBL_PREFS).upsert({
                 user_id: user.id, home_address: prefs.homeAddress,
                 home_lat: prefs.homeLat, home_lng: prefs.homeLng,
-                prep_time: prefs.prepTime || 60
+                prep_time: typeof prefs.prepTime === 'number' ? prefs.prepTime : 60
               });
             }
 
@@ -837,7 +837,7 @@
             supabase.from(TBL_PREFS).upsert({
               user_id: user.id, home_address: next.homeAddress,
               home_lat: next.homeLat, home_lng: next.homeLng,
-              prep_time: next.prepTime || 60
+              prep_time: typeof next.prepTime === 'number' ? next.prepTime : 60
             }).then(({ error }) => { if (error) console.error('Prefs save error:', error); });
           }
           return next;
@@ -1748,7 +1748,7 @@
       );
     };
 
-    const RetouchingCard = ({ project, onSelect }) => {
+    const RetouchingCard = ({ project, onSelect, index = 0 }) => {
       const { advanceProject, revertProject, deleteProject, updateProject, prefs } = useStore();
       const [confirmDelete, setConfirmDelete] = useState(false);
       const [confirmDone, setConfirmDone] = useState(false);
@@ -1917,7 +1917,8 @@
       // Desktop layout
       return (
         <div className="card-glow-wrap">
-        <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden border-b border-adaptive">
+        <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden animate-card-in border-b border-adaptive"
+          style={{ animationDelay: `${index * 0.1}s` }}>
           <div className="card-info-flare" style={{ left: '-350px', top: '0px', background: 'radial-gradient(circle, rgba(216,175,76,1) 0%, rgba(216,175,76,0.5) 35%, transparent 65%)' }}></div>
           <div className="flex items-center gap-0">
             <div onClick={() => onSelect(project)} className="cursor-pointer" style={{ width: '432px', flexShrink: 0 }}>
@@ -4264,7 +4265,7 @@
         <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px' }}>
           {!isMobile && <h1 className="font-bebas-regular" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>ÉDITION</h1>}
           {retouching.length === 0 ? <div className="text-center py-16"><p className="font-bebas-book text-charcoal-muted" style={{ fontSize: '24px' }}>Aucun projet en édition</p></div>
-          : <div style={{ paddingBottom: '80px' }}>{retouching.map(p => <RetouchingCard key={p.id} project={p} onSelect={onSelect}/>)}</div>}
+          : <div style={{ paddingBottom: '80px' }}>{retouching.map((p, i) => <RetouchingCard key={p.id} project={p} onSelect={onSelect} index={i}/>)}</div>}
           {done.length > 0 && <>
             <div className={isMobile ? 'px-6' : 'px-4'} style={{ paddingTop: '16px', paddingBottom: '16px', marginTop: '32px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}><h2 className="font-bebas-light" style={{ fontSize: '28px', color: '#8B9B99' }}>ARCHIVÉ</h2></div>
             <div style={{ paddingBottom: '80px' }}>{done.map(p => <DoneCard key={p.id} project={p}/>)}</div>
@@ -4351,7 +4352,7 @@
                 <label className="font-bebas-book text-charcoal-muted" style={{ fontSize: '22px' }}>TEMPS DE PRÉPARATION (RÉVEIL)</label>
                 <div className="flex items-center gap-3" style={{ marginTop: '8px' }}>
                   <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', display: 'inline-block' }}>
-                    <input type="number" value={prepTime} onChange={e => { setPrepTime(e.target.value); setPrefs({ prepTime: parseInt(e.target.value) || 0 }); }} min="0" max="180" className="bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', width: '40px' }}/>
+                    <input type="number" value={prepTime} onChange={e => { const val = e.target.value; setPrepTime(val); const num = parseInt(val); if (!isNaN(num)) setPrefs({ prepTime: num }); }} onBlur={e => { const num = parseInt(e.target.value); if (isNaN(num) || num < 0) { setPrepTime(60); setPrefs({ prepTime: 60 }); } }} min="0" max="180" className="bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', width: '40px' }}/>
                   </div>
                   <span className="font-bebas-light text-charcoal-muted" style={{ fontSize: '19px' }}>MINUTES</span>
                 </div>
@@ -4382,7 +4383,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v380</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v382</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
