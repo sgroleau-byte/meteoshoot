@@ -381,7 +381,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v339</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v341</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -1751,21 +1751,37 @@
 
       if (isMobile) {
         return (
-          <div className="mb-3" style={{ padding: '14px 16px' }}>
-            <div className="flex items-center justify-between">
-              <div onClick={() => onSelect(project)} className="flex-1 min-w-0">
-                <h3 className="font-bebas-book text-charcoal" style={{ fontSize: '24px', lineHeight: '1.1' }}>
+          <div className="mb-3" style={{ borderRadius: '37px', background: 'rgba(0,0,0,0.14)', margin: '0 12px', marginBottom: '15px', padding: '20px 24px', position: 'relative', overflow: 'hidden' }}>
+            {/* Subtle amber glow bottom-left */}
+            <div style={{ position: 'absolute', left: '-300px', bottom: '-300px', width: '550px', height: '550px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(251,227,127,0.25) 0%, rgba(251,227,127,0.06) 40%, rgba(251,227,127,0) 70%)', pointerEvents: 'none', zIndex: 0 }}/>
+            <div style={{ position: 'relative', zIndex: 1 }}>
+              <div onClick={() => onSelect(project)}>
+                <h3 className="font-bebas-book text-charcoal" style={{ fontSize: '24px', lineHeight: '1.1', marginBottom: '4px' }}>
                   {project.name} {project.isContest && <StarIcon/>}
                 </h3>
-                <div className="flex items-center gap-3 font-bebas-light uppercase mt-2" style={{ fontSize: '14px', lineHeight: '1' }}>
-                  {project.mandates?.length > 0 && <span>{project.mandates.map((m, i) => <React.Fragment key={m}>{i > 0 && ' · '}{renderMandate(m, '#FAF9F7')}</React.Fragment>)}</span>}
-                  <span style={{ color: '#404A48' }}>|</span>
-                  <span style={{ color: '#FAF9F7' }}>{project.shotAt ? formatDateShort(project.shotAt) : '- - -'}</span>
-                  <span style={{ color: '#404A48' }}>|</span>
-                  <span style={{ color: daysColor }}>{days !== null ? `${days}J` : '—'}</span>
+                <div className="flex items-center gap-2 font-bebas-light uppercase" style={{ fontSize: '17px', lineHeight: '1', padding: '4px 0' }}>
+                  {project.mandates?.length > 0 && (
+                    <span style={{ flexShrink: 0 }}>
+                      {project.mandates.map((m, i) => <React.Fragment key={m}>{i > 0 && <span style={{ color: '#4a5054' }}>{'\u00A0\u00A0|\u00A0\u00A0'}</span>}{m === 'DRONE+C' ? <span><span style={{ color: '#FAF9F7' }}>DRONE.</span><span style={{ color: '#d83152' }}>C</span></span> : <span style={{ color: '#FAF9F7' }}>{m}</span>}</React.Fragment>)}
+                    </span>
+                  )}
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '12px', flexShrink: 0 }}>
+              {/* Info columns */}
+              <div onClick={() => onSelect(project)} className="font-bebas-bold uppercase" style={{ display: 'flex', gap: '0', marginTop: '10px', fontSize: '18px', lineHeight: '1.3' }}>
+                <div style={{ borderLeft: '1px solid rgba(255,255,255,0.08)', paddingLeft: '8px', minWidth: '100px' }}>
+                  <div style={{ color: '#404A48' }}>CRÉÉ</div>
+                  <div style={{ color: '#FAF9F7' }}>{formatDateShort(project.createdAt)}</div>
+                  <div style={{ color: '#8B9B99' }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</div>
+                </div>
+                <div style={{ borderLeft: '1px solid rgba(255,255,255,0.08)', paddingLeft: '8px', marginLeft: '12px', minWidth: '100px' }}>
+                  <div style={{ color: '#404A48' }}>ÉDITION</div>
+                  <div style={{ color: '#FAF9F7' }}>{project.shotAt ? formatDateShort(project.shotAt) : '- - -'}</div>
+                  <div style={{ color: daysColor }}>{days !== null ? `${days} ${days <= 1 ? 'JOUR' : 'JOURS'}` : ''}</div>
+                </div>
+              </div>
+              {/* Action buttons */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '14px' }}>
                 <button className="action-pill" style={{ background: 'transparent', border: '1.5px solid rgba(255,255,255,0.2)', width: '34px', height: '34px', minWidth: '34px' }} onClick={() => revertProject(project.id)}>
                   <UndoIcon/>
                 </button>
@@ -1845,6 +1861,7 @@
       const colorActive = '#FAF9F7';
       const colorInactive = '#404A48';
       const days = project.completedAt ? daysSince(project.completedAt) : null;
+      const isMobile = useIsMobile();
       const handleRevert = (e) => {
         e.stopPropagation(); e.preventDefault();
         if (confirmRevert) { revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setConfirmDelete(false); setTimeout(() => setConfirmRevert(false), 3000); }
@@ -1853,6 +1870,47 @@
         e.stopPropagation(); e.preventDefault();
         if (confirmDelete) { deleteProject(project.id); } else { setConfirmDelete(true); setConfirmRevert(false); setTimeout(() => setConfirmDelete(false), 3000); }
       };
+
+      if (isMobile) {
+        return (
+          <div style={{ borderRadius: '37px', background: 'rgba(0,0,0,0.10)', margin: '0 12px', marginBottom: '15px', padding: '20px 24px', opacity: 0.5 }}>
+            <h3 className="font-bebas-book" style={{ fontSize: '24px', lineHeight: '1.1', color: colorCharcoal, marginBottom: '4px' }}>
+              {project.name} {project.isContest && <StarIcon/>}
+            </h3>
+            <div className="flex items-center gap-2 font-bebas-light uppercase" style={{ fontSize: '17px', lineHeight: '1', padding: '4px 0' }}>
+              {project.mandates?.length > 0 && (
+                <span style={{ flexShrink: 0 }}>
+                  {project.mandates.map((m, i) => <React.Fragment key={m}>{i > 0 && <span style={{ color: '#4a5054' }}>{'\u00A0\u00A0|\u00A0\u00A0'}</span>}<span style={{ color: colorCharcoal }}>{m === 'DRONE+C' ? 'DRONE.C' : m}</span></React.Fragment>)}
+                </span>
+              )}
+            </div>
+            <div className="font-bebas-bold uppercase" style={{ display: 'flex', gap: '0', marginTop: '10px', fontSize: '18px', lineHeight: '1.3' }}>
+              <div style={{ borderLeft: '1px solid rgba(255,255,255,0.06)', paddingLeft: '8px', minWidth: '100px' }}>
+                <div style={{ color: colorInactive }}>CRÉÉ</div>
+                <div style={{ color: colorCharcoal }}>{formatDateShort(project.createdAt)}</div>
+                <div style={{ color: colorInactive }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</div>
+              </div>
+              {project.shotAt && <div style={{ borderLeft: '1px solid rgba(255,255,255,0.06)', paddingLeft: '8px', marginLeft: '12px', minWidth: '100px' }}>
+                <div style={{ color: colorInactive }}>ÉDITION</div>
+                <div style={{ color: colorCharcoal }}>{formatDateShort(project.shotAt)}</div>
+                <div style={{ color: colorInactive }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? 'JOUR' : 'JOURS'}</div>
+              </div>}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '14px' }}>
+              <button className="action-pill" style={{ background: 'transparent', border: '1.5px solid rgba(255,255,255,0.15)', width: '34px', height: '34px', minWidth: '34px' }} onClick={() => revertProject(project.id)}>
+                <UndoIcon/>
+              </button>
+              <button className="action-pill" style={{ background: 'transparent', border: confirmDelete ? '1.5px solid #FF3B30' : '1.5px solid rgba(255,255,255,0.15)', width: '34px', height: '34px', minWidth: '34px' }} onClick={() => { 
+                if (confirmDelete) { deleteProject(project.id); }
+                else { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }
+              }}>
+                <TrashIcon/>
+              </button>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="card-glow-wrap">
         <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden border-b border-adaptive" style={{ opacity: 0.5 }}>
@@ -3801,7 +3859,7 @@
         if (!isMobile || !listRef.current) return;
         const list = listRef.current;
         let longPressTimer = null;
-        let drag = { active: false, id: null, startY: 0, startX: 0, clone: null, origCard: null, cardRects: [], startIdx: 0, currentIdx: 0 };
+        let drag = { active: false, id: null, startY: 0, startX: 0, clone: null, origCard: null, cardRects: [], startIdx: 0, currentIdx: 0, scrollAtStart: 0 };
 
         const getCard = (el) => {
           while (el && !el.dataset.projectId) el = el.parentElement;
@@ -3810,12 +3868,17 @@
 
         const getCardRects = () => {
           const cards = list.querySelectorAll('[data-project-id]');
-          return Array.from(cards).map(c => ({
-            el: c,
-            id: c.dataset.projectId,
-            rect: c.getBoundingClientRect(),
-            h: c.offsetHeight
-          }));
+          const scrollY = window.scrollY || window.pageYOffset;
+          return Array.from(cards).map(c => {
+            const r = c.getBoundingClientRect();
+            return {
+              el: c,
+              id: c.dataset.projectId,
+              absTop: r.top + scrollY,
+              rect: r,
+              h: c.offsetHeight
+            };
+          });
         };
 
         const animateCards = (currentIdx) => {
@@ -3825,10 +3888,8 @@
             if (c.id === drag.id) return;
             let offset = 0;
             if (startIdx < currentIdx) {
-              // Dragging down: cards between start+1..current move UP
               if (i > startIdx && i <= currentIdx) offset = -cards[startIdx].h - 12;
             } else if (startIdx > currentIdx) {
-              // Dragging up: cards between current..start-1 move DOWN
               if (i >= currentIdx && i < startIdx) offset = cards[startIdx].h + 12;
             }
             c.el.style.transition = 'transform 0.25s cubic-bezier(0.25,1,0.5,1)';
@@ -3837,13 +3898,10 @@
         };
 
         const onTouchStart = (e) => {
-          // Cancel if multi-touch (pinch zoom)
           if (e.touches.length > 1) { clearTimeout(longPressTimer); return; }
           
           const card = getCard(e.target);
           if (!card) return;
-          
-          // Don't start drag if swipe actions are open
           if (card.dataset.open === 'true') return;
           
           const touch = e.touches[0];
@@ -3853,16 +3911,16 @@
           drag.id = card.dataset.projectId;
           
           longPressTimer = setTimeout(() => {
-            // Activate drag
             drag.active = true;
             drag.cardRects = getCardRects();
+            drag.scrollAtStart = window.scrollY || window.pageYOffset;
             drag.startIdx = drag.cardRects.findIndex(c => c.id === drag.id);
             drag.currentIdx = drag.startIdx;
             
-            // Haptic
+            if (drag.startIdx === -1) { drag.active = false; return; }
+            
             if (navigator.vibrate) navigator.vibrate(30);
             
-            // Create floating clone
             const rect = card.getBoundingClientRect();
             const clone = card.cloneNode(true);
             clone.style.cssText = `
@@ -3879,22 +3937,18 @@
             drag.clone = clone;
             drag.cloneStartTop = rect.top;
             
-            // Hide original
             card.style.opacity = '0';
             card.style.transition = 'none';
             
-            // Lock scroll
             document.body.style.overflow = 'hidden';
             document.body.style.touchAction = 'none';
           }, 500);
         };
 
         const onTouchMove = (e) => {
-          // Cancel if multi-touch (pinch zoom)
           if (e.touches.length > 1) { clearTimeout(longPressTimer); return; }
           
           if (!drag.active) {
-            // Cancel long press if moved too much
             const dx = Math.abs(e.touches[0].clientX - drag.startX);
             const dy = Math.abs(e.touches[0].clientY - drag.startY);
             if (dx > 10 || dy > 10) {
@@ -3907,34 +3961,28 @@
           const touch = e.touches[0];
           const dy = touch.clientY - drag.startY;
           
-          // Move floating clone
           if (drag.clone) {
             drag.clone.style.top = `${drag.cloneStartTop + dy}px`;
           }
           
-          // Determine which index we're over
+          // Use absolute positions to handle scroll
           const cards = drag.cardRects;
-          let newIdx = drag.startIdx;
+          const touchAbsY = touch.clientY + (window.scrollY || window.pageYOffset);
+          
+          // Find position: above all = 0, below all = last index
+          let newIdx = 0;
           for (let i = 0; i < cards.length; i++) {
-            if (cards[i].id === drag.id) continue;
-            const midY = cards[i].rect.top + cards[i].rect.height / 2;
-            if (touch.clientY > midY) {
-              newIdx = i >= drag.startIdx ? i : i;
-            }
+            const midAbsY = cards[i].absTop + cards[i].h / 2;
+            if (touchAbsY > midAbsY) newIdx = i;
           }
-          // More precise: check from top
-          newIdx = drag.startIdx;
-          for (let i = 0; i < cards.length; i++) {
-            const midY = cards[i].rect.top + cards[i].rect.height / 2;
-            if (touch.clientY > midY) newIdx = i;
-          }
+          // Clamp
+          newIdx = Math.max(0, Math.min(newIdx, cards.length - 1));
           
           if (newIdx !== drag.currentIdx) {
             drag.currentIdx = newIdx;
             animateCards(newIdx);
           }
           
-          // Auto-scroll near edges
           if (touch.clientY < 80) {
             window.scrollBy(0, -6);
           } else if (touch.clientY > window.innerHeight - 80) {
@@ -3942,60 +3990,63 @@
           }
         };
 
-        const onTouchEnd = () => {
-          clearTimeout(longPressTimer);
+        const cleanup = (fromIdx, toIdx) => {
+          // Remove clone
+          if (drag.clone && drag.clone.parentNode) {
+            drag.clone.parentNode.removeChild(drag.clone);
+          }
           
-          if (drag.active) {
-            const fromIdx = drag.startIdx;
-            const toIdx = drag.currentIdx;
-            
-            // Animate clone to target position
-            if (drag.clone && drag.cardRects[toIdx]) {
-              const targetRect = drag.cardRects[toIdx].rect;
-              drag.clone.style.transition = 'top 0.25s cubic-bezier(0.25,1,0.5,1), transform 0.25s, box-shadow 0.25s';
-              drag.clone.style.top = `${targetRect.top}px`;
-              drag.clone.style.transform = 'scale(1)';
-              drag.clone.style.boxShadow = '0 0 0 rgba(0,0,0,0)';
+          // Restore ALL cards opacity + transforms (not just origCard, in case React hasn't re-rendered yet)
+          drag.cardRects.forEach(c => {
+            c.el.style.opacity = '';
+            c.el.style.transition = '';
+            c.el.style.transform = '';
+          });
+          
+          // Also restore origCard specifically
+          if (drag.origCard) {
+            drag.origCard.style.opacity = '';
+            drag.origCard.style.transition = '';
+          }
+          
+          // Reorder if moved
+          if (fromIdx !== toIdx) {
+            const targetId = drag.cardRects[toIdx]?.id;
+            if (targetId && drag.id) {
+              reorderProjects(drag.id, targetId);
             }
-            
-            // Reset all card transforms
-            drag.cardRects.forEach(c => {
-              c.el.style.transition = 'transform 0.25s cubic-bezier(0.25,1,0.5,1), opacity 0.25s';
-              c.el.style.transform = '';
-            });
-            
-            // After animation, do the actual reorder
-            setTimeout(() => {
-              // Remove clone
-              if (drag.clone && drag.clone.parentNode) {
-                drag.clone.parentNode.removeChild(drag.clone);
-              }
-              
-              // Show original
-              if (drag.origCard) {
-                drag.origCard.style.opacity = '';
-                drag.origCard.style.transition = '';
-              }
-              
-              // Reorder if moved
-              if (fromIdx !== toIdx) {
-                const targetId = drag.cardRects[toIdx]?.id;
-                if (targetId && drag.id) {
-                  reorderProjects(drag.id, targetId);
-                }
-              }
-              
-              // Reset
-              drag.active = false;
-              drag.clone = null;
-              drag.origCard = null;
-              drag.id = null;
-              document.body.style.overflow = '';
-              document.body.style.touchAction = '';
-            }, 280);
           }
           
           drag.active = false;
+          drag.clone = null;
+          drag.origCard = null;
+          drag.id = null;
+          drag.cardRects = [];
+          document.body.style.overflow = '';
+          document.body.style.touchAction = '';
+        };
+
+        const onTouchEnd = () => {
+          clearTimeout(longPressTimer);
+          
+          if (!drag.active) {
+            drag.active = false;
+            return;
+          }
+          
+          const fromIdx = drag.startIdx;
+          const toIdx = drag.currentIdx;
+          
+          // Animate clone to target position
+          if (drag.clone && drag.cardRects[toIdx]) {
+            const targetRect = drag.cardRects[toIdx].rect;
+            drag.clone.style.transition = 'top 0.25s cubic-bezier(0.25,1,0.5,1), transform 0.25s, box-shadow 0.25s';
+            drag.clone.style.top = `${targetRect.top}px`;
+            drag.clone.style.transform = 'scale(1)';
+            drag.clone.style.boxShadow = '0 0 0 rgba(0,0,0,0)';
+          }
+          
+          setTimeout(() => cleanup(fromIdx, toIdx), 280);
         };
 
         list.addEventListener('touchstart', onTouchStart, { passive: true });
@@ -4040,7 +4091,7 @@
           {retouching.length === 0 ? <div className="text-center py-16"><p className="font-bebas-book text-charcoal-muted" style={{ fontSize: '24px' }}>Aucun projet en édition</p></div>
           : <div style={{ paddingBottom: '80px' }}>{retouching.map(p => <RetouchingCard key={p.id} project={p} onSelect={onSelect}/>)}</div>}
           {done.length > 0 && <>
-            <div className="px-4 py-4 mt-8 border-b border-adaptive"><h2 className="font-bebas-light" style={{ fontSize: '28px', color: '#8B9B99' }}>ARCHIVÉ</h2></div>
+            <div className={isMobile ? 'px-6' : 'px-4'} style={{ paddingTop: '16px', paddingBottom: '16px', marginTop: '32px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}><h2 className="font-bebas-light" style={{ fontSize: '28px', color: '#8B9B99' }}>ARCHIVÉ</h2></div>
             <div style={{ paddingBottom: '80px' }}>{done.map(p => <DoneCard key={p.id} project={p}/>)}</div>
           </>}
         </div>
