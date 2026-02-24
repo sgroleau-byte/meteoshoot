@@ -381,7 +381,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v338</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v339</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -3433,21 +3433,21 @@
       }
 
       const navContainerRef = useRef(null);
-      const navBtnRefs = useRef({});
+      const navSpanRefs = useRef({});
       const [barStyle, setBarStyle] = useState({ left: 0, width: 0 });
       const barInitialized = useRef(false);
 
       useEffect(() => {
         if (isMobile) return;
         const measure = () => {
-          const btn = navBtnRefs.current[view];
+          const span = navSpanRefs.current[view];
           const container = navContainerRef.current;
-          if (!btn || !container) return;
+          if (!span || !container) return;
           const cRect = container.getBoundingClientRect();
-          const bRect = btn.getBoundingClientRect();
+          const sRect = span.getBoundingClientRect();
           setBarStyle({
-            left: bRect.left - cRect.left,
-            width: bRect.width,
+            left: sRect.left - cRect.left,
+            width: sRect.width,
           });
           if (!barInitialized.current) {
             requestAnimationFrame(() => { barInitialized.current = true; });
@@ -3468,7 +3468,6 @@
               return (
                 <button 
                   key={item.id}
-                  ref={el => navBtnRefs.current[item.id] = el}
                   onClick={() => onChangeView(item.id)}
                   onMouseEnter={() => setHoveredItem(item.id)}
                   onMouseLeave={() => setHoveredItem(null)}
@@ -3481,13 +3480,13 @@
                   }}
                 >
                   <span 
+                    ref={el => navSpanRefs.current[item.id] = el}
                     className="font-bebas-regular tracking-wider whitespace-nowrap"
                     style={{ 
                       fontSize: '20px',
                       color: isActive ? '#9BABA9' : hoveredItem === item.id ? '#8B9B99' : '#5A6B69',
                       lineHeight: '1.2',
-                      transition: 'color 0.2s ease-out, text-shadow 0.3s ease-out',
-                      textShadow: isActive ? '0 0 8px rgba(155,171,169,0.4), 0 0 20px rgba(155,171,169,0.15)' : 'none',
+                      transition: 'color 0.2s ease-out',
                     }}
                   >
                     {item.label}
@@ -3495,6 +3494,18 @@
                 </button>
               );
             })}
+            {/* Sliding white glow behind active word */}
+            <div style={{
+              position: 'absolute',
+              top: '-8px',
+              left: (barStyle.left + barStyle.width / 2 - 30) + 'px',
+              width: '60px',
+              height: '30px',
+              background: 'radial-gradient(ellipse at center, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 70%)',
+              borderRadius: '50%',
+              pointerEvents: 'none',
+              transition: barInitialized.current ? 'left 0.35s cubic-bezier(0.4, 0, 0.2, 1)' : 'none',
+            }}/>
             {/* Sliding underline bar */}
             <div style={{
               position: 'absolute',
@@ -3502,11 +3513,11 @@
               left: barStyle.left + 'px',
               width: barStyle.width + 'px',
               height: '3px',
-              backgroundColor: '#5A6B69',
+              backgroundColor: 'rgba(90,107,105,0.5)',
               borderRadius: '1px',
               transition: barInitialized.current ? 'left 0.35s cubic-bezier(0.4, 0, 0.2, 1), width 0.35s cubic-bezier(0.4, 0, 0.2, 1)' : 'none',
               filter: 'blur(0.3px)',
-              boxShadow: '0 0 6px rgba(90,107,105,0.4)',
+              boxShadow: '0 0 4px rgba(90,107,105,0.25)',
             }}/>
           </div>
         </header>
