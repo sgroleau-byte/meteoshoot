@@ -381,7 +381,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v347</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v348</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -1691,12 +1691,12 @@
                   PM {sun ? formatTime(sun.sunset) : '—'}
                 </span>
               </div>}
-              <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
+              <div className="flex flex-col justify-center pl-2 ml-6 border-l border-adaptive">
                 <span style={{ color: colorInactive }}>TRAJET</span>
                 <span style={{ color: project.travelTime?.durationSeconds ? colorActive : colorInactive }}>{project.travelTime?.durationSeconds ? formatDuration(project.travelTime.durationSeconds) : '—'}</span>
                 {project.travelTime?.distanceMeters > 0 ? <span style={{ color: colorCharcoal, letterSpacing: '0.1em', marginTop: '-5px' }} className="text-lg">{Math.round(project.travelTime.distanceMeters / 1000)} KM</span> : <span style={{ color: 'transparent' }}>&nbsp;</span>}
               </div>
-              <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
+              <div className="flex flex-col justify-center pl-2 ml-6 border-l border-adaptive">
                 <span style={{ color: colorInactive }}>RÉVEIL</span>
                 <span style={{ color: (project.orientation?.includes('AM') && wakeUp) ? colorActive : colorInactive }}>{project.orientation?.includes('AM') && wakeUp ? formatTime(wakeUp).replace(':','H') : '—'}</span>
                 <span style={{ color: 'transparent' }}>&nbsp;</span>
@@ -2938,12 +2938,12 @@
                       PM {sun ? formatTime(sun.sunset) : '—'}
                     </span>
                   </div>
-                  <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
+                  <div className="flex flex-col justify-center pl-2 ml-5" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
                     <span style={{ color: colorInactive }}>TRAJET</span>
                     <span style={{ color: project.travelTime?.durationSeconds ? colorActive : colorInactive }}>{project.travelTime?.durationSeconds ? formatDuration(project.travelTime.durationSeconds) : '—'}</span>
                     {project.travelTime?.distanceMeters > 0 ? <span style={{ color: colorCharcoal, letterSpacing: "0.1em", marginTop: "-3px", fontSize: "inherit" }}>{Math.round(project.travelTime.distanceMeters / 1000)} KM</span> : <span style={{ color: 'transparent' }}>&nbsp;</span>}
                   </div>
-                  <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
+                  <div className="flex flex-col justify-center pl-2 ml-5" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
                     <span style={{ color: colorInactive }}>RÉVEIL</span>
                     <span style={{ color: (project.orientation?.includes('AM') && wakeUp) ? colorActive : colorInactive }}>{project.orientation?.includes('AM') && wakeUp ? formatTime(wakeUp).replace(':','H') : '—'}</span>
                     <span style={{ color: 'transparent' }}>&nbsp;</span>
@@ -2985,12 +2985,12 @@
                       PM {sun ? formatTime(sun.sunset) : '--:--'}
                     </span>
                   </div>
-                  <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
+                  <div className="flex flex-col justify-center pl-2 ml-6 border-l border-adaptive">
                     <span style={{ color: colorInactive }}>TRAJET</span>
                     <span style={{ color: project.travelTime?.durationSeconds ? colorActive : colorInactive }}>{project.travelTime?.durationSeconds ? formatDuration(project.travelTime.durationSeconds) : '—'}</span>
                     {project.travelTime?.distanceMeters > 0 ? <span style={{ color: colorCharcoal, letterSpacing: '0.1em', marginTop: '-5px' }} className="text-lg">{Math.round(project.travelTime.distanceMeters / 1000)} KM</span> : <span style={{ color: 'transparent' }}>&nbsp;</span>}
                   </div>
-                  <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
+                  <div className="flex flex-col justify-center pl-2 ml-6 border-l border-adaptive">
                     <span style={{ color: colorInactive }}>RÉVEIL</span>
                     <span style={{ color: (project.orientation?.includes('AM') && wakeUp) ? colorActive : colorInactive }}>{project.orientation?.includes('AM') && wakeUp ? formatTime(wakeUp).replace(':','H') : '—'}</span>
                     <span style={{ color: 'transparent' }}>&nbsp;</span>
