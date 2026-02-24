@@ -381,7 +381,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v335</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v336</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -2709,7 +2709,7 @@
       };
 
       return (
-        <div className="pb-8 pt-6 animate-fade-in" style={isMobile ? { paddingTop: 'calc(24px + 25px)' } : { paddingTop: '100px' }}>
+        <div className="pb-8 pt-6 animate-fade-in" style={isMobile ? { paddingTop: 'calc(24px + 25px)' } : { paddingTop: '75px' }}>
           {!isMobile && <h1 className="font-bebas-regular" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>DÉTAILS PROJET</h1>}
           {/* Bande météo + infos — même layout que l'accueil */}
           <div className={`border-b border-adaptive py-4 ${isMobile ? 'px-4' : 'px-8'} overflow-hidden`}>
@@ -3450,7 +3450,7 @@
                   style={{ 
                     background: 'none',
                     border: 'none',
-                    padding: '0 4px 6px 4px',
+                    padding: '0 4px 3px 4px',
                     position: 'relative',
                     display: 'flex',
                     flexDirection: 'column',
@@ -3469,7 +3469,7 @@
                     {item.label}
                   </span>
                   {isActive && <div style={{ 
-                    position: 'absolute', bottom: '0', left: '4px', right: '4px', height: '3px',
+                    position: 'absolute', bottom: '0', left: '4px', right: '4px', height: '6px',
                     backgroundColor: '#5A6B69', borderRadius: '1px'
                   }}/>}
                 </button>
