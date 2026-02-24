@@ -381,7 +381,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v345</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v346</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -3251,7 +3251,10 @@
 
           {/* Actions en bas */}
           <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} mt-8 pt-4 border-t border-adaptive flex items-center ${isMobile ? 'justify-between' : 'gap-8'}`}>
-            <div className={`flex items-center ${isMobile ? 'gap-6' : 'gap-8'}`}>
+            <button onClick={onClose} className="text-charcoal-muted hover:text-charcoal transition-colors" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <div className={`flex items-center ${isMobile ? 'gap-6' : 'gap-8'}`} style={isMobile ? {} : { marginLeft: '80px' }}>
               {project.status === 'todo' && (
                 <button onClick={handleDone} className="font-bebas-bold text-xl" style={{ background: 'none', border: 'none', cursor: 'pointer', color: confirmDone ? '#d83152' : '#8B9B99', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }}
                   onMouseEnter={e => { if (!confirmDone) { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }}}
