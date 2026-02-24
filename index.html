@@ -381,7 +381,7 @@
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v342</div>
+  <div style="opacity:0; animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards; font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em; position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%)">v343</div>
   <div class="splash-badge" style="opacity:0">by Drift &amp; Grain</div>
 </div>
 <script>
@@ -1753,7 +1753,7 @@
       const contentRef = useRef(null);
       const actionsRef = useRef(null);
       const [actionsOpen, setActionsOpen] = useState(false);
-      const actionW = 200;
+      const actionW = 140;
 
       useEffect(() => {
         const card = cardRef.current;
@@ -1864,22 +1864,19 @@
               transform: `translateX(${actionW - tx}px)`, transition: ease
             }}>
               <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
-              <button style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0' }} onClick={() => { setActionsOpen(false); revertProject(project.id); }}>
-                <div className="action-pill" style={{ background: 'transparent', border: '1.5px solid rgba(255,255,255,0.2)', width: '34px', height: '34px', minWidth: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><UndoIcon/></div>
+              <button style={{ background: 'none', border: 'none', padding: '6px 0' }} onClick={() => { setActionsOpen(false); revertProject(project.id); }}>
                 <span className="font-bebas-regular" style={{ color: '#8B9B99', fontSize: '16px', letterSpacing: '0.03em' }}>RETOUR</span>
               </button>
-              <button style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0' }} onClick={() => { setActionsOpen(false); advanceProject(project.id); }}>
-                <div className="action-pill" style={{ background: 'transparent', border: '1.5px solid rgba(255,255,255,0.2)', width: '34px', height: '34px', minWidth: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CheckIcon/></div>
+              <button style={{ background: 'none', border: 'none', padding: '6px 0' }} onClick={() => { setActionsOpen(false); advanceProject(project.id); }}>
                 <span className="font-bebas-regular" style={{ color: '#8B9B99', fontSize: '16px', letterSpacing: '0.03em' }}>ARCHIVER</span>
               </button>
-              <button style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0' }} onClick={() => { 
+              <button style={{ background: 'none', border: 'none', padding: '6px 0' }} onClick={() => { 
                 if (confirmDelete) { deleteProject(project.id); }
                 else { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }
               }}>
                 <div className="action-pill" style={{ background: 'transparent', border: confirmDelete ? '1.5px solid #FF3B30' : '1.5px solid rgba(255,255,255,0.2)', width: '34px', height: '34px', minWidth: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={confirmDelete ? '#FF3B30' : '#8B9B99'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF3B30" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                 </div>
-                <span className="font-bebas-regular" style={{ color: confirmDelete ? '#FF3B30' : '#8B9B99', fontSize: '16px', letterSpacing: '0.03em' }}>{confirmDelete ? 'CONFIRMER' : 'SUPPRIMER'}</span>
               </button>
             </div>
           </div>
@@ -1952,7 +1949,7 @@
       const contentRef2 = useRef(null);
       const actionsRef2 = useRef(null);
       const [actionsOpen2, setActionsOpen2] = useState(false);
-      const actionW2 = 180;
+      const actionW2 = 120;
 
       useEffect(() => {
         const card = cardRef2.current;
@@ -2028,18 +2025,16 @@
               transform: `translateX(${actionW2 - tx2}px)`, transition: ease2
             }}>
               <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
-              <button style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0' }} onClick={() => { setActionsOpen2(false); revertProject(project.id); }}>
-                <div className="action-pill" style={{ background: 'transparent', border: '1.5px solid rgba(255,255,255,0.2)', width: '34px', height: '34px', minWidth: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><UndoIcon/></div>
+              <button style={{ background: 'none', border: 'none', padding: '6px 0' }} onClick={() => { setActionsOpen2(false); revertProject(project.id); }}>
                 <span className="font-bebas-regular" style={{ color: '#8B9B99', fontSize: '16px', letterSpacing: '0.03em' }}>RÉACTIVER</span>
               </button>
-              <button style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0' }} onClick={() => { 
+              <button style={{ background: 'none', border: 'none', padding: '6px 0' }} onClick={() => { 
                 if (confirmDelete) { deleteProject(project.id); }
                 else { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }
               }}>
                 <div className="action-pill" style={{ background: 'transparent', border: confirmDelete ? '1.5px solid #FF3B30' : '1.5px solid rgba(255,255,255,0.2)', width: '34px', height: '34px', minWidth: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={confirmDelete ? '#FF3B30' : '#8B9B99'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF3B30" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                 </div>
-                <span className="font-bebas-regular" style={{ color: confirmDelete ? '#FF3B30' : '#8B9B99', fontSize: '16px', letterSpacing: '0.03em' }}>{confirmDelete ? 'CONFIRMER' : 'SUPPRIMER'}</span>
               </button>
             </div>
           </div>
