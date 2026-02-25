@@ -399,7 +399,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v410</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v411</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -423,15 +423,19 @@
     el.style.scrollBehavior = 'auto';
 
     const setBlur = (v) => {
-      const px = Math.min(Math.abs(v) * 0.8, 4);
-      const inner = el.firstElementChild || el;
-      if (px > 0.3) {
-        inner.style.filter = 'blur(' + px.toFixed(1) + 'px)';
-        inner.style.transition = 'filter 0.05s linear';
+      const absV = Math.abs(v);
+      const px = Math.min(absV * 1.5, 6);
+      if (px > 0.2) {
+        el.style.filter = 'blur(' + px.toFixed(1) + 'px)';
       } else {
-        inner.style.filter = '';
-        inner.style.transition = 'filter 0.15s ease-out';
+        el.style.filter = '';
       }
+    };
+
+    const clearBlur = () => {
+      el.style.transition = 'filter 0.25s ease-out';
+      el.style.filter = '';
+      setTimeout(() => { el.style.transition = ''; }, 260);
     };
 
     const onMove = (ev) => {
@@ -454,12 +458,11 @@
       const maxScroll = el.scrollWidth - el.clientWidth;
 
       const glide = () => {
-        if (Math.abs(v) < 0.5) { setBlur(0); doBounce(); return; }
+        if (Math.abs(v) < 0.5) { clearBlur(); doBounce(); return; }
         const before = el.scrollLeft;
         el.scrollLeft -= v;
         const after = el.scrollLeft;
-        // Hit edge detection
-        if (before === after && Math.abs(v) > 2) { setBlur(0); doBounce(); return; }
+        if (before === after && Math.abs(v) > 2) { clearBlur(); doBounce(); return; }
         v *= decel;
         setBlur(v);
         rafId = requestAnimationFrame(glide);
@@ -468,23 +471,23 @@
       const doBounce = () => {
         const atStart = el.scrollLeft <= 0;
         const atEnd = el.scrollLeft >= maxScroll - 1;
-        if ((atStart || atEnd) && Math.abs(velocity) > 0.15) {
+        if ((atStart || atEnd) && Math.abs(velocity) > 0.1) {
           const dir = atStart ? 1 : -1;
-          const bump = Math.min(Math.abs(velocity) * 40, 18);
-          el.style.transition = 'transform 0.12s cubic-bezier(0.2, 0, 0.4, 1)';
+          const bump = Math.min(Math.abs(velocity) * 80, 30);
+          el.style.transition = 'transform 0.15s cubic-bezier(0.2, 0, 0.4, 1)';
           el.style.transform = 'translateX(' + (dir * bump) + 'px)';
           setTimeout(() => {
-            el.style.transition = 'transform 0.35s cubic-bezier(0.25, 1, 0.5, 1)';
+            el.style.transition = 'transform 0.5s cubic-bezier(0.25, 1, 0.5, 1)';
             el.style.transform = '';
-            setTimeout(() => { el.style.transition = ''; }, 350);
-          }, 120);
+            setTimeout(() => { el.style.transition = ''; }, 500);
+          }, 150);
         }
       };
 
       glide();
       const stopMomentum = () => {
         if (rafId) cancelAnimationFrame(rafId);
-        setBlur(0);
+        clearBlur();
         el.removeEventListener('mousedown', stopMomentum);
       };
       el.addEventListener('mousedown', stopMomentum, { once: true });
@@ -4437,7 +4440,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v410</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v411</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
