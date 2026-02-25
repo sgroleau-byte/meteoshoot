@@ -399,7 +399,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v421</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v422</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2402,6 +2402,7 @@
       const sunPosLineRef = React.useRef(null);
       const shadowLineRef = React.useRef(null);
       const sunPosMarkerRef = React.useRef(null);
+      const sunBearingRef = React.useRef(null);
       const nightOverlayRef = React.useRef(null);
       const markerRef = React.useRef(null);
       const [adjustedPos, setAdjustedPos] = useState(null);
@@ -2606,6 +2607,19 @@
             const anchor = effectiveCenterRef.current || { lat: project.lat, lng: project.lng };
             map.setCenter(anchor);
           }
+          // Immediately reposition sun dot to avoid drift during zoom animation
+          if (sunPosMarkerRef.current && sunBearingRef.current) {
+            const sb = sunBearingRef.current;
+            const b = map.getBounds();
+            if (b) {
+              const R = Math.min(Math.abs(b.getNorthEast().lat() - b.getSouthWest().lat()), Math.abs(b.getNorthEast().lng() - b.getSouthWest().lng())) * 0.38;
+              const newLat = sb.eLat + R * Math.cos(sb.bearing * Math.PI / 180);
+              const newLng = sb.eLng + R * Math.sin(sb.bearing * Math.PI / 180) / Math.cos(sb.eLat * Math.PI / 180);
+              sunPosMarkerRef.current.lat = newLat;
+              sunPosMarkerRef.current.lng = newLng;
+              sunPosMarkerRef.current.draw();
+            }
+          }
         });
 
         // Night overlay — inserted into mapPane so it's BELOW polylines
@@ -2769,6 +2783,7 @@
         simDate.setHours(Math.floor(sunHour), Math.round((sunHour % 1) * 60), 0);
         const sunPos = SunCalc.getPosition(simDate, eLat, eLng);
         const bearing = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
+        sunBearingRef.current = { bearing, eLat, eLng };
         const bounds = map.getBounds(); const R = bounds ? Math.min(Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat()), Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng())) * 0.38 : 0.003;
         const lat2 = eLat + R * Math.cos(bearing * Math.PI / 180);
         const lng2 = eLng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(eLat * Math.PI / 180);
@@ -3197,10 +3212,10 @@
 
           {/* Édition + Carte — layout with map bottom-right */}
           <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} pt-6`} style={{ position: 'relative' }}>
-            <div className={`flex gap-8 ${isMobile ? 'flex-col' : 'flex-wrap lg:flex-nowrap'} items-stretch`} style={isMobile ? {} : { minWidth: '1100px' }}>
+            <div className={`flex gap-8 ${isMobile ? 'flex-col' : 'flex-nowrap'} items-stretch`} style={isMobile ? {} : {}}>
               
               {/* Colonne gauche — Édition */}
-              <div className="w-full lg:w-7/12 space-y-5">
+              <div style={isMobile ? {} : { width: '700px', flexShrink: 0 }} className={`${isMobile ? 'w-full' : ''} space-y-5`}>
                 {/* Address inputs with box style like modal */}
                 <div>
                   <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>ADRESSE DU PROJET</label>
@@ -3289,7 +3304,7 @@
               </div>
 
               {/* Colonne droite — Carte Google Maps interactive, square, bottom-right */}
-              <div className={`${isMobile ? 'w-full' : 'w-full lg:w-5/12'} flex-shrink-0 flex flex-col`} style={{ minHeight: isMobile ? '450px' : '500px', order: isMobile ? -1 : 0 }}>
+              <div className={`${isMobile ? 'w-full' : ''} flex-shrink-0 flex flex-col`} style={{ minHeight: isMobile ? '450px' : '500px', order: isMobile ? -1 : 0, flex: isMobile ? undefined : 1 }}>
                 {project.lat && project.lng ? (
                   <>
                   {showMapFull && <div onClick={() => setShowMapFull(false)} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(30,30,30,0.88)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}/>}
@@ -4635,7 +4650,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v421</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v422</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
