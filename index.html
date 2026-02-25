@@ -399,7 +399,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v429</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v430</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2485,10 +2485,18 @@
         drawingMarkersRef.current.forEach(m => m.setMap(null));
         drawingMarkersRef.current = [];
         if (drawingVertices.length >= 2) {
+          // Glow polygon (behind)
+          const glow = new google.maps.Polygon({
+            paths: drawingVertices,
+            strokeColor: '#ffe26b', strokeOpacity: 0.3, strokeWeight: 8,
+            fillColor: '#ffe26b', fillOpacity: 0.08, map, zIndex: 29
+          });
+          drawingMarkersRef.current.push(glow); // reuse array for cleanup
+          // Main polygon
           drawingPolygonRef.current = new google.maps.Polygon({
             paths: drawingVertices,
-            strokeColor: '#7dd3c6', strokeOpacity: 0.9, strokeWeight: 2,
-            fillColor: '#7dd3c6', fillOpacity: 0.25, map,
+            strokeColor: '#ffe26b', strokeOpacity: 0.9, strokeWeight: 2,
+            fillColor: '#ffe26b', fillOpacity: 0.2, map,
             zIndex: 30
           });
         }
@@ -2499,7 +2507,7 @@
             icon: {
               path: google.maps.SymbolPath.CIRCLE,
               scale: isFirst ? 8 : 5,
-              fillColor: isFirst ? '#ffe26b' : '#7dd3c6',
+              fillColor: '#ffe26b',
               fillOpacity: 1,
               strokeColor: '#fff',
               strokeWeight: isFirst ? 2.5 : 1.5,
@@ -2606,13 +2614,13 @@
             }
           }
 
-          // Draw building footprint
+          // Draw building footprint — always yellow
           const poly = new google.maps.Polygon({
             paths: bldg.polygon,
-            strokeColor: isSelected ? '#ffe26b' : '#7dd3c6',
-            strokeOpacity: 0.9, strokeWeight: 2,
-            fillColor: isSelected ? '#ffe26b' : '#7dd3c6',
-            fillOpacity: 0.3, map, zIndex: 25,
+            strokeColor: '#ffe26b',
+            strokeOpacity: isSelected ? 1 : 0.7, strokeWeight: isSelected ? 2.5 : 1.5,
+            fillColor: '#ffe26b',
+            fillOpacity: isSelected ? 0.3 : 0.15, map, zIndex: 25,
             clickable: true
           });
           poly.addListener('click', () => {
@@ -2831,6 +2839,7 @@
           gestureHandling: 'greedy',
           scrollwheel: false,
           mapTypeControl: false,
+          clickableIcons: false,
           backgroundColor: '#262c30',
         });
         mapInstanceRef.current = map;
@@ -3003,13 +3012,14 @@
         if (drawingMode) {
           savedMapStylesRef.current = map.get('styles') || [];
           const poiHidden = [
-            ...savedMapStylesRef.current.filter(s => s.featureType !== 'poi'),
-            { featureType: 'poi', stylers: [{ visibility: 'off' }] }
+            ...savedMapStylesRef.current.filter(s => s.featureType !== 'poi' && s.featureType !== 'transit'),
+            { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+            { featureType: 'transit', stylers: [{ visibility: 'off' }] }
           ];
-          map.setOptions({ styles: poiHidden, clickableIcons: false });
+          map.setOptions({ styles: poiHidden });
         } else {
           if (savedMapStylesRef.current !== null) {
-            map.setOptions({ styles: savedMapStylesRef.current, clickableIcons: true });
+            map.setOptions({ styles: savedMapStylesRef.current });
             savedMapStylesRef.current = null;
           }
         }
@@ -3787,7 +3797,7 @@
                               background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)',
                               borderRadius: '4px', border: 'none', cursor: 'pointer',
                               padding: '3px 8px', fontSize: '12px', letterSpacing: '0.04em',
-                              color: '#7dd3c6', textAlign: 'left', whiteSpace: 'nowrap'
+                              color: '#ffe26b', textAlign: 'left', whiteSpace: 'nowrap'
                             }}
                           >{b.name} • {b.height}M</button>
                         ))}
@@ -5035,7 +5045,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v429</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v430</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
