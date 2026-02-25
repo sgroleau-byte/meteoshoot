@@ -399,7 +399,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v415</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v416</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -529,8 +529,9 @@
         const ts = Date.now();
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
         const storagePath = `${userId}/${projectId}/${ts}_${safeName}`;
+        console.log('Storage upload path:', storagePath, 'type:', file.type, 'size:', file.size);
         const { error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(storagePath, file, { contentType: file.type });
-        if (upErr) { console.error('Upload error:', upErr); throw upErr; }
+        if (upErr) { console.error('Storage upload error:', upErr); throw upErr; }
         const { error: dbErr } = await supabase.from(TBL_FILES).insert({
           project_id: projectId, user_id: userId, filename: file.name,
           size_bytes: file.size, mime_type: file.type, storage_path: storagePath
@@ -2431,27 +2432,33 @@
       }, [project?.id]);
 
       const handleFileUpload = async (fileList) => {
-        if (!user || !project) return;
+        if (!user || !project) { console.error('No user or project'); return; }
         const files = Array.from(fileList);
+        console.log('Files dropped:', files.map(f => f.name + ' ' + f.type + ' ' + f.size));
         const allowedExt = ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.pdf'];
         const valid = files.filter(f => {
           const ext = '.' + f.name.split('.').pop().toLowerCase();
           return allowedExt.includes(ext);
         });
-        if (valid.length === 0) return;
+        if (valid.length === 0) { console.error('No valid files'); return; }
         const newTotalMB = totalFilesMB + valid.reduce((s, f) => s + f.size, 0) / (1024 * 1024);
         if (newTotalMB > MAX_PROJECT_FILES_MB) { alert(`Limite de ${MAX_PROJECT_FILES_MB} MB par projet dépassée`); return; }
         setUploading(true);
         try {
-          for (const f of valid) { await fileHelpers.upload(project.id, user.id, f); }
+          for (const f of valid) {
+            console.log('Uploading:', f.name);
+            await fileHelpers.upload(project.id, user.id, f);
+            console.log('Uploaded:', f.name);
+          }
           const updated = await fileHelpers.list(project.id);
+          console.log('Files after upload:', updated.length);
           setProjectFiles(updated);
           const pairs = await Promise.all(updated.map(async f => {
             const url = fileUrls[f.id] || await fileHelpers.getUrl(f.storage_path);
             return [f.id, url];
           }));
           setFileUrls(Object.fromEntries(pairs));
-        } catch (e) { console.error('Upload failed:', e); }
+        } catch (e) { console.error('Upload failed:', e); alert('Erreur: ' + e.message); }
         setUploading(false);
       };
 
@@ -3408,7 +3415,7 @@
           </div>
 
           {/* Fichiers */}
-          <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} mt-6`}>
+          <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} mt-6`} style={{ maxWidth: isMobile ? '100%' : '58.333%' }}>
             <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>FICHIERS</label>
             {projectFiles.length > 0 && <span className="font-bebas-light" style={{ fontSize: '14px', color: '#404A48', letterSpacing: '0.04em', marginLeft: '12px' }}>{totalFilesMB.toFixed(1)} / {MAX_PROJECT_FILES_MB} MB</span>}
             
@@ -3456,7 +3463,8 @@
                 onClick={() => fileInputRef.current?.click()}
                 style={{
                   border: dragOver ? '1px solid rgba(125,211,198,0.4)' : '1px solid rgba(255,255,255,0.15)',
-                  padding: '10px 12px', cursor: 'pointer', marginTop: '4px',
+                  padding: '18px 12px', cursor: 'pointer', marginTop: '4px', minHeight: '60px',
+                  display: 'flex', alignItems: 'center',
                   background: dragOver ? 'rgba(125,211,198,0.03)' : 'transparent',
                   transition: 'all 0.2s'
                 }}
@@ -4606,7 +4614,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v415</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v416</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
