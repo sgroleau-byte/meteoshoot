@@ -399,7 +399,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v431</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v432</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2614,13 +2614,20 @@
             }
           }
 
-          // Draw building footprint — always yellow
+          // Draw building footprint — always yellow, flashy
+          // Glow behind
+          const glowPoly = new google.maps.Polygon({
+            paths: bldg.polygon,
+            strokeColor: '#ffe26b', strokeOpacity: 0.4, strokeWeight: isSelected ? 10 : 6,
+            fillColor: 'transparent', fillOpacity: 0, map, zIndex: 24,
+          });
+          overlays.push(glowPoly);
           const poly = new google.maps.Polygon({
             paths: bldg.polygon,
             strokeColor: '#ffe26b',
-            strokeOpacity: isSelected ? 1 : 0.7, strokeWeight: isSelected ? 2.5 : 1.5,
+            strokeOpacity: isSelected ? 1 : 0.85, strokeWeight: isSelected ? 3.5 : 2.5,
             fillColor: '#ffe26b',
-            fillOpacity: isSelected ? 0.3 : 0.15, map, zIndex: 25,
+            fillOpacity: isSelected ? 0.3 : 0.12, map, zIndex: 25,
             clickable: true
           });
           poly.addListener('click', () => {
@@ -3217,6 +3224,8 @@
         
         if (currentTimeLineRef.current) { currentTimeLineRef.current.setMap(null); currentTimeLineRef.current = null; }
         
+        if (!showSunLines || drawingMode) return;
+        
         const now = new Date();
         const sunTimes = SunCalc.getTimes(now, eLat, eLng);
         const nowH = now.getHours() + now.getMinutes()/60;
@@ -3235,7 +3244,7 @@
             strokeColor: '#ffffff', strokeOpacity: 0.35, strokeWeight: 3, map
           });
         }
-      }, [project?.lat, project?.lng, mapType, mapZoom, adjustedPos]);
+      }, [project?.lat, project?.lng, mapType, mapZoom, adjustedPos, showSunLines, drawingMode]);
 
       if (!project) return null;
       const sun = weather?.daily?.[0];
@@ -3752,12 +3761,7 @@
                     {/* Drawing mode hint — near the polygon */}
                     {drawingMode && (
                       <div style={{ position: 'absolute', 
-                        ...(drawPanelPos ? {
-                          left: Math.max(10, Math.min(drawPanelPos.x - 100, (mapContainerRef.current?.offsetWidth || 400) - 280)),
-                          top: Math.max(80, Math.min(drawPanelPos.y + 25, (mapContainerRef.current?.offsetHeight || 400) - 60)),
-                        } : {
-                          bottom: adjustedPos ? '60px' : '14px', left: '50%', transform: 'translateX(-50%)',
-                        }),
+                        bottom: '14px', left: '50%', transform: 'translateX(-50%)',
                         zIndex: 13, 
                         background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', borderRadius: '8px', padding: '6px 14px',
                         display: 'flex', alignItems: 'center', gap: '10px'
@@ -3776,11 +3780,10 @@
                       </div>
                     )}
                     {/* Building edit panel — positioned near the building */}
-                    {editingBuilding !== null && buildings[editingBuilding] && !drawingMode && editPanelPos && (
+                    {editingBuilding !== null && buildings[editingBuilding] && !drawingMode && (
                       <div style={{ 
                         position: 'absolute', 
-                        left: Math.max(10, Math.min(editPanelPos.x - 110, (mapContainerRef.current?.offsetWidth || 400) - 240)),
-                        top: Math.max(80, Math.min(editPanelPos.y + 20, (mapContainerRef.current?.offsetHeight || 400) - 100)),
+                        bottom: '14px', left: '14px',
                         zIndex: 13,
                         background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
                         borderRadius: '8px', padding: '8px 12px',
@@ -5066,7 +5069,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v431</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v432</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
