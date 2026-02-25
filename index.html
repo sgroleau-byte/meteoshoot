@@ -116,9 +116,9 @@
     .font-bebas-regular { font-family: 'Bebas Neue', sans-serif; font-weight: 400; letter-spacing: 0.02em; }
     .font-bebas-book { font-family: 'Bebas Neue', sans-serif; font-weight: 500; letter-spacing: 0.02em; }
     .font-bebas-bold { font-family: 'Bebas Neue', sans-serif; font-weight: 700; letter-spacing: 0.02em; }
-    .hour-scroll { scrollbar-width: none; -ms-overflow-style: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+    .hour-scroll { scrollbar-width: none; -ms-overflow-style: none; cursor: grab; user-select: none; -webkit-user-select: none; scroll-behavior: smooth; }
     .hour-scroll::-webkit-scrollbar { display: none; }
-    .hour-scroll.dragging { cursor: grabbing; user-select: none; }
+    .hour-scroll.dragging { cursor: grabbing; user-select: none; scroll-behavior: auto; }
     input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     input[type=number] { -moz-appearance: textfield; }
     input::-webkit-contacts-auto-fill-button, input::-webkit-credentials-auto-fill-button { display: none !important; visibility: hidden !important; pointer-events: none !important; position: absolute !important; right: 0 !important; }
@@ -399,7 +399,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v408</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v409</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -412,23 +412,42 @@
   }, 2500);
 </script>
 <script>
-  // Drag-to-scroll for .hour-scroll containers
+  // Drag-to-scroll with momentum for .hour-scroll containers
   document.addEventListener('mousedown', function(e) {
     const el = e.target.closest('.hour-scroll');
     if (!el) return;
     let startX = e.pageX, scrollLeft = el.scrollLeft, moved = false;
+    let lastX = e.pageX, lastT = Date.now(), velocity = 0;
+    let rafId = null;
     el.classList.add('dragging');
+    el.style.scrollBehavior = 'auto';
     const onMove = (ev) => {
       const dx = ev.pageX - startX;
       if (Math.abs(dx) > 3) moved = true;
+      const now = Date.now();
+      const dt = now - lastT;
+      if (dt > 0) velocity = (ev.pageX - lastX) / dt;
+      lastX = ev.pageX; lastT = now;
       el.scrollLeft = scrollLeft - dx;
     };
     const onUp = () => {
       el.classList.remove('dragging');
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      // Momentum glide
+      let v = velocity * 16; // px per frame
+      const decel = 0.95;
+      const glide = () => {
+        if (Math.abs(v) < 0.5) return;
+        el.scrollLeft -= v;
+        v *= decel;
+        rafId = requestAnimationFrame(glide);
+      };
+      glide();
+      // Stop momentum on next mousedown
+      const stopMomentum = () => { if (rafId) cancelAnimationFrame(rafId); el.removeEventListener('mousedown', stopMomentum); };
+      el.addEventListener('mousedown', stopMomentum, { once: true });
       if (moved) {
-        // Block click events that fire after drag
         const block = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
         el.addEventListener('click', block, { capture: true, once: true });
       }
@@ -4377,7 +4396,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v408</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v409</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
