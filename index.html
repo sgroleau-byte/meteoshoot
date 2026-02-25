@@ -399,7 +399,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v424</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v425</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2420,9 +2420,12 @@
       const [buildingName, setBuildingName] = useState('');
       const buildingPolygonsRef = React.useRef([]);
       const shadowPolygonsRef = React.useRef([]);
+      const wallPolygonsRef = React.useRef([]);
+      const roofPolygonsRef = React.useRef([]);
       const drawingPolygonRef = React.useRef(null);
       const drawingMarkersRef = React.useRef([]);
       const drawClickListenerRef = React.useRef(null);
+      const [editPanelPos, setEditPanelPos] = useState(null);
       // Reset adjustedPos when switching projects
       useEffect(() => { setAdjustedPos(null); effectiveCenterRef.current = null; }, [project?.id]);
       
@@ -2531,7 +2534,7 @@
         else if (editingBuilding > idx) setEditingBuilding(editingBuilding - 1);
       };
 
-      // Draw building polygons + shadow polygons on map
+      // Draw building polygons + shadow + 3D extrusion on map
       useEffect(() => {
         const map = mapInstanceRef.current;
         if (!map || !window.SunCalc) return;
@@ -2544,22 +2547,117 @@
         buildingPolygonsRef.current = [];
         shadowPolygonsRef.current.forEach(p => p.setMap(null));
         shadowPolygonsRef.current = [];
+        wallPolygonsRef.current.forEach(p => p.setMap(null));
+        wallPolygonsRef.current = [];
+        roofPolygonsRef.current.forEach(p => p.setMap(null));
+        roofPolygonsRef.current = [];
 
         // Sun position for shadow calc
         const simDate = new Date(sunDate);
         simDate.setHours(Math.floor(sunHour), Math.round((sunHour % 1) * 60), 0);
         const sunPos = SunCalc.getPosition(simDate, eLat, eLng);
-        const sunAlt = sunPos.altitude; // radians, negative = below horizon
-        const sunAz = sunPos.azimuth; // radians from south, clockwise
+        const sunAlt = sunPos.altitude;
+        const sunAz = sunPos.azimuth;
+
+        // 3D offset: pseudo-isometric based on height + zoom
+        // Each meter of height = small lat/lng offset (simulates looking from south-east, elevated)
+        const zoom = map.getZoom() || 16;
+        const metersPerPx = 156543.03392 * Math.cos(eLat * Math.PI / 180) / Math.pow(2, zoom);
+        const pxPerMeter = 1 / metersPerPx;
+        // Offset direction: slightly to the top-left to simulate 3D perspective
+        const offsetAngle = -45 * Math.PI / 180; // north-west
+        const heightScale = 0.4; // pixels per meter of height
 
         buildings.forEach((bldg, idx) => {
-          // Draw building footprint
+          const isSelected = editingBuilding === idx;
+          const n = bldg.polygon.length;
+          if (n < 3) return;
+
+          // Calculate 3D roof offset in lat/lng
+          const offsetPx = bldg.height * heightScale * pxPerMeter;
+          const dLatRoof = (offsetPx * Math.cos(offsetAngle)) / 111320;
+          const dLngRoof = (offsetPx * Math.sin(offsetAngle)) / (111320 * Math.cos(eLat * Math.PI / 180));
+
+          const roofVerts = bldg.polygon.map(v => ({
+            lat: v.lat + dLatRoof,
+            lng: v.lng + dLngRoof
+          }));
+
+          // Draw shadow first (below everything)
+          if (sunAlt > 0.01) {
+            const shadowLen = Math.min(bldg.height / Math.tan(sunAlt), 2000);
+            const sunBearingFromNorth = (sunAz * 180 / Math.PI + 180) % 360;
+            const shadowBearing = (sunBearingFromNorth + 180) % 360;
+            const shadowBearingRad = shadowBearing * Math.PI / 180;
+            const dLat = (shadowLen * Math.cos(shadowBearingRad)) / 111320;
+            const dLng = (shadowLen * Math.sin(shadowBearingRad)) / (111320 * Math.cos(eLat * Math.PI / 180));
+
+            const projVerts = bldg.polygon.map(v => ({
+              lat: v.lat + dLat,
+              lng: v.lng + dLng
+            }));
+
+            // Shadow = projected footprint
+            const shadowFoot = new google.maps.Polygon({
+              paths: projVerts,
+              strokeColor: '#000000', strokeOpacity: 0.1, strokeWeight: 0,
+              fillColor: '#000000', fillOpacity: 0.3, map, zIndex: 18,
+              clickable: false
+            });
+            shadowPolygonsRef.current.push(shadowFoot);
+
+            // Wall shadows: quad for each edge connecting footprint to projection
+            for (let i = 0; i < n; i++) {
+              const j = (i + 1) % n;
+              const quad = new google.maps.Polygon({
+                paths: [bldg.polygon[i], bldg.polygon[j], projVerts[j], projVerts[i]],
+                strokeColor: '#000000', strokeOpacity: 0, strokeWeight: 0,
+                fillColor: '#000000', fillOpacity: 0.25, map, zIndex: 18,
+                clickable: false
+              });
+              shadowPolygonsRef.current.push(quad);
+            }
+          }
+
+          // Draw 3D walls (connecting footprint to roof)
+          if (bldg.height > 0) {
+            for (let i = 0; i < n; i++) {
+              const j = (i + 1) % n;
+              const wallQuad = new google.maps.Polygon({
+                paths: [bldg.polygon[i], bldg.polygon[j], roofVerts[j], roofVerts[i]],
+                strokeColor: isSelected ? '#ffe26b' : '#7dd3c6',
+                strokeOpacity: 0.4, strokeWeight: 1,
+                fillColor: isSelected ? '#ffe26b' : '#7dd3c6',
+                fillOpacity: 0.12, map, zIndex: 26,
+                clickable: false
+              });
+              wallPolygonsRef.current.push(wallQuad);
+            }
+
+            // Draw roof polygon (top of building)
+            const roof = new google.maps.Polygon({
+              paths: roofVerts,
+              strokeColor: isSelected ? '#ffe26b' : '#7dd3c6',
+              strokeOpacity: 0.9, strokeWeight: 2,
+              fillColor: isSelected ? '#ffe26b' : '#7dd3c6',
+              fillOpacity: 0.35, map, zIndex: 28,
+              clickable: true
+            });
+            roof.addListener('click', () => {
+              setEditingBuilding(idx);
+              setBuildingHeight(String(bldg.height));
+              setBuildingName(bldg.name);
+            });
+            roofPolygonsRef.current.push(roof);
+          }
+
+          // Draw building footprint (base)
           const poly = new google.maps.Polygon({
             paths: bldg.polygon,
-            strokeColor: editingBuilding === idx ? '#ffe26b' : '#7dd3c6',
-            strokeOpacity: 0.9, strokeWeight: 2,
-            fillColor: editingBuilding === idx ? '#ffe26b' : '#7dd3c6',
-            fillOpacity: 0.3, map, zIndex: 25,
+            strokeColor: isSelected ? '#ffe26b' : '#7dd3c6',
+            strokeOpacity: 0.6, strokeWeight: 1,
+            fillColor: isSelected ? '#ffe26b' : '#7dd3c6',
+            fillOpacity: 0.08, map, zIndex: 24,
             clickable: true
           });
           poly.addListener('click', () => {
@@ -2568,53 +2666,29 @@
             setBuildingName(bldg.name);
           });
           buildingPolygonsRef.current.push(poly);
-
-          // Calculate shadow if sun is above horizon
-          if (sunAlt > 0.01) {
-            const shadowLen = bldg.height / Math.tan(sunAlt); // meters
-            const cappedLen = Math.min(shadowLen, 2000); // cap at 2km
-            // Shadow direction = opposite of sun azimuth
-            // SunCalc azimuth: 0 = south, positive = west. Convert to bearing from north.
-            const sunBearingFromNorth = (sunAz * 180 / Math.PI + 180) % 360; // degrees
-            const shadowBearing = (sunBearingFromNorth + 180) % 360; // opposite direction
-            const shadowBearingRad = shadowBearing * Math.PI / 180;
-
-            // Convert meters to lat/lng offset
-            const dLat = (cappedLen * Math.cos(shadowBearingRad)) / 111320;
-            const dLng = (cappedLen * Math.sin(shadowBearingRad)) / (111320 * Math.cos(eLat * Math.PI / 180));
-
-            // Project each vertex
-            const shadowVerts = bldg.polygon.map(v => ({
-              lat: v.lat + dLat,
-              lng: v.lng + dLng
-            }));
-
-            // Shadow polygon = building footprint connected to projected footprint
-            // Create a proper shadow shape: for each edge, connect original to projected
-            const n = bldg.polygon.length;
-            const shadowPath = [];
-            for (let i = 0; i < n; i++) {
-              shadowPath.push(bldg.polygon[i]);
-            }
-            for (let i = n - 1; i >= 0; i--) {
-              shadowPath.push(shadowVerts[i]);
-            }
-
-            const shadowPoly = new google.maps.Polygon({
-              paths: shadowPath,
-              strokeColor: '#000000', strokeOpacity: 0.15, strokeWeight: 1,
-              fillColor: '#000000', fillOpacity: 0.35, map, zIndex: 20,
-              clickable: false
-            });
-            shadowPolygonsRef.current.push(shadowPoly);
-          }
         });
+
+        // Calculate edit panel position near the selected building
+        if (editingBuilding !== null && buildings[editingBuilding]) {
+          const bldg = buildings[editingBuilding];
+          const centroid = bldg.polygon.reduce((acc, v) => ({ lat: acc.lat + v.lat / bldg.polygon.length, lng: acc.lng + v.lng / bldg.polygon.length }), { lat: 0, lng: 0 });
+          const overlay = nightOverlayRef.current;
+          if (overlay && overlay.getProjection()) {
+            const proj = overlay.getProjection();
+            const px = proj.fromLatLngToContainerPixel(new google.maps.LatLng(centroid.lat, centroid.lng));
+            if (px) setEditPanelPos({ x: px.x, y: px.y });
+          }
+        } else {
+          setEditPanelPos(null);
+        }
 
         return () => {
           buildingPolygonsRef.current.forEach(p => p.setMap(null));
           shadowPolygonsRef.current.forEach(p => p.setMap(null));
+          wallPolygonsRef.current.forEach(p => p.setMap(null));
+          roofPolygonsRef.current.forEach(p => p.setMap(null));
         };
-      }, [buildings, sunHour, sunDate, adjustedPos, editingBuilding, project?.lat, project?.lng]);
+      }, [buildings, sunHour, sunDate, adjustedPos, editingBuilding, project?.lat, project?.lng, mapType]);
 
       // === Project files ===
       const [projectFiles, setProjectFiles] = useState([]);
@@ -2887,6 +2961,8 @@
           if (nightOverlayRef.current) { nightOverlayRef.current.setMap(null); nightOverlayRef.current = null; }
           buildingPolygonsRef.current.forEach(p => p.setMap(null)); buildingPolygonsRef.current = [];
           shadowPolygonsRef.current.forEach(p => p.setMap(null)); shadowPolygonsRef.current = [];
+          wallPolygonsRef.current.forEach(p => p.setMap(null)); wallPolygonsRef.current = [];
+          roofPolygonsRef.current.forEach(p => p.setMap(null)); roofPolygonsRef.current = [];
           google.maps.event.removeListener(panListener);
         };
       }, [project?.lat, project?.lng, mapType]);
@@ -3611,6 +3687,22 @@
                           cursor: 'pointer'
                         }}
                       >MAP</button>
+                      <button 
+                        onClick={() => { if (drawingMode) { setDrawingMode(false); setDrawingVertices([]); } else { setDrawingMode(true); setEditingBuilding(null); } }}
+                        title={drawingMode ? 'Annuler le dessin' : 'Dessiner un bâtiment'}
+                        style={{ 
+                          background: drawingMode ? 'rgba(125,211,198,0.15)' : 'transparent', 
+                          border: 'none', borderBottom: '1px solid rgba(255,255,255,0.1)',
+                          cursor: 'pointer', padding: '5px 10px',
+                          color: drawingMode ? '#7dd3c6' : 'rgba(255,255,255,0.75)', 
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="3" width="18" height="18" rx="1"/>
+                          <line x1="3" y1="12" x2="12" y2="3"/>
+                        </svg>
+                      </button>
                       <button onClick={() => setShowMapFull(f => !f)} style={{ 
                         background: 'transparent', 
                         border: 'none',
@@ -3625,81 +3717,55 @@
                         )}
                       </button>
                     </div>
-                    {/* Building draw controls */}
-                    <div style={{ position: 'absolute', top: '80px', right: '56px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <button 
-                        onClick={() => { if (drawingMode) { setDrawingMode(false); setDrawingVertices([]); } else { setDrawingMode(true); setEditingBuilding(null); } }}
-                        title={drawingMode ? 'Annuler le dessin' : 'Dessiner un bâtiment'}
-                        style={{ 
-                          background: drawingMode ? 'rgba(125,211,198,0.3)' : 'rgba(0,0,0,0.4)', 
-                          backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
-                          borderRadius: '6px', border: drawingMode ? '1px solid rgba(125,211,198,0.5)' : 'none', 
-                          cursor: 'pointer', padding: '6px 8px',
-                          color: drawingMode ? '#7dd3c6' : 'rgba(255,255,255,0.75)', 
-                          display: 'flex', alignItems: 'center', justifyContent: 'center'
-                        }}
-                      >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
-                          <line x1="8" y1="2" x2="8" y2="18"/>
-                          <line x1="16" y1="6" x2="16" y2="22"/>
-                        </svg>
                       </button>
-                      {drawingMode && drawingVertices.length >= 3 && (
-                        <button 
-                          onClick={() => finishDrawing()}
-                          className="font-bebas-bold"
-                          style={{ 
-                            background: 'rgba(125,211,198,0.3)', 
-                            backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
-                            borderRadius: '6px', border: '1px solid rgba(125,211,198,0.5)', 
-                            cursor: 'pointer', padding: '4px 8px',
-                            color: '#7dd3c6', fontSize: '12px', letterSpacing: '0.04em'
-                          }}
-                        >OK</button>
-                      )}
                     </div>
                     {/* Drawing mode hint */}
                     {drawingMode && (
                       <div style={{ position: 'absolute', bottom: adjustedPos ? '60px' : '14px', left: '50%', transform: 'translateX(-50%)', zIndex: 13, 
                         background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', borderRadius: '8px', padding: '6px 14px',
-                        display: 'flex', alignItems: 'center', gap: '8px'
+                        display: 'flex', alignItems: 'center', gap: '10px'
                       }}>
                         <span className="font-bebas-regular" style={{ fontSize: '14px', color: '#7dd3c6', letterSpacing: '0.04em' }}>
                           {drawingVertices.length === 0 ? 'CLIQUER POUR PLACER LE PREMIER POINT' : 
                            drawingVertices.length < 3 ? `${drawingVertices.length} POINT${drawingVertices.length > 1 ? 'S' : ''} — CONTINUEZ` :
-                           `${drawingVertices.length} POINTS — CLIQUER LE 1ER POINT POUR FERMER`}
+                           `${drawingVertices.length} POINTS — CLIQUER LE 1ER POINT OU`}
                         </span>
+                        {drawingVertices.length >= 3 && (
+                          <button onClick={() => finishDrawing()} className="font-bebas-bold"
+                            style={{ background: 'rgba(125,211,198,0.3)', border: '1px solid rgba(125,211,198,0.5)', borderRadius: '4px', cursor: 'pointer', padding: '2px 10px', color: '#7dd3c6', fontSize: '14px', letterSpacing: '0.04em' }}>OK</button>
+                        )}
+                        <button onClick={() => { setDrawingMode(false); setDrawingVertices([]); }} className="font-bebas-regular"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>✕</button>
                       </div>
                     )}
-                    {/* Building edit panel */}
-                    {editingBuilding !== null && buildings[editingBuilding] && !drawingMode && (
+                    {/* Building edit panel — positioned near the building */}
+                    {editingBuilding !== null && buildings[editingBuilding] && !drawingMode && editPanelPos && (
                       <div style={{ 
-                        position: 'absolute', bottom: adjustedPos ? '60px' : '14px', left: '10px', zIndex: 13,
+                        position: 'absolute', 
+                        left: Math.max(10, Math.min(editPanelPos.x - 110, (mapContainerRef.current?.offsetWidth || 400) - 240)),
+                        top: Math.max(80, Math.min(editPanelPos.y + 20, (mapContainerRef.current?.offsetHeight || 400) - 100)),
+                        zIndex: 13,
                         background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-                        borderRadius: '8px', padding: '10px 14px', minWidth: '220px',
-                        border: '1px solid rgba(125,211,198,0.2)'
+                        borderRadius: '8px', padding: '8px 12px',
+                        border: '1px solid rgba(125,211,198,0.2)',
+                        pointerEvents: 'auto'
                       }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
                           <input type="text" value={buildingName} onChange={e => setBuildingName(e.target.value)}
                             onBlur={() => { const idx = editingBuilding; setBuildings(prev => prev.map((b, i) => i === idx ? {...b, name: buildingName} : b)); }}
-                            className="font-bebas-bold" style={{ background: 'none', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.2)', color: '#ffe26b', fontSize: '16px', letterSpacing: '0.04em', outline: 'none', flex: 1, padding: '2px 0' }}/>
+                            className="font-bebas-bold" style={{ background: 'none', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.2)', color: '#ffe26b', fontSize: '15px', letterSpacing: '0.04em', outline: 'none', flex: 1, padding: '2px 0', width: '100px' }}/>
                           <button onClick={() => deleteBuilding(editingBuilding)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF3B30" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF3B30" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                           </button>
-                          <button onClick={() => setEditingBuilding(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: 'rgba(255,255,255,0.5)' }}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="18 15 12 9 6 15"/></svg>
-                          </button>
+                          <button onClick={() => setEditingBuilding(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: 'rgba(255,255,255,0.5)' }}>✓</button>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span className="font-bebas-regular" style={{ fontSize: '14px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.04em' }}>HAUTEUR</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <input type="number" value={buildingHeight} onChange={e => setBuildingHeight(e.target.value)}
                             onBlur={() => { const h = parseFloat(buildingHeight) || 15; const idx = editingBuilding; setBuildings(prev => prev.map((b, i) => i === idx ? {...b, height: h} : b)); }}
                             onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
-                            style={{ width: '60px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '4px', color: '#fff', fontSize: '14px', padding: '4px 8px', outline: 'none', textAlign: 'center' }}/>
-                          <span className="font-bebas-regular" style={{ fontSize: '14px', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.04em' }}>M</span>
+                            style={{ width: '50px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '4px', color: '#fff', fontSize: '14px', padding: '3px 6px', outline: 'none', textAlign: 'center' }}/>
+                          <span className="font-bebas-regular" style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.04em' }}>MÈTRES</span>
                         </div>
-                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.25)', marginTop: '4px' }}>{buildings[editingBuilding].polygon.length} sommets</div>
                       </div>
                     )}
                     {/* Building list — top left below date */}
@@ -4963,7 +5029,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v424</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v425</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
