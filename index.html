@@ -396,7 +396,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v398</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v399</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -4423,7 +4423,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v398</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v399</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -4509,19 +4509,19 @@
             display: 'flex', alignItems: 'center', gap: '6px'
           }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-            <span className="font-bebas-book" style={{ fontSize: '18px', letterSpacing: '0.05em' }}>REMETTRE</span>
+            <span className="font-bebas-book" style={{ fontSize: '18px', letterSpacing: '0.05em' }}>RETOUR</span>
           </button>
 
           <h2 className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '28px', color: 'rgba(255,255,255,0.85)', marginBottom: '32px' }}>NOUVEAU PROJET</h2>
 
           <div style={{ marginBottom: '24px' }}>
             <label className="newproj-label font-bebas-book">NOM DU PROJET</label>
-            <input ref={nameInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet" style={inputStyle}/>
+            <input ref={nameInputRef} type="text" autoComplete="one-time-code" autoCorrect="off" autoCapitalize="characters" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" name="projectname_notafield" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet" style={inputStyle}/>
           </div>
 
           <div style={{ marginBottom: '24px' }}>
             <label className="newproj-label font-bebas-book">ADRESSE DU PROJET</label>
-            <input ref={addressInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder="Entrer l'adresse..." style={inputStyle}/>
+            <input ref={addressInputRef} type="search" autoComplete="one-time-code" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" name="projectaddr_notafield" defaultValue={form.address} placeholder="Entrer l'adresse..." style={inputStyle}/>
           </div>
 
           <div style={{ marginBottom: '24px' }}>
@@ -4542,14 +4542,19 @@
             </div>
           </div>
 
-          <button onClick={handleSubmit} disabled={loading || !form.name.trim()} style={{
-            width: '100%', padding: '14px', borderRadius: '10px',
-            background: !form.name.trim() ? 'rgba(255,255,255,0.05)' : 'rgba(216,49,82,0.8)',
-            color: !form.name.trim() ? 'rgba(255,255,255,0.2)' : '#fff',
-            border: 'none', fontSize: '17px', cursor: 'pointer',
-            fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em',
-            transition: 'background 0.2s, color 0.2s'
-          }}>{loading ? 'CRÉATION...' : 'AJOUTER LE PROJET'}</button>
+          <div style={{ display: 'flex', gap: '24px', alignItems: 'center', marginTop: '8px' }}>
+            <button onClick={handleSubmit} disabled={loading || !form.name.trim()} className="font-bebas-bold" style={{
+              background: 'none', border: 'none', padding: '8px 0',
+              color: !form.name.trim() ? 'rgba(255,255,255,0.2)' : '#FAF9F7',
+              fontSize: '20px', cursor: 'pointer', letterSpacing: '0.05em',
+              textShadow: form.name.trim() ? '0 0 12px rgba(255,255,255,0.3)' : 'none',
+              transition: 'color 0.2s, text-shadow 0.2s'
+            }}>{loading ? 'CRÉATION...' : 'AJOUTER'}</button>
+            <button onClick={onClose} className="font-bebas-bold" style={{
+              background: 'none', border: 'none', padding: '8px 0',
+              color: '#FAF9F7', fontSize: '20px', cursor: 'pointer', letterSpacing: '0.05em'
+            }}>ANNULER</button>
+          </div>
         </div>
       );
     };
