@@ -398,7 +398,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v403</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v405</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -1689,13 +1689,13 @@
             </div>
             <div ref={actionsRef} style={{ 
               position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW}px`,
-              display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', gap: '6px', paddingRight: '20px',
+              display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: '16px', paddingRight: '20px',
               transform: `translateX(${actionW - tx}px)`, transition: ease
             }}>
               {/* Red/pink glow - moves with swipe */}
               <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
               <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: 'none', whiteSpace: 'nowrap' }} onClick={() => { setActionsOpen(false); advanceProject(project.id); }}>EN ÉDITION</button>
-              {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>SUPPRIMER ?</button> : <button className="p-2 trash-btn" style={{ background: 'none', border: 'none' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
+              {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>SUPPRIMER ?</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
             </div>
           </div>
         );
@@ -1923,7 +1923,7 @@
                 if (confirmDelete) { deleteProject(project.id); }
                 else { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }
               }}>
-                {confirmDelete ? <span className="font-bebas-bold" style={{ color: '#FF3B30', fontSize: '16px', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)' }}>SUPPRIMER ?</span> : <span style={{ color: '#FF3B30', display: 'flex', alignItems: 'center' }}><TrashIcon/></span>}
+                {confirmDelete ? <span className="font-bebas-bold" style={{ color: '#FF3B30', fontSize: '16px', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)' }}>SUPPRIMER ?</span> : <span style={{ color: '#FF3B30', display: 'flex', alignItems: 'center', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))' }}><TrashIcon/></span>}
               </button>
             </div>
           </div>
@@ -2081,7 +2081,7 @@
                 if (confirmDelete) { deleteProject(project.id); }
                 else { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }
               }}>
-                {confirmDelete ? <span className="font-bebas-bold" style={{ color: '#FF3B30', fontSize: '16px', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)' }}>SUPPRIMER ?</span> : <span style={{ color: '#FF3B30', display: 'flex', alignItems: 'center' }}><TrashIcon/></span>}
+                {confirmDelete ? <span className="font-bebas-bold" style={{ color: '#FF3B30', fontSize: '16px', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)' }}>SUPPRIMER ?</span> : <span style={{ color: '#FF3B30', display: 'flex', alignItems: 'center', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))' }}><TrashIcon/></span>}
               </button>
             </div>
           </div>
@@ -2307,6 +2307,10 @@
       const shadowLineRef = React.useRef(null);
       const sunPosMarkerRef = React.useRef(null);
       const nightOverlayRef = React.useRef(null);
+      const markerRef = React.useRef(null);
+      const [adjustedPos, setAdjustedPos] = useState(null);
+      // Reset adjustedPos when switching projects
+      useEffect(() => { setAdjustedPos(null); }, [project?.id]);
 
       useEffect(() => { if (project?.lat && project?.lng) fetchWeather(project.lat, project.lng).then(setWeather).catch(console.error); }, [project?.lat, project?.lng]);
 
@@ -2427,7 +2431,7 @@
         });
         mapInstanceRef.current = map;
         // Offset center upward by 25px
-        google.maps.event.addListenerOnce(map, 'idle', () => { map.panBy(0, 50); });
+        // No panBy — center pin is at visual center
         map.addListener('idle', () => { const z = map.getZoom(); if (z !== mapZoom) setMapZoom(z); });
 
         // Night overlay — inserted into mapPane so it's BELOW polylines
@@ -2454,107 +2458,39 @@
         nightOverlayRef.current = new NightOverlay();
         nightOverlayRef.current.setMap(map);
 
-        // Pin with site blue color
-        new google.maps.Marker({
-          position: { lat: project.lat, lng: project.lng },
-          map,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 10,
-            fillColor: '#7dd3c6',
-            fillOpacity: 1,
-            strokeColor: '#fff',
-            strokeWeight: 2,
+        // Fixed center pin — map pans behind it
+        if (markerRef.current) markerRef.current.setMap(null);
+        markerRef.current = null;
+        // Detect map pan → update adjustedPos
+        const panListener = map.addListener('idle', () => {
+          const c = map.getCenter();
+          const dist = Math.abs(c.lat() - project.lat) + Math.abs(c.lng() - project.lng);
+          if (dist > 0.00005) {
+            setAdjustedPos({ lat: c.lat(), lng: c.lng() });
+          } else {
+            setAdjustedPos(null);
           }
         });
 
-        // Static SunCalc lines (sunrise, sunset, arc)
-        // Calculate R from map bounds so lines always fit in viewport
-        const getLineR = (fraction) => {
-          const bounds = map.getBounds();
-          if (!bounds) return fraction;
-          const ne = bounds.getNorthEast();
-          const sw = bounds.getSouthWest();
-          const latSpan = Math.abs(ne.lat() - sw.lat());
-          const lngSpan = Math.abs(ne.lng() - sw.lng());
-          const minSpan = Math.min(latSpan, lngSpan);
-          return minSpan * 0.38;
-        };
-
-        const drawStaticSunLines = () => {
-        sunLinesRef.current.forEach(l => l.setMap(null));
-        sunLinesRef.current = [];
-        
-        if (window.SunCalc) {
-          const sunTimes = SunCalc.getTimes(sunDate, project.lat, project.lng);
-          
-          const drawLine = (azRad, color, opacity, weight) => {
-            const bearing = (azRad * 180 / Math.PI + 180) % 360;
-            const R = getLineR(0.003);
-            const lat2 = project.lat + R * Math.cos(bearing * Math.PI / 180);
-            const lng2 = project.lng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(project.lat * Math.PI / 180);
-            const line = new google.maps.Polyline({
-              path: [{ lat: project.lat, lng: project.lng }, { lat: lat2, lng: lng2 }],
-              strokeColor: color, strokeOpacity: opacity, strokeWeight: weight, map
-            });
-            sunLinesRef.current.push(line);
-          };
-
-          if (sunTimes.sunrise) {
-            const srPos = SunCalc.getPosition(sunTimes.sunrise, project.lat, project.lng);
-            drawLine(srPos.azimuth, '#ffe26b', 0.9, 5);
-          }
-          if (sunTimes.sunset) {
-            const ssPos = SunCalc.getPosition(sunTimes.sunset, project.lat, project.lng);
-            drawLine(ssPos.azimuth, '#f4143d', 0.9, 5);
-          }
-
-          // Arc between sunrise and sunset
-          const srAz = sunTimes.sunrise ? SunCalc.getPosition(sunTimes.sunrise, project.lat, project.lng).azimuth : 0;
-          const ssAz = sunTimes.sunset ? SunCalc.getPosition(sunTimes.sunset, project.lat, project.lng).azimuth : 0;
-          // Dark pie-slice polygon for sun arc
-          const steps = 36;
-          const srBearing = (srAz * 180 / Math.PI + 180) % 360;
-          const ssBearing = (ssAz * 180 / Math.PI + 180) % 360;
-          let startB = srBearing, endB = ssBearing;
-          if (endB < startB) endB += 360;
-          const R = getLineR(0.004) * 1.1;
-
-          const arcPoints = [{ lat: project.lat, lng: project.lng }];
-          for (let i = 0; i <= steps; i++) {
-            const b = startB + (endB - startB) * i / steps;
-            const bRad = b * Math.PI / 180;
-            arcPoints.push({
-              lat: project.lat + R * Math.cos(bRad),
-              lng: project.lng + R * Math.sin(bRad) / Math.cos(project.lat * Math.PI / 180)
-            });
-          }
-          arcPoints.push({ lat: project.lat, lng: project.lng });
-          const arc = new google.maps.Polygon({
-            paths: arcPoints, strokeColor: '#ffe26b', strokeOpacity: 0.15,
-            strokeWeight: 1, fillColor: '#000000', fillOpacity: 0.25, map
-          });
-          sunLinesRef.current.push(arc);
-        }
-        };
-        drawStaticSunLines();
-        const zoomListener = map.addListener('idle', drawStaticSunLines);
+        // Sun lines are drawn by the sunDate/adjustedPos effect
 
         return () => {
-          google.maps.event.removeListener(zoomListener);
           sunLinesRef.current.forEach(l => l.setMap(null));
           sunLinesRef.current = [];
           if (sunPosLineRef.current) { sunPosLineRef.current.setMap(null); sunPosLineRef.current = null; }
           if (shadowLineRef.current) { shadowLineRef.current.setMap(null); shadowLineRef.current = null; }
           if (sunPosMarkerRef.current) { sunPosMarkerRef.current.setMap(null); sunPosMarkerRef.current = null; }
           if (nightOverlayRef.current) { nightOverlayRef.current.setMap(null); nightOverlayRef.current = null; }
+          google.maps.event.removeListener(panListener);
         };
       }, [project?.lat, project?.lng, mapType]);
 
-      // Redraw sun lines when sunDate changes
+      // Redraw sun lines when sunDate or adjustedPos changes
       useEffect(() => {
         const map = mapInstanceRef.current;
         if (!map || !project?.lat || !project?.lng || !window.SunCalc) return;
+        const eLat = adjustedPos?.lat ?? project.lat;
+        const eLng = adjustedPos?.lng ?? project.lng;
         
         sunLinesRef.current.forEach(l => l.setMap(null));
         sunLinesRef.current = [];
@@ -2567,53 +2503,53 @@
           return Math.min(latSpan, lngSpan) * 0.38;
         };
         
-        const sunTimes = SunCalc.getTimes(sunDate, project.lat, project.lng);
+        const sunTimes = SunCalc.getTimes(sunDate, eLat, eLng);
         
         const drawLine = (azRad, color, opacity, weight) => {
           const bearing = (azRad * 180 / Math.PI + 180) % 360;
           const R = getR();
-          const lat2 = project.lat + R * Math.cos(bearing * Math.PI / 180);
-          const lng2 = project.lng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(project.lat * Math.PI / 180);
+          const lat2 = eLat + R * Math.cos(bearing * Math.PI / 180);
+          const lng2 = eLng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(eLat * Math.PI / 180);
           const line = new google.maps.Polyline({
-            path: [{ lat: project.lat, lng: project.lng }, { lat: lat2, lng: lng2 }],
+            path: [{ lat: eLat, lng: eLng }, { lat: lat2, lng: lng2 }],
             strokeColor: color, strokeOpacity: opacity, strokeWeight: weight, map
           });
           sunLinesRef.current.push(line);
         };
 
         if (sunTimes.sunrise) {
-          const srPos = SunCalc.getPosition(sunTimes.sunrise, project.lat, project.lng);
+          const srPos = SunCalc.getPosition(sunTimes.sunrise, eLat, eLng);
           drawLine(srPos.azimuth, '#ffe26b', 0.9, 5);
         }
         if (sunTimes.sunset) {
-          const ssPos = SunCalc.getPosition(sunTimes.sunset, project.lat, project.lng);
+          const ssPos = SunCalc.getPosition(sunTimes.sunset, eLat, eLng);
           drawLine(ssPos.azimuth, '#f4143d', 0.9, 5);
         }
 
-        const srAz = sunTimes.sunrise ? SunCalc.getPosition(sunTimes.sunrise, project.lat, project.lng).azimuth : 0;
-        const ssAz = sunTimes.sunset ? SunCalc.getPosition(sunTimes.sunset, project.lat, project.lng).azimuth : 0;
+        const srAz = sunTimes.sunrise ? SunCalc.getPosition(sunTimes.sunrise, eLat, eLng).azimuth : 0;
+        const ssAz = sunTimes.sunset ? SunCalc.getPosition(sunTimes.sunset, eLat, eLng).azimuth : 0;
         const steps = 36;
         const srBearing = (srAz * 180 / Math.PI + 180) % 360;
         const ssBearing = (ssAz * 180 / Math.PI + 180) % 360;
         let startB = srBearing, endB = ssBearing;
         if (endB < startB) endB += 360;
         const R = getR() * 1.1;
-        const arcPoints = [{ lat: project.lat, lng: project.lng }];
+        const arcPoints = [{ lat: eLat, lng: eLng }];
         for (let i = 0; i <= steps; i++) {
           const b = startB + (endB - startB) * i / steps;
           const bRad = b * Math.PI / 180;
           arcPoints.push({
-            lat: project.lat + R * Math.cos(bRad),
-            lng: project.lng + R * Math.sin(bRad) / Math.cos(project.lat * Math.PI / 180)
+            lat: eLat + R * Math.cos(bRad),
+            lng: eLng + R * Math.sin(bRad) / Math.cos(eLat * Math.PI / 180)
           });
         }
-        arcPoints.push({ lat: project.lat, lng: project.lng });
+        arcPoints.push({ lat: eLat, lng: eLng });
         const arc = new google.maps.Polygon({
           paths: arcPoints, strokeColor: '#ffe26b', strokeOpacity: 0.15,
           strokeWeight: 1, fillColor: '#000000', fillOpacity: 0.25, map
         });
         sunLinesRef.current.push(arc);
-      }, [sunDate, project?.lat, project?.lng, mapZoom]);
+      }, [sunDate, project?.lat, project?.lng, mapZoom, adjustedPos]);
 
       // Escape key closes fullscreen map
       useEffect(() => {
@@ -2629,7 +2565,6 @@
           const doResize = () => {
             google.maps.event.trigger(mapInstanceRef.current, 'resize');
             mapInstanceRef.current.setCenter({ lat: project.lat, lng: project.lng });
-            mapInstanceRef.current.panBy(0, 50);
           };
           setTimeout(doResize, 50);
           setTimeout(doResize, 300);
@@ -2642,22 +2577,24 @@
       useEffect(() => {
         const map = mapInstanceRef.current;
         if (!map || !project?.lat || !project?.lng || !window.SunCalc) return;
+        const eLat = adjustedPos?.lat ?? project.lat;
+        const eLng = adjustedPos?.lng ?? project.lng;
         
         // Remove previous position line only (keep marker for smooth update)
         if (sunPosLineRef.current) { sunPosLineRef.current.setMap(null); sunPosLineRef.current = null; }
         if (shadowLineRef.current) { shadowLineRef.current.setMap(null); shadowLineRef.current = null; }
         
-        const sunTimes = SunCalc.getTimes(sunDate, project.lat, project.lng);
+        const sunTimes = SunCalc.getTimes(sunDate, eLat, eLng);
         const srTime = sunTimes.sunrise ? sunTimes.sunrise.getHours() + sunTimes.sunrise.getMinutes()/60 : 6;
         const ssTime = sunTimes.sunset ? sunTimes.sunset.getHours() + sunTimes.sunset.getMinutes()/60 : 18;
         
         const simDate = new Date(sunDate);
         simDate.setHours(Math.floor(sunHour), Math.round((sunHour % 1) * 60), 0);
-        const sunPos = SunCalc.getPosition(simDate, project.lat, project.lng);
+        const sunPos = SunCalc.getPosition(simDate, eLat, eLng);
         const bearing = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
         const bounds = map.getBounds(); const R = bounds ? Math.min(Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat()), Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng())) * 0.38 : 0.003;
-        const lat2 = project.lat + R * Math.cos(bearing * Math.PI / 180);
-        const lng2 = project.lng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(project.lat * Math.PI / 180);
+        const lat2 = eLat + R * Math.cos(bearing * Math.PI / 180);
+        const lng2 = eLng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(eLat * Math.PI / 180);
         
         const isDay = sunHour >= srTime && sunHour <= ssTime;
         const isGoldenBefore = sunHour >= (srTime - 1) && sunHour < srTime;
@@ -2667,7 +2604,7 @@
         const lineOpacity = isNight ? 0.5 : (isGoldenBefore || isGoldenAfter) ? 0.6 : 1;
         
         sunPosLineRef.current = new google.maps.Polyline({
-          path: [{ lat: project.lat, lng: project.lng }, { lat: lat2, lng: lng2 }],
+          path: [{ lat: eLat, lng: eLng }, { lat: lat2, lng: lng2 }],
           strokeColor: lineColor, strokeOpacity: 0, strokeWeight: 6,
           icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: lineOpacity, scale: 2 }, offset: '0', repeat: '10px' }],
           map
@@ -2677,10 +2614,10 @@
         if (!isNight) {
           const shadowBearing = (bearing + 180) % 360;
           const shadowR = bounds ? Math.min(Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat()), Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng())) * 0.38 : 0.003;
-          const sLat2 = project.lat + shadowR * Math.cos(shadowBearing * Math.PI / 180);
-          const sLng2 = project.lng + shadowR * Math.sin(shadowBearing * Math.PI / 180) / Math.cos(project.lat * Math.PI / 180);
+          const sLat2 = eLat + shadowR * Math.cos(shadowBearing * Math.PI / 180);
+          const sLng2 = eLng + shadowR * Math.sin(shadowBearing * Math.PI / 180) / Math.cos(eLat * Math.PI / 180);
           shadowLineRef.current = new google.maps.Polyline({
-            path: [{ lat: project.lat, lng: project.lng }, { lat: sLat2, lng: sLng2 }],
+            path: [{ lat: eLat, lng: eLng }, { lat: sLat2, lng: sLng2 }],
             strokeColor: '#000000', strokeOpacity: 0, strokeWeight: 8,
             icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.35, scale: 3 }, offset: '0', repeat: '12px' }],
             map
@@ -2763,7 +2700,7 @@
           sunPosMarkerRef.current = new SunDotOverlay(lat2, lng2);
           sunPosMarkerRef.current.setMap(map);
         }
-      }, [sunHour, project?.lat, project?.lng, mapType, mapZoom, sunDate]);
+      }, [sunHour, project?.lat, project?.lng, mapType, mapZoom, sunDate, adjustedPos]);
 
       // Night overlay toggle
       useEffect(() => {
@@ -2776,28 +2713,30 @@
       useEffect(() => {
         const map = mapInstanceRef.current;
         if (!map || !project?.lat || !project?.lng || !window.SunCalc) return;
+        const eLat = adjustedPos?.lat ?? project.lat;
+        const eLng = adjustedPos?.lng ?? project.lng;
         
         if (currentTimeLineRef.current) { currentTimeLineRef.current.setMap(null); currentTimeLineRef.current = null; }
         
         const now = new Date();
-        const sunTimes = SunCalc.getTimes(now, project.lat, project.lng);
+        const sunTimes = SunCalc.getTimes(now, eLat, eLng);
         const nowH = now.getHours() + now.getMinutes()/60;
         const srTime = sunTimes.sunrise ? sunTimes.sunrise.getHours() + sunTimes.sunrise.getMinutes()/60 : 6;
         const ssTime = sunTimes.sunset ? sunTimes.sunset.getHours() + sunTimes.sunset.getMinutes()/60 : 18;
         
         if (nowH >= (srTime - 1) && nowH <= (ssTime + 1)) {
-          const sunPos = SunCalc.getPosition(now, project.lat, project.lng);
+          const sunPos = SunCalc.getPosition(now, eLat, eLng);
           const bearing = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
           const bounds = map.getBounds(); const R = bounds ? Math.min(Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat()), Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng())) * 0.38 : 0.003;
-          const lat2 = project.lat + R * Math.cos(bearing * Math.PI / 180);
-          const lng2 = project.lng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(project.lat * Math.PI / 180);
+          const lat2 = eLat + R * Math.cos(bearing * Math.PI / 180);
+          const lng2 = eLng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(eLat * Math.PI / 180);
           
           currentTimeLineRef.current = new google.maps.Polyline({
-            path: [{ lat: project.lat, lng: project.lng }, { lat: lat2, lng: lng2 }],
+            path: [{ lat: eLat, lng: eLng }, { lat: lat2, lng: lng2 }],
             strokeColor: '#ffffff', strokeOpacity: 0.35, strokeWeight: 3, map
           });
         }
-      }, [project?.lat, project?.lng, mapType, mapZoom]);
+      }, [project?.lat, project?.lng, mapType, mapZoom, adjustedPos]);
 
       if (!project) return null;
       const sun = weather?.daily?.[0];
@@ -3236,6 +3175,10 @@
                     </div>
                     {/* Map controls - stacked vertically with subtle border */}
                     <div ref={mapContainerRef} style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#262c30' }}/>
+                    {/* Fixed center pin */}
+                    <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 5, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#7dd3c6', border: '2px solid #fff', boxShadow: '0 0 8px rgba(125,211,198,0.5), 0 2px 6px rgba(0,0,0,0.4)' }}/>
+                    </div>
                     <div style={{ position: 'absolute', top: '80px', right: '10px', zIndex: 13, display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', borderRadius: '6px', overflow: 'hidden' }}>
                       <button 
                         onClick={() => setMapType('hybrid')} 
@@ -3285,6 +3228,23 @@
                     </button>
                     {/* Date wheel picker */}
                     {showDatePicker && <DateWheelPicker date={sunDate} onChange={setSunDate} onClose={() => setShowDatePicker(false)} />}
+                    {/* Update position button - shown when marker is dragged */}
+                    {adjustedPos && (
+                      <div style={{ position: 'absolute', bottom: '14px', left: '50%', transform: 'translateX(-50%)', zIndex: 13, display: 'flex', gap: '8px' }}>
+                        <button onClick={() => { updateProject(project.id, { lat: adjustedPos.lat, lng: adjustedPos.lng }); setAdjustedPos(null); }} className="font-bebas-bold" style={{
+                          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+                          borderRadius: '8px', border: '1px solid rgba(125,211,198,0.3)', cursor: 'pointer',
+                          padding: '8px 16px', fontSize: '14px', letterSpacing: '0.05em',
+                          color: '#7dd3c6', textShadow: '0 0 8px rgba(125,211,198,0.3)', whiteSpace: 'nowrap'
+                        }}>METTRE À JOUR</button>
+                        <button onClick={() => { setAdjustedPos(null); if (mapInstanceRef.current) mapInstanceRef.current.panTo({ lat: project.lat, lng: project.lng }); }} className="font-bebas-bold" style={{
+                          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+                          borderRadius: '8px', border: 'none', cursor: 'pointer',
+                          padding: '8px 12px', fontSize: '14px', letterSpacing: '0.05em',
+                          color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap'
+                        }}>ANNULER</button>
+                      </div>
+                    )}
                   </div>
                   </>
                 ) : (
@@ -4414,7 +4374,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v403</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v405</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
