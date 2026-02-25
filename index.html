@@ -399,7 +399,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v413</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v414</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -514,6 +514,45 @@
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     const TBL_PROJECTS = isDev ? 'projects_dev' : 'projects';
     const TBL_PREFS = isDev ? 'preferences_dev' : 'preferences';
+    const TBL_FILES = isDev ? 'project_files_dev' : 'project_files';
+    const STORAGE_BUCKET = 'project-files';
+    const MAX_PROJECT_FILES_MB = 30;
+
+    // === File helpers ===
+    const fileHelpers = {
+      async list(projectId) {
+        const { data, error } = await supabase.from(TBL_FILES).select('*').eq('project_id', projectId).order('created_at', { ascending: true });
+        if (error) { console.error('List files error:', error); return []; }
+        return data || [];
+      },
+      async upload(projectId, userId, file) {
+        const ts = Date.now();
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const storagePath = `${userId}/${projectId}/${ts}_${safeName}`;
+        const { error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(storagePath, file, { contentType: file.type });
+        if (upErr) { console.error('Upload error:', upErr); throw upErr; }
+        const { error: dbErr } = await supabase.from(TBL_FILES).insert({
+          project_id: projectId, user_id: userId, filename: file.name,
+          size_bytes: file.size, mime_type: file.type, storage_path: storagePath
+        });
+        if (dbErr) { console.error('DB insert error:', dbErr); throw dbErr; }
+      },
+      async deleteFile(fileRow) {
+        await supabase.storage.from(STORAGE_BUCKET).remove([fileRow.storage_path]);
+        await supabase.from(TBL_FILES).delete().eq('id', fileRow.id);
+      },
+      async deleteAllForProject(projectId) {
+        const files = await this.list(projectId);
+        if (files.length === 0) return;
+        const paths = files.map(f => f.storage_path);
+        await supabase.storage.from(STORAGE_BUCKET).remove(paths);
+        await supabase.from(TBL_FILES).delete().eq('project_id', projectId);
+      },
+      async getUrl(storagePath) {
+        const { data } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(storagePath, 3600);
+        return data?.signedUrl || '';
+      }
+    };
 
     // Auth context
     const AuthContext = createContext();
@@ -966,6 +1005,7 @@
         // Delay actual Supabase delete by 60s (undo window)
         deleteTimerRef.current = setTimeout(() => {
           if (user) {
+            fileHelpers.deleteAllForProject(id).catch(e => console.error('File cleanup error:', e));
             supabase.from(TBL_PROJECTS).delete().eq('id', id)
               .then(({ error }) => { if (error) console.error('Delete error:', error); });
           }
@@ -990,8 +1030,11 @@
         }
         if (x.status === ProjectStatus.RETOUCHING) {
           const upd = { status: ProjectStatus.DONE, completedAt: new Date().toISOString() };
-          if (user) supabase.from(TBL_PROJECTS).update({ status: upd.status, completed_at: upd.completedAt }).eq('id', id)
-            .then(({ error }) => { if (error) console.error('Advance error:', error); });
+          if (user) {
+            fileHelpers.deleteAllForProject(id).catch(e => console.error('File cleanup error:', e));
+            supabase.from(TBL_PROJECTS).update({ status: upd.status, completed_at: upd.completedAt }).eq('id', id)
+              .then(({ error }) => { if (error) console.error('Advance error:', error); });
+          }
           return {...x, ...upd};
         }
         return x;
@@ -2322,6 +2365,7 @@
 
     const ProjectDetail = ({ projectId, onClose }) => {
       const { projects, updateProject, advanceProject, revertProject, deleteProject, prefs } = useStore();
+      const { user } = useAuth();
       const project = projects.find(p => p.id === projectId);
       const [weather, setWeather] = useState(null);
       const [confirm, setConfirm] = useState(false);
@@ -2362,6 +2406,56 @@
       const [adjustedPos, setAdjustedPos] = useState(null);
       // Reset adjustedPos when switching projects
       useEffect(() => { setAdjustedPos(null); }, [project?.id]);
+
+      // === Project files ===
+      const [projectFiles, setProjectFiles] = useState([]);
+      const [fileUrls, setFileUrls] = useState({});
+      const [uploading, setUploading] = useState(false);
+      const [dragOver, setDragOver] = useState(false);
+      const [previewFile, setPreviewFile] = useState(null);
+      const fileInputRef = React.useRef(null);
+
+      const totalFilesMB = React.useMemo(() => projectFiles.reduce((s, f) => s + f.size_bytes, 0) / (1024 * 1024), [projectFiles]);
+
+      // Load files on mount / project change
+      useEffect(() => {
+        if (!project?.id) return;
+        fileHelpers.list(project.id).then(files => {
+          setProjectFiles(files);
+          // Get signed URLs for all files
+          Promise.all(files.map(async f => {
+            const url = await fileHelpers.getUrl(f.storage_path);
+            return [f.id, url];
+          })).then(pairs => setFileUrls(Object.fromEntries(pairs)));
+        });
+      }, [project?.id]);
+
+      const handleFileUpload = async (fileList) => {
+        if (!user || !project) return;
+        const files = Array.from(fileList);
+        const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf'];
+        const valid = files.filter(f => allowed.includes(f.type));
+        if (valid.length === 0) return;
+        const newTotalMB = totalFilesMB + valid.reduce((s, f) => s + f.size, 0) / (1024 * 1024);
+        if (newTotalMB > MAX_PROJECT_FILES_MB) { alert(`Limite de ${MAX_PROJECT_FILES_MB} MB par projet dépassée`); return; }
+        setUploading(true);
+        try {
+          for (const f of valid) { await fileHelpers.upload(project.id, user.id, f); }
+          const updated = await fileHelpers.list(project.id);
+          setProjectFiles(updated);
+          Promise.all(updated.map(async f => {
+            const url = fileUrls[f.id] || await fileHelpers.getUrl(f.storage_path);
+            return [f.id, url];
+          })).then(pairs => setFileUrls(Object.fromEntries(pairs)));
+        } catch (e) { console.error('Upload failed:', e); }
+        setUploading(false);
+      };
+
+      const handleFileDelete = async (fileRow) => {
+        await fileHelpers.deleteFile(fileRow);
+        setProjectFiles(p => p.filter(f => f.id !== fileRow.id));
+        setFileUrls(u => { const n = {...u}; delete n[fileRow.id]; return n; });
+      };
 
       useEffect(() => { if (project?.lat && project?.lng) fetchWeather(project.lat, project.lng).then(setWeather).catch(console.error); }, [project?.lat, project?.lng]);
 
@@ -3308,6 +3402,88 @@
               </div>
             </div>
           </div>
+
+          {/* Fichiers */}
+          <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} mt-6`}>
+            <div className="flex items-baseline gap-4 mb-3">
+              <span className="font-bebas-regular" style={{ letterSpacing: '0.04em', fontSize: '18px', color: '#404A48' }}>FICHIERS</span>
+              {projectFiles.length > 0 && <span className="font-bebas-light" style={{ fontSize: '14px', color: '#404A48', letterSpacing: '0.04em' }}>{totalFilesMB.toFixed(1)} / {MAX_PROJECT_FILES_MB} MB</span>}
+            </div>
+            
+            {projectFiles.length > 0 && (
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                {projectFiles.map(f => {
+                  const url = fileUrls[f.id];
+                  const isPdf = f.mime_type === 'application/pdf';
+                  return (
+                    <div key={f.id} style={{ position: 'relative', width: '100px', height: '100px', borderRadius: '10px', overflow: 'hidden', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', flexShrink: 0 }}
+                      onClick={() => setPreviewFile(f)}
+                    >
+                      {isPdf ? (
+                        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                          <span className="font-bebas-bold" style={{ fontSize: '22px', color: '#8B9B99', letterSpacing: '0.04em' }}>PDF</span>
+                          <span className="font-bebas-light" style={{ fontSize: '11px', color: '#404A48', letterSpacing: '0.02em', textAlign: 'center', padding: '0 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '90px' }}>{f.filename}</span>
+                        </div>
+                      ) : url ? (
+                        <img src={url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={f.filename} loading="lazy"/>
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <span style={{ color: '#404A48', fontSize: '12px' }}>...</span>
+                        </div>
+                      )}
+                      {!isMobile && (
+                        <button onClick={(e) => { e.stopPropagation(); handleFileDelete(f); }} style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: 0.7, transition: 'opacity 0.2s' }}
+                          onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                          onMouseLeave={e => e.currentTarget.style.opacity = 0.7}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF3B30" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Upload zone — desktop only */}
+            {!isMobile && project?.status !== 'done' && (
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFileUpload(e.dataTransfer.files); }}
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  border: dragOver ? '1.5px solid rgba(125,211,198,0.5)' : '1.5px dashed rgba(255,255,255,0.1)',
+                  borderRadius: '12px', padding: '16px', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                  background: dragOver ? 'rgba(125,211,198,0.05)' : 'transparent',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <input ref={fileInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp,image/heic,application/pdf" style={{ display: 'none' }}
+                  onChange={(e) => { handleFileUpload(e.target.files); e.target.value = ''; }}
+                />
+                <span className="font-bebas-regular" style={{ letterSpacing: '0.04em', fontSize: '15px', color: uploading ? '#7dd3c6' : '#404A48' }}>
+                  {uploading ? 'TÉLÉVERSEMENT...' : projectFiles.length === 0 ? 'GLISSER OU CLIQUER POUR AJOUTER' : 'AJOUTER'}
+                </span>
+              </div>
+            )}
+
+            {projectFiles.length === 0 && isMobile && (
+              <span className="font-bebas-light" style={{ fontSize: '15px', color: '#404A48', letterSpacing: '0.04em' }}>AUCUN FICHIER</span>
+            )}
+          </div>
+
+          {/* File preview overlay */}
+          {previewFile && (
+            <div onClick={() => setPreviewFile(null)} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              {previewFile.mime_type === 'application/pdf' ? (
+                <iframe src={fileUrls[previewFile.id]} style={{ width: '90%', height: '90%', border: 'none', borderRadius: '8px' }}/>
+              ) : (
+                <img src={fileUrls[previewFile.id]} style={{ maxWidth: '95%', maxHeight: '95%', objectFit: 'contain', borderRadius: '8px' }} alt={previewFile.filename}/>
+              )}
+            </div>
+          )}
 
           {/* Actions en bas */}
           <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} mt-8 pt-4 border-t border-adaptive flex items-center ${isMobile ? 'justify-between' : 'gap-8'}`}>
@@ -4427,7 +4603,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v413</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v414</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
