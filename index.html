@@ -399,7 +399,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v427</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v428</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2426,6 +2426,8 @@
       const drawingMarkersRef = React.useRef([]);
       const drawClickListenerRef = React.useRef(null);
       const [editPanelPos, setEditPanelPos] = useState(null);
+      const [drawPanelPos, setDrawPanelPos] = useState(null);
+      const skipMapRecreateRef = React.useRef(false);
       // Reset adjustedPos when switching projects
       useEffect(() => { setAdjustedPos(null); effectiveCenterRef.current = null; }, [project?.id]);
       
@@ -2512,6 +2514,15 @@
           }
           drawingMarkersRef.current.push(marker);
         });
+        // Calculate panel position near last vertex
+        if (drawingVertices.length >= 1 && nightOverlayRef.current && nightOverlayRef.current.getProjection()) {
+          const last = drawingVertices[drawingVertices.length - 1];
+          const proj = nightOverlayRef.current.getProjection();
+          const px = proj.fromLatLngToContainerPixel(new google.maps.LatLng(last.lat, last.lng));
+          if (px) setDrawPanelPos({ x: px.x, y: px.y });
+        } else {
+          setDrawPanelPos(null);
+        }
       }, [drawingVertices]);
 
       const finishDrawing = () => {
@@ -2795,6 +2806,11 @@
       // Interactive Google Map with dark mode
       useEffect(() => {
         if (!mapContainerRef.current || !project?.lat || !project?.lng || !window.google) return;
+        // Skip map recreation when just confirming adjusted position
+        if (skipMapRecreateRef.current) {
+          skipMapRecreateRef.current = false;
+          return;
+        }
         
         const darkStyle = [
           { elementType: 'geometry', stylers: [{ color: '#2d2d2d' }] },
@@ -3677,16 +3693,23 @@
                         )}
                       </button>
                     </div>
-                    {/* Drawing mode hint */}
+                    {/* Drawing mode hint — near the polygon */}
                     {drawingMode && (
-                      <div style={{ position: 'absolute', bottom: adjustedPos ? '60px' : '14px', left: '50%', transform: 'translateX(-50%)', zIndex: 13, 
+                      <div style={{ position: 'absolute', 
+                        ...(drawPanelPos ? {
+                          left: Math.max(10, Math.min(drawPanelPos.x - 100, (mapContainerRef.current?.offsetWidth || 400) - 280)),
+                          top: Math.max(80, Math.min(drawPanelPos.y + 25, (mapContainerRef.current?.offsetHeight || 400) - 60)),
+                        } : {
+                          bottom: adjustedPos ? '60px' : '14px', left: '50%', transform: 'translateX(-50%)',
+                        }),
+                        zIndex: 13, 
                         background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', borderRadius: '8px', padding: '6px 14px',
                         display: 'flex', alignItems: 'center', gap: '10px'
                       }}>
                         <span className="font-bebas-regular" style={{ fontSize: '14px', color: '#7dd3c6', letterSpacing: '0.04em' }}>
                           {drawingVertices.length === 0 ? 'CLIQUER POUR PLACER LE PREMIER POINT' : 
                            drawingVertices.length < 3 ? `${drawingVertices.length} POINT${drawingVertices.length > 1 ? 'S' : ''} — CONTINUEZ` :
-                           `${drawingVertices.length} POINTS — CLIQUER LE 1ER POINT OU`}
+                           `${drawingVertices.length} POINTS`}
                         </span>
                         {drawingVertices.length >= 3 && (
                           <button onClick={() => finishDrawing()} className="font-bebas-bold"
@@ -3760,7 +3783,7 @@
                     {/* Update position button - shown when marker is dragged */}
                     {adjustedPos && (
                       <div style={{ position: 'absolute', bottom: '14px', left: '50%', transform: 'translateX(-50%)', zIndex: 13, display: 'flex', gap: '8px' }}>
-                        <button onClick={() => { updateProject(project.id, { lat: adjustedPos.lat, lng: adjustedPos.lng }); setAdjustedPos(null); }} className="font-bebas-bold" style={{
+                        <button onClick={() => { skipMapRecreateRef.current = true; effectiveCenterRef.current = null; updateProject(project.id, { lat: adjustedPos.lat, lng: adjustedPos.lng }); setAdjustedPos(null); }} className="font-bebas-bold" style={{
                           background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
                           borderRadius: '8px', border: '1px solid rgba(125,211,198,0.3)', cursor: 'pointer',
                           padding: '8px 16px', fontSize: '14px', letterSpacing: '0.05em',
@@ -4987,7 +5010,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v427</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v428</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
