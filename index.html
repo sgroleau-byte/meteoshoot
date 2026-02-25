@@ -399,7 +399,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v422</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v423</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2589,12 +2589,19 @@
           disableDefaultUI: true,
           zoomControl: !isMobile,
           gestureHandling: 'greedy',
+          scrollwheel: false,
           mapTypeControl: false,
           backgroundColor: '#262c30',
         });
         mapInstanceRef.current = map;
-        // Stop wheel from scrolling parent — let map zoom instead
-        mapContainerRef.current.addEventListener('wheel', (e) => e.stopPropagation(), { passive: false });
+        // Manual scroll zoom — keeps center fixed (no cursor-biased panning)
+        mapContainerRef.current.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const delta = e.deltaY < 0 ? 1 : -1;
+          const current = map.getZoom();
+          map.setZoom(current + delta);
+        }, { passive: false });
         // No panBy — center pin is at visual center
         map.addListener('idle', () => { const z = map.getZoom(); if (z !== mapZoom) setMapZoom(z); });
 
@@ -3322,7 +3329,8 @@
                     {/* Slider + time label on top, not affected by mask */}
                     <div style={{ 
                       position: 'absolute', top: '0', left: '0', right: '0', zIndex: 11,
-                      padding: '10px 14px 120px 14px'
+                      padding: '10px 14px 120px 14px',
+                      pointerEvents: 'none'
                     }}>
                       <div style={{ position: 'relative', marginTop: '24px', marginRight: '60px', display: 'flex', alignItems: 'center' }}>
                         <div style={{ position: 'relative', flex: 1 }}>
@@ -3359,7 +3367,8 @@
                           style={{ 
                             width: '100%', appearance: 'none', WebkitAppearance: 'none', 
                             background: 'transparent', 
-                            outline: 'none', cursor: 'pointer'
+                            outline: 'none', cursor: 'pointer',
+                            pointerEvents: 'auto'
                           }}
                         />
                         </div>
@@ -3449,7 +3458,7 @@
           </div>
 
           {/* Fichiers */}
-          <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} mt-6`} style={{ maxWidth: isMobile ? '100%' : '58.333%' }}>
+          <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} mt-6`} style={{ maxWidth: isMobile ? '100%' : '700px' }}>
             <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>FICHIERS</label>
             {projectFiles.length > 0 && <span className="font-bebas-light" style={{ fontSize: '14px', color: '#404A48', letterSpacing: '0.04em', marginLeft: '12px' }}>{totalFilesMB.toFixed(1)} / {MAX_PROJECT_FILES_MB} MB</span>}
 
@@ -4650,7 +4659,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v422</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v423</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
