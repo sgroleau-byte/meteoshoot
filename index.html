@@ -399,7 +399,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v428</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v429</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2377,6 +2377,7 @@
       const [mapType, setMapType] = useState('hybrid');
       const [mapZoom, setMapZoom] = useState(16);
       const [showMapFull, setShowMapFull] = useState(false);
+      const [showSunLines, setShowSunLines] = useState(true);
       const [sunDate, setSunDate] = useState(() => new Date());
       const [showDatePicker, setShowDatePicker] = useState(false);
       const [editingCreatedDate, setEditingCreatedDate] = useState(false);
@@ -2575,51 +2576,33 @@
           const n = bldg.polygon.length;
           if (n < 3) return;
 
-          // Draw shadow with gradient fade (multiple strips)
+          // Draw shadow
           if (sunAlt > 0.01) {
             const shadowLen = Math.min(bldg.height / Math.tan(sunAlt), 2000);
             const sunBearingFromNorth = (sunAz * 180 / Math.PI + 180) % 360;
             const shadowBearing = (sunBearingFromNorth + 180) % 360;
             const shadowBearingRad = shadowBearing * Math.PI / 180;
+            const dLat = (shadowLen * Math.cos(shadowBearingRad)) / 111320;
+            const dLng = (shadowLen * Math.sin(shadowBearingRad)) / (111320 * Math.cos(eLat * Math.PI / 180));
 
-            // Split shadow into strips for gradient effect
-            const strips = 6;
-            for (let s = 0; s < strips; s++) {
-              const t0 = s / strips;
-              const t1 = (s + 1) / strips;
-              const len0 = shadowLen * t0;
-              const len1 = shadowLen * t1;
-              const dLat0 = (len0 * Math.cos(shadowBearingRad)) / 111320;
-              const dLng0 = (len0 * Math.sin(shadowBearingRad)) / (111320 * Math.cos(eLat * Math.PI / 180));
-              const dLat1 = (len1 * Math.cos(shadowBearingRad)) / 111320;
-              const dLng1 = (len1 * Math.sin(shadowBearingRad)) / (111320 * Math.cos(eLat * Math.PI / 180));
+            const projVerts = bldg.polygon.map(v => ({ lat: v.lat + dLat, lng: v.lng + dLng }));
 
-              const verts0 = bldg.polygon.map(v => ({ lat: v.lat + dLat0, lng: v.lng + dLng0 }));
-              const verts1 = bldg.polygon.map(v => ({ lat: v.lat + dLat1, lng: v.lng + dLng1 }));
+            // Projected footprint
+            const shadowFoot = new google.maps.Polygon({
+              paths: projVerts, strokeWeight: 0, strokeOpacity: 0,
+              fillColor: '#000000', fillOpacity: 0.3, map, zIndex: 18, clickable: false
+            });
+            shadowPolygonsRef.current.push(shadowFoot);
 
-              // Fade: strong near building, faint far away
-              const opacity = 0.35 * (1 - t0 * 0.85);
-
-              // Build strip quad for each edge
-              for (let i = 0; i < n; i++) {
-                const j = (i + 1) % n;
-                const quad = new google.maps.Polygon({
-                  paths: [verts0[i], verts0[j], verts1[j], verts1[i]],
-                  strokeWeight: 0, strokeOpacity: 0,
-                  fillColor: '#000000', fillOpacity: opacity, map, zIndex: 18,
-                  clickable: false
-                });
-                shadowPolygonsRef.current.push(quad);
-              }
-
-              // Fill the end cap of this strip
-              const capPoly = new google.maps.Polygon({
-                paths: verts1,
+            // Wall quads connecting footprint to projection
+            for (let i = 0; i < n; i++) {
+              const j = (i + 1) % n;
+              const quad = new google.maps.Polygon({
+                paths: [bldg.polygon[i], bldg.polygon[j], projVerts[j], projVerts[i]],
                 strokeWeight: 0, strokeOpacity: 0,
-                fillColor: '#000000', fillOpacity: opacity * 0.7, map, zIndex: 18,
-                clickable: false
+                fillColor: '#000000', fillOpacity: 0.25, map, zIndex: 18, clickable: false
               });
-              shadowPolygonsRef.current.push(capPoly);
+              shadowPolygonsRef.current.push(quad);
             }
           }
 
@@ -2954,6 +2937,8 @@
         sunLinesRef.current.forEach(l => l.setMap(null));
         sunLinesRef.current = [];
         
+        if (!showSunLines) return;
+        
         const bounds = map.getBounds();
         const getR = () => {
           if (!bounds) return 0.003;
@@ -3008,7 +2993,27 @@
           strokeWeight: 1, fillColor: '#000000', fillOpacity: 0.25, map
         });
         sunLinesRef.current.push(arc);
-      }, [sunDate, project?.lat, project?.lng, mapZoom, adjustedPos]);
+      }, [sunDate, project?.lat, project?.lng, mapZoom, adjustedPos, showSunLines]);
+
+      // Hide POI labels in drawing mode to avoid accidental clicks on business info
+      const savedMapStylesRef = React.useRef(null);
+      useEffect(() => {
+        const map = mapInstanceRef.current;
+        if (!map) return;
+        if (drawingMode) {
+          savedMapStylesRef.current = map.get('styles') || [];
+          const poiHidden = [
+            ...savedMapStylesRef.current.filter(s => s.featureType !== 'poi'),
+            { featureType: 'poi', stylers: [{ visibility: 'off' }] }
+          ];
+          map.setOptions({ styles: poiHidden, clickableIcons: false });
+        } else {
+          if (savedMapStylesRef.current !== null) {
+            map.setOptions({ styles: savedMapStylesRef.current, clickableIcons: true });
+            savedMapStylesRef.current = null;
+          }
+        }
+      }, [drawingMode]);
 
       // Escape key closes fullscreen map
       useEffect(() => {
@@ -3042,6 +3047,9 @@
         // Remove previous position line only (keep marker for smooth update)
         if (sunPosLineRef.current) { sunPosLineRef.current.setMap(null); sunPosLineRef.current = null; }
         if (shadowLineRef.current) { shadowLineRef.current.setMap(null); shadowLineRef.current = null; }
+        if (sunPosMarkerRef.current) { sunPosMarkerRef.current.setMap(null); }
+        
+        if (!showSunLines) return;
         
         const sunTimes = SunCalc.getTimes(sunDate, eLat, eLng);
         const srTime = sunTimes.sunrise ? sunTimes.sunrise.getHours() + sunTimes.sunrise.getMinutes()/60 : 6;
@@ -3160,7 +3168,7 @@
           sunPosMarkerRef.current = new SunDotOverlay(lat2, lng2);
           sunPosMarkerRef.current.setMap(map);
         }
-      }, [sunHour, project?.lat, project?.lng, mapType, mapZoom, sunDate, adjustedPos]);
+      }, [sunHour, project?.lat, project?.lng, mapType, mapZoom, sunDate, adjustedPos, showSunLines]);
 
       // Night overlay toggle
       useEffect(() => {
@@ -3678,6 +3686,23 @@
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
                         </svg>
+                      </button>
+                      <button 
+                        onClick={() => setShowSunLines(v => !v)}
+                        title={showSunLines ? 'Masquer lignes soleil' : 'Afficher lignes soleil'}
+                        style={{ 
+                          background: 'transparent', 
+                          border: 'none', borderBottom: '1px solid rgba(255,255,255,0.1)',
+                          cursor: 'pointer', padding: '5px 10px',
+                          color: showSunLines ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.25)', 
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}
+                      >
+                        {showSunLines ? (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        ) : (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                        )}
                       </button>
                       <button onClick={() => setShowMapFull(f => !f)} style={{ 
                         background: 'transparent', 
@@ -5010,7 +5035,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v428</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v429</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
