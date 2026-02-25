@@ -399,7 +399,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v423</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v424</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -848,7 +848,8 @@
                 isContest: p.is_contest, notes: p.notes, links: p.links || [],
                 departureAddress: p.departure_address, departureLat: p.departure_lat, departureLng: p.departure_lng,
                 travelTime: p.travel_time, sortOrder: p.sort_order,
-                createdAt: p.created_at, shotAt: p.shot_at, completedAt: p.completed_at
+                createdAt: p.created_at, shotAt: p.shot_at, completedAt: p.completed_at,
+                buildings: p.buildings || []
               })));
             } else if (hasLocalData && !alreadyMigrated) {
               // First login with localStorage data → migrate to Supabase
@@ -907,7 +908,8 @@
                 isContest: p.is_contest, notes: p.notes, links: p.links || [],
                 departureAddress: p.departure_address, departureLat: p.departure_lat, departureLng: p.departure_lng,
                 travelTime: p.travel_time, sortOrder: p.sort_order,
-                createdAt: p.created_at, shotAt: p.shot_at, completedAt: p.completed_at
+                createdAt: p.created_at, shotAt: p.shot_at, completedAt: p.completed_at,
+                buildings: p.buildings || []
               };
               setProjects(prev => {
                 const exists = prev.findIndex(x => x.id === p.id);
@@ -938,7 +940,7 @@
       };
 
       const addProject = (data) => {
-        const proj = { id: generateId(), name: data.name || 'Nouveau', address: data.address || '', lat: data.lat, lng: data.lng, mandates: data.mandates || [], orientation: data.orientation || [], deliveryDate: data.deliveryDate || null, isContest: data.isContest || false, status: ProjectStatus.TODO, notes: '', links: [], travelTime: data.travelTime || null, departureAddress: data.departureAddress || null, departureLat: data.departureLat || null, departureLng: data.departureLng || null, createdAt: new Date().toISOString(), shotAt: null };
+        const proj = { id: generateId(), name: data.name || 'Nouveau', address: data.address || '', lat: data.lat, lng: data.lng, mandates: data.mandates || [], orientation: data.orientation || [], deliveryDate: data.deliveryDate || null, isContest: data.isContest || false, status: ProjectStatus.TODO, notes: '', links: [], buildings: [], travelTime: data.travelTime || null, departureAddress: data.departureAddress || null, departureLat: data.departureLat || null, departureLng: data.departureLng || null, createdAt: new Date().toISOString(), shotAt: null };
         setProjects(p => {
           const newList = [proj, ...p];
           // Update all sort_orders in Supabase
@@ -954,7 +956,7 @@
             id: proj.id, user_id: user.id, name: proj.name, address: proj.address,
             lat: proj.lat, lng: proj.lng, status: proj.status,
             mandates: proj.mandates, orientation: proj.orientation,
-            is_contest: proj.isContest, notes: '', links: [],
+            is_contest: proj.isContest, notes: '', links: [], buildings: [],
             departure_address: proj.departureAddress, departure_lat: proj.departureLat, departure_lng: proj.departureLng,
             travel_time: proj.travelTime, sort_order: 0,
             created_at: proj.createdAt
@@ -985,6 +987,7 @@
           if ('shotAt' in upd) dbUpd.shot_at = upd.shotAt;
           if ('createdAt' in upd) dbUpd.created_at = upd.createdAt;
           if ('completedAt' in upd) dbUpd.completed_at = upd.completedAt;
+          if ('buildings' in upd) dbUpd.buildings = upd.buildings;
           if (Object.keys(dbUpd).length > 0) {
             supabase.from(TBL_PROJECTS).update(dbUpd).eq('id', id)
               .then(({ error }) => { if (error) console.error('Update error:', error); });
@@ -2407,8 +2410,211 @@
       const markerRef = React.useRef(null);
       const [adjustedPos, setAdjustedPos] = useState(null);
       const effectiveCenterRef = React.useRef(null);
+      
+      // === Buildings & Shadow Simulation ===
+      const [buildings, setBuildings] = useState(() => project?.buildings || []);
+      const [drawingMode, setDrawingMode] = useState(false);
+      const [drawingVertices, setDrawingVertices] = useState([]);
+      const [editingBuilding, setEditingBuilding] = useState(null); // index of building being edited
+      const [buildingHeight, setBuildingHeight] = useState('');
+      const [buildingName, setBuildingName] = useState('');
+      const buildingPolygonsRef = React.useRef([]);
+      const shadowPolygonsRef = React.useRef([]);
+      const drawingPolygonRef = React.useRef(null);
+      const drawingMarkersRef = React.useRef([]);
+      const drawClickListenerRef = React.useRef(null);
       // Reset adjustedPos when switching projects
       useEffect(() => { setAdjustedPos(null); effectiveCenterRef.current = null; }, [project?.id]);
+      
+      // Load buildings from project
+      useEffect(() => { setBuildings(project?.buildings || []); setDrawingMode(false); setDrawingVertices([]); setEditingBuilding(null); }, [project?.id]);
+      
+      // Save buildings to project when changed (debounced)
+      const buildingsSaveTimer = React.useRef(null);
+      useEffect(() => {
+        if (!project?.id) return;
+        if (buildingsSaveTimer.current) clearTimeout(buildingsSaveTimer.current);
+        buildingsSaveTimer.current = setTimeout(() => {
+          updateProject(project.id, { buildings });
+        }, 500);
+        return () => { if (buildingsSaveTimer.current) clearTimeout(buildingsSaveTimer.current); };
+      }, [buildings]);
+
+      // Drawing mode — add click listener on map
+      useEffect(() => {
+        const map = mapInstanceRef.current;
+        if (!map) return;
+        // Clean up previous listener
+        if (drawClickListenerRef.current) {
+          google.maps.event.removeListener(drawClickListenerRef.current);
+          drawClickListenerRef.current = null;
+        }
+        if (!drawingMode) {
+          // Clean drawing preview
+          if (drawingPolygonRef.current) { drawingPolygonRef.current.setMap(null); drawingPolygonRef.current = null; }
+          drawingMarkersRef.current.forEach(m => m.setMap(null));
+          drawingMarkersRef.current = [];
+          return;
+        }
+        map.setOptions({ draggableCursor: 'crosshair' });
+        drawClickListenerRef.current = map.addListener('click', (e) => {
+          const pt = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+          setDrawingVertices(prev => [...prev, pt]);
+        });
+        return () => {
+          if (drawClickListenerRef.current) {
+            google.maps.event.removeListener(drawClickListenerRef.current);
+            drawClickListenerRef.current = null;
+          }
+          map.setOptions({ draggableCursor: null });
+        };
+      }, [drawingMode]);
+
+      // Update drawing preview polygon + vertex markers
+      useEffect(() => {
+        const map = mapInstanceRef.current;
+        if (!map) return;
+        // Update preview polygon
+        if (drawingPolygonRef.current) drawingPolygonRef.current.setMap(null);
+        drawingMarkersRef.current.forEach(m => m.setMap(null));
+        drawingMarkersRef.current = [];
+        if (drawingVertices.length >= 2) {
+          drawingPolygonRef.current = new google.maps.Polygon({
+            paths: drawingVertices,
+            strokeColor: '#7dd3c6', strokeOpacity: 0.9, strokeWeight: 2,
+            fillColor: '#7dd3c6', fillOpacity: 0.25, map,
+            zIndex: 30
+          });
+        }
+        drawingVertices.forEach((v, i) => {
+          const isFirst = i === 0;
+          const marker = new google.maps.Marker({
+            position: v, map,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: isFirst ? 8 : 5,
+              fillColor: isFirst ? '#ffe26b' : '#7dd3c6',
+              fillOpacity: 1,
+              strokeColor: '#fff',
+              strokeWeight: isFirst ? 2.5 : 1.5,
+            },
+            zIndex: 35,
+            clickable: isFirst && drawingVertices.length >= 3
+          });
+          if (isFirst && drawingVertices.length >= 3) {
+            marker.addListener('click', () => {
+              // Close polygon
+              finishDrawing();
+            });
+          }
+          drawingMarkersRef.current.push(marker);
+        });
+      }, [drawingVertices]);
+
+      const finishDrawing = () => {
+        if (drawingVertices.length < 3) return;
+        const newBuilding = { polygon: [...drawingVertices], height: 15, name: `Bâtiment ${buildings.length + 1}` };
+        setBuildings(prev => [...prev, newBuilding]);
+        setEditingBuilding(buildings.length);
+        setBuildingHeight('15');
+        setBuildingName(newBuilding.name);
+        setDrawingVertices([]);
+        setDrawingMode(false);
+        if (drawingPolygonRef.current) { drawingPolygonRef.current.setMap(null); drawingPolygonRef.current = null; }
+        drawingMarkersRef.current.forEach(m => m.setMap(null));
+        drawingMarkersRef.current = [];
+      };
+
+      const deleteBuilding = (idx) => {
+        setBuildings(prev => prev.filter((_, i) => i !== idx));
+        if (editingBuilding === idx) setEditingBuilding(null);
+        else if (editingBuilding > idx) setEditingBuilding(editingBuilding - 1);
+      };
+
+      // Draw building polygons + shadow polygons on map
+      useEffect(() => {
+        const map = mapInstanceRef.current;
+        if (!map || !window.SunCalc) return;
+        const eLat = adjustedPos?.lat ?? project?.lat;
+        const eLng = adjustedPos?.lng ?? project?.lng;
+        if (!eLat || !eLng) return;
+
+        // Clear previous
+        buildingPolygonsRef.current.forEach(p => p.setMap(null));
+        buildingPolygonsRef.current = [];
+        shadowPolygonsRef.current.forEach(p => p.setMap(null));
+        shadowPolygonsRef.current = [];
+
+        // Sun position for shadow calc
+        const simDate = new Date(sunDate);
+        simDate.setHours(Math.floor(sunHour), Math.round((sunHour % 1) * 60), 0);
+        const sunPos = SunCalc.getPosition(simDate, eLat, eLng);
+        const sunAlt = sunPos.altitude; // radians, negative = below horizon
+        const sunAz = sunPos.azimuth; // radians from south, clockwise
+
+        buildings.forEach((bldg, idx) => {
+          // Draw building footprint
+          const poly = new google.maps.Polygon({
+            paths: bldg.polygon,
+            strokeColor: editingBuilding === idx ? '#ffe26b' : '#7dd3c6',
+            strokeOpacity: 0.9, strokeWeight: 2,
+            fillColor: editingBuilding === idx ? '#ffe26b' : '#7dd3c6',
+            fillOpacity: 0.3, map, zIndex: 25,
+            clickable: true
+          });
+          poly.addListener('click', () => {
+            setEditingBuilding(idx);
+            setBuildingHeight(String(bldg.height));
+            setBuildingName(bldg.name);
+          });
+          buildingPolygonsRef.current.push(poly);
+
+          // Calculate shadow if sun is above horizon
+          if (sunAlt > 0.01) {
+            const shadowLen = bldg.height / Math.tan(sunAlt); // meters
+            const cappedLen = Math.min(shadowLen, 2000); // cap at 2km
+            // Shadow direction = opposite of sun azimuth
+            // SunCalc azimuth: 0 = south, positive = west. Convert to bearing from north.
+            const sunBearingFromNorth = (sunAz * 180 / Math.PI + 180) % 360; // degrees
+            const shadowBearing = (sunBearingFromNorth + 180) % 360; // opposite direction
+            const shadowBearingRad = shadowBearing * Math.PI / 180;
+
+            // Convert meters to lat/lng offset
+            const dLat = (cappedLen * Math.cos(shadowBearingRad)) / 111320;
+            const dLng = (cappedLen * Math.sin(shadowBearingRad)) / (111320 * Math.cos(eLat * Math.PI / 180));
+
+            // Project each vertex
+            const shadowVerts = bldg.polygon.map(v => ({
+              lat: v.lat + dLat,
+              lng: v.lng + dLng
+            }));
+
+            // Shadow polygon = building footprint connected to projected footprint
+            // Create a proper shadow shape: for each edge, connect original to projected
+            const n = bldg.polygon.length;
+            const shadowPath = [];
+            for (let i = 0; i < n; i++) {
+              shadowPath.push(bldg.polygon[i]);
+            }
+            for (let i = n - 1; i >= 0; i--) {
+              shadowPath.push(shadowVerts[i]);
+            }
+
+            const shadowPoly = new google.maps.Polygon({
+              paths: shadowPath,
+              strokeColor: '#000000', strokeOpacity: 0.15, strokeWeight: 1,
+              fillColor: '#000000', fillOpacity: 0.35, map, zIndex: 20,
+              clickable: false
+            });
+            shadowPolygonsRef.current.push(shadowPoly);
+          }
+        });
+
+        return () => {
+          buildingPolygonsRef.current.forEach(p => p.setMap(null));
+          shadowPolygonsRef.current.forEach(p => p.setMap(null));
+        };
+      }, [buildings, sunHour, sunDate, adjustedPos, editingBuilding, project?.lat, project?.lng]);
 
       // === Project files ===
       const [projectFiles, setProjectFiles] = useState([]);
@@ -2679,6 +2885,8 @@
           if (shadowLineRef.current) { shadowLineRef.current.setMap(null); shadowLineRef.current = null; }
           if (sunPosMarkerRef.current) { sunPosMarkerRef.current.setMap(null); sunPosMarkerRef.current = null; }
           if (nightOverlayRef.current) { nightOverlayRef.current.setMap(null); nightOverlayRef.current = null; }
+          buildingPolygonsRef.current.forEach(p => p.setMap(null)); buildingPolygonsRef.current = [];
+          shadowPolygonsRef.current.forEach(p => p.setMap(null)); shadowPolygonsRef.current = [];
           google.maps.event.removeListener(panListener);
         };
       }, [project?.lat, project?.lng, mapType]);
@@ -3417,6 +3625,102 @@
                         )}
                       </button>
                     </div>
+                    {/* Building draw controls */}
+                    <div style={{ position: 'absolute', top: '80px', right: '56px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <button 
+                        onClick={() => { if (drawingMode) { setDrawingMode(false); setDrawingVertices([]); } else { setDrawingMode(true); setEditingBuilding(null); } }}
+                        title={drawingMode ? 'Annuler le dessin' : 'Dessiner un bâtiment'}
+                        style={{ 
+                          background: drawingMode ? 'rgba(125,211,198,0.3)' : 'rgba(0,0,0,0.4)', 
+                          backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+                          borderRadius: '6px', border: drawingMode ? '1px solid rgba(125,211,198,0.5)' : 'none', 
+                          cursor: 'pointer', padding: '6px 8px',
+                          color: drawingMode ? '#7dd3c6' : 'rgba(255,255,255,0.75)', 
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+                          <line x1="8" y1="2" x2="8" y2="18"/>
+                          <line x1="16" y1="6" x2="16" y2="22"/>
+                        </svg>
+                      </button>
+                      {drawingMode && drawingVertices.length >= 3 && (
+                        <button 
+                          onClick={() => finishDrawing()}
+                          className="font-bebas-bold"
+                          style={{ 
+                            background: 'rgba(125,211,198,0.3)', 
+                            backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+                            borderRadius: '6px', border: '1px solid rgba(125,211,198,0.5)', 
+                            cursor: 'pointer', padding: '4px 8px',
+                            color: '#7dd3c6', fontSize: '12px', letterSpacing: '0.04em'
+                          }}
+                        >OK</button>
+                      )}
+                    </div>
+                    {/* Drawing mode hint */}
+                    {drawingMode && (
+                      <div style={{ position: 'absolute', bottom: adjustedPos ? '60px' : '14px', left: '50%', transform: 'translateX(-50%)', zIndex: 13, 
+                        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', borderRadius: '8px', padding: '6px 14px',
+                        display: 'flex', alignItems: 'center', gap: '8px'
+                      }}>
+                        <span className="font-bebas-regular" style={{ fontSize: '14px', color: '#7dd3c6', letterSpacing: '0.04em' }}>
+                          {drawingVertices.length === 0 ? 'CLIQUER POUR PLACER LE PREMIER POINT' : 
+                           drawingVertices.length < 3 ? `${drawingVertices.length} POINT${drawingVertices.length > 1 ? 'S' : ''} — CONTINUEZ` :
+                           `${drawingVertices.length} POINTS — CLIQUER LE 1ER POINT POUR FERMER`}
+                        </span>
+                      </div>
+                    )}
+                    {/* Building edit panel */}
+                    {editingBuilding !== null && buildings[editingBuilding] && !drawingMode && (
+                      <div style={{ 
+                        position: 'absolute', bottom: adjustedPos ? '60px' : '14px', left: '10px', zIndex: 13,
+                        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+                        borderRadius: '8px', padding: '10px 14px', minWidth: '220px',
+                        border: '1px solid rgba(125,211,198,0.2)'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                          <input type="text" value={buildingName} onChange={e => setBuildingName(e.target.value)}
+                            onBlur={() => { const idx = editingBuilding; setBuildings(prev => prev.map((b, i) => i === idx ? {...b, name: buildingName} : b)); }}
+                            className="font-bebas-bold" style={{ background: 'none', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.2)', color: '#ffe26b', fontSize: '16px', letterSpacing: '0.04em', outline: 'none', flex: 1, padding: '2px 0' }}/>
+                          <button onClick={() => deleteBuilding(editingBuilding)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF3B30" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                          </button>
+                          <button onClick={() => setEditingBuilding(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: 'rgba(255,255,255,0.5)' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="18 15 12 9 6 15"/></svg>
+                          </button>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span className="font-bebas-regular" style={{ fontSize: '14px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.04em' }}>HAUTEUR</span>
+                          <input type="number" value={buildingHeight} onChange={e => setBuildingHeight(e.target.value)}
+                            onBlur={() => { const h = parseFloat(buildingHeight) || 15; const idx = editingBuilding; setBuildings(prev => prev.map((b, i) => i === idx ? {...b, height: h} : b)); }}
+                            onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+                            style={{ width: '60px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '4px', color: '#fff', fontSize: '14px', padding: '4px 8px', outline: 'none', textAlign: 'center' }}/>
+                          <span className="font-bebas-regular" style={{ fontSize: '14px', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.04em' }}>M</span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.25)', marginTop: '4px' }}>{buildings[editingBuilding].polygon.length} sommets</div>
+                      </div>
+                    )}
+                    {/* Building list — top left below date */}
+                    {buildings.length > 0 && !drawingMode && editingBuilding === null && (
+                      <div style={{ 
+                        position: 'absolute', top: '115px', left: '10px', zIndex: 13,
+                        display: 'flex', flexDirection: 'column', gap: '3px'
+                      }}>
+                        {buildings.map((b, i) => (
+                          <button key={i} onClick={() => { setEditingBuilding(i); setBuildingHeight(String(b.height)); setBuildingName(b.name); }} 
+                            className="font-bebas-regular"
+                            style={{ 
+                              background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)',
+                              borderRadius: '4px', border: 'none', cursor: 'pointer',
+                              padding: '3px 8px', fontSize: '12px', letterSpacing: '0.04em',
+                              color: '#7dd3c6', textAlign: 'left', whiteSpace: 'nowrap'
+                            }}
+                          >{b.name} • {b.height}M</button>
+                        ))}
+                      </div>
+                    )}
                     {/* Date button - top left */}
                     <button onClick={() => setShowDatePicker(p => !p)} className="font-bebas-bold" style={{ 
                       position: 'absolute', top: '80px', left: '10px', zIndex: 13,
@@ -4659,7 +4963,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v423</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v424</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
