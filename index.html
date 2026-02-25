@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MeteoShoot">
-  <script>var isDev = !location.hostname.match(/^meteoshoot\.vercel\.app$/);</script>
+  <script>var isDev = !location.hostname.match(/^(meteoshoot\.vercel\.app|meteoshoot\.com|www\.meteoshoot\.com)$/);</script>
   <link rel="manifest" id="manifest-link">
   <link rel="apple-touch-icon" id="touch-icon-link">
   <script>
@@ -396,7 +396,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v389</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v391</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -404,7 +404,7 @@
   setTimeout(function() {
     var splash = document.getElementById('splashScreen');
     splash.classList.add('splash-hidden');
-    document.getElementById('themeColor').setAttribute('content', location.hostname.match(/^meteoshoot\.vercel\.app$/) ? '#3d4a47' : '#694d44');
+    document.getElementById('themeColor').setAttribute('content', location.hostname.match(/^(meteoshoot\.vercel\.app|meteoshoot\.com|www\.meteoshoot\.com)$/) ? '#3d4a47' : '#694d44');
     setTimeout(function() { splash.remove(); }, 900);
   }, 2500);
 </script>
@@ -3761,18 +3761,17 @@
     // ===== GEO WEATHER CARD (mobile) =====
     const GeoWeatherCard = () => {
       const [geoData, setGeoData] = useState(null);
-      const [status, setStatus] = useState('loading');
+      const [status, setStatus] = useState(() => localStorage.getItem('geo-permission') === 'granted' ? 'loading' : 'prompt');
 
-      // Géolocalisation active (HTTPS requis)
-
-      useEffect(() => {
+      const requestGeo = () => {
+        setStatus('loading');
         if (!navigator.geolocation) { setStatus('error'); return; }
         navigator.geolocation.getCurrentPosition(
           async (pos) => {
             try {
+              localStorage.setItem('geo-permission', 'granted');
               const lat = pos.coords.latitude;
               const lng = pos.coords.longitude;
-              // Reverse geocode for city name
               let cityName = 'Ma position';
               try {
                 const geocoder = new google.maps.Geocoder();
@@ -3802,9 +3801,13 @@
               setStatus('done');
             } catch(e) { console.error('GeoWeather error', e); setStatus('error'); }
           },
-          (err) => { console.error('Geolocation denied', err); setStatus('error'); },
+          (err) => { console.error('Geolocation denied', err); setStatus('denied'); },
           { enableHighAccuracy: false, timeout: 10000 }
         );
+      };
+
+      useEffect(() => {
+        if (status === 'loading' && localStorage.getItem('geo-permission') === 'granted') requestGeo();
       }, []);
 
       const now = new Date();
@@ -3819,12 +3822,18 @@
         return `${d.getHours()}H${String(d.getMinutes()).padStart(2,'0')}`;
       };
 
+      if (status === 'prompt') return (
+        <div style={{ margin: '0 12px', marginBottom: '15px', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', overflow: 'hidden', padding: '24px 28px', textAlign: 'center' }}>
+          <div className="font-bebas-regular" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.4)', marginBottom: '12px' }}>MÉTÉO DE VOTRE POSITION ACTUELLE</div>
+          <button onClick={requestGeo} className="font-bebas-regular" style={{ letterSpacing: '0.04em', background: 'none', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: '20px', color: '#FAF9F7', fontSize: '16px', padding: '8px 24px', cursor: 'pointer', textShadow: '0 0 12px rgba(255,255,255,0.3)' }}>ACTIVER LA LOCALISATION</button>
+        </div>
+      );
       if (status === 'loading') return (
         <div style={{ margin: '0 12px', marginBottom: '35px', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', overflow: 'hidden', padding: '24px 28px', textAlign: 'center' }}>
           <div className="font-bebas-regular" style={{ letterSpacing: '0.04em', fontSize: '13px', color: '#424a48' }}>Chargement météo...</div>
         </div>
       );
-      if (status === 'error' || !geoData) return null;
+      if (status === 'error' || status === 'denied' || !geoData) return null;
 
       // Done: show full weather card
       return (
@@ -4383,7 +4392,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v389</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v391</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
