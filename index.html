@@ -399,7 +399,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v430</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v431</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2934,7 +2934,29 @@
           roofPolygonsRef.current.forEach(p => p.setMap(null)); roofPolygonsRef.current = [];
           google.maps.event.removeListener(panListener);
         };
-      }, [project?.lat, project?.lng, mapType]);
+      }, [project?.lat, project?.lng]);
+
+      // Switch map type without recreating — preserves overlays & zoom
+      useEffect(() => {
+        const map = mapInstanceRef.current;
+        if (!map) return;
+        map.setMapTypeId(mapType);
+        const darkStyle = [
+          { elementType: 'geometry', stylers: [{ color: '#2c2c2c' }] },
+          { elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+          { elementType: 'labels.text.stroke', stylers: [{ color: '#212121' }] },
+          { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#3c3c3c' }] },
+          { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+          { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
+          { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4a4a4a' }] },
+          { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+        ];
+        const satStyle = [
+          { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
+          { featureType: 'transit', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
+        ];
+        map.setOptions({ styles: mapType === 'roadmap' ? darkStyle : satStyle });
+      }, [mapType]);
 
       // Redraw sun lines when sunDate or adjustedPos changes
       useEffect(() => {
@@ -2946,8 +2968,7 @@
         sunLinesRef.current.forEach(l => l.setMap(null));
         sunLinesRef.current = [];
         
-        if (!showSunLines) return;
-        
+        if (!showSunLines || drawingMode) return;
         const bounds = map.getBounds();
         const getR = () => {
           if (!bounds) return 0.003;
@@ -3002,7 +3023,7 @@
           strokeWeight: 1, fillColor: '#000000', fillOpacity: 0.25, map
         });
         sunLinesRef.current.push(arc);
-      }, [sunDate, project?.lat, project?.lng, mapZoom, adjustedPos, showSunLines]);
+      }, [sunDate, project?.lat, project?.lng, mapZoom, adjustedPos, showSunLines, drawingMode]);
 
       // Hide POI labels in drawing mode to avoid accidental clicks on business info
       const savedMapStylesRef = React.useRef(null);
@@ -3059,7 +3080,7 @@
         if (shadowLineRef.current) { shadowLineRef.current.setMap(null); shadowLineRef.current = null; }
         if (sunPosMarkerRef.current) { sunPosMarkerRef.current.setMap(null); }
         
-        if (!showSunLines) return;
+        if (!showSunLines || drawingMode) return;
         
         const sunTimes = SunCalc.getTimes(sunDate, eLat, eLng);
         const srTime = sunTimes.sunrise ? sunTimes.sunrise.getHours() + sunTimes.sunrise.getMinutes()/60 : 6;
@@ -3178,7 +3199,7 @@
           sunPosMarkerRef.current = new SunDotOverlay(lat2, lng2);
           sunPosMarkerRef.current.setMap(map);
         }
-      }, [sunHour, project?.lat, project?.lng, mapType, mapZoom, sunDate, adjustedPos, showSunLines]);
+      }, [sunHour, project?.lat, project?.lng, mapType, mapZoom, sunDate, adjustedPos, showSunLines, drawingMode]);
 
       // Night overlay toggle
       useEffect(() => {
@@ -5045,7 +5066,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v430</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v431</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
