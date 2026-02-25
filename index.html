@@ -399,7 +399,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v432</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v433</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2842,7 +2842,7 @@
             { featureType: 'transit', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
           ],
           disableDefaultUI: true,
-          zoomControl: !isMobile,
+          zoomControl: false,
           gestureHandling: 'greedy',
           scrollwheel: false,
           mapTypeControl: false,
@@ -3758,6 +3758,23 @@
                         )}
                       </button>
                     </div>
+                    {/* Custom zoom pills */}
+                    {!isMobile && (
+                      <div style={{ position: 'absolute', bottom: '14px', right: '10px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() + 1); }}
+                          style={{ width: '36px', height: '36px', borderRadius: '50%', border: 'none', cursor: 'pointer',
+                            background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+                            color: 'rgba(255,255,255,0.8)', fontSize: '20px', fontWeight: '300', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                          }}>+</button>
+                        <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() - 1); }}
+                          style={{ width: '36px', height: '36px', borderRadius: '50%', border: 'none', cursor: 'pointer',
+                            background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+                            color: 'rgba(255,255,255,0.8)', fontSize: '20px', fontWeight: '300', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                          }}>−</button>
+                      </div>
+                    )}
                     {/* Drawing mode hint — near the polygon */}
                     {drawingMode && (
                       <div style={{ position: 'absolute', 
@@ -5069,7 +5086,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v432</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v433</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
