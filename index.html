@@ -399,7 +399,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v414</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v415</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2433,8 +2433,11 @@
       const handleFileUpload = async (fileList) => {
         if (!user || !project) return;
         const files = Array.from(fileList);
-        const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf'];
-        const valid = files.filter(f => allowed.includes(f.type));
+        const allowedExt = ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.pdf'];
+        const valid = files.filter(f => {
+          const ext = '.' + f.name.split('.').pop().toLowerCase();
+          return allowedExt.includes(ext);
+        });
         if (valid.length === 0) return;
         const newTotalMB = totalFilesMB + valid.reduce((s, f) => s + f.size, 0) / (1024 * 1024);
         if (newTotalMB > MAX_PROJECT_FILES_MB) { alert(`Limite de ${MAX_PROJECT_FILES_MB} MB par projet dépassée`); return; }
@@ -2443,10 +2446,11 @@
           for (const f of valid) { await fileHelpers.upload(project.id, user.id, f); }
           const updated = await fileHelpers.list(project.id);
           setProjectFiles(updated);
-          Promise.all(updated.map(async f => {
+          const pairs = await Promise.all(updated.map(async f => {
             const url = fileUrls[f.id] || await fileHelpers.getUrl(f.storage_path);
             return [f.id, url];
-          })).then(pairs => setFileUrls(Object.fromEntries(pairs)));
+          }));
+          setFileUrls(Object.fromEntries(pairs));
         } catch (e) { console.error('Upload failed:', e); }
         setUploading(false);
       };
@@ -3405,16 +3409,14 @@
 
           {/* Fichiers */}
           <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} mt-6`}>
-            <div className="flex items-baseline gap-4 mb-3">
-              <span className="font-bebas-regular" style={{ letterSpacing: '0.04em', fontSize: '18px', color: '#404A48' }}>FICHIERS</span>
-              {projectFiles.length > 0 && <span className="font-bebas-light" style={{ fontSize: '14px', color: '#404A48', letterSpacing: '0.04em' }}>{totalFilesMB.toFixed(1)} / {MAX_PROJECT_FILES_MB} MB</span>}
-            </div>
+            <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>FICHIERS</label>
+            {projectFiles.length > 0 && <span className="font-bebas-light" style={{ fontSize: '14px', color: '#404A48', letterSpacing: '0.04em', marginLeft: '12px' }}>{totalFilesMB.toFixed(1)} / {MAX_PROJECT_FILES_MB} MB</span>}
             
             {projectFiles.length > 0 && (
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '8px', marginBottom: '8px' }}>
                 {projectFiles.map(f => {
                   const url = fileUrls[f.id];
-                  const isPdf = f.mime_type === 'application/pdf';
+                  const isPdf = f.mime_type === 'application/pdf' || f.filename.toLowerCase().endsWith('.pdf');
                   return (
                     <div key={f.id} style={{ position: 'relative', width: '100px', height: '100px', borderRadius: '10px', overflow: 'hidden', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', flexShrink: 0 }}
                       onClick={() => setPreviewFile(f)}
@@ -3453,24 +3455,25 @@
                 onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFileUpload(e.dataTransfer.files); }}
                 onClick={() => fileInputRef.current?.click()}
                 style={{
-                  border: dragOver ? '1.5px solid rgba(125,211,198,0.5)' : '1.5px dashed rgba(255,255,255,0.1)',
-                  borderRadius: '12px', padding: '16px', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                  background: dragOver ? 'rgba(125,211,198,0.05)' : 'transparent',
+                  border: dragOver ? '1px solid rgba(125,211,198,0.4)' : '1px solid rgba(255,255,255,0.15)',
+                  padding: '10px 12px', cursor: 'pointer', marginTop: '4px',
+                  background: dragOver ? 'rgba(125,211,198,0.03)' : 'transparent',
                   transition: 'all 0.2s'
                 }}
               >
-                <input ref={fileInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp,image/heic,application/pdf" style={{ display: 'none' }}
+                <input ref={fileInputRef} type="file" multiple accept=".jpg,.jpeg,.png,.webp,.heic,.pdf" style={{ display: 'none' }}
                   onChange={(e) => { handleFileUpload(e.target.files); e.target.value = ''; }}
                 />
-                <span className="font-bebas-regular" style={{ letterSpacing: '0.04em', fontSize: '15px', color: uploading ? '#7dd3c6' : '#404A48' }}>
-                  {uploading ? 'TÉLÉVERSEMENT...' : projectFiles.length === 0 ? 'GLISSER OU CLIQUER POUR AJOUTER' : 'AJOUTER'}
+                <span className="text-charcoal" style={{ fontSize: '15px', color: uploading ? '#7dd3c6' : 'rgba(255,255,255,0.85)' }}>
+                  {uploading ? 'Téléversement...' : 'Glisser ou cliquer pour ajouter...'}
                 </span>
               </div>
             )}
 
             {projectFiles.length === 0 && isMobile && (
-              <span className="font-bebas-light" style={{ fontSize: '15px', color: '#404A48', letterSpacing: '0.04em' }}>AUCUN FICHIER</span>
+              <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', marginTop: '4px' }}>
+                <span style={{ fontSize: '15px', color: 'rgba(255,255,255,0.4)' }}>Aucun fichier</span>
+              </div>
             )}
           </div>
 
@@ -4603,7 +4606,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v414</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v415</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
