@@ -396,7 +396,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v392</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v393</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -910,14 +910,14 @@
         setLastDeleted(proj);
         // Clear any previous timer
         if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
-        // Delay actual Supabase delete by 8s (undo window)
+        // Delay actual Supabase delete by 60s (undo window)
         deleteTimerRef.current = setTimeout(() => {
           if (user) {
             supabase.from(TBL_PROJECTS).delete().eq('id', id)
               .then(({ error }) => { if (error) console.error('Delete error:', error); });
           }
           setLastDeleted(prev => prev?.id === id ? null : prev);
-        }, 8000);
+        }, 60000);
       };
 
       const undoDelete = () => {
@@ -1764,7 +1764,7 @@
         </div>
         <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
           <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? 'EN ÉDITION ?' : 'EN ÉDITION'}</button>
-          <button onClick={handleDelete} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDelete ? (confirmReady ? '#FF3B30' : '#8B9B99') : colorCharcoal, fontSize: '16px', cursor: confirmDelete && !confirmReady ? 'default' : 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'color 0.3s, text-shadow 0.3s, opacity 0.3s', textShadow: confirmDelete && confirmReady ? '0 0 12px rgba(255,59,48,0.4), 0 0 30px rgba(255,59,48,0.15)' : 'none', opacity: confirmDelete && !confirmReady ? 0.5 : 1 }} onMouseEnter={e => { if (!confirmDelete) { e.target.style.color = '#FF3B30'; } }} onMouseLeave={e => { if (!confirmDelete) { e.target.style.color = colorCharcoal; } }}>{confirmDelete ? 'SUPPRIMER ?' : '🗑'}</button>
+          <button onClick={handleDelete} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDelete ? (confirmReady ? '#FF3B30' : '#8B9B99') : colorCharcoal, fontSize: '16px', cursor: confirmDelete && !confirmReady ? 'default' : 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'color 0.3s, text-shadow 0.3s, opacity 0.3s', textShadow: confirmDelete && confirmReady ? '0 0 12px rgba(255,59,48,0.4), 0 0 30px rgba(255,59,48,0.15)' : 'none', opacity: confirmDelete && !confirmReady ? 0.5 : 1 }} onMouseEnter={e => { if (!confirmDelete) { e.target.style.color = '#FF3B30'; } }} onMouseLeave={e => { if (!confirmDelete) { e.target.style.color = colorCharcoal; } }}>{confirmDelete ? 'SUPPRIMER ?' : <TrashIcon/>}</button>
         </div>
         </div>
       );
@@ -1976,7 +1976,7 @@
         <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
           <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? 'ANNULER ÉDITION ?' : 'ANNULER ÉDITION'}</button>
           <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? 'ARCHIVER ?' : 'ARCHIVER'}</button>
-          <button onClick={handleDelete} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDelete ? (confirmReady ? '#FF3B30' : '#8B9B99') : colorCharcoal, fontSize: '16px', cursor: confirmDelete && !confirmReady ? 'default' : 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'color 0.3s, text-shadow 0.3s, opacity 0.3s', textShadow: confirmDelete && confirmReady ? '0 0 12px rgba(255,59,48,0.4), 0 0 30px rgba(255,59,48,0.15)' : 'none', opacity: confirmDelete && !confirmReady ? 0.5 : 1 }} onMouseEnter={e => { if (!confirmDelete) { e.target.style.color = '#FF3B30'; } }} onMouseLeave={e => { if (!confirmDelete) { e.target.style.color = colorCharcoal; } }}>{confirmDelete ? 'SUPPRIMER ?' : '🗑'}</button>
+          <button onClick={handleDelete} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDelete ? (confirmReady ? '#FF3B30' : '#8B9B99') : colorCharcoal, fontSize: '16px', cursor: confirmDelete && !confirmReady ? 'default' : 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'color 0.3s, text-shadow 0.3s, opacity 0.3s', textShadow: confirmDelete && confirmReady ? '0 0 12px rgba(255,59,48,0.4), 0 0 30px rgba(255,59,48,0.15)' : 'none', opacity: confirmDelete && !confirmReady ? 0.5 : 1 }} onMouseEnter={e => { if (!confirmDelete) { e.target.style.color = '#FF3B30'; } }} onMouseLeave={e => { if (!confirmDelete) { e.target.style.color = colorCharcoal; } }}>{confirmDelete ? 'SUPPRIMER ?' : <TrashIcon/>}</button>
         </div>
         {(editingCreatedDate || editingShotDate) && ReactDOM.createPortal(
           <React.Fragment>
@@ -4415,7 +4415,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v392</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v393</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -4542,6 +4542,29 @@
             fontFamily: "'Bebas Neue', sans-serif", letterSpacing: '0.05em',
             transition: 'background 0.2s, color 0.2s'
           }}>{loading ? 'CRÉATION...' : 'AJOUTER LE PROJET'}</button>
+        </div>
+      );
+    };
+
+    const UndoToast = ({ onUndo, projectName }) => {
+      const [visible, setVisible] = useState(true);
+      useEffect(() => {
+        const t = setTimeout(() => setVisible(false), 5000);
+        return () => clearTimeout(t);
+      }, []);
+      if (!visible) return null;
+      return (
+        <div style={{
+          position: 'fixed', bottom: '30px', left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(20,24,27,0.92)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+          borderRadius: '14px', padding: '12px 24px', zIndex: 9999,
+          display: 'flex', alignItems: 'center', gap: '16px',
+          border: '1px solid rgba(255,255,255,0.1)',
+          animation: 'fadeIn 0.3s ease'
+        }}>
+          <span className="font-bebas-regular" style={{ letterSpacing: '0.04em', fontSize: '16px', color: 'rgba(255,255,255,0.6)' }}>PROJET SUPPRIMÉ</span>
+          <button onClick={onUndo} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: 'none', color: '#FAF9F7', fontSize: '16px', cursor: 'pointer', textShadow: '0 0 12px rgba(255,255,255,0.4)', padding: '0' }}>ANNULER</button>
+          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>⌘Z</span>
         </div>
       );
     };
@@ -4841,20 +4864,7 @@
           {/* Desktop modal */}
           {!isMobile && view === 'todo' && !selectedId && plusRect && <NewProjectModal isOpen={showNew} origin={plusRect} onClose={() => { setShowNew(false); }} onCreated={() => { setShowNew(false); }} onOpen={() => setShowNew(true)}/>}
           {/* Undo delete toast */}
-          {lastDeleted && (
-            <div style={{
-              position: 'fixed', bottom: '30px', left: '50%', transform: 'translateX(-50%)',
-              background: 'rgba(20,24,27,0.92)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
-              borderRadius: '14px', padding: '12px 24px', zIndex: 9999,
-              display: 'flex', alignItems: 'center', gap: '16px',
-              border: '1px solid rgba(255,255,255,0.1)',
-              animation: 'fadeIn 0.3s ease'
-            }}>
-              <span className="font-bebas-regular" style={{ letterSpacing: '0.04em', fontSize: '16px', color: 'rgba(255,255,255,0.6)' }}>PROJET SUPPRIMÉ</span>
-              <button onClick={undoDelete} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: 'none', color: '#FAF9F7', fontSize: '16px', cursor: 'pointer', textShadow: '0 0 12px rgba(255,255,255,0.4)', padding: '0' }}>ANNULER</button>
-              <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>⌘Z</span>
-            </div>
-          )}
+          {lastDeleted && <UndoToast onUndo={undoDelete} projectName={lastDeleted.name} />}
         </div>
       );
     };
