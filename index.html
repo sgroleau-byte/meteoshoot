@@ -396,7 +396,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v391</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v392</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -899,13 +899,32 @@
         }
       };
 
+      const [lastDeleted, setLastDeleted] = useState(null);
+      const deleteTimerRef = useRef(null);
+
       const deleteProject = (id) => {
+        const proj = projects.find(x => x.id === id);
+        if (!proj) return;
         setProjects(p => p.filter(x => x.id !== id));
         if (selectedId === id) setSelectedId(null);
-        if (user) {
-          supabase.from(TBL_PROJECTS).delete().eq('id', id)
-            .then(({ error }) => { if (error) console.error('Delete error:', error); });
-        }
+        setLastDeleted(proj);
+        // Clear any previous timer
+        if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+        // Delay actual Supabase delete by 8s (undo window)
+        deleteTimerRef.current = setTimeout(() => {
+          if (user) {
+            supabase.from(TBL_PROJECTS).delete().eq('id', id)
+              .then(({ error }) => { if (error) console.error('Delete error:', error); });
+          }
+          setLastDeleted(prev => prev?.id === id ? null : prev);
+        }, 8000);
+      };
+
+      const undoDelete = () => {
+        if (!lastDeleted) return;
+        if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+        setProjects(p => [lastDeleted, ...p]);
+        setLastDeleted(null);
       };
 
       const advanceProject = (id) => setProjects(p => p.map(x => {
@@ -965,7 +984,7 @@
         });
       };
 
-      return <StoreContext.Provider value={{ projects, prefs, view, selectedId, setView, setSelectedId, addProject, updateProject, deleteProject, advanceProject, revertProject, reorderProjects, setPrefs }}>{children}</StoreContext.Provider>;
+      return <StoreContext.Provider value={{ projects, prefs, view, selectedId, setView, setSelectedId, addProject, updateProject, deleteProject, advanceProject, revertProject, reorderProjects, setPrefs, lastDeleted, undoDelete }}>{children}</StoreContext.Provider>;
     };
 
     // ===== ICONS =====
@@ -1436,6 +1455,7 @@
       const { advanceProject, deleteProject, prefs } = useStore();
       const [weather, setWeather] = useState(null);
       const [confirmDelete, setConfirmDelete] = useState(false);
+      const [confirmReady, setConfirmReady] = useState(false);
       const [confirmDone, setConfirmDone] = useState(false);
 
       useEffect(() => { if (project.lat && project.lng) fetchWeather(project.lat, project.lng).then(setWeather).catch(console.error); }, [project.lat, project.lng]);
@@ -1451,12 +1471,14 @@
       const handleDelete = (e) => {
         e.stopPropagation();
         e.preventDefault();
-        if (confirmDelete) {
+        if (confirmDelete && confirmReady) {
           deleteProject(project.id);
-        } else {
+        } else if (!confirmDelete) {
           setConfirmDelete(true);
+          setConfirmReady(false);
           setConfirmDone(false);
-          setTimeout(() => setConfirmDelete(false), 3000);
+          setTimeout(() => setConfirmReady(true), 600);
+          setTimeout(() => { setConfirmDelete(false); setConfirmReady(false); }, 4000);
         }
       };
       
@@ -1742,7 +1764,7 @@
         </div>
         <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
           <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? 'EN ÉDITION ?' : 'EN ÉDITION'}</button>
-          <button onClick={handleDelete} className={`p-2 trash-btn text-red-500`} title="Supprimer"><TrashIcon/></button>
+          <button onClick={handleDelete} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDelete ? (confirmReady ? '#FF3B30' : '#8B9B99') : colorCharcoal, fontSize: '16px', cursor: confirmDelete && !confirmReady ? 'default' : 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'color 0.3s, text-shadow 0.3s, opacity 0.3s', textShadow: confirmDelete && confirmReady ? '0 0 12px rgba(255,59,48,0.4), 0 0 30px rgba(255,59,48,0.15)' : 'none', opacity: confirmDelete && !confirmReady ? 0.5 : 1 }} onMouseEnter={e => { if (!confirmDelete) { e.target.style.color = '#FF3B30'; } }} onMouseLeave={e => { if (!confirmDelete) { e.target.style.color = colorCharcoal; } }}>{confirmDelete ? 'SUPPRIMER ?' : '🗑'}</button>
         </div>
         </div>
       );
@@ -1751,6 +1773,7 @@
     const RetouchingCard = ({ project, onSelect, index = 0 }) => {
       const { advanceProject, revertProject, deleteProject, updateProject, prefs } = useStore();
       const [confirmDelete, setConfirmDelete] = useState(false);
+      const [confirmReady, setConfirmReady] = useState(false);
       const [confirmDone, setConfirmDone] = useState(false);
       const [confirmRevert, setConfirmRevert] = useState(false);
       const [editingCreatedDate, setEditingCreatedDate] = useState(false);
@@ -1767,7 +1790,7 @@
 
       const handleDelete = (e) => {
         e.stopPropagation(); e.preventDefault();
-        if (confirmDelete) { deleteProject(project.id); } else { setConfirmDelete(true); setConfirmDone(false); setConfirmRevert(false); setTimeout(() => setConfirmDelete(false), 3000); }
+        if (confirmDelete && confirmReady) { deleteProject(project.id); } else if (!confirmDelete) { setConfirmDelete(true); setConfirmReady(false); setConfirmDone(false); setConfirmRevert(false); setTimeout(() => setConfirmReady(true), 600); setTimeout(() => { setConfirmDelete(false); setConfirmReady(false); }, 4000); }
       };
       const handleDone = (e) => {
         e.stopPropagation(); e.preventDefault();
@@ -1953,7 +1976,7 @@
         <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
           <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? 'ANNULER ÉDITION ?' : 'ANNULER ÉDITION'}</button>
           <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? 'ARCHIVER ?' : 'ARCHIVER'}</button>
-          <button onClick={handleDelete} className={`p-2 trash-btn text-red-500`} title="Supprimer"><TrashIcon/></button>
+          <button onClick={handleDelete} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDelete ? (confirmReady ? '#FF3B30' : '#8B9B99') : colorCharcoal, fontSize: '16px', cursor: confirmDelete && !confirmReady ? 'default' : 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'color 0.3s, text-shadow 0.3s, opacity 0.3s', textShadow: confirmDelete && confirmReady ? '0 0 12px rgba(255,59,48,0.4), 0 0 30px rgba(255,59,48,0.15)' : 'none', opacity: confirmDelete && !confirmReady ? 0.5 : 1 }} onMouseEnter={e => { if (!confirmDelete) { e.target.style.color = '#FF3B30'; } }} onMouseLeave={e => { if (!confirmDelete) { e.target.style.color = colorCharcoal; } }}>{confirmDelete ? 'SUPPRIMER ?' : '🗑'}</button>
         </div>
         {(editingCreatedDate || editingShotDate) && ReactDOM.createPortal(
           <React.Fragment>
@@ -3412,11 +3435,11 @@
                 }}>
                   <div className="mb-5">
                     <label className="newproj-label font-bebas-book">NOM DU PROJET</label>
-                    <input ref={nameInputRef} type="text" autoComplete="one-time-code" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet" style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
+                    <input ref={nameInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet" style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
                   </div>
                   <div className="mb-5">
                     <label className="newproj-label font-bebas-book">ADRESSE DU PROJET</label>
-                    <input ref={addressInputRef} type="text" autoComplete="one-time-code" defaultValue={form.address} placeholder="Entrer l'adresse..." style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
+                    <input ref={addressInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder="Entrer l'adresse..." style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
                   </div>
                   <div className="mb-5">
                     <label className="newproj-label font-bebas-book">MANDAT</label>
@@ -3489,11 +3512,11 @@
               <div className={`newproj-panel ${animated ? 'open' : ''}`} style={{ left: panelX, top: panelY, width: panelW, padding: '28px 32px' }} onClick={e => e.stopPropagation()}>
                 <div className="mb-5">
                   <label className="newproj-label font-bebas-book">NOM DU PROJET</label>
-                  <input ref={nameInputRef} type="text" autoComplete="one-time-code" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet"/>
+                  <input ref={nameInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet"/>
                 </div>
                 <div className="mb-5">
                   <label className="newproj-label font-bebas-book">ADRESSE DU PROJET</label>
-                  <input ref={addressInputRef} type="text" autoComplete="one-time-code" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder="Entrer l'adresse..."/>
+                  <input ref={addressInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder="Entrer l'adresse..."/>
                 </div>
                 <div className="mb-5">
                   <label className="newproj-label font-bebas-book">MANDAT</label>
@@ -4392,7 +4415,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v391</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v392</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -4485,12 +4508,12 @@
 
           <div style={{ marginBottom: '24px' }}>
             <label className="newproj-label font-bebas-book">NOM DU PROJET</label>
-            <input ref={nameInputRef} type="text" autoComplete="one-time-code" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet" style={inputStyle}/>
+            <input ref={nameInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet" style={inputStyle}/>
           </div>
 
           <div style={{ marginBottom: '24px' }}>
             <label className="newproj-label font-bebas-book">ADRESSE DU PROJET</label>
-            <input ref={addressInputRef} type="text" autoComplete="one-time-code" defaultValue={form.address} placeholder="Entrer l'adresse..." style={inputStyle}/>
+            <input ref={addressInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder="Entrer l'adresse..." style={inputStyle}/>
           </div>
 
           <div style={{ marginBottom: '24px' }}>
@@ -4524,12 +4547,24 @@
     };
 
     const App = () => {
-      const { view, setView, selectedId, setSelectedId, prefs } = useStore();
+      const { view, setView, selectedId, setSelectedId, prefs, lastDeleted, undoDelete } = useStore();
       const [showNew, setShowNew] = useState(false);
       const plusRef = React.useRef(null);
       const [plusRect, setPlusRect] = useState(null);
       const isMobile = useIsMobile();
       const [displayedProjectId, setDisplayedProjectId] = useState(null);
+
+      // Cmd+Z undo delete
+      useEffect(() => {
+        const handler = (e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'z' && lastDeleted) {
+            e.preventDefault();
+            undoDelete();
+          }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+      }, [lastDeleted, undoDelete]);
 
       // Pull-to-refresh (Safari-style)
       useEffect(() => {
@@ -4805,6 +4840,21 @@
           {isMobile && <MobileNewProjectScreen isOpen={showNew} onClose={() => setShowNew(false)} onCreated={() => setShowNew(false)} />}
           {/* Desktop modal */}
           {!isMobile && view === 'todo' && !selectedId && plusRect && <NewProjectModal isOpen={showNew} origin={plusRect} onClose={() => { setShowNew(false); }} onCreated={() => { setShowNew(false); }} onOpen={() => setShowNew(true)}/>}
+          {/* Undo delete toast */}
+          {lastDeleted && (
+            <div style={{
+              position: 'fixed', bottom: '30px', left: '50%', transform: 'translateX(-50%)',
+              background: 'rgba(20,24,27,0.92)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+              borderRadius: '14px', padding: '12px 24px', zIndex: 9999,
+              display: 'flex', alignItems: 'center', gap: '16px',
+              border: '1px solid rgba(255,255,255,0.1)',
+              animation: 'fadeIn 0.3s ease'
+            }}>
+              <span className="font-bebas-regular" style={{ letterSpacing: '0.04em', fontSize: '16px', color: 'rgba(255,255,255,0.6)' }}>PROJET SUPPRIMÉ</span>
+              <button onClick={undoDelete} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: 'none', color: '#FAF9F7', fontSize: '16px', cursor: 'pointer', textShadow: '0 0 12px rgba(255,255,255,0.4)', padding: '0' }}>ANNULER</button>
+              <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>⌘Z</span>
+            </div>
+          )}
         </div>
       );
     };
