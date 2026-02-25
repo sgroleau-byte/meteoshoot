@@ -399,7 +399,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v416</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v417</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3418,43 +3418,8 @@
           <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} mt-6`} style={{ maxWidth: isMobile ? '100%' : '58.333%' }}>
             <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>FICHIERS</label>
             {projectFiles.length > 0 && <span className="font-bebas-light" style={{ fontSize: '14px', color: '#404A48', letterSpacing: '0.04em', marginLeft: '12px' }}>{totalFilesMB.toFixed(1)} / {MAX_PROJECT_FILES_MB} MB</span>}
-            
-            {projectFiles.length > 0 && (
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '8px', marginBottom: '8px' }}>
-                {projectFiles.map(f => {
-                  const url = fileUrls[f.id];
-                  const isPdf = f.mime_type === 'application/pdf' || f.filename.toLowerCase().endsWith('.pdf');
-                  return (
-                    <div key={f.id} style={{ position: 'relative', width: '100px', height: '100px', borderRadius: '10px', overflow: 'hidden', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', flexShrink: 0 }}
-                      onClick={() => setPreviewFile(f)}
-                    >
-                      {isPdf ? (
-                        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                          <span className="font-bebas-bold" style={{ fontSize: '22px', color: '#8B9B99', letterSpacing: '0.04em' }}>PDF</span>
-                          <span className="font-bebas-light" style={{ fontSize: '11px', color: '#404A48', letterSpacing: '0.02em', textAlign: 'center', padding: '0 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '90px' }}>{f.filename}</span>
-                        </div>
-                      ) : url ? (
-                        <img src={url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={f.filename} loading="lazy"/>
-                      ) : (
-                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <span style={{ color: '#404A48', fontSize: '12px' }}>...</span>
-                        </div>
-                      )}
-                      {!isMobile && (
-                        <button onClick={(e) => { e.stopPropagation(); handleFileDelete(f); }} style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: 0.7, transition: 'opacity 0.2s' }}
-                          onMouseEnter={e => e.currentTarget.style.opacity = 1}
-                          onMouseLeave={e => e.currentTarget.style.opacity = 0.7}
-                        >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF3B30" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
 
-            {/* Upload zone — desktop only */}
+            {/* Upload zone — desktop only, before files */}
             {!isMobile && project?.status !== 'done' && (
               <div
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -3462,9 +3427,12 @@
                 onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFileUpload(e.dataTransfer.files); }}
                 onClick={() => fileInputRef.current?.click()}
                 style={{
-                  border: dragOver ? '1px solid rgba(125,211,198,0.4)' : '1px solid rgba(255,255,255,0.15)',
+                  border: 'none',
+                  backgroundImage: dragOver 
+                    ? `url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' stroke='rgba(125,211,198,0.4)' stroke-width='1.5' stroke-dasharray='10,8' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e")`
+                    : `url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' stroke='rgba(255,255,255,0.15)' stroke-width='1.5' stroke-dasharray='10,8' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e")`,
                   padding: '18px 12px', cursor: 'pointer', marginTop: '4px', minHeight: '60px',
-                  display: 'flex', alignItems: 'center',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
                   background: dragOver ? 'rgba(125,211,198,0.03)' : 'transparent',
                   transition: 'all 0.2s'
                 }}
@@ -3472,14 +3440,52 @@
                 <input ref={fileInputRef} type="file" multiple accept=".jpg,.jpeg,.png,.webp,.heic,.pdf" style={{ display: 'none' }}
                   onChange={(e) => { handleFileUpload(e.target.files); e.target.value = ''; }}
                 />
-                <span className="text-charcoal" style={{ fontSize: '15px', color: uploading ? '#7dd3c6' : 'rgba(255,255,255,0.85)' }}>
+                <span className="text-charcoal" style={{ fontSize: '15px', color: uploading ? '#7dd3c6' : 'rgba(255,255,255,0.4)' }}>
                   {uploading ? 'Téléversement...' : 'Glisser ou cliquer pour ajouter...'}
                 </span>
               </div>
             )}
 
+            {/* Files list — below upload zone */}
+            {projectFiles.length > 0 && (
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '12px' }}>
+                {projectFiles.map(f => {
+                  const url = fileUrls[f.id];
+                  const isPdf = f.mime_type === 'application/pdf' || f.filename.toLowerCase().endsWith('.pdf');
+                  return (
+                    <div key={f.id} style={{ position: 'relative', width: '100px', flexShrink: 0, cursor: 'pointer' }}
+                      onClick={() => setPreviewFile(f)}
+                    >
+                      <div style={{ width: '100px', height: '100px', borderRadius: '10px', overflow: 'hidden', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        {isPdf ? (
+                          <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                            <span className="font-bebas-bold" style={{ fontSize: '22px', color: '#8B9B99', letterSpacing: '0.04em' }}>PDF</span>
+                          </div>
+                        ) : url ? (
+                          <img src={url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={f.filename} loading="lazy"/>
+                        ) : (
+                          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <span style={{ color: '#404A48', fontSize: '12px' }}>...</span>
+                          </div>
+                        )}
+                        {!isMobile && (
+                          <button onClick={(e) => { e.stopPropagation(); handleFileDelete(f); }} style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: 0.7, transition: 'opacity 0.2s' }}
+                            onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                            onMouseLeave={e => e.currentTarget.style.opacity = 0.7}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF3B30" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                          </button>
+                        )}
+                      </div>
+                      <div style={{ marginTop: '4px', fontSize: '11px', color: '#8B9B99', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100px' }}>{f.filename}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {projectFiles.length === 0 && isMobile && (
-              <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', marginTop: '4px' }}>
+              <div style={{ border: '1px dashed rgba(255,255,255,0.15)', padding: '18px 12px', marginTop: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60px' }}>
                 <span style={{ fontSize: '15px', color: 'rgba(255,255,255,0.4)' }}>Aucun fichier</span>
               </div>
             )}
@@ -4614,7 +4620,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v416</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v417</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
