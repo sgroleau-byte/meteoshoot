@@ -428,7 +428,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v501</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v502</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2426,11 +2426,15 @@
         let result = raw;
         for (const t of [sr, ss]) {
           const dist = raw - t;
-          // Gaussian pull: smooth bell curve, no discontinuity
-          const sigma = 0.2; // width of influence (~12min)
-          const strength = 0.18; // max pull (~11min)
+          // Gaussian pull: monotonic (strength < sigma/2 guarantees no reversal)
+          const sigma = 0.25; // width of influence (~15min)
+          const strength = 0.09; // max pull — must be < sigma/2 for monotonicity
           const pull = strength * Math.exp(-(dist * dist) / (2 * sigma * sigma)) * dist / (sigma * 0.5);
           result -= pull;
+        }
+        // Hard lock: if within ~3min of sr/ss, snap to exact time
+        for (const t of [sr, ss]) {
+          if (Math.abs(result - t) < 0.05) result = t;
         }
         return result;
       };
@@ -2442,11 +2446,10 @@
           const { sr, ss } = sunTimesSnapRef.current;
           const range = (ss - sr) / (4/6);
           const min = sr - (1/6) * range;
-          const max = min + range;
           const from = sunHourTargetRef.current;
-          const to = max; // slide to right edge
+          const to = min; // slide to left edge
           const t0 = performance.now();
-          const dur = 650; // match close clip duration
+          const dur = 600; // slightly faster than 0.65s clip to arrive before mask
           const anim = (now) => {
             const p = Math.min(1, (now - t0) / dur);
             const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
@@ -5459,7 +5462,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v501</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v502</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
