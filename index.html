@@ -423,7 +423,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v484</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v485</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2709,10 +2709,49 @@
             fillColor: 'transparent', fillOpacity: 0, map, zIndex: 24,
           });
           buildingPolygonsRef.current.push(glowPoly);
+          
+          // Per-edge lines: brighter on sun side, darker on shadow side
+          const sunBearingRad = sunAz; // azimuth from SunCalc (radians from south, clockwise)
+          const sunDirX = Math.sin(sunBearingRad); // east component
+          const sunDirY = Math.cos(sunBearingRad); // north component (toward sun)
+          for (let i = 0; i < n; i++) {
+            const j = (i + 1) % n;
+            const v1 = bldg.polygon[i], v2 = bldg.polygon[j];
+            // Edge direction
+            const edgeX = v2.lng - v1.lng;
+            const edgeY = v2.lat - v1.lat;
+            // Outward normal (perpendicular, pointing outward for CW polygon)
+            const normalX = edgeY;
+            const normalY = -edgeX;
+            // Dot product with sun direction: positive = facing sun
+            const dot = normalX * sunDirX + normalY * sunDirY;
+            const facing = Math.max(0, Math.min(1, dot / (Math.sqrt(normalX*normalX + normalY*normalY) * Math.sqrt(sunDirX*sunDirX + sunDirY*sunDirY) + 0.001)));
+            // Sun-facing edges: brighter white-yellow, shadow edges: dimmer
+            const edgeOpacity = isSelected ? 0.5 + 0.5 * facing : 0.35 + 0.5 * facing;
+            const edgeLine = new google.maps.Polyline({
+              path: [v1, v2],
+              strokeColor: facing > 0.3 ? '#fff8d0' : '#ffe26b',
+              strokeOpacity: edgeOpacity,
+              strokeWeight: isSelected ? 3.5 : 2.5,
+              map, zIndex: 26
+            });
+            buildingPolygonsRef.current.push(edgeLine);
+            // Inner glow on sun-facing edges
+            if (facing > 0.2 && sunAlt > 0.01) {
+              const glowLine = new google.maps.Polyline({
+                path: [v1, v2],
+                strokeColor: '#ffffff',
+                strokeOpacity: 0.15 * facing,
+                strokeWeight: isSelected ? 8 : 5,
+                map, zIndex: 23
+              });
+              buildingPolygonsRef.current.push(glowLine);
+            }
+          }
+          
           const poly = new google.maps.Polygon({
             paths: bldg.polygon,
-            strokeColor: '#ffe26b',
-            strokeOpacity: isSelected ? 1 : 0.85, strokeWeight: isSelected ? 3.5 : 2.5,
+            strokeWeight: 0, strokeOpacity: 0,
             fillColor: '#ffe26b',
             fillOpacity: isSelected ? 0.3 : 0.12, map, zIndex: 25,
             clickable: true
@@ -2736,7 +2775,7 @@
                 },
                 zIndex: 40
               });
-              vertexMarker.addListener('drag', (e) => {
+              vertexMarker.addListener('dragend', (e) => {
                 const newPos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
                 setBuildings(prev => prev.map((b, bi) => {
                   if (bi !== idx) return b;
@@ -5336,7 +5375,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v484</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v485</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
