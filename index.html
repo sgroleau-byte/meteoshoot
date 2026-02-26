@@ -423,7 +423,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v477</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v478</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3687,6 +3687,11 @@
                       const srTime = st?.sunrise ? st.sunrise.getHours() + st.sunrise.getMinutes()/60 : 6;
                       const ssTime = st?.sunset ? st.sunset.getHours() + st.sunset.getMinutes()/60 : 18;
                       
+                      // Dynamic slider range: sunrise at 20%, sunset at 80%
+                      const sliderRange = (ssTime - srTime) / 0.6;
+                      const sliderMin = srTime - 0.2 * sliderRange;
+                      const sliderMax = sliderMin + sliderRange;
+                      
                       // Glow color logic — smooth morphing
                       const lerp = (a, b, t) => a + (b - a) * Math.max(0, Math.min(1, t));
                       const hexLerp = (hex1, hex2, t) => {
@@ -3729,9 +3734,9 @@
                         glowColor = DARK;
                       }
                       
-                      const thumbLeft = `calc(${((sunHourDisplay - 3) / 19) * 100}% + ${(0.5 - (sunHourDisplay - 3) / 19) * 9}px)`;
-                      const srLeft = `${((srTime - 3) / 19) * 100}%`;
-                      const ssLeft = `${((ssTime - 3) / 19) * 100}%`;
+                      const thumbLeft = `calc(${((sunHourDisplay - sliderMin) / sliderRange) * 100}% + ${(0.5 - (sunHourDisplay - sliderMin) / sliderRange) * 9}px)`;
+                      const srLeft = '20%';
+                      const ssLeft = '80%';
                       
                       return (
                         <>
@@ -3810,7 +3815,7 @@
                             {/* The range input */}
                             <input 
                               type="range" 
-                              min="3" max="22" step="0.05" 
+                              min={sliderMin} max={sliderMax} step="0.05" 
                               value={sunHour}
                               onChange={e => setSunHour(parseFloat(e.target.value))}
                               style={{ 
@@ -3826,7 +3831,7 @@
                             position: 'absolute',
                             top: '88px',
                             marginTop: '10px',
-                            left: `calc(14px + (100% - 14px - 14px) * ${(sunHourDisplay - 3) / 19})`,
+                            left: `calc(14px + (100% - 14px - 14px) * ${(sunHourDisplay - sliderMin) / sliderRange})`,
                             transform: 'translateX(-50%)',
                             pointerEvents: 'auto',
                             zIndex: 13,
@@ -3850,13 +3855,13 @@
                           {/* Triangles on the filet line */}
                           <div style={{ position: 'absolute', top: '88px', left: '14px', right: '14px', height: 0, pointerEvents: 'none', zIndex: 12 }}>
                             {/* Sunrise ▲ - base on filet, pointing UP (inside zone) */}
-                            <div style={{ position: 'absolute', bottom: 0, left: `${((srTime - 3) / 19) * 100}%`, transform: 'translateX(-50%)' }}>
+                            <div style={{ position: 'absolute', bottom: 0, left: '20%', transform: 'translateX(-50%)' }}>
                               <svg width="18" height="12" viewBox="0 0 18 12">
                                 <polygon points="9,0 18,12 0,12" fill="#ffffff"/>
                               </svg>
                             </div>
                             {/* Sunset ▼ - base on filet, pointing DOWN (outside zone) */}
-                            <div style={{ position: 'absolute', top: 0, left: `${((ssTime - 3) / 19) * 100}%`, transform: 'translateX(-50%)' }}>
+                            <div style={{ position: 'absolute', top: 0, left: '80%', transform: 'translateX(-50%)' }}>
                               <svg width="18" height="12" viewBox="0 0 18 12">
                                 <polygon points="9,12 18,0 0,0" fill="#ffffff"/>
                               </svg>
@@ -5259,7 +5264,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v477</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v478</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
