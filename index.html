@@ -428,7 +428,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v498</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v499</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2419,7 +2419,7 @@
       const [sunHourDisplay, setSunHourDisplay] = useState(sunHour);
       const sunHourTargetRef = React.useRef(sunHour);
       const sunTimesSnapRef = React.useRef({ sr: 6, ss: 18 });
-      const snapBounceRef = React.useRef(null);
+      const snapAnimRef = React.useRef(null);
       
       // Smooth magnetic: gaussian-shaped pull, no hard edges
       const magneticSunHour = (raw) => {
@@ -2446,7 +2446,7 @@
         else if (Math.abs(current - ss) < snapDist) snapTo = ss;
         if (snapTo === null) return;
         
-        if (snapBounceRef.current) cancelAnimationFrame(snapBounceRef.current);
+        if (snapAnimRef.current) cancelAnimationFrame(snapAnimRef.current);
         const from = current;
         const to = snapTo;
         const t0 = performance.now();
@@ -2456,9 +2456,9 @@
           // Smooth ease-in-out
           const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
           setSunHour(from + (to - from) * ease);
-          if (p < 1) snapBounceRef.current = requestAnimationFrame(anim);
+          if (p < 1) snapAnimRef.current = requestAnimationFrame(anim);
         };
-        snapBounceRef.current = requestAnimationFrame(anim);
+        snapAnimRef.current = requestAnimationFrame(anim);
       };
       const rafRef = React.useRef(null);
       useEffect(() => {
@@ -5464,7 +5464,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v498</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v499</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -5964,6 +5964,18 @@
             }}>
               <ProjectDetail projectId={displayedProjectId} onClose={closeProject} weatherReady={detailContentReady} onReady={triggerReveal}/>
             </div>}
+            {/* White leading edge line following clip mask */}
+            {displayedProjectId && <div style={{
+              position: 'fixed', top: 0, bottom: 0,
+              width: '1px',
+              background: 'rgba(255,255,255,0.4)',
+              left: detailOpen ? '100%' : '0%',
+              transition: detailOpen 
+                ? 'left 1s cubic-bezier(0.22, 0.61, 0.36, 1)'
+                : 'left 0.65s cubic-bezier(0.25, 0.1, 0.25, 1)',
+              zIndex: 11,
+              pointerEvents: 'none'
+            }}/>}
           </main>
           </div>
           {/* Mobile slide-in new project screen */}
