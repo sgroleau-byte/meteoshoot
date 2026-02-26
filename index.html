@@ -405,7 +405,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v459</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v460</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3723,6 +3723,12 @@
                         }}/>
                         {/* Full-width filet at 172px */}
                         <div style={{ position: 'absolute', top: '88px', left: 0, right: 0, height: '1px', background: 'rgba(255,255,255,0.5)', zIndex: 12 }}/>
+                        {/* Vignette overlay tinted with glow color */}
+                        <div style={{
+                          position: 'absolute', inset: 0, zIndex: 4, pointerEvents: 'none',
+                          background: `radial-gradient(ellipse 70% 60% at center, transparent 40%, ${glowColor}15 65%, ${glowColor}30 85%, ${glowColor}50 100%)`,
+                          mixBlendMode: 'normal'
+                        }}/>
                         {/* Slider content layer */}
                         <div style={{ 
                           position: 'absolute', top: 0, left: 0, right: 0, height: '88px', zIndex: 11,
@@ -5199,7 +5205,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v459</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v460</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
