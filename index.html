@@ -428,7 +428,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v508</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v509</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -4062,22 +4062,23 @@
                     {/* Shape labels top-right */}
                     {buildings.length > 0 && <div style={{ position: 'absolute', top: '98px', right: '14px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
                       {buildings.map((b, i) => (
-                        <span key={i} className="font-bebas-bold" style={{ 
+                        <span key={i} className="font-bebas-bold" onClick={() => { setEditingBuilding(i); setBuildingHeight(String(b.height)); setBuildingName(b.name); }} style={{ 
                           letterSpacing: '0.06em', fontSize: '13px', color: 'rgba(255,255,255,0.85)',
-                          textShadow: '0 1px 4px rgba(0,0,0,0.8), 0 0 12px rgba(0,0,0,0.5)'
+                          textShadow: '0 1px 4px rgba(0,0,0,0.8), 0 0 12px rgba(0,0,0,0.5)',
+                          cursor: 'pointer'
                         }}>{b.name || `FORME ${i + 1}`} - {b.height} M</span>
                       ))}
                     </div>}
                     {/* Controls pill + Zoom pill wrapper */}
-                    <div style={{ position: 'absolute', bottom: '14px', right: '12px', zIndex: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ position: 'absolute', bottom: '14px', right: '12px', zIndex: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
                       {/* Controls pill */}
                       <div style={{ 
                         display: 'flex', flexDirection: 'column', alignItems: 'center',
                         backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', 
                         borderRadius: '28px', 
                         border: '2px solid rgba(255,255,255,0.9)',
-                        padding: '12px 5px', gap: '6px',
-                        width: '44px', boxSizing: 'border-box'
+                        padding: '14px 5px', gap: '8px',
+                        width: '46px', boxSizing: 'border-box'
                       }}>
                         <button 
                           onClick={() => setMapType('hybrid')} 
@@ -4149,17 +4150,17 @@
                         <div style={{ 
                           display: 'flex', flexDirection: 'column', alignItems: 'center',
                           background: 'rgba(255,255,255,0.92)', 
-                          borderRadius: '22px', 
-                          width: '44px', boxSizing: 'border-box',
-                          padding: '4px 0'
+                          borderRadius: '24px', 
+                          width: '46px', boxSizing: 'border-box',
+                          padding: '6px 0'
                         }}>
                           <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() + 1); }}
-                            style={{ width: '100%', height: '32px', border: 'none', cursor: 'pointer',
+                            style={{ width: '100%', height: '34px', border: 'none', cursor: 'pointer',
                               background: 'transparent',
                               color: '#333', fontSize: '18px', fontWeight: '300', display: 'flex', alignItems: 'center', justifyContent: 'center',
                             }}>+</button>
                           <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() - 1); }}
-                            style={{ width: '100%', height: '32px', border: 'none', cursor: 'pointer',
+                            style={{ width: '100%', height: '34px', border: 'none', cursor: 'pointer',
                               background: 'transparent',
                               color: '#333', fontSize: '18px', fontWeight: '300', display: 'flex', alignItems: 'center', justifyContent: 'center',
                             }}>−</button>
@@ -4214,25 +4215,6 @@
                             style={{ width: '50px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '4px', color: '#fff', fontSize: '14px', padding: '3px 6px', outline: 'none', textAlign: 'center' }}/>
                           <span className="font-bebas-bold" style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.04em' }}>MÈTRES</span>
                         </div>
-                      </div>
-                    )}
-                    {/* Building list — top left below date */}
-                    {buildings.length > 0 && !drawingMode && editingBuilding === null && (
-                      <div style={{ 
-                        position: 'absolute', bottom: '56px', right: '10px', zIndex: 13,
-                        display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end'
-                      }}>
-                        {buildings.map((b, i) => (
-                          <button key={i} onClick={() => { setEditingBuilding(i); setBuildingHeight(String(b.height)); setBuildingName(b.name); }} 
-                            className="font-bebas-regular"
-                            style={{ 
-                              background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)',
-                              borderRadius: '4px', border: 'none', cursor: 'pointer',
-                              padding: '3px 8px', fontSize: '12px', letterSpacing: '0.04em',
-                              color: '#ffe26b', textAlign: 'right', whiteSpace: 'nowrap'
-                            }}
-                          >{b.name.toUpperCase()} - {b.height} M</button>
-                        ))}
                       </div>
                     )}
                     {/* Date wheel picker */}
@@ -5467,7 +5449,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v508</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v509</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -5956,7 +5938,6 @@
             {displayedProjectId && <div ref={detailDivRef} style={{
               position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
               overflow: 'auto',
-              scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch',
               clipPath: detailOpen ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
               WebkitClipPath: detailOpen ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
               transition: detailOpen 
