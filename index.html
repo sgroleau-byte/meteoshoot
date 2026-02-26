@@ -423,7 +423,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v480</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v481</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2456,6 +2456,7 @@
       const [buildings, setBuildings] = useState(() => project?.buildings || []);
       const [drawingMode, setDrawingMode] = useState(false);
       const [drawingVertices, setDrawingVertices] = useState([]);
+      const drawingVerticesRef = React.useRef([]);
       const [editingBuilding, setEditingBuilding] = useState(null); // index of building being edited
       const [buildingHeight, setBuildingHeight] = useState('');
       const [buildingName, setBuildingName] = useState('');
@@ -2505,7 +2506,26 @@
         map.setOptions({ draggableCursor: 'crosshair' });
         drawClickListenerRef.current = map.addListener('click', (e) => {
           const pt = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-          setDrawingVertices(prev => [...prev, pt]);
+          const next = [...drawingVerticesRef.current, pt];
+          drawingVerticesRef.current = next;
+          setDrawingVertices(next);
+          if (next.length >= 3) {
+            // Auto-finish: create building immediately
+            const newBuilding = { polygon: [...next], height: 15, name: '' };
+            setBuildings(prev => {
+              newBuilding.name = `Bâtiment ${prev.length + 1}`;
+              setEditingBuilding(prev.length);
+              return [...prev, newBuilding];
+            });
+            setBuildingHeight('15');
+            setBuildingName(newBuilding.name);
+            drawingVerticesRef.current = [];
+            setDrawingVertices([]);
+            setDrawingMode(false);
+            if (drawingPolygonRef.current) { drawingPolygonRef.current.setMap(null); drawingPolygonRef.current = null; }
+            drawingMarkersRef.current.forEach(m => m.setMap(null));
+            drawingMarkersRef.current = [];
+          }
         });
         return () => {
           if (drawClickListenerRef.current) {
@@ -2676,6 +2696,31 @@
             setBuildingName(bldg.name);
           });
           buildingPolygonsRef.current.push(poly);
+          
+          // Draggable vertex markers for selected building
+          if (isSelected) {
+            bldg.polygon.forEach((v, vi) => {
+              const vertexMarker = new google.maps.Marker({
+                position: v, map, draggable: true,
+                icon: {
+                  path: google.maps.SymbolPath.CIRCLE,
+                  scale: 6, fillColor: '#ffe26b', fillOpacity: 1,
+                  strokeColor: '#fff', strokeWeight: 2,
+                },
+                zIndex: 40
+              });
+              vertexMarker.addListener('dragend', (e) => {
+                const newPos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+                setBuildings(prev => prev.map((b, bi) => {
+                  if (bi !== idx) return b;
+                  const newPoly = [...b.polygon];
+                  newPoly[vi] = newPos;
+                  return { ...b, polygon: newPoly };
+                }));
+              });
+              buildingPolygonsRef.current.push(vertexMarker);
+            });
+          }
         });
 
         // Calculate edit panel position near the selected building
@@ -2883,6 +2928,7 @@
             { featureType: 'transit', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
           ],
           disableDefaultUI: true,
+          disableDoubleClickZoom: true,
           zoomControl: false,
           gestureHandling: 'greedy',
           scrollwheel: false,
@@ -5263,7 +5309,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v480</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v481</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
