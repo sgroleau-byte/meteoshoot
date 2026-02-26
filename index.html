@@ -429,7 +429,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v512</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v513</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2397,7 +2397,7 @@
       );
     };
 
-    const ProjectDetail = ({ projectId, onClose, weatherReady = true, onReady, isClosing = false }) => {
+    const ProjectDetail = ({ projectId, onClose }) => {
       const { projects, updateProject, advanceProject, revertProject, deleteProject, prefs } = useStore();
       const { user } = useAuth();
       const project = projects.find(p => p.id === projectId);
@@ -2423,28 +2423,6 @@
       
       // Smooth magnetic: gaussian-shaped pull, no hard edges
       const magneticSunHour = (raw) => raw;
-      
-      // Reverse slider animation on close
-      const closeAnimRef = React.useRef(null);
-      useEffect(() => {
-        if (isClosing) {
-          const { sr, ss } = sunTimesSnapRef.current;
-          const range = (ss - sr) / (4/6);
-          const min = sr - (1/6) * range;
-          const from = sunHourTargetRef.current;
-          const to = min; // slide to left edge
-          const t0 = performance.now();
-          const dur = 400; // fast — arrive well before 0.65s mask
-          const anim = (now) => {
-            const p = Math.min(1, (now - t0) / dur);
-            const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
-            setSunHour(from + (to - from) * ease);
-            if (p < 1) closeAnimRef.current = requestAnimationFrame(anim);
-          };
-          closeAnimRef.current = requestAnimationFrame(anim);
-          return () => { if (closeAnimRef.current) cancelAnimationFrame(closeAnimRef.current); };
-        }
-      }, [isClosing]);
       
       const rafRef = React.useRef(null);
       useEffect(() => {
@@ -2951,11 +2929,7 @@
 
       // Interactive Google Map with dark mode
       useEffect(() => {
-        if (!mapContainerRef.current || !project?.lat || !project?.lng || !window.google) {
-          // No map to load — trigger reveal immediately
-          if (onReady) setTimeout(() => onReady(), 80);
-          return;
-        }
+        if (!mapContainerRef.current || !project?.lat || !project?.lng || !window.google) return;
         // Skip map recreation when just confirming adjusted position
         if (skipMapRecreateRef.current) {
           skipMapRecreateRef.current = false;
@@ -3020,10 +2994,7 @@
             setSunHourDisplay(min2);
             sunHourTargetRef.current = min2;
             
-            // Signal parent: map is ready, start clip reveal
-            if (onReady) onReady();
-            
-            // Animate slider to current time, follows clip mask with 200ms delay
+            // Animate slider to current time
             setTimeout(() => {
               const now = new Date();
               const targetH = now.getHours() + now.getMinutes()/60;
@@ -3601,7 +3572,7 @@
 
       return (
         <div className="pb-8 pt-6 animate-fade-in" style={isMobile ? { paddingTop: 'calc(24px + 25px)' } : { paddingTop: '75px' }}>
-          {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'absolute', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>DÉTAILS PROJET</h1>}
+          {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 15 }}>DÉTAILS PROJET</h1>}
           {/* Bande météo + infos — même layout que l'accueil */}
           <div className={`border-b border-adaptive py-4 ${isMobile ? 'px-4' : 'px-8'} overflow-hidden`}>
             <button onClick={onClose} className="text-charcoal-muted hover:text-charcoal transition-colors mb-4" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
@@ -3664,14 +3635,14 @@
                 </div>
                 <div className="border-b border-adaptive" style={{ marginTop: '12px' }}/>
                 <div style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', marginTop: '12px', marginLeft: '-16px', marginRight: '-16px', paddingLeft: '16px', paddingRight: '16px' }}>
-                  {project.lat && project.lng ? <WeatherRow daily={weatherReady ? weather?.daily : null} hourly={weatherReady ? weather?.hourly : null} maxDays={10}/> : <p className="text-charcoal-muted text-sm italic py-2">Météo non disponible</p>}
+                  {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10}/> : <p className="text-charcoal-muted text-sm italic py-2">Météo non disponible</p>}
                 </div>
               </div>
             ) : (
               /* ===== DESKTOP: original horizontal ===== */
               <div className="flex items-center gap-0" style={{ minWidth: '1375px' }}>
                 <div className="min-w-0">
-                  {project.lat && project.lng ? <WeatherRow daily={weatherReady ? weather?.daily : null} hourly={weatherReady ? weather?.hourly : null} maxDays={10}/> : <p className="text-charcoal-muted text-sm italic py-2">Météo non disponible</p>}
+                  {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10}/> : <p className="text-charcoal-muted text-sm italic py-2">Météo non disponible</p>}
                 </div>
                 <div className="info-dodge flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
                   <div className="flex flex-col justify-center pl-2 border-l border-adaptive">
@@ -5450,7 +5421,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v512</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v513</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -5722,41 +5693,11 @@
         };
       }, [isMobile]);
       
-      // Keep detail mounted during slide-out animation
-      const [detailOpen, setDetailOpen] = useState(false);
-      const [detailContentReady, setDetailContentReady] = useState(false);
-      const detailDivRef = React.useRef(null);
-      const revealTimeoutRef = React.useRef(null);
-      
-      const revealFiredRef = React.useRef(false);
-      
-      const triggerReveal = React.useCallback(() => {
-        if (revealFiredRef.current) return;
-        revealFiredRef.current = true;
-        if (detailDivRef.current) {
-          detailDivRef.current.getBoundingClientRect();
-        }
-        setDetailOpen(true);
-        // Show weather after clip finishes (1s clip)
-        setTimeout(() => setDetailContentReady(true), 1050);
-      }, []);
-      
       useEffect(() => {
         if (selectedId) {
-          revealFiredRef.current = false;
-          setDetailOpen(false);
-          setDetailContentReady(false);
           setDisplayedProjectId(selectedId);
-          // Fallback: if map doesn't fire ready in 2s, reveal anyway
-          const fallback = setTimeout(() => triggerReveal(), 2000);
-          revealTimeoutRef.current = fallback;
-          return () => clearTimeout(revealTimeoutRef.current);
         } else {
-          setDetailContentReady(false);
-          setDetailOpen(false);
-          clearTimeout(revealTimeoutRef.current);
-          const timer = setTimeout(() => setDisplayedProjectId(null), 900);
-          return () => clearTimeout(timer);
+          setDisplayedProjectId(null);
         }
       }, [selectedId]);
 
@@ -5935,34 +5876,14 @@
               {view === 'retouching' && <RetouchingView onSelect={openProject}/>}
               {view === 'preferences' && <PreferencesView/>}
             </div>
-            {displayedProjectId && <div ref={detailDivRef} style={{
+            {displayedProjectId && <div style={{
               position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-              overflowY: detailOpen ? 'auto' : 'hidden',
-              clipPath: detailOpen ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
-              WebkitClipPath: detailOpen ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
-              transition: detailOpen 
-                ? 'clip-path 1s cubic-bezier(0.22, 0.61, 0.36, 1), -webkit-clip-path 1s cubic-bezier(0.22, 0.61, 0.36, 1)'
-                : 'clip-path 0.85s cubic-bezier(0.25, 0.1, 0.25, 1), -webkit-clip-path 0.85s cubic-bezier(0.25, 0.1, 0.25, 1)',
-              pointerEvents: detailOpen ? 'auto' : 'none',
+              overflowY: 'auto',
               zIndex: 10,
               background: '#262c30'
             }}>
-              <ProjectDetail projectId={displayedProjectId} onClose={closeProject} weatherReady={detailContentReady} onReady={triggerReveal} isClosing={!detailOpen && !!displayedProjectId}/>
+              <ProjectDetail projectId={displayedProjectId} onClose={closeProject}/>
             </div>}
-            {/* White leading edge line following clip mask */}
-            {displayedProjectId && <div style={{
-              position: 'fixed',
-              top: 0,
-              height: '100%',
-              width: '1px',
-              background: 'rgba(255,255,255,0.4)',
-              left: detailOpen ? '100%' : '-1px',
-              transition: detailOpen 
-                ? 'left 1s cubic-bezier(0.22, 0.61, 0.36, 1)'
-                : 'left 0.85s cubic-bezier(0.25, 0.1, 0.25, 1)',
-              zIndex: 11,
-              pointerEvents: 'none'
-            }}/>}
           </main>
           </div>
           {/* Mobile slide-in new project screen */}
