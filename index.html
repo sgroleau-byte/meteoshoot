@@ -428,7 +428,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v500</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v501</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2396,7 +2396,7 @@
       );
     };
 
-    const ProjectDetail = ({ projectId, onClose, weatherReady = true, onReady }) => {
+    const ProjectDetail = ({ projectId, onClose, weatherReady = true, onReady, isClosing = false }) => {
       const { projects, updateProject, advanceProject, revertProject, deleteProject, prefs } = useStore();
       const { user } = useAuth();
       const project = projects.find(p => p.id === projectId);
@@ -2419,7 +2419,6 @@
       const [sunHourDisplay, setSunHourDisplay] = useState(sunHour);
       const sunHourTargetRef = React.useRef(sunHour);
       const sunTimesSnapRef = React.useRef({ sr: 6, ss: 18 });
-      const snapAnimRef = React.useRef(null);
       
       // Smooth magnetic: gaussian-shaped pull, no hard edges
       const magneticSunHour = (raw) => {
@@ -2436,30 +2435,29 @@
         return result;
       };
       
-      // Snap release: smooth ease to exact sr/ss if within range
-      const handleSliderRelease = () => {
-        const { sr, ss } = sunTimesSnapRef.current;
-        const current = sunHourTargetRef.current;
-        const snapDist = 0.08; // ~5min
-        let snapTo = null;
-        if (Math.abs(current - sr) < snapDist) snapTo = sr;
-        else if (Math.abs(current - ss) < snapDist) snapTo = ss;
-        if (snapTo === null) return;
-        
-        if (snapAnimRef.current) cancelAnimationFrame(snapAnimRef.current);
-        const from = current;
-        const to = snapTo;
-        const t0 = performance.now();
-        const dur = 250;
-        const anim = (now) => {
-          const p = Math.min(1, (now - t0) / dur);
-          // Smooth ease-in-out
-          const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
-          setSunHour(from + (to - from) * ease);
-          if (p < 1) snapAnimRef.current = requestAnimationFrame(anim);
-        };
-        snapAnimRef.current = requestAnimationFrame(anim);
-      };
+      // Reverse slider animation on close
+      const closeAnimRef = React.useRef(null);
+      useEffect(() => {
+        if (isClosing) {
+          const { sr, ss } = sunTimesSnapRef.current;
+          const range = (ss - sr) / (4/6);
+          const min = sr - (1/6) * range;
+          const max = min + range;
+          const from = sunHourTargetRef.current;
+          const to = max; // slide to right edge
+          const t0 = performance.now();
+          const dur = 650; // match close clip duration
+          const anim = (now) => {
+            const p = Math.min(1, (now - t0) / dur);
+            const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+            setSunHour(from + (to - from) * ease);
+            if (p < 1) closeAnimRef.current = requestAnimationFrame(anim);
+          };
+          closeAnimRef.current = requestAnimationFrame(anim);
+          return () => { if (closeAnimRef.current) cancelAnimationFrame(closeAnimRef.current); };
+        }
+      }, [isClosing]);
+      
       const rafRef = React.useRef(null);
       useEffect(() => {
         sunHourTargetRef.current = sunHour;
@@ -3984,7 +3982,6 @@
                               const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
                               setSunHour(magneticSunHour(sliderMin + pct * sliderRange));
                             }}
-                            onTouchEnd={handleSliderRelease}
                           />}
                           <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, transform: 'translateY(-50%)' }}>
                             {/* Glow behind thumb */}
@@ -4016,8 +4013,6 @@
                               min={sliderMin} max={sliderMax} step="0.05" 
                               value={sunHour}
                               onChange={e => setSunHour(magneticSunHour(parseFloat(e.target.value)))}
-                              onMouseUp={handleSliderRelease}
-                              onTouchEnd={handleSliderRelease}
                               style={{ 
                                 width: '100%', appearance: 'none', WebkitAppearance: 'none', 
                                 background: 'transparent', position: 'relative', zIndex: 2, 
@@ -5464,7 +5459,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v500</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v501</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -5963,20 +5958,19 @@
               zIndex: 10,
               background: '#262c30'
             }}>
-              <ProjectDetail projectId={displayedProjectId} onClose={closeProject} weatherReady={detailContentReady} onReady={triggerReveal}/>
+              <ProjectDetail projectId={displayedProjectId} onClose={closeProject} weatherReady={detailContentReady} onReady={triggerReveal} isClosing={!detailOpen && !!displayedProjectId}/>
             </div>}
             {/* White leading edge line following clip mask */}
             {displayedProjectId && <div style={{
               position: 'fixed',
-              top: detailOpen ? '0' : '50%',
-              height: detailOpen ? '100%' : '100px',
-              transform: detailOpen ? 'translateY(0)' : 'translateY(-50%)',
+              top: 0,
+              height: '100%',
               width: '1px',
               background: 'rgba(255,255,255,0.4)',
-              left: detailOpen ? '100%' : '0%',
+              left: detailOpen ? '100%' : '-1px',
               transition: detailOpen 
-                ? 'left 1s cubic-bezier(0.22, 0.61, 0.36, 1), top 1s cubic-bezier(0.22, 0.61, 0.36, 1), height 1s cubic-bezier(0.22, 0.61, 0.36, 1), transform 1s cubic-bezier(0.22, 0.61, 0.36, 1)'
-                : 'left 0.65s cubic-bezier(0.25, 0.1, 0.25, 1), top 0.65s cubic-bezier(0.25, 0.1, 0.25, 1), height 0.65s cubic-bezier(0.25, 0.1, 0.25, 1), transform 0.65s cubic-bezier(0.25, 0.1, 0.25, 1)',
+                ? 'left 1s cubic-bezier(0.22, 0.61, 0.36, 1)'
+                : 'left 0.65s cubic-bezier(0.25, 0.1, 0.25, 1)',
               zIndex: 11,
               pointerEvents: 'none'
             }}/>}
