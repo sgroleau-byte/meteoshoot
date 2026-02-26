@@ -428,7 +428,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v503</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v504</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2421,23 +2421,7 @@
       const sunTimesSnapRef = React.useRef({ sr: 6, ss: 18 });
       
       // Smooth magnetic: gaussian-shaped pull, no hard edges
-      const magneticSunHour = (raw) => {
-        const { sr, ss } = sunTimesSnapRef.current;
-        let result = raw;
-        for (const t of [sr, ss]) {
-          const dist = raw - t;
-          // Gaussian pull: monotonic (strength * 2/sigma < 1 guarantees no reversal)
-          const sigma = 0.25; // width of influence (~15min)
-          const strength = 0.12; // max pull — derivative = 0.96 < 1
-          const pull = strength * Math.exp(-(dist * dist) / (2 * sigma * sigma)) * dist / (sigma * 0.5);
-          result -= pull;
-        }
-        // Hard lock: if within ~5min of sr/ss, snap to exact time
-        for (const t of [sr, ss]) {
-          if (Math.abs(result - t) < 0.08) result = t;
-        }
-        return result;
-      };
+      const magneticSunHour = (raw) => raw;
       
       // Reverse slider animation on close
       const closeAnimRef = React.useRef(null);
@@ -2765,7 +2749,7 @@
             strokeColor: '#ffe26b',
             strokeOpacity: isSelected ? 1 : 0.85, strokeWeight: isSelected ? 3.5 : 2.5,
             fillColor: '#ffe26b',
-            fillOpacity: 0, map, zIndex: 25,
+            fillOpacity: 0.12, map, zIndex: 25,
             clickable: true
           });
           poly.addListener('click', () => {
@@ -5462,7 +5446,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v503</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v504</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -5767,7 +5751,7 @@
           setDetailContentReady(false);
           setDetailOpen(false);
           clearTimeout(revealTimeoutRef.current);
-          const timer = setTimeout(() => setDisplayedProjectId(null), 700);
+          const timer = setTimeout(() => setDisplayedProjectId(null), 900);
           return () => clearTimeout(timer);
         }
       }, [selectedId]);
@@ -5956,7 +5940,7 @@
               WebkitClipPath: detailOpen ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
               transition: detailOpen 
                 ? 'clip-path 1s cubic-bezier(0.22, 0.61, 0.36, 1), -webkit-clip-path 1s cubic-bezier(0.22, 0.61, 0.36, 1)'
-                : 'clip-path 0.65s cubic-bezier(0.25, 0.1, 0.25, 1), -webkit-clip-path 0.65s cubic-bezier(0.25, 0.1, 0.25, 1)',
+                : 'clip-path 0.85s cubic-bezier(0.25, 0.1, 0.25, 1), -webkit-clip-path 0.85s cubic-bezier(0.25, 0.1, 0.25, 1)',
               pointerEvents: detailOpen ? 'auto' : 'none',
               zIndex: 10,
               background: '#262c30'
@@ -5973,7 +5957,7 @@
               left: detailOpen ? '100%' : '-1px',
               transition: detailOpen 
                 ? 'left 1s cubic-bezier(0.22, 0.61, 0.36, 1)'
-                : 'left 0.65s cubic-bezier(0.25, 0.1, 0.25, 1)',
+                : 'left 0.85s cubic-bezier(0.25, 0.1, 0.25, 1)',
               zIndex: 11,
               pointerEvents: 'none'
             }}/>}
