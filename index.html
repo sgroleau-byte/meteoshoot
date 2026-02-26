@@ -428,7 +428,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v491</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v492</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2406,7 +2406,6 @@
       const [mapType, setMapType] = useState('hybrid');
       const [mapZoom, setMapZoom] = useState(16);
       const [showMapFull, setShowMapFull] = useState(false);
-      const [mapRevealProgress, setMapRevealProgress] = useState(0);
       const mapRevealedRef = React.useRef(false);
       const [showSunLines, setShowSunLines] = useState(true);
       const [sunDate, setSunDate] = useState(() => new Date());
@@ -2421,54 +2420,45 @@
       const sunHourTargetRef = React.useRef(sunHour);
       const sunTimesSnapRef = React.useRef({ sr: 6, ss: 18 });
       const snapBounceRef = React.useRef(null);
-      const rawSliderRef = React.useRef(null); // track raw input position
       
-      // Magnetic resistance: slider gets "ahead" approaching snap, "behind" leaving
+      // Smooth magnetic: gaussian-shaped pull, no hard edges
       const magneticSunHour = (raw) => {
-        rawSliderRef.current = raw;
         const { sr, ss } = sunTimesSnapRef.current;
-        const snapRadius = 0.35; // ~21min zone of influence
-        const maxPull = 0.25; // max offset in hours (~15min)
-        
+        let result = raw;
         for (const t of [sr, ss]) {
-          const dist = raw - t; // signed distance
-          const absDist = Math.abs(dist);
-          if (absDist < snapRadius) {
-            // Smooth pull: cubic ease toward snap point
-            const normalizedDist = absDist / snapRadius; // 0 at target, 1 at edge
-            const pullAmount = maxPull * Math.pow(1 - normalizedDist, 3);
-            // Pull toward t: if raw > t, subtract; if raw < t, add
-            return raw - Math.sign(dist) * pullAmount;
-          }
+          const dist = raw - t;
+          // Gaussian pull: smooth bell curve, no discontinuity
+          const sigma = 0.2; // width of influence (~12min)
+          const strength = 0.18; // max pull (~11min)
+          const pull = strength * Math.exp(-(dist * dist) / (2 * sigma * sigma)) * dist / (sigma * 0.5);
+          result -= pull;
         }
-        return raw;
+        return result;
       };
       
-      // Snap release: spring to exact sr/ss if close enough
+      // Snap release: smooth ease to exact sr/ss if within range
       const handleSliderRelease = () => {
         const { sr, ss } = sunTimesSnapRef.current;
         const current = sunHourTargetRef.current;
-        const snapRadius = 0.15; // snap zone for release
+        const snapDist = 0.08; // ~5min
         let snapTo = null;
-        if (Math.abs(current - sr) < snapRadius) snapTo = sr;
-        else if (Math.abs(current - ss) < snapRadius) snapTo = ss;
+        if (Math.abs(current - sr) < snapDist) snapTo = sr;
+        else if (Math.abs(current - ss) < snapDist) snapTo = ss;
         if (snapTo === null) return;
         
         if (snapBounceRef.current) cancelAnimationFrame(snapBounceRef.current);
         const from = current;
         const to = snapTo;
         const t0 = performance.now();
-        const dur = 300;
-        const bounce = (now) => {
+        const dur = 250;
+        const anim = (now) => {
           const p = Math.min(1, (now - t0) / dur);
-          // Ease out with slight overshoot
-          const ease = 1 - Math.pow(1 - p, 3);
-          const overshoot = p < 1 ? Math.sin(p * Math.PI) * 0.02 * (1 - p) : 0;
-          setSunHour(from + (to - from) * ease + overshoot);
-          if (p < 1) snapBounceRef.current = requestAnimationFrame(bounce);
-          else setSunHour(to);
+          // Smooth ease-in-out
+          const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+          setSunHour(from + (to - from) * ease);
+          if (p < 1) snapBounceRef.current = requestAnimationFrame(anim);
         };
-        snapBounceRef.current = requestAnimationFrame(bounce);
+        snapBounceRef.current = requestAnimationFrame(anim);
       };
       const rafRef = React.useRef(null);
       useEffect(() => {
@@ -2719,8 +2709,6 @@
         const sunAlt = sunPos.altitude;
         const sunAz = sunPos.azimuth;
 
-        // Collect all building footprints (reversed winding) for shadow holes
-        const allBuildingHoles = buildings.filter(b => b.polygon.length >= 3).map(b => [...b.polygon].reverse());
 
         buildings.forEach((bldg, idx) => {
           const isSelected = editingBuilding === idx;
@@ -2744,7 +2732,7 @@
 
             // Projected footprint — with holes for all building footprints
             const shadowFoot = new google.maps.Polygon({
-              paths: [projVerts, ...allBuildingHoles], strokeWeight: 0, strokeOpacity: 0,
+              paths: projVerts, strokeWeight: 0, strokeOpacity: 0,
               fillColor: '#000000', fillOpacity: 0.3 * shadowOpacity, map, zIndex: 18, clickable: false
             });
             shadowPolygonsRef.current.push(shadowFoot);
@@ -2753,7 +2741,7 @@
             for (let i = 0; i < n; i++) {
               const j = (i + 1) % n;
               const quad = new google.maps.Polygon({
-                paths: [[bldg.polygon[i], bldg.polygon[j], projVerts[j], projVerts[i]], ...allBuildingHoles],
+                paths: [bldg.polygon[i], bldg.polygon[j], projVerts[j], projVerts[i]],
                 strokeWeight: 0, strokeOpacity: 0,
                 fillColor: '#000000', fillOpacity: 0.25 * shadowOpacity, map, zIndex: 18, clickable: false
               });
@@ -3032,32 +3020,21 @@
           google.maps.event.addListenerOnce(map, 'tilesloaded', () => {
             if (mapRevealedRef.current) return;
             mapRevealedRef.current = true;
-            // Set slider to start of range
+            // Set slider to start of range (far left)
             const st2 = (project?.lat && project?.lng && window.SunCalc) ? SunCalc.getTimes(new Date(), project.lat, project.lng) : null;
             const sr2 = st2?.sunrise ? st2.sunrise.getHours() + st2.sunrise.getMinutes()/60 : 6;
             const ss2 = st2?.sunset ? st2.sunset.getHours() + st2.sunset.getMinutes()/60 : 18;
             const range2 = (ss2 - sr2) / (4/6);
             const min2 = sr2 - (1/6) * range2;
-            setSunHour(min2); // start at far left
+            setSunHour(min2);
             setSunHourDisplay(min2);
             sunHourTargetRef.current = min2;
             
-            // Animate mask open left-to-right
-            const dur = 1000;
-            const t0 = performance.now();
-            const animMask = (now) => {
-              const p = Math.min(1, (now - t0) / dur);
-              const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
-              setMapRevealProgress(ease);
-              if (p < 1) requestAnimationFrame(animMask);
-            };
-            requestAnimationFrame(animMask);
-            
-            // Animate slider to current time with delay
+            // Animate slider to current time, delayed to follow the clip-path reveal
             setTimeout(() => {
               const now = new Date();
               const targetH = now.getHours() + now.getMinutes()/60;
-              const sliderDur = 800;
+              const sliderDur = 900;
               const sT0 = performance.now();
               const startH = min2;
               const animSlider = (now2) => {
@@ -3067,7 +3044,7 @@
                 if (p < 1) requestAnimationFrame(animSlider);
               };
               requestAnimationFrame(animSlider);
-            }, 300); // 300ms delay behind mask
+            }, 200);
           });
         }
         // Desaturation: CSS filter on container, counter-filter on all overlay panes
@@ -3863,9 +3840,7 @@
                   <>
                   {showMapFull && <div onClick={() => setShowMapFull(false)} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(30,30,30,0.88)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}/>}
                   <div style={{
-                    ...(showMapFull ? { position: 'fixed', top: 'env(safe-area-inset-top, 50px)', left: 0, width: '100vw', height: 'calc(100vh - env(safe-area-inset-top, 50px))', zIndex: 51, overflow: 'hidden' } : { position: 'relative', overflow: 'hidden', flex: 1 }),
-                    clipPath: mapRevealProgress >= 1 ? 'none' : `inset(0 ${(1 - mapRevealProgress) * 100}% 0 0)`,
-                    WebkitClipPath: mapRevealProgress >= 1 ? 'none' : `inset(0 ${(1 - mapRevealProgress) * 100}% 0 0)`
+                    ...(showMapFull ? { position: 'fixed', top: 'env(safe-area-inset-top, 50px)', left: 0, width: '100vw', height: 'calc(100vh - env(safe-area-inset-top, 50px))', zIndex: 51, overflow: 'hidden' } : { position: 'relative', overflow: 'hidden', flex: 1 })
                   }}>
                     {/* Sun time slider - new design */}
                     {(() => {
@@ -5481,7 +5456,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v491</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v492</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -5944,9 +5919,8 @@
               {view === 'preferences' && <PreferencesView/>}
             </div>
             <div style={{
-              transform: selectedId ? 'translateX(0)' : 'translateX(100%)',
-              opacity: selectedId ? 1 : 0,
-              transition: 'transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease',
+              clipPath: selectedId ? 'inset(0 0 0 0)' : 'inset(0 100% 0 0)',
+              transition: 'clip-path 0.7s cubic-bezier(0.16, 1, 0.3, 1)',
               pointerEvents: selectedId ? 'auto' : 'none'
             }}>
               {displayedProjectId && <ProjectDetail projectId={displayedProjectId} onClose={closeProject}/>}
