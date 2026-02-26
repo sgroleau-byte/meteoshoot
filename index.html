@@ -33,7 +33,7 @@
     }
   </script>
   <title>MeteoShoot | Shooting Planner</title>
-  <script>if (isDev) document.title = 'DEV DEV DEV DEV DEV DEV';</script>
+  <script>if (isDev) document.title = 'DEV DEV DEV DEV DEV | Shooting Planner';</script>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Google Maps API -->
@@ -405,7 +405,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v447</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v448</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -414,7 +414,7 @@
     var splash = document.getElementById('splashScreen');
     splash.classList.add('splash-hidden');
     document.getElementById('themeColor').setAttribute('content', '#3d4a47');
-    setTimeout(function() { splash.remove(); if (isDev) document.title = 'DEV DEV DEV DEV DEV DEV'; }, 900);
+    setTimeout(function() { splash.remove(); if (isDev) document.title = 'DEV DEV DEV DEV DEV | Shooting Planner'; }, 900);
   }, 2500);
 </script>
 <script>
@@ -3699,12 +3699,12 @@
                               top: '50%',
                               left: thumbLeft,
                               transform: 'translate(-50%, -50%)',
-                              width: '100px', height: '100px',
+                              width: '250px', height: '250px',
                               borderRadius: '50%',
-                              background: `radial-gradient(circle, ${glowColor}88 0%, ${glowColor}33 30%, transparent 70%)`,
-                              opacity: 0.5,
+                              background: `radial-gradient(circle, ${glowColor} 0%, ${glowColor} 24%, ${glowColor}80 45%, transparent 70%)`,
+                              opacity: 0.45,
                               pointerEvents: 'none',
-                              filter: 'blur(12px)'
+                              filter: 'blur(15px)'
                             }}/>
                             
                             {/* The range input */}
@@ -3732,7 +3732,7 @@
                             zIndex: 13
                           }}>
                             <span className="font-bebas-regular" style={{ 
-                              fontSize: '20px', color: '#ffffff', letterSpacing: '0.04em',
+                              fontSize: '30px', color: '#ffffff', letterSpacing: '0.04em',
                               textShadow: '0 1px 4px rgba(0,0,0,0.8)', lineHeight: '1'
                             }}>
                               {`${Math.floor(sunHour)}H${String(Math.round((sunHour % 1) * 60)).padStart(2, '0')}`}
@@ -5150,7 +5150,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v447</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v448</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
