@@ -18,7 +18,7 @@
         start_url: "/",
         display: "standalone",
         background_color: "#262c30",
-        theme_color: "#694d44",
+        theme_color: "#3d4a47",
         icons: [
           { src: "icon-192-DevRose.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
           { src: "icon-512-DevRose.png", sizes: "512x512", type: "image/png", purpose: "any maskable" }
@@ -26,13 +26,14 @@
       });
       document.getElementById('manifest-link').href = URL.createObjectURL(new Blob([devManifest], {type: 'application/json'}));
       document.getElementById('touch-icon-link').href = 'icon-180-DevRose.png';
-      document.getElementById('themeColor').setAttribute('content', '#694d44');
+      document.getElementById('themeColor').setAttribute('content', '#3d4a47');
     } else {
       document.getElementById('manifest-link').href = 'manifest.json';
       document.getElementById('touch-icon-link').href = 'icon-180.png';
     }
   </script>
   <title>MeteoShoot | Shooting Planner</title>
+  <script>if (isDev) document.title = '--->  DEV --->  DEV --->  DEV --->  DEV --->  DEV --->  DEV';</script>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Google Maps API -->
@@ -404,7 +405,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v440</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v441</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -412,7 +413,7 @@
   setTimeout(function() {
     var splash = document.getElementById('splashScreen');
     splash.classList.add('splash-hidden');
-    document.getElementById('themeColor').setAttribute('content', location.hostname.match(/^(meteoshoot\.vercel\.app|meteoshoot\.com|www\.meteoshoot\.com)$/) ? '#3d4a47' : '#694d44');
+    document.getElementById('themeColor').setAttribute('content', '#3d4a47');
     setTimeout(function() { splash.remove(); }, 900);
   }, 2500);
 </script>
@@ -5142,7 +5143,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v440</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v441</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
