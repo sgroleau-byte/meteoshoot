@@ -405,7 +405,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v454</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v455</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3698,9 +3698,9 @@
                         glowColor = DARK;
                       }
                       
-                      const thumbLeft = `calc(${(sunHourDisplay / 24) * 100}% + ${(0.5 - sunHourDisplay / 24) * 9}px)`;
-                      const srLeft = `${(srTime / 24) * 100}%`;
-                      const ssLeft = `${(ssTime / 24) * 100}%`;
+                      const thumbLeft = `calc(${((sunHourDisplay - 3) / 19) * 100}% + ${(0.5 - (sunHourDisplay - 3) / 19) * 9}px)`;
+                      const srLeft = `${((srTime - 3) / 19) * 100}%`;
+                      const ssLeft = `${((ssTime - 3) / 19) * 100}%`;
                       
                       return (
                         <>
@@ -3715,8 +3715,8 @@
                         }}/>
                         {/* Dark gradient overlay */}
                         <div style={{ 
-                          position: 'absolute', top: 0, left: 0, right: 0, height: '120px', zIndex: 10,
-                          background: 'linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 70%, transparent 100%)',
+                          position: 'absolute', top: 0, left: 0, right: 0, height: '140px', zIndex: 10,
+                          background: 'linear-gradient(to bottom, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.3) 70%, transparent 100%)',
                           pointerEvents: 'none'
                         }}/>
                         {/* Full-width filet at 172px */}
@@ -3758,7 +3758,7 @@
                             {/* The range input */}
                             <input 
                               type="range" 
-                              min="0" max="24" step="0.083" 
+                              min="3" max="22" step="0.05" 
                               value={sunHour}
                               onChange={e => setSunHour(parseFloat(e.target.value))}
                               style={{ 
@@ -3790,13 +3790,13 @@
                           {/* Triangles on the filet line */}
                           <div style={{ position: 'absolute', top: '88px', left: '60px', right: '74px', height: 0, pointerEvents: 'none', zIndex: 12 }}>
                             {/* Sunrise ▲ - base on filet, pointing UP (inside zone) */}
-                            <div style={{ position: 'absolute', bottom: 0, left: `${(srTime / 24) * 100}%`, transform: 'translateX(-50%)' }}>
+                            <div style={{ position: 'absolute', bottom: 0, left: `${((srTime - 3) / 19) * 100}%`, transform: 'translateX(-50%)' }}>
                               <svg width="18" height="12" viewBox="0 0 18 12">
                                 <polygon points="9,0 18,12 0,12" fill="#ffffff"/>
                               </svg>
                             </div>
                             {/* Sunset ▼ - base on filet, pointing DOWN (outside zone) */}
-                            <div style={{ position: 'absolute', top: 0, left: `${(ssTime / 24) * 100}%`, transform: 'translateX(-50%)' }}>
+                            <div style={{ position: 'absolute', top: 0, left: `${((ssTime - 3) / 19) * 100}%`, transform: 'translateX(-50%)' }}>
                               <svg width="18" height="12" viewBox="0 0 18 12">
                                 <polygon points="9,12 18,0 0,0" fill="#ffffff"/>
                               </svg>
@@ -5199,7 +5199,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v454</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v455</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
