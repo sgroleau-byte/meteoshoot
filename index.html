@@ -405,7 +405,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v450</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v451</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -625,7 +625,7 @@
                   value={email} 
                   onChange={e => setEmail(e.target.value)}
                   placeholder="ton@email.com"
-                  style={{ background: 'transparent', border: 'none', outline: 'none', color: 'rgba(255,255,255,0.85)', fontSize: '15px', width: '100%' }}
+                  style={{ background: 'transparent', position: 'relative', zIndex: 2, border: 'none', outline: 'none', color: 'rgba(255,255,255,0.85)', fontSize: '15px', width: '100%' }}
                 />
               </div>
               <label className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '18px', color: '#8B9B99', display: 'block', marginBottom: '6px' }}>MOT DE PASSE</label>
@@ -636,7 +636,7 @@
                   onChange={e => setPassword(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSubmit()}
                   placeholder="••••••••"
-                  style={{ background: 'transparent', border: 'none', outline: 'none', color: 'rgba(255,255,255,0.85)', fontSize: '15px', width: '100%' }}
+                  style={{ background: 'transparent', position: 'relative', zIndex: 2, border: 'none', outline: 'none', color: 'rgba(255,255,255,0.85)', fontSize: '15px', width: '100%' }}
                 />
               </div>
               {error && <p style={{ color: '#d83152', fontSize: '13px', marginBottom: '12px' }}>{error}</p>}
@@ -3650,28 +3650,30 @@
                       };
                       const BLUE = '#1a66f3', ORANGE = '#FF4200', DAY = '#FFF3ba';
                       let glowColor = DAY;
-                      // Sunrise zone: orange from sr-1h to sr+0.25h, morphing at edges
-                      // Sunset zone: orange from ss-1h to ss+0.25h, morphing at edges
-                      const srOrangeStart = srTime - 1, srOrangeEnd = srTime + 0.25;
+                      // Sunrise: orange from sr-15min to sr+1h
+                      // Sunset: orange from ss-1h to ss+15min
+                      // 30min morph zones on each side
+                      const srOrangeStart = srTime - 0.25, srOrangeEnd = srTime + 1;
                       const ssOrangeStart = ssTime - 1, ssOrangeEnd = ssTime + 0.25;
-                      if (sunHour < srOrangeStart - 0.5) {
-                        glowColor = BLUE; // deep night
+                      const morphDuration = 0.5; // 30min transition
+                      if (sunHour < srOrangeStart - morphDuration) {
+                        glowColor = BLUE;
                       } else if (sunHour < srOrangeStart) {
-                        glowColor = hexLerp(BLUE, ORANGE, (sunHour - (srOrangeStart - 0.5)) / 0.5); // blue→orange
+                        glowColor = hexLerp(BLUE, ORANGE, (sunHour - (srOrangeStart - morphDuration)) / morphDuration);
                       } else if (sunHour <= srOrangeEnd) {
-                        glowColor = ORANGE; // sunrise orange
-                      } else if (sunHour < srOrangeEnd + 0.5) {
-                        glowColor = hexLerp(ORANGE, DAY, (sunHour - srOrangeEnd) / 0.5); // orange→day
-                      } else if (sunHour < ssOrangeStart - 0.5) {
-                        glowColor = DAY; // full day
+                        glowColor = ORANGE;
+                      } else if (sunHour < srOrangeEnd + morphDuration) {
+                        glowColor = hexLerp(ORANGE, DAY, (sunHour - srOrangeEnd) / morphDuration);
+                      } else if (sunHour < ssOrangeStart - morphDuration) {
+                        glowColor = DAY;
                       } else if (sunHour < ssOrangeStart) {
-                        glowColor = hexLerp(DAY, ORANGE, (sunHour - (ssOrangeStart - 0.5)) / 0.5); // day→orange
+                        glowColor = hexLerp(DAY, ORANGE, (sunHour - (ssOrangeStart - morphDuration)) / morphDuration);
                       } else if (sunHour <= ssOrangeEnd) {
-                        glowColor = ORANGE; // sunset orange
-                      } else if (sunHour < ssOrangeEnd + 0.5) {
-                        glowColor = hexLerp(ORANGE, BLUE, (sunHour - ssOrangeEnd) / 0.5); // orange→blue
+                        glowColor = ORANGE;
+                      } else if (sunHour < ssOrangeEnd + morphDuration) {
+                        glowColor = hexLerp(ORANGE, BLUE, (sunHour - ssOrangeEnd) / morphDuration);
                       } else {
-                        glowColor = BLUE; // night
+                        glowColor = BLUE;
                       }
                       
                       const thumbLeft = `calc(${(sunHour / 24) * 100}% + ${(0.5 - sunHour / 24) * 9}px)`;
@@ -3727,18 +3729,19 @@
                               background: `radial-gradient(circle, ${glowColor} 0%, ${glowColor} 24%, ${glowColor}80 45%, transparent 70%)`,
                               opacity: 0.3,
                               pointerEvents: 'none',
-                              filter: 'blur(15px)'
+                              filter: 'blur(15px)',
+                              transition: 'left 0.15s ease-out, background 0.5s ease'
                             }}/>
                             
                             {/* The range input */}
                             <input 
                               type="range" 
-                              min="0" max="24" step="0.25" 
+                              min="0" max="24" step="0.083" 
                               value={sunHour}
                               onChange={e => setSunHour(parseFloat(e.target.value))}
                               style={{ 
                                 width: '100%', appearance: 'none', WebkitAppearance: 'none', 
-                                background: 'transparent', 
+                                background: 'transparent', position: 'relative', zIndex: 2, 
                                 outline: 'none', cursor: 'pointer',
                                 pointerEvents: 'auto'
                               }}
@@ -3752,7 +3755,8 @@
                             left: `calc(60px + (100% - 60px - 74px) * ${sunHour / 24})`,
                             transform: 'translateX(-50%)',
                             pointerEvents: 'none',
-                            zIndex: 13
+                            zIndex: 13,
+                            transition: 'left 0.15s ease-out'
                           }}>
                             <span className="font-bebas-bold" style={{ 
                               fontSize: '24px', color: '#ffffff', letterSpacing: '0.04em',
@@ -3792,7 +3796,7 @@
                         className="font-bebas-bold"
                         style={{ letterSpacing: '0.04em', 
                           fontSize: '16px', padding: '4px 10px', 
-                          background: 'transparent', 
+                          background: 'transparent', position: 'relative', zIndex: 2, 
                           color: mapType === 'hybrid' ? '#7dd3c6' : 'rgba(255,255,255,0.75)',
                           border: 'none', borderBottom: '1px solid rgba(255,255,255,0.1)',
                           cursor: 'pointer'
@@ -3803,7 +3807,7 @@
                         className="font-bebas-bold"
                         style={{ letterSpacing: '0.04em', 
                           fontSize: '16px', padding: '4px 10px', 
-                          background: 'transparent', 
+                          background: 'transparent', position: 'relative', zIndex: 2, 
                           color: mapType === 'roadmap' ? '#7dd3c6' : 'rgba(255,255,255,0.75)',
                           border: 'none', borderBottom: '1px solid rgba(255,255,255,0.1)',
                           cursor: 'pointer'
@@ -3828,7 +3832,7 @@
                         onClick={() => setShowSunLines(v => !v)}
                         title={showSunLines ? 'Masquer lignes soleil' : 'Afficher lignes soleil'}
                         style={{ 
-                          background: 'transparent', 
+                          background: 'transparent', position: 'relative', zIndex: 2, 
                           border: 'none', borderBottom: '1px solid rgba(255,255,255,0.1)',
                           cursor: 'pointer', padding: '5px 10px',
                           color: showSunLines ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.25)', 
@@ -3842,7 +3846,7 @@
                         )}
                       </button>
                       <button onClick={() => setShowMapFull(f => !f)} style={{ 
-                        background: 'transparent', 
+                        background: 'transparent', position: 'relative', zIndex: 2, 
                         border: 'none',
                         borderRadius: '0',
                         cursor: 'pointer', padding: '5px 10px',
@@ -4185,11 +4189,11 @@
                 }}>
                   <div className="mb-5">
                     <label className="newproj-label font-bebas-book">NOM DU PROJET</label>
-                    <input ref={nameInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet" style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
+                    <input ref={nameInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet" style={{ background: 'transparent', position: 'relative', zIndex: 2, border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
                   </div>
                   <div className="mb-5">
                     <label className="newproj-label font-bebas-book">ADRESSE DU PROJET</label>
-                    <input ref={addressInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder="Entrer l'adresse..." style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
+                    <input ref={addressInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder="Entrer l'adresse..." style={{ background: 'transparent', position: 'relative', zIndex: 2, border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
                   </div>
                   <div className="mb-5">
                     <label className="newproj-label font-bebas-book">MANDAT</label>
@@ -4618,7 +4622,7 @@
 
       // Done: show full weather card
       return (
-        <div style={{ margin: '0 12px', marginBottom: '15px', borderRadius: '37px', background: 'transparent', overflow: 'hidden', padding: '20px 28px 5px' }}>
+        <div style={{ margin: '0 12px', marginBottom: '15px', borderRadius: '37px', background: 'transparent', position: 'relative', zIndex: 2, overflow: 'hidden', padding: '20px 28px 5px' }}>
           {/* Top row: date + city */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '2px', gap: '12px', paddingLeft: '0', textAlign: 'center' }}>
             <div className="font-bebas-bold" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap', width: '100%', textAlign: 'center' }}>
@@ -5173,7 +5177,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v450</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v451</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -5236,7 +5240,7 @@
         onCreated();
       };
 
-      const inputStyle = { background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', padding: '12px 14px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '16px', borderRadius: '8px' };
+      const inputStyle = { background: 'transparent', position: 'relative', zIndex: 2, border: '1px solid rgba(255,255,255,0.15)', padding: '12px 14px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '16px', borderRadius: '8px' };
 
       return (
         <div style={{
