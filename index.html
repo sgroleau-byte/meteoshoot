@@ -405,7 +405,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v452</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v453</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2395,14 +2395,21 @@
       const [sunHourDisplay, setSunHourDisplay] = useState(sunHour);
       const sunHourTargetRef = React.useRef(sunHour);
       const rafRef = React.useRef(null);
+      const sunHourVelRef = React.useRef(0);
       useEffect(() => {
         sunHourTargetRef.current = sunHour;
         const animate = () => {
           setSunHourDisplay(prev => {
             const diff = sunHourTargetRef.current - prev;
-            if (Math.abs(diff) < 0.005) return sunHourTargetRef.current;
+            if (Math.abs(diff) < 0.002 && Math.abs(sunHourVelRef.current) < 0.002) {
+              sunHourVelRef.current = 0;
+              return sunHourTargetRef.current;
+            }
+            // Spring: stiffness 0.15, damping 0.7
+            const spring = diff * 0.15;
+            sunHourVelRef.current = (sunHourVelRef.current + spring) * 0.7;
             rafRef.current = requestAnimationFrame(animate);
-            return prev + diff * 0.25;
+            return prev + sunHourVelRef.current;
           });
         };
         rafRef.current = requestAnimationFrame(animate);
@@ -3709,7 +3716,7 @@
                         }}/>
                         {/* Dark gradient overlay */}
                         <div style={{ 
-                          position: 'absolute', top: 0, left: 0, right: 0, height: '88px', zIndex: 10,
+                          position: 'absolute', top: 0, left: 0, right: 0, height: '120px', zIndex: 10,
                           background: 'linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 70%, transparent 100%)',
                           pointerEvents: 'none'
                         }}/>
@@ -5193,7 +5200,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v452</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v453</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
