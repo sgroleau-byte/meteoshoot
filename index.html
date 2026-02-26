@@ -405,7 +405,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v458</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v459</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2860,6 +2860,7 @@
           zoom: 16,
           mapTypeId: mapType,
           styles: mapType === 'roadmap' ? darkStyle : [
+            { stylers: [{ saturation: -40 }] },
             { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
             { featureType: 'transit', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
           ],
@@ -2981,6 +2982,7 @@
           { featureType: 'poi', stylers: [{ visibility: 'off' }] },
         ];
         const satStyle = [
+          { stylers: [{ saturation: -40 }] },
           { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
           { featureType: 'transit', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
         ];
@@ -3716,7 +3718,7 @@
                         {/* Dark gradient overlay */}
                         <div style={{ 
                           position: 'absolute', top: 0, left: 0, right: 0, height: '140px', zIndex: 10,
-                          background: 'linear-gradient(to bottom, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.3) 70%, transparent 100%)',
+                          background: 'linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.4) 70%, transparent 100%)',
                           pointerEvents: 'none'
                         }}/>
                         {/* Full-width filet at 172px */}
@@ -3727,16 +3729,6 @@
                           pointerEvents: 'none',
                           padding: '0 14px'
                         }}>
-                          {/* Date label - left side, vertically centered in 172px */}
-                          <button onClick={() => setShowDatePicker(p => !p)} className="font-bebas-bold" style={{ 
-                            position: 'absolute', top: '55%', left: '14px', transform: 'translateY(-50%)', zIndex: 2,
-                            background: 'none', border: 'none', cursor: 'pointer',
-                            fontSize: '25px', letterSpacing: '0.06em',
-                            color: '#ffffff',
-                            pointerEvents: 'auto', padding: '2px 4px'
-                          }}>
-                            {MONTHS_FR[sunDate.getMonth()]} {sunDate.getDate()}
-                          </button>
                           
                           {/* Slider track area — centered vertically in 172px zone */}
                           <div style={{ position: 'absolute', top: '50%', left: '14px', right: '14px', transform: 'translateY(-50%)' }}>
@@ -3769,22 +3761,30 @@
                               }}
                             />
                           </div>
-                          {/* Time display below filet */}
+                          {/* Time + date display below filet */}
                           <div style={{
                             position: 'absolute',
                             top: '88px',
                             marginTop: '10px',
                             left: `calc(14px + (100% - 14px - 14px) * ${(sunHourDisplay - 3) / 19})`,
                             transform: 'translateX(-50%)',
-                            pointerEvents: 'none',
+                            pointerEvents: 'auto',
                             zIndex: 13,
-                            
-                          }}>
+                            display: 'flex', alignItems: 'baseline', gap: '8px',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap'
+                          }} onClick={() => setShowDatePicker(p => !p)}>
                             <span className="font-bebas-bold" style={{ 
                               fontSize: '24px', color: '#ffffff', letterSpacing: '0.04em',
                               textShadow: '0 1px 4px rgba(0,0,0,0.8)', lineHeight: '1'
                             }}>
                               {`${Math.floor(sunHourDisplay)}H${String(Math.round((sunHourDisplay % 1) * 60)).padStart(2, '0')}`}
+                            </span>
+                            <span className="font-bebas-regular" style={{ 
+                              fontSize: '16px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.04em',
+                              textShadow: '0 1px 4px rgba(0,0,0,0.8)', lineHeight: '1'
+                            }}>
+                              {MONTHS_FR[sunDate.getMonth()]} {sunDate.getDate()}
                             </span>
                           </div>
                           {/* Triangles on the filet line */}
@@ -5199,7 +5199,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v458</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v459</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
