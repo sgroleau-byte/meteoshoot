@@ -124,12 +124,13 @@
     input[type=number] { -moz-appearance: textfield; }
     input::-webkit-contacts-auto-fill-button, input::-webkit-credentials-auto-fill-button { display: none !important; visibility: hidden !important; pointer-events: none !important; position: absolute !important; right: 0 !important; }
     input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus, input:-webkit-autofill:active { -webkit-box-shadow: 0 0 0 30px #1e2224 inset !important; -webkit-text-fill-color: rgba(255,255,255,0.85) !important; transition: background-color 5000s ease-in-out 0s; }
-    input[type="range"] { height: 44px; }
+    input[type="range"] { height: 44px; touch-action: none; }
     input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: transparent; border-radius: 0; }
     input[type="range"]::-moz-range-track { height: 1px; background: transparent; border-radius: 0; }
     input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 9px; height: 54px; border-radius: 5px; background: #ffffff; cursor: pointer; border: none; box-shadow: 0 0 12px rgba(255,255,255,0.5), 0 0 25px rgba(255,255,255,0.2), 0 1px 4px rgba(0,0,0,0.3); margin-top: -21px; }
     input[type="range"]::-moz-range-thumb { width: 9px; height: 54px; border-radius: 5px; background: #ffffff; cursor: pointer; border: none; box-shadow: 0 0 12px rgba(255,255,255,0.5), 0 0 25px rgba(255,255,255,0.2), 0 1px 4px rgba(0,0,0,0.3); }
     @media (max-width: 768px) {
+      input[type="range"] { height: 66px; }
       input[type="range"]::-webkit-slider-thumb { width: 7px; height: 40px; border-radius: 4px; margin-top: -16px; }
       input[type="range"]::-moz-range-thumb { width: 7px; height: 40px; border-radius: 4px; }
     }
@@ -427,7 +428,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v486</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v487</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2714,48 +2715,10 @@
           });
           buildingPolygonsRef.current.push(glowPoly);
           
-          // Per-edge lines: brighter on sun side, darker on shadow side
-          const sunBearingRad = sunAz; // azimuth from SunCalc (radians from south, clockwise)
-          const sunDirX = Math.sin(sunBearingRad); // east component
-          const sunDirY = Math.cos(sunBearingRad); // north component (toward sun)
-          for (let i = 0; i < n; i++) {
-            const j = (i + 1) % n;
-            const v1 = bldg.polygon[i], v2 = bldg.polygon[j];
-            // Edge direction
-            const edgeX = v2.lng - v1.lng;
-            const edgeY = v2.lat - v1.lat;
-            // Outward normal (perpendicular, pointing outward for CW polygon)
-            const normalX = edgeY;
-            const normalY = -edgeX;
-            // Dot product with sun direction: positive = facing sun
-            const dot = normalX * sunDirX + normalY * sunDirY;
-            const facing = Math.max(0, Math.min(1, dot / (Math.sqrt(normalX*normalX + normalY*normalY) * Math.sqrt(sunDirX*sunDirX + sunDirY*sunDirY) + 0.001)));
-            // Sun-facing edges: brighter white-yellow, shadow edges: dimmer
-            const edgeOpacity = isSelected ? 0.5 + 0.5 * facing : 0.35 + 0.5 * facing;
-            const edgeLine = new google.maps.Polyline({
-              path: [v1, v2],
-              strokeColor: facing > 0.3 ? '#fff8d0' : '#ffe26b',
-              strokeOpacity: edgeOpacity,
-              strokeWeight: isSelected ? 3.5 : 2.5,
-              map, zIndex: 26
-            });
-            buildingPolygonsRef.current.push(edgeLine);
-            // Inner glow on sun-facing edges
-            if (facing > 0.2 && sunAlt > 0.01) {
-              const glowLine = new google.maps.Polyline({
-                path: [v1, v2],
-                strokeColor: '#ffffff',
-                strokeOpacity: 0.15 * facing,
-                strokeWeight: isSelected ? 8 : 5,
-                map, zIndex: 23
-              });
-              buildingPolygonsRef.current.push(glowLine);
-            }
-          }
-          
           const poly = new google.maps.Polygon({
             paths: bldg.polygon,
-            strokeWeight: 0, strokeOpacity: 0,
+            strokeColor: '#ffe26b',
+            strokeOpacity: isSelected ? 1 : 0.85, strokeWeight: isSelected ? 3.5 : 2.5,
             fillColor: '#ffe26b',
             fillOpacity: isSelected ? 0.3 : 0.12, map, zIndex: 25,
             clickable: true
@@ -3011,10 +2974,10 @@
         const counterOverlay = new google.maps.OverlayView();
         counterOverlay.onAdd = function() {
           const panes = this.getPanes();
-          if (panes.overlayLayer) panes.overlayLayer.style.filter = 'saturate(2.5)';
-          if (panes.overlayMouseTarget) panes.overlayMouseTarget.style.filter = 'saturate(2.5)';
-          if (panes.floatPane) panes.floatPane.style.filter = 'saturate(2.5)';
-          if (panes.markerLayer) panes.markerLayer.style.filter = 'saturate(2.5)';
+          // Counter saturate(0.50) on container: 1/0.5 = 2.0
+          ['overlayLayer', 'overlayMouseTarget', 'floatPane', 'markerLayer', 'overlayImage'].forEach(p => {
+            if (panes[p]) panes[p].style.filter = 'saturate(2.0)';
+          });
         };
         counterOverlay.draw = function() {};
         counterOverlay.setMap(map);
@@ -3913,6 +3876,21 @@
                         }}>
                           
                           {/* Slider track area — centered vertically in 172px zone */}
+                          {isMobile && <div 
+                            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'auto', zIndex: 3, touchAction: 'none' }}
+                            onTouchStart={e => {
+                              e.preventDefault();
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
+                              setSunHour(sliderMin + pct * sliderRange);
+                            }}
+                            onTouchMove={e => {
+                              e.preventDefault();
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
+                              setSunHour(sliderMin + pct * sliderRange);
+                            }}
+                          />}
                           <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, transform: 'translateY(-50%)' }}>
                             {/* Glow behind thumb */}
                             <div style={{
@@ -5389,7 +5367,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v486</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v487</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
