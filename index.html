@@ -405,7 +405,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v453</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v454</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2395,21 +2395,14 @@
       const [sunHourDisplay, setSunHourDisplay] = useState(sunHour);
       const sunHourTargetRef = React.useRef(sunHour);
       const rafRef = React.useRef(null);
-      const sunHourVelRef = React.useRef(0);
       useEffect(() => {
         sunHourTargetRef.current = sunHour;
         const animate = () => {
           setSunHourDisplay(prev => {
             const diff = sunHourTargetRef.current - prev;
-            if (Math.abs(diff) < 0.002 && Math.abs(sunHourVelRef.current) < 0.002) {
-              sunHourVelRef.current = 0;
-              return sunHourTargetRef.current;
-            }
-            // Spring: stiffness 0.15, damping 0.7
-            const spring = diff * 0.15;
-            sunHourVelRef.current = (sunHourVelRef.current + spring) * 0.7;
+            if (Math.abs(diff) < 0.003) return sunHourTargetRef.current;
             rafRef.current = requestAnimationFrame(animate);
-            return prev + sunHourVelRef.current;
+            return prev + diff * 0.3;
           });
         };
         rafRef.current = requestAnimationFrame(animate);
@@ -3671,32 +3664,38 @@
                         const r = Math.round(lerp(r1,r2,t)), g = Math.round(lerp(g1,g2,t)), b = Math.round(lerp(b1,b2,t));
                         return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
                       };
-                      const BLUE = '#1a66f3', ORANGE = '#FF4200', DAY = '#FFF3ba';
+                      const DARK = '#0c0f33', BLUE = '#1a66f3', ORANGE = '#FF4200', DAY = '#FFF3ba';
                       let glowColor = DAY;
-                      // Sunrise: orange from sr-15min to sr+1h
-                      // Sunset: orange from ss-1h to ss+15min
-                      // 30min morph zones on each side
-                      const srOrangeStart = srTime - 0.25, srOrangeEnd = srTime + 1;
-                      const ssOrangeStart = ssTime - 1, ssOrangeEnd = ssTime + 0.25;
-                      const morphDuration = 0.5; // 30min transition
-                      if (sunHourDisplay < srOrangeStart - morphDuration) {
+                      // Relative to sunrise/sunset:
+                      // sr-1h → sr-15min: blue | sr-15min → sr+15min: orange | then day
+                      // ss-1h → ss+15min: orange | ss+15min → ss+1h: blue | then dark
+                      const m = 0.25; // 15min morph
+                      if (sunHourDisplay < srTime - 1 - m) {
+                        glowColor = DARK;
+                      } else if (sunHourDisplay < srTime - 1) {
+                        glowColor = hexLerp(DARK, BLUE, (sunHourDisplay - (srTime - 1 - m)) / m);
+                      } else if (sunHourDisplay < srTime - 0.25) {
                         glowColor = BLUE;
-                      } else if (sunHourDisplay < srOrangeStart) {
-                        glowColor = hexLerp(BLUE, ORANGE, (sunHourDisplay - (srOrangeStart - morphDuration)) / morphDuration);
-                      } else if (sunHourDisplay <= srOrangeEnd) {
+                      } else if (sunHourDisplay < srTime - 0.25 + m) {
+                        glowColor = hexLerp(BLUE, ORANGE, (sunHourDisplay - (srTime - 0.25)) / m);
+                      } else if (sunHourDisplay <= srTime + 0.25) {
                         glowColor = ORANGE;
-                      } else if (sunHourDisplay < srOrangeEnd + morphDuration) {
-                        glowColor = hexLerp(ORANGE, DAY, (sunHourDisplay - srOrangeEnd) / morphDuration);
-                      } else if (sunHourDisplay < ssOrangeStart - morphDuration) {
+                      } else if (sunHourDisplay < srTime + 0.25 + m) {
+                        glowColor = hexLerp(ORANGE, DAY, (sunHourDisplay - (srTime + 0.25)) / m);
+                      } else if (sunHourDisplay < ssTime - 1 - m) {
                         glowColor = DAY;
-                      } else if (sunHourDisplay < ssOrangeStart) {
-                        glowColor = hexLerp(DAY, ORANGE, (sunHourDisplay - (ssOrangeStart - morphDuration)) / morphDuration);
-                      } else if (sunHourDisplay <= ssOrangeEnd) {
+                      } else if (sunHourDisplay < ssTime - 1) {
+                        glowColor = hexLerp(DAY, ORANGE, (sunHourDisplay - (ssTime - 1 - m)) / m);
+                      } else if (sunHourDisplay <= ssTime + 0.25) {
                         glowColor = ORANGE;
-                      } else if (sunHourDisplay < ssOrangeEnd + morphDuration) {
-                        glowColor = hexLerp(ORANGE, BLUE, (sunHourDisplay - ssOrangeEnd) / morphDuration);
-                      } else {
+                      } else if (sunHourDisplay < ssTime + 0.25 + m) {
+                        glowColor = hexLerp(ORANGE, BLUE, (sunHourDisplay - (ssTime + 0.25)) / m);
+                      } else if (sunHourDisplay < ssTime + 1) {
                         glowColor = BLUE;
+                      } else if (sunHourDisplay < ssTime + 1 + m) {
+                        glowColor = hexLerp(BLUE, DARK, (sunHourDisplay - (ssTime + 1)) / m);
+                      } else {
+                        glowColor = DARK;
                       }
                       
                       const thumbLeft = `calc(${(sunHourDisplay / 24) * 100}% + ${(0.5 - sunHourDisplay / 24) * 9}px)`;
@@ -5200,7 +5199,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v453</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v454</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
