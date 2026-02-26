@@ -404,7 +404,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v437</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v438</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3658,11 +3658,11 @@
                         <>
                         {/* Background blur + darken gradient */}
                         <div style={{ 
-                          position: 'absolute', top: 0, left: 0, right: 0, height: '87px', zIndex: 10,
-                          background: 'linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.3) 60%, transparent 100%)',
+                          position: 'absolute', top: 0, left: 0, right: 0, height: '140px', zIndex: 10,
+                          background: 'linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.35) 62%, transparent 100%)',
                           backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-                          maskImage: 'linear-gradient(to bottom, black 0%, black 50%, transparent 100%)',
-                          WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 50%, transparent 100%)',
+                          maskImage: 'linear-gradient(to bottom, black 0%, black 62%, transparent 100%)',
+                          WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 62%, transparent 100%)',
                           pointerEvents: 'none'
                         }}/>
                         {/* Full-width filet */}
@@ -3677,7 +3677,7 @@
                           <button onClick={() => setShowDatePicker(p => !p)} className="font-bebas-regular" style={{ 
                             position: 'absolute', top: '50%', left: '14px', transform: 'translateY(-50%)', zIndex: 2,
                             background: 'none', border: 'none', cursor: 'pointer',
-                            fontSize: '10px', letterSpacing: '0.06em',
+                            fontSize: '20px', letterSpacing: '0.06em',
                             color: isToday ? 'rgba(255,255,255,0.45)' : '#7dd3c6',
                             pointerEvents: 'auto', padding: '2px 4px'
                           }}>
@@ -5153,7 +5153,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v437</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v438</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
