@@ -423,7 +423,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v478</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v479</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3688,8 +3688,8 @@
                       const ssTime = st?.sunset ? st.sunset.getHours() + st.sunset.getMinutes()/60 : 18;
                       
                       // Dynamic slider range: sunrise at 20%, sunset at 80%
-                      const sliderRange = (ssTime - srTime) / 0.6;
-                      const sliderMin = srTime - 0.2 * sliderRange;
+                      const sliderRange = (ssTime - srTime) / (4/6);
+                      const sliderMin = srTime - (1/6) * sliderRange;
                       const sliderMax = sliderMin + sliderRange;
                       
                       // Glow color logic — smooth morphing
@@ -3805,7 +3805,7 @@
                             }}/>
                             {/* Vapor wisps */}
                             <div style={{ position: 'absolute', top: '50%', left: thumbLeft, width: '300px', height: '120px', transform: 'translate(-50%, -50%)', pointerEvents: 'none', overflow: 'visible' }}>
-                              <div style={{ position: 'absolute', top: '50%', left: '20%', width: '120px', height: '40px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}30 0%, ${glowColor}10 50%, transparent 75%)`, filter: 'blur(12px)', animation: 'vaporDrift1 8s ease-in-out infinite', opacity: 0.6 }}/>
+                              <div style={{ position: 'absolute', top: '50%', left: '16.667%', width: '120px', height: '40px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}30 0%, ${glowColor}10 50%, transparent 75%)`, filter: 'blur(12px)', animation: 'vaporDrift1 8s ease-in-out infinite', opacity: 0.6 }}/>
                               <div style={{ position: 'absolute', top: '50%', left: '60%', width: '90px', height: '35px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}25 0%, ${glowColor}0c 50%, transparent 75%)`, filter: 'blur(10px)', animation: 'vaporDrift2 11s ease-in-out infinite', animationDelay: '-3s', opacity: 0.5 }}/>
                               <div style={{ position: 'absolute', top: '50%', left: '40%', width: '150px', height: '50px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}20 0%, ${glowColor}08 50%, transparent 75%)`, filter: 'blur(14px)', animation: 'vaporDrift3 14s ease-in-out infinite', animationDelay: '-7s', opacity: 0.45 }}/>
                               <div style={{ position: 'absolute', top: '50%', left: '10%', width: '100px', height: '30px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}28 0%, ${glowColor}0a 50%, transparent 75%)`, filter: 'blur(8px)', animation: 'vaporDrift1 6s ease-in-out infinite', animationDelay: '-2s', opacity: 0.4 }}/>
@@ -3855,13 +3855,13 @@
                           {/* Triangles on the filet line */}
                           <div style={{ position: 'absolute', top: '88px', left: '14px', right: '14px', height: 0, pointerEvents: 'none', zIndex: 12 }}>
                             {/* Sunrise ▲ - base on filet, pointing UP (inside zone) */}
-                            <div style={{ position: 'absolute', bottom: 0, left: '20%', transform: 'translateX(-50%)' }}>
+                            <div style={{ position: 'absolute', bottom: 0, left: '16.667%', transform: 'translateX(-50%)' }}>
                               <svg width="18" height="12" viewBox="0 0 18 12">
                                 <polygon points="9,0 18,12 0,12" fill="#ffffff"/>
                               </svg>
                             </div>
                             {/* Sunset ▼ - base on filet, pointing DOWN (outside zone) */}
-                            <div style={{ position: 'absolute', top: 0, left: '80%', transform: 'translateX(-50%)' }}>
+                            <div style={{ position: 'absolute', top: 0, left: '83.333%', transform: 'translateX(-50%)' }}>
                               <svg width="18" height="12" viewBox="0 0 18 12">
                                 <polygon points="9,12 18,0 0,0" fill="#ffffff"/>
                               </svg>
@@ -3872,7 +3872,7 @@
                       );
                     })()}
                     {/* Map controls - stacked vertically with subtle border */}
-                    <div ref={mapContainerRef} style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#262c30', filter: 'saturate(0.40)' }}/>
+                    <div ref={mapContainerRef} style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#262c30', filter: 'saturate(0.60)' }}/>
                     {/* Fixed center pin */}
                     <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 5, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                       <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#7dd3c6', border: '2px solid #fff', boxShadow: '0 0 8px rgba(125,211,198,0.5), 0 2px 6px rgba(0,0,0,0.4)' }}/>
@@ -5264,7 +5264,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v478</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v479</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
