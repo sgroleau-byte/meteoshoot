@@ -124,10 +124,10 @@
     input::-webkit-contacts-auto-fill-button, input::-webkit-credentials-auto-fill-button { display: none !important; visibility: hidden !important; pointer-events: none !important; position: absolute !important; right: 0 !important; }
     input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus, input:-webkit-autofill:active { -webkit-box-shadow: 0 0 0 30px #1e2224 inset !important; -webkit-text-fill-color: rgba(255,255,255,0.85) !important; transition: background-color 5000s ease-in-out 0s; }
     input[type="range"] { height: 44px; }
-    input[type="range"]::-webkit-slider-runnable-track { height: 3px; background: rgba(255,255,255,0.2); border-radius: 2px; }
-    input[type="range"]::-moz-range-track { height: 3px; background: rgba(255,255,255,0.2); border-radius: 2px; }
-    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: #7dd3c6; cursor: pointer; border: 1.5px solid rgba(255,255,255,0.9); box-shadow: 0 1px 4px rgba(0,0,0,0.5); margin-top: -10.5px; }
-    input[type="range"]::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: #7dd3c6; cursor: pointer; border: 1.5px solid rgba(255,255,255,0.9); box-shadow: 0 1px 4px rgba(0,0,0,0.5); }
+    input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: rgba(255,255,255,0.25); border-radius: 0; }
+    input[type="range"]::-moz-range-track { height: 1px; background: rgba(255,255,255,0.25); border-radius: 0; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 11px; height: 56px; border-radius: 6px; background: #ffffff; cursor: pointer; border: none; box-shadow: 0 0 12px rgba(255,255,255,0.3), 0 2px 6px rgba(0,0,0,0.4); margin-top: -28px; }
+    input[type="range"]::-moz-range-thumb { width: 11px; height: 56px; border-radius: 6px; background: #ffffff; cursor: pointer; border: none; box-shadow: 0 0 12px rgba(255,255,255,0.3), 0 2px 6px rgba(0,0,0,0.4); }
     /* ── Splash Screen ── */
     .splash-overlay {
       position: fixed;
@@ -404,7 +404,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v435</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v436</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3630,71 +3630,142 @@
                   <>
                   {showMapFull && <div onClick={() => setShowMapFull(false)} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(30,30,30,0.88)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}/>}
                   <div style={showMapFull ? { position: 'fixed', top: 'env(safe-area-inset-top, 50px)', left: 0, width: '100vw', height: 'calc(100vh - env(safe-area-inset-top, 50px))', zIndex: 51, overflow: 'hidden' } : { position: 'relative', overflow: 'hidden', flex: 1 }}>
-                    {/* Sun time slider - overlaid at top of map with blur gradient */}
-                    <div style={{ 
-                      position: 'absolute', top: '0', left: '0', right: '0', zIndex: 10,
-                      background: 'linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.2) 40%, transparent 100%)',
-                      backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-                      maskImage: 'linear-gradient(to bottom, black 0%, black 30%, transparent 100%)',
-                      WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 30%, transparent 100%)',
-                      padding: '10px 14px 120px 14px',
-                      pointerEvents: 'none'
-                    }}/>
-                    {/* Slider + time label on top, not affected by mask */}
-                    <div style={{ 
-                      position: 'absolute', top: '0', left: '0', right: '0', zIndex: 11,
-                      padding: '10px 14px 120px 14px',
-                      pointerEvents: 'none'
-                    }}>
-                      <div style={{ position: 'relative', marginTop: '24px', marginRight: '60px', display: 'flex', alignItems: 'center' }}>
-                        <div style={{ position: 'relative', flex: 1 }}>
+                    {/* Sun time slider - new design */}
+                    {(() => {
+                      // Compute sun times for glow color and triangles
+                      const eLat = adjustedPos?.lat ?? project?.lat;
+                      const eLng = adjustedPos?.lng ?? project?.lng;
+                      const st = (eLat && eLng && window.SunCalc) ? SunCalc.getTimes(sunDate, eLat, eLng) : null;
+                      const srTime = st?.sunrise ? st.sunrise.getHours() + st.sunrise.getMinutes()/60 : 6;
+                      const ssTime = st?.sunset ? st.sunset.getHours() + st.sunset.getMinutes()/60 : 18;
+                      
+                      // Glow color logic
+                      const isDay = sunHour >= srTime && sunHour <= ssTime;
+                      const isBlueHourAfter = sunHour > ssTime && sunHour <= (ssTime + 0.75); // 0-45min after sunset
+                      const isBlueHourBefore = sunHour >= (srTime - 0.75) && sunHour < srTime; // 45-0min before sunrise
+                      const isGoldenAfter = sunHour > (ssTime - 0.75) && sunHour <= ssTime; // 45min before sunset
+                      const isGoldenBefore = sunHour >= srTime && sunHour < (srTime + 0.25); // just after sunrise
+                      let glowColor = '#FFF3ba'; // day default
+                      if (isBlueHourAfter || isBlueHourBefore) glowColor = '#1a66f3';
+                      else if (isGoldenAfter || isGoldenBefore) glowColor = '#FF4200';
+                      else if (!isDay && !isBlueHourAfter && !isBlueHourBefore) glowColor = '#1a66f3';
+                      
+                      const thumbLeft = `calc(${(sunHour / 24) * 100}% + ${(0.5 - sunHour / 24) * 11}px)`;
+                      const srLeft = `${(srTime / 24) * 100}%`;
+                      const ssLeft = `${(ssTime / 24) * 100}%`;
+                      
+                      return (
+                        <>
+                        {/* Background blur + darken gradient */}
                         <div style={{ 
-                          position: 'absolute', 
-                          top: '-22px',
-                          left: `calc(${(sunHour / 24) * 100}% + ${(0.5 - sunHour / 24) * 24}px)`,
-                          transform: 'translateX(-50%)',
+                          position: 'absolute', top: 0, left: 0, right: 0, height: '87px', zIndex: 10,
+                          background: 'linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.3) 60%, transparent 100%)',
+                          backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+                          maskImage: 'linear-gradient(to bottom, black 0%, black 50%, transparent 100%)',
+                          WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 50%, transparent 100%)',
                           pointerEvents: 'none',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center'
+                          borderBottom: '1px solid rgba(255,255,255,0.08)'
+                        }}/>
+                        {/* Slider content layer */}
+                        <div style={{ 
+                          position: 'absolute', top: 0, left: 0, right: 0, height: '87px', zIndex: 11,
+                          pointerEvents: 'none', display: 'flex', flexDirection: 'column', justifyContent: 'center',
+                          padding: '0 14px'
                         }}>
-                          <span className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '20px', color: '#ffffff', textShadow: '0 1px 3px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.6)', lineHeight: '1' }}>
-                            {`${Math.floor(sunHour)}H${String(Math.round((sunHour % 1) * 60)).padStart(2, '0')}`}
-                          </span>
+                          {/* Date label - left side */}
+                          <button onClick={() => setShowDatePicker(p => !p)} className="font-bebas-regular" style={{ 
+                            position: 'absolute', top: '8px', left: '14px', zIndex: 2,
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            fontSize: '13px', letterSpacing: '0.06em',
+                            color: isToday ? 'rgba(255,255,255,0.45)' : '#7dd3c6',
+                            pointerEvents: 'auto', padding: '2px 4px'
+                          }}>
+                            {MONTHS_FR[sunDate.getMonth()]} {sunDate.getDate()}
+                          </button>
+                          
+                          {/* Slider track area */}
+                          <div style={{ position: 'relative', marginTop: '6px', marginRight: '60px' }}>
+                            {/* Glow behind thumb */}
+                            <div style={{
+                              position: 'absolute',
+                              top: '50%',
+                              left: thumbLeft,
+                              transform: 'translate(-50%, -50%)',
+                              width: '125px', height: '125px',
+                              borderRadius: '50%',
+                              background: `radial-gradient(circle, ${glowColor} 0%, ${glowColor}66 24%, transparent 70%)`,
+                              opacity: 0.45,
+                              pointerEvents: 'none',
+                              filter: 'blur(8px)'
+                            }}/>
+                            
+                            {/* Sunrise triangle ▲ - above track */}
+                            <div style={{
+                              position: 'absolute',
+                              top: '-16px',
+                              left: srLeft,
+                              transform: 'translateX(-50%)',
+                              pointerEvents: 'none'
+                            }}>
+                              <svg width="12" height="12" viewBox="0 0 12 12">
+                                <polygon points="6,0 12,12 0,12" fill="rgba(255,255,255,0.5)"/>
+                              </svg>
+                            </div>
+                            
+                            {/* Sunset triangle ▼ - below track */}
+                            <div style={{
+                              position: 'absolute',
+                              bottom: '-16px',
+                              left: ssLeft,
+                              transform: 'translateX(-50%)',
+                              pointerEvents: 'none'
+                            }}>
+                              <svg width="12" height="12" viewBox="0 0 12 12">
+                                <polygon points="6,12 12,0 0,0" fill="rgba(255,255,255,0.5)"/>
+                              </svg>
+                            </div>
+                            
+                            {/* The range input */}
+                            <input 
+                              type="range" 
+                              min="0" max="24" step="0.25" 
+                              value={sunHour}
+                              onChange={e => setSunHour(parseFloat(e.target.value))}
+                              style={{ 
+                                width: '100%', appearance: 'none', WebkitAppearance: 'none', 
+                                background: 'transparent', 
+                                outline: 'none', cursor: 'pointer',
+                                pointerEvents: 'auto'
+                              }}
+                            />
+                          {/* Time display below slider */}
+                          <div style={{
+                            position: 'absolute',
+                            top: '100%',
+                            marginTop: '4px',
+                            left: thumbLeft,
+                            transform: 'translateX(-50%)',
+                            pointerEvents: 'none',
+                          }}>
+                            <span className="font-bebas-regular" style={{ 
+                              fontSize: '25px', color: '#ffffff', letterSpacing: '0.04em',
+                              textShadow: '0 1px 4px rgba(0,0,0,0.8)', lineHeight: '1'
+                            }}>
+                              {`${Math.floor(sunHour)}H${String(Math.round((sunHour % 1) * 60)).padStart(2, '0')}`}
+                            </span>
+                          </div>
+                          </div>
                         </div>
-                        {/* Chevrons beside thumb */}
-                        <div style={{
-                          position: 'absolute',
-                          top: '50%',
-                          left: `calc(${(sunHour / 24) * 100}% + ${(0.5 - sunHour / 24) * 24}px)`,
-                          transform: 'translate(-50%, calc(-30% - 10px))',
-                          pointerEvents: 'none',
-                          display: 'flex', alignItems: 'center', gap: '16px'
-                        }}>
-                          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-                          <div style={{ width: '6px' }}/>
-                          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
-                        </div>
-                        <input 
-                          type="range" 
-                          min="0" max="24" step="0.25" 
-                          value={sunHour}
-                          onChange={e => setSunHour(parseFloat(e.target.value))}
-                          style={{ 
-                            width: '100%', appearance: 'none', WebkitAppearance: 'none', 
-                            background: 'transparent', 
-                            outline: 'none', cursor: 'pointer',
-                            pointerEvents: 'auto'
-                          }}
-                        />
-                        </div>
-                      </div>
-                    </div>
+                        </>
+                      );
+                    })()}
                     {/* Map controls - stacked vertically with subtle border */}
                     <div ref={mapContainerRef} style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#262c30' }}/>
                     {/* Fixed center pin */}
                     <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 5, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                       <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#7dd3c6', border: '2px solid #fff', boxShadow: '0 0 8px rgba(125,211,198,0.5), 0 2px 6px rgba(0,0,0,0.4)' }}/>
                     </div>
-                    <div style={{ position: 'absolute', top: '80px', right: '10px', zIndex: 13, display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', borderRadius: '6px', overflow: 'hidden' }}>
+                    <div style={{ position: 'absolute', top: '95px', right: '10px', zIndex: 13, display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', borderRadius: '6px', overflow: 'hidden' }}>
                       <button 
                         onClick={() => setMapType('hybrid')} 
                         className="font-bebas-bold"
@@ -3833,8 +3904,8 @@
                     {/* Building list — top left below date */}
                     {buildings.length > 0 && !drawingMode && editingBuilding === null && (
                       <div style={{ 
-                        position: 'absolute', top: '115px', left: '10px', zIndex: 13,
-                        display: 'flex', flexDirection: 'column', gap: '3px'
+                        position: 'absolute', bottom: '56px', right: '10px', zIndex: 13,
+                        display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end'
                       }}>
                         {buildings.map((b, i) => (
                           <button key={i} onClick={() => { setEditingBuilding(i); setBuildingHeight(String(b.height)); setBuildingName(b.name); }} 
@@ -3843,22 +3914,12 @@
                               background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)',
                               borderRadius: '4px', border: 'none', cursor: 'pointer',
                               padding: '3px 8px', fontSize: '12px', letterSpacing: '0.04em',
-                              color: '#ffe26b', textAlign: 'left', whiteSpace: 'nowrap'
+                              color: '#ffe26b', textAlign: 'right', whiteSpace: 'nowrap'
                             }}
-                          >{b.name} • {b.height}M</button>
+                          >{b.name.toUpperCase()} - {b.height} M</button>
                         ))}
                       </div>
                     )}
-                    {/* Date button - top left */}
-                    <button onClick={() => setShowDatePicker(p => !p)} className="font-bebas-bold" style={{ 
-                      position: 'absolute', top: '80px', left: '10px', zIndex: 13,
-                      background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
-                      borderRadius: '6px', border: 'none', cursor: 'pointer',
-                      padding: '6px 10px', fontSize: '14px', letterSpacing: '0.05em',
-                      color: isToday ? 'rgba(255,255,255,0.75)' : '#7dd3c6',
-                    }}>
-                      {MONTHS_FR[sunDate.getMonth()]} {sunDate.getDate()}
-                    </button>
                     {/* Date wheel picker */}
                     {showDatePicker && <DateWheelPicker date={sunDate} onChange={setSunDate} onClose={() => setShowDatePicker(false)} />}
                     {/* Update position button - shown when marker is dragged */}
@@ -5091,7 +5152,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v435</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v436</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
