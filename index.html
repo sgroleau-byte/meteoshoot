@@ -405,7 +405,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v469</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v470</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3731,13 +3731,26 @@
                           maskImage: 'linear-gradient(to bottom, transparent 0%, black 15%)',
                           WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 15%)'
                         }}/>
-                        {/* Color tint - only blue at night */}
-                        {(glowColor !== '#FFF3ba' && glowColor !== '#ffc600') && <div style={{
-                          position: 'absolute', inset: 0, zIndex: 4, pointerEvents: 'none',
-                          background: `radial-gradient(ellipse 75% 70% at 50% 55%, transparent 35%, ${glowColor}10 55%, ${glowColor}20 75%, ${glowColor}35 100%)`,
-                          maskImage: 'linear-gradient(to bottom, transparent 0%, black 15%)',
-                          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 15%)'
-                        }}/>}
+                        {/* Color tint - blue, fades in/out smoothly */}
+                        {(() => {
+                          // Compute blue intensity 0-1 based on time
+                          const h = sunHourDisplay;
+                          let blueAmt = 0;
+                          if (h < srTime - 1) blueAmt = 1;
+                          else if (h < srTime - 0.25) blueAmt = 1;
+                          else if (h < srTime + 0.25) blueAmt = Math.max(0, 1 - (h - (srTime - 0.25)) / 0.5);
+                          else if (h < ssTime - 1) blueAmt = 0;
+                          else if (h < ssTime + 0.25) blueAmt = 0;
+                          else if (h < ssTime + 1) blueAmt = Math.min(1, (h - (ssTime + 0.25)) / 0.75);
+                          else blueAmt = 1;
+                          if (blueAmt <= 0) return null;
+                          return <div style={{
+                            position: 'absolute', inset: 0, zIndex: 4, pointerEvents: 'none',
+                            background: `radial-gradient(ellipse 75% 70% at 50% 55%, transparent 35%, rgba(26,102,243,${0.06*blueAmt}) 55%, rgba(26,102,243,${0.12*blueAmt}) 75%, rgba(26,102,243,${0.22*blueAmt}) 100%)`,
+                            maskImage: 'linear-gradient(to bottom, transparent 0%, black 15%)',
+                            WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 15%)'
+                          }}/>;
+                        })()}
                         {/* Slider content layer */}
                         <div style={{ 
                           position: 'absolute', top: 0, left: 0, right: 0, height: '88px', zIndex: 11,
@@ -5214,7 +5227,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v469</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v470</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
