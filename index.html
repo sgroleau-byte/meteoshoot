@@ -56,6 +56,13 @@
     }
   </script>
   <style>
+    html { overflow-x: hidden; overflow-y: scroll; }
+    /* Style detail scrollbar to match native thin look */
+    .detail-scroll::-webkit-scrollbar { width: 8px; }
+    .detail-scroll::-webkit-scrollbar-track { background: transparent; }
+    .detail-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+    .detail-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+    .detail-scroll { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
 @font-face {
     font-family: 'Bebas Neue';
     font-weight: 100;
@@ -428,7 +435,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v519</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v520</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -5420,7 +5427,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v519</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v520</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -5880,7 +5887,7 @@
               {view === 'retouching' && <RetouchingView onSelect={openProject}/>}
               {view === 'preferences' && <PreferencesView/>}
             </div>
-            {displayedProjectId && <div style={{
+            {displayedProjectId && <div className="detail-scroll" style={{
               position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
               overflowX: 'hidden',
               overflowY: 'auto',
