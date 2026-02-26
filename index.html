@@ -33,7 +33,7 @@
     }
   </script>
   <title>MeteoShoot | Shooting Planner</title>
-  <script>if (isDev) document.title = '--->  DEV --->  DEV --->  DEV --->  DEV --->  DEV --->  DEV';</script>
+  <script>if (isDev) document.title = 'DEV DEV DEV DEV DEV DEV';</script>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Google Maps API -->
@@ -127,8 +127,8 @@
     input[type="range"] { height: 44px; }
     input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: transparent; border-radius: 0; }
     input[type="range"]::-moz-range-track { height: 1px; background: transparent; border-radius: 0; }
-    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 54px; border-radius: 7px; background: #ffffff; cursor: pointer; border: none; box-shadow: 0 0 8px rgba(255,255,255,0.2), 0 1px 4px rgba(0,0,0,0.3); margin-top: -27px; }
-    input[type="range"]::-moz-range-thumb { width: 14px; height: 54px; border-radius: 7px; background: #ffffff; cursor: pointer; border: none; box-shadow: 0 0 8px rgba(255,255,255,0.2), 0 1px 4px rgba(0,0,0,0.3); }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 9px; height: 54px; border-radius: 5px; background: #ffffff; cursor: pointer; border: none; box-shadow: 0 0 8px rgba(255,255,255,0.2), 0 1px 4px rgba(0,0,0,0.3); margin-top: -27px; }
+    input[type="range"]::-moz-range-thumb { width: 9px; height: 54px; border-radius: 5px; background: #ffffff; cursor: pointer; border: none; box-shadow: 0 0 8px rgba(255,255,255,0.2), 0 1px 4px rgba(0,0,0,0.3); }
     /* ── Splash Screen ── */
     .splash-overlay {
       position: fixed;
@@ -405,7 +405,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v446</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v447</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -414,7 +414,7 @@
     var splash = document.getElementById('splashScreen');
     splash.classList.add('splash-hidden');
     document.getElementById('themeColor').setAttribute('content', '#3d4a47');
-    setTimeout(function() { splash.remove(); }, 900);
+    setTimeout(function() { splash.remove(); if (isDev) document.title = 'DEV DEV DEV DEV DEV DEV'; }, 900);
   }, 2500);
 </script>
 <script>
@@ -3651,7 +3651,7 @@
                       else if (isGoldenAfter || isGoldenBefore) glowColor = '#FF4200';
                       else if (!isDay && !isBlueHourAfter && !isBlueHourBefore) glowColor = '#1a66f3';
                       
-                      const thumbLeft = `calc(${(sunHour / 24) * 100}% + ${(0.5 - sunHour / 24) * 14}px)`;
+                      const thumbLeft = `calc(${(sunHour / 24) * 100}% + ${(0.5 - sunHour / 24) * 9}px)`;
                       const srLeft = `${(srTime / 24) * 100}%`;
                       const ssLeft = `${(ssTime / 24) * 100}%`;
                       
@@ -3668,15 +3668,15 @@
                         }}/>
                         {/* Dark gradient overlay */}
                         <div style={{ 
-                          position: 'absolute', top: 0, left: 0, right: 0, height: '93px', zIndex: 10,
+                          position: 'absolute', top: 0, left: 0, right: 0, height: '88px', zIndex: 10,
                           background: 'linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 70%, transparent 100%)',
                           pointerEvents: 'none'
                         }}/>
                         {/* Full-width filet at 172px */}
-                        <div style={{ position: 'absolute', top: '93px', left: 0, right: 0, height: '1px', background: '#ffffff', zIndex: 12 }}/>
+                        <div style={{ position: 'absolute', top: '88px', left: 0, right: 0, height: '1px', background: '#ffffff', zIndex: 12 }}/>
                         {/* Slider content layer */}
                         <div style={{ 
-                          position: 'absolute', top: 0, left: 0, right: 0, height: '93px', zIndex: 11,
+                          position: 'absolute', top: 0, left: 0, right: 0, height: '88px', zIndex: 11,
                           pointerEvents: 'none',
                           padding: '0 14px'
                         }}>
@@ -3685,7 +3685,7 @@
                             position: 'absolute', top: '50%', left: '14px', transform: 'translateY(-50%)', zIndex: 2,
                             background: 'none', border: 'none', cursor: 'pointer',
                             fontSize: '25px', letterSpacing: '0.06em',
-                            color: isToday ? 'rgba(255,255,255,0.45)' : '#7dd3c6',
+                            color: '#ffffff',
                             pointerEvents: 'auto', padding: '2px 4px'
                           }}>
                             {MONTHS_FR[sunDate.getMonth()]} {sunDate.getDate()}
@@ -3720,14 +3720,16 @@
                                 pointerEvents: 'auto'
                               }}
                             />
-                          {/* Time display below slider */}
+                          </div>
+                          {/* Time display below filet */}
                           <div style={{
                             position: 'absolute',
-                            top: '100%',
+                            top: '88px',
                             marginTop: '4px',
-                            left: thumbLeft,
+                            left: `calc(60px + (100% - 60px - 74px) * ${sunHour / 24})`,
                             transform: 'translateX(-50%)',
                             pointerEvents: 'none',
+                            zIndex: 13
                           }}>
                             <span className="font-bebas-regular" style={{ 
                               fontSize: '20px', color: '#ffffff', letterSpacing: '0.04em',
@@ -3736,19 +3738,18 @@
                               {`${Math.floor(sunHour)}H${String(Math.round((sunHour % 1) * 60)).padStart(2, '0')}`}
                             </span>
                           </div>
-                          </div>
-                          {/* Triangles on the filet line — same horizontal bounds as slider */}
-                          <div style={{ position: 'absolute', bottom: 0, left: '60px', right: '74px', height: 0, pointerEvents: 'none', zIndex: 12 }}>
+                          {/* Triangles on the filet line */}
+                          <div style={{ position: 'absolute', top: '88px', left: '60px', right: '74px', height: 0, pointerEvents: 'none', zIndex: 12 }}>
                             {/* Sunrise ▲ - base on filet, pointing UP (inside zone) */}
-                            <div style={{ position: 'absolute', bottom: 0, left: srLeft, transform: 'translateX(-50%)' }}>
-                              <svg width="10" height="8" viewBox="0 0 10 8">
-                                <polygon points="5,0 10,8 0,8" fill="#ffffff"/>
+                            <div style={{ position: 'absolute', bottom: 0, left: `${(srTime / 24) * 100}%`, transform: 'translateX(-50%)' }}>
+                              <svg width="14" height="10" viewBox="0 0 14 10">
+                                <polygon points="7,0 14,10 0,10" fill="#ffffff"/>
                               </svg>
                             </div>
                             {/* Sunset ▼ - base on filet, pointing DOWN (outside zone) */}
-                            <div style={{ position: 'absolute', top: 0, left: ssLeft, transform: 'translateX(-50%)' }}>
-                              <svg width="10" height="8" viewBox="0 0 10 8">
-                                <polygon points="5,8 10,0 0,0" fill="#ffffff"/>
+                            <div style={{ position: 'absolute', top: 0, left: `${(ssTime / 24) * 100}%`, transform: 'translateX(-50%)' }}>
+                              <svg width="14" height="10" viewBox="0 0 14 10">
+                                <polygon points="7,10 14,0 0,0" fill="#ffffff"/>
                               </svg>
                             </div>
                           </div>
@@ -3762,7 +3763,7 @@
                     <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 5, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                       <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#7dd3c6', border: '2px solid #fff', boxShadow: '0 0 8px rgba(125,211,198,0.5), 0 2px 6px rgba(0,0,0,0.4)' }}/>
                     </div>
-                    <div style={{ position: 'absolute', top: '103px', right: '10px', zIndex: 13, display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', borderRadius: '6px', overflow: 'hidden' }}>
+                    <div style={{ position: 'absolute', top: '98px', right: '10px', zIndex: 13, display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', borderRadius: '6px', overflow: 'hidden' }}>
                       <button 
                         onClick={() => setMapType('hybrid')} 
                         className="font-bebas-bold"
@@ -5149,7 +5150,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v446</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v447</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
