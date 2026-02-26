@@ -318,7 +318,7 @@
     .card-info-flare {
       position: absolute;
       width: 1500px;
-      height: 1500px;
+      height: 3000px;
       border-radius: 50%;
       background: radial-gradient(circle, rgba(39,89,102,1) 0%, rgba(39,89,102,0.5) 35%, transparent 65%);
       mix-blend-mode: screen;
@@ -423,7 +423,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v483</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v484</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2426,13 +2426,18 @@
         rafRef.current = requestAnimationFrame(animate);
         return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
       }, [sunHour]);
-      const mapIsNight = React.useMemo(() => {
-        if (!project?.lat || !project?.lng || !window.SunCalc) return false;
+      const nightOpacity = React.useMemo(() => {
+        if (!project?.lat || !project?.lng || !window.SunCalc) return 0;
         const st = SunCalc.getTimes(sunDate, project.lat, project.lng);
         const sr = st.sunrise ? st.sunrise.getHours() + st.sunrise.getMinutes()/60 : 6;
         const ss = st.sunset ? st.sunset.getHours() + st.sunset.getMinutes()/60 : 18;
-        return sunHour < (sr - 1) || sunHour > (ss + 1);
+        // Progressive: 0 during day, fade over 1h after sunset / before sunrise
+        if (sunHour >= sr && sunHour <= ss) return 0;
+        if (sunHour > ss && sunHour < ss + 1) return (sunHour - ss);
+        if (sunHour < sr && sunHour > sr - 1) return (sr - sunHour);
+        return 1;
       }, [sunHour, project?.lat, project?.lng, sunDate]);
+      const mapIsNight = nightOpacity >= 1;
       const [showHelp, setShowHelp] = useState(false);
       const [editingName, setEditingName] = useState(false);
       const addressInputRef = React.useRef(null);
@@ -2595,13 +2600,13 @@
       const finishDrawingFromRef = () => {
         const verts = drawingVerticesRef.current;
         if (verts.length < 3) return;
-        const newBuilding = { polygon: [...verts], height: 15, name: '' };
+        const newBuilding = { polygon: [...verts], height: 30, name: '' };
         setBuildings(prev => {
           newBuilding.name = `Bâtiment ${prev.length + 1}`;
           setEditingBuilding(prev.length);
           return [...prev, newBuilding];
         });
-        setBuildingHeight('15');
+        setBuildingHeight('30');
         setBuildingName(newBuilding.name);
         drawingVerticesRef.current = [];
         setDrawingVertices([]);
@@ -2613,10 +2618,10 @@
 
       const finishDrawing = () => {
         if (drawingVertices.length < 3) return;
-        const newBuilding = { polygon: [...drawingVertices], height: 15, name: `Bâtiment ${buildings.length + 1}` };
+        const newBuilding = { polygon: [...drawingVertices], height: 30, name: `Bâtiment ${buildings.length + 1}` };
         setBuildings(prev => [...prev, newBuilding]);
         setEditingBuilding(buildings.length);
-        setBuildingHeight('15');
+        setBuildingHeight('30');
         setBuildingName(newBuilding.name);
         setDrawingVertices([]);
         setDrawingMode(false);
@@ -2731,7 +2736,7 @@
                 },
                 zIndex: 40
               });
-              vertexMarker.addListener('dragend', (e) => {
+              vertexMarker.addListener('drag', (e) => {
                 const newPos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
                 setBuildings(prev => prev.map((b, bi) => {
                   if (bi !== idx) return b;
@@ -3022,7 +3027,7 @@
             this.getPanes().mapPane.appendChild(this.div);
           }
           draw() {}
-          setNight(n) { if (this.div) this.div.style.opacity = n ? '1' : '0'; }
+          setNight(opacity) { if (this.div) this.div.style.opacity = String(opacity); }
           onRemove() { if (this.div) { this.div.parentNode.removeChild(this.div); this.div = null; } }
         }
         if (nightOverlayRef.current) nightOverlayRef.current.setMap(null);
@@ -3331,8 +3336,8 @@
 
       // Night overlay toggle
       useEffect(() => {
-        if (nightOverlayRef.current) nightOverlayRef.current.setNight(mapIsNight);
-      }, [mapIsNight]);
+        if (nightOverlayRef.current) nightOverlayRef.current.setNight(nightOpacity);
+      }, [nightOpacity]);
 
       // Cloud layer (OpenWeatherMap)
       // Always show current time line on map
@@ -5331,7 +5336,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v483</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v484</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
