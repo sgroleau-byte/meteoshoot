@@ -428,7 +428,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v487</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v488</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2417,6 +2417,51 @@
       const [sunHour, setSunHour] = useState(() => { const n = new Date(); return n.getHours() + n.getMinutes()/60; });
       const [sunHourDisplay, setSunHourDisplay] = useState(sunHour);
       const sunHourTargetRef = React.useRef(sunHour);
+      const sunTimesSnapRef = React.useRef({ sr: 6, ss: 18 });
+      const snapBounceRef = React.useRef(null);
+      
+      // Magnetic resistance during drag
+      const magneticSunHour = (raw) => {
+        const { sr, ss } = sunTimesSnapRef.current;
+        const snapRadius = 0.12; // ~7min
+        const pullStrength = 0.6;
+        for (const t of [sr, ss]) {
+          const dist = Math.abs(raw - t);
+          if (dist < snapRadius) {
+            return raw + (t - raw) * pullStrength * (1 - dist / snapRadius);
+          }
+        }
+        return raw;
+      };
+      
+      // Snap release with bounce
+      const handleSliderRelease = () => {
+        const { sr, ss } = sunTimesSnapRef.current;
+        const snapRadius = 0.1;
+        const current = sunHour;
+        let snapTo = null;
+        if (Math.abs(current - sr) < snapRadius) snapTo = sr;
+        else if (Math.abs(current - ss) < snapRadius) snapTo = ss;
+        if (snapTo !== null) {
+          if (snapBounceRef.current) cancelAnimationFrame(snapBounceRef.current);
+          const start = current;
+          const target = snapTo;
+          const overshoot = (target - start) * 0.3;
+          const t0 = performance.now();
+          const dur = 300;
+          const bounce = (now) => {
+            const p = Math.min(1, (now - t0) / dur);
+            // Ease-out with overshoot
+            const ease = p < 0.5 
+              ? target + overshoot * Math.sin(p * 2 * Math.PI)
+              : target + overshoot * Math.sin(p * 2 * Math.PI) * (1 - p);
+            const val = start + (target - start) * p + overshoot * Math.sin(p * Math.PI * 2) * (1 - p);
+            setSunHour(p >= 1 ? target : val);
+            if (p < 1) snapBounceRef.current = requestAnimationFrame(bounce);
+          };
+          snapBounceRef.current = requestAnimationFrame(bounce);
+        }
+      };
       const rafRef = React.useRef(null);
       useEffect(() => {
         sunHourTargetRef.current = sunHour;
@@ -2666,6 +2711,9 @@
         const sunAlt = sunPos.altitude;
         const sunAz = sunPos.azimuth;
 
+        // Collect all building footprints (reversed winding) for shadow holes
+        const allBuildingHoles = buildings.filter(b => b.polygon.length >= 3).map(b => [...b.polygon].reverse());
+
         buildings.forEach((bldg, idx) => {
           const isSelected = editingBuilding === idx;
           const n = bldg.polygon.length;
@@ -2686,18 +2734,18 @@
 
             const projVerts = bldg.polygon.map(v => ({ lat: v.lat + dLat, lng: v.lng + dLng }));
 
-            // Projected footprint
+            // Projected footprint — with holes for all building footprints
             const shadowFoot = new google.maps.Polygon({
-              paths: projVerts, strokeWeight: 0, strokeOpacity: 0,
+              paths: [projVerts, ...allBuildingHoles], strokeWeight: 0, strokeOpacity: 0,
               fillColor: '#000000', fillOpacity: 0.3 * shadowOpacity, map, zIndex: 18, clickable: false
             });
             shadowPolygonsRef.current.push(shadowFoot);
 
-            // Wall quads connecting footprint to projection
+            // Wall quads connecting footprint to projection — with holes
             for (let i = 0; i < n; i++) {
               const j = (i + 1) % n;
               const quad = new google.maps.Polygon({
-                paths: [bldg.polygon[i], bldg.polygon[j], projVerts[j], projVerts[i]],
+                paths: [[bldg.polygon[i], bldg.polygon[j], projVerts[j], projVerts[i]], ...allBuildingHoles],
                 strokeWeight: 0, strokeOpacity: 0,
                 fillColor: '#000000', fillOpacity: 0.25 * shadowOpacity, map, zIndex: 18, clickable: false
               });
@@ -3775,6 +3823,7 @@
                       const st = (eLat && eLng && window.SunCalc) ? SunCalc.getTimes(sunDate, eLat, eLng) : null;
                       const srTime = st?.sunrise ? st.sunrise.getHours() + st.sunrise.getMinutes()/60 : 6;
                       const ssTime = st?.sunset ? st.sunset.getHours() + st.sunset.getMinutes()/60 : 18;
+                      sunTimesSnapRef.current = { sr: srTime, ss: ssTime };
                       
                       // Dynamic slider range: sunrise at 20%, sunset at 80%
                       const sliderRange = (ssTime - srTime) / (4/6);
@@ -3882,14 +3931,15 @@
                               e.preventDefault();
                               const rect = e.currentTarget.getBoundingClientRect();
                               const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
-                              setSunHour(sliderMin + pct * sliderRange);
+                              setSunHour(magneticSunHour(sliderMin + pct * sliderRange));
                             }}
                             onTouchMove={e => {
                               e.preventDefault();
                               const rect = e.currentTarget.getBoundingClientRect();
                               const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
-                              setSunHour(sliderMin + pct * sliderRange);
+                              setSunHour(magneticSunHour(sliderMin + pct * sliderRange));
                             }}
+                            onTouchEnd={handleSliderRelease}
                           />}
                           <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, transform: 'translateY(-50%)' }}>
                             {/* Glow behind thumb */}
@@ -3920,7 +3970,9 @@
                               type="range" 
                               min={sliderMin} max={sliderMax} step="0.05" 
                               value={sunHour}
-                              onChange={e => setSunHour(parseFloat(e.target.value))}
+                              onChange={e => setSunHour(magneticSunHour(parseFloat(e.target.value)))}
+                              onMouseUp={handleSliderRelease}
+                              onTouchEnd={handleSliderRelease}
                               style={{ 
                                 width: '100%', appearance: 'none', WebkitAppearance: 'none', 
                                 background: 'transparent', position: 'relative', zIndex: 2, 
@@ -5367,7 +5419,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v487</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v488</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
