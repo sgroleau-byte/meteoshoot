@@ -428,7 +428,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v496</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v497</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2396,7 +2396,7 @@
       );
     };
 
-    const ProjectDetail = ({ projectId, onClose, weatherReady = true }) => {
+    const ProjectDetail = ({ projectId, onClose, weatherReady = true, onReady }) => {
       const { projects, updateProject, advanceProject, revertProject, deleteProject, prefs } = useStore();
       const { user } = useAuth();
       const project = projects.find(p => p.id === projectId);
@@ -2965,7 +2965,11 @@
 
       // Interactive Google Map with dark mode
       useEffect(() => {
-        if (!mapContainerRef.current || !project?.lat || !project?.lng || !window.google) return;
+        if (!mapContainerRef.current || !project?.lat || !project?.lng || !window.google) {
+          // No map to load — trigger reveal immediately
+          if (onReady) setTimeout(() => onReady(), 80);
+          return;
+        }
         // Skip map recreation when just confirming adjusted position
         if (skipMapRecreateRef.current) {
           skipMapRecreateRef.current = false;
@@ -3030,15 +3034,19 @@
             setSunHourDisplay(min2);
             sunHourTargetRef.current = min2;
             
-            // Animate slider to current time, delayed to follow the clip-path reveal
+            // Signal parent: map is ready, start clip reveal
+            if (onReady) onReady();
+            
+            // Animate slider to current time, follows clip mask with 200ms delay
             setTimeout(() => {
               const now = new Date();
               const targetH = now.getHours() + now.getMinutes()/60;
-              const sliderDur = 900;
+              const sliderDur = 1000;
               const sT0 = performance.now();
               const startH = min2;
               const animSlider = (now2) => {
                 const p = Math.min(1, (now2 - sT0) / sliderDur);
+                // Match clip easing: cubic-bezier(0.22, 0.61, 0.36, 1)
                 const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
                 setSunHour(startH + (targetH - startH) * ease);
                 if (p < 1) requestAnimationFrame(animSlider);
@@ -5456,7 +5464,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v496</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v497</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -5732,24 +5740,35 @@
       const [detailOpen, setDetailOpen] = useState(false);
       const [detailContentReady, setDetailContentReady] = useState(false);
       const detailDivRef = React.useRef(null);
+      const revealTimeoutRef = React.useRef(null);
+      
+      const revealFiredRef = React.useRef(false);
+      
+      const triggerReveal = React.useCallback(() => {
+        if (revealFiredRef.current) return;
+        revealFiredRef.current = true;
+        if (detailDivRef.current) {
+          detailDivRef.current.getBoundingClientRect();
+        }
+        setDetailOpen(true);
+        // Show weather after clip finishes (1s clip)
+        setTimeout(() => setDetailContentReady(true), 1050);
+      }, []);
+      
       useEffect(() => {
         if (selectedId) {
+          revealFiredRef.current = false;
           setDetailOpen(false);
           setDetailContentReady(false);
           setDisplayedProjectId(selectedId);
-          // Wait for mount + layout, then force reflow, then open
-          const t = setTimeout(() => {
-            if (detailDivRef.current) {
-              detailDivRef.current.getBoundingClientRect();
-            }
-            setDetailOpen(true);
-          }, 60);
-          // Show content (weather etc) after clip animation finishes
-          const t2 = setTimeout(() => setDetailContentReady(true), 750);
-          return () => { clearTimeout(t); clearTimeout(t2); };
+          // Fallback: if map doesn't fire ready in 2s, reveal anyway
+          const fallback = setTimeout(() => triggerReveal(), 2000);
+          revealTimeoutRef.current = fallback;
+          return () => clearTimeout(revealTimeoutRef.current);
         } else {
           setDetailContentReady(false);
           setDetailOpen(false);
+          clearTimeout(revealTimeoutRef.current);
           const timer = setTimeout(() => setDisplayedProjectId(null), 700);
           return () => clearTimeout(timer);
         }
@@ -5937,12 +5956,14 @@
               position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, minHeight: '100vh',
               clipPath: detailOpen ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
               WebkitClipPath: detailOpen ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
-              transition: 'clip-path 0.65s cubic-bezier(0.25, 0.1, 0.25, 1), -webkit-clip-path 0.65s cubic-bezier(0.25, 0.1, 0.25, 1)',
+              transition: detailOpen 
+                ? 'clip-path 1s cubic-bezier(0.22, 0.61, 0.36, 1), -webkit-clip-path 1s cubic-bezier(0.22, 0.61, 0.36, 1)'
+                : 'clip-path 0.65s cubic-bezier(0.25, 0.1, 0.25, 1), -webkit-clip-path 0.65s cubic-bezier(0.25, 0.1, 0.25, 1)',
               pointerEvents: detailOpen ? 'auto' : 'none',
               zIndex: 2,
               background: '#262c30'
             }}>
-              <ProjectDetail projectId={displayedProjectId} onClose={closeProject} weatherReady={detailContentReady}/>
+              <ProjectDetail projectId={displayedProjectId} onClose={closeProject} weatherReady={detailContentReady} onReady={triggerReveal}/>
             </div>}
           </main>
           </div>
