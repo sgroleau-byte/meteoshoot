@@ -423,7 +423,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v482</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v483</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2509,29 +2509,28 @@
           const next = [...drawingVerticesRef.current, pt];
           drawingVerticesRef.current = next;
           setDrawingVertices(next);
-          if (next.length >= 3) {
-            // Auto-finish: create building immediately
-            const newBuilding = { polygon: [...next], height: 15, name: '' };
-            setBuildings(prev => {
-              newBuilding.name = `Bâtiment ${prev.length + 1}`;
-              setEditingBuilding(prev.length);
-              return [...prev, newBuilding];
-            });
-            setBuildingHeight('15');
-            setBuildingName(newBuilding.name);
-            drawingVerticesRef.current = [];
-            setDrawingVertices([]);
-            setDrawingMode(false);
-            if (drawingPolygonRef.current) { drawingPolygonRef.current.setMap(null); drawingPolygonRef.current = null; }
-            drawingMarkersRef.current.forEach(m => m.setMap(null));
-            drawingMarkersRef.current = [];
+        });
+        // Double-click to finish
+        const dblClickListener = map.addListener('dblclick', (e) => {
+          e.stop();
+          if (drawingVerticesRef.current.length >= 3) {
+            finishDrawingFromRef();
           }
         });
+        // Enter key to finish
+        const enterHandler = (e) => {
+          if (e.key === 'Enter' && drawingVerticesRef.current.length >= 3) {
+            finishDrawingFromRef();
+          }
+        };
+        document.addEventListener('keydown', enterHandler);
         return () => {
           if (drawClickListenerRef.current) {
             google.maps.event.removeListener(drawClickListenerRef.current);
             drawClickListenerRef.current = null;
           }
+          google.maps.event.removeListener(dblClickListener);
+          document.removeEventListener('keydown', enterHandler);
           map.setOptions({ draggableCursor: null });
         };
       }, [drawingMode]);
@@ -2577,8 +2576,7 @@
           });
           if (isFirst && drawingVertices.length >= 3) {
             marker.addListener('click', () => {
-              // Close polygon
-              finishDrawing();
+              finishDrawingFromRef();
             });
           }
           drawingMarkersRef.current.push(marker);
@@ -2593,6 +2591,25 @@
           setDrawPanelPos(null);
         }
       }, [drawingVertices]);
+
+      const finishDrawingFromRef = () => {
+        const verts = drawingVerticesRef.current;
+        if (verts.length < 3) return;
+        const newBuilding = { polygon: [...verts], height: 15, name: '' };
+        setBuildings(prev => {
+          newBuilding.name = `Bâtiment ${prev.length + 1}`;
+          setEditingBuilding(prev.length);
+          return [...prev, newBuilding];
+        });
+        setBuildingHeight('15');
+        setBuildingName(newBuilding.name);
+        drawingVerticesRef.current = [];
+        setDrawingVertices([]);
+        setDrawingMode(false);
+        if (drawingPolygonRef.current) { drawingPolygonRef.current.setMap(null); drawingPolygonRef.current = null; }
+        drawingMarkersRef.current.forEach(m => m.setMap(null));
+        drawingMarkersRef.current = [];
+      };
 
       const finishDrawing = () => {
         if (drawingVertices.length < 3) return;
@@ -2644,9 +2661,13 @@
           const n = bldg.polygon.length;
           if (n < 3) return;
 
-          // Draw shadow
-          if (sunAlt > 0.01) {
-            const shadowLen = Math.min(bldg.height / Math.tan(sunAlt), 2000);
+          // Draw shadow — fade smoothly near sunrise/sunset
+          if (sunAlt > -0.05) {
+            // Opacity fades: full at alt>5°, fading 0°-5°, gone below -3°
+            const altDeg = sunAlt * 180 / Math.PI;
+            const shadowOpacity = altDeg >= 5 ? 1 : altDeg <= -3 ? 0 : (altDeg + 3) / 8;
+            if (shadowOpacity > 0) {
+            const shadowLen = Math.min(bldg.height / Math.tan(Math.max(sunAlt, 0.01)), 2000);
             const sunBearingFromNorth = (sunAz * 180 / Math.PI + 180) % 360;
             const shadowBearing = (sunBearingFromNorth + 180) % 360;
             const shadowBearingRad = shadowBearing * Math.PI / 180;
@@ -2658,7 +2679,7 @@
             // Projected footprint
             const shadowFoot = new google.maps.Polygon({
               paths: projVerts, strokeWeight: 0, strokeOpacity: 0,
-              fillColor: '#000000', fillOpacity: 0.3, map, zIndex: 18, clickable: false
+              fillColor: '#000000', fillOpacity: 0.3 * shadowOpacity, map, zIndex: 18, clickable: false
             });
             shadowPolygonsRef.current.push(shadowFoot);
 
@@ -2668,9 +2689,10 @@
               const quad = new google.maps.Polygon({
                 paths: [bldg.polygon[i], bldg.polygon[j], projVerts[j], projVerts[i]],
                 strokeWeight: 0, strokeOpacity: 0,
-                fillColor: '#000000', fillOpacity: 0.25, map, zIndex: 18, clickable: false
+                fillColor: '#000000', fillOpacity: 0.25 * shadowOpacity, map, zIndex: 18, clickable: false
               });
               shadowPolygonsRef.current.push(quad);
+            }
             }
           }
 
@@ -5309,7 +5331,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v482</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v483</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
