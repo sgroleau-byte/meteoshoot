@@ -405,7 +405,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v445</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v446</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -614,7 +614,7 @@
       return (
         <div className="min-h-screen bg-cream flex items-center justify-center" style={{ background: '#262c30' }}>
           <div style={{ maxWidth: '360px', width: '100%', padding: '0 24px' }}>
-            <h1 className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '48px', color: '#FAF9F7', marginBottom: '4px' }}>{isDev ? '--->  DEV --->  DEV --->  DEV --->  DEV --->  DEV --->  DEV' : 'MeteoShoot'}</h1>
+            <h1 className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '48px', color: '#FAF9F7', marginBottom: '4px' }}>{window.isDev ? '--->  DEV --->  DEV --->  DEV --->  DEV --->  DEV --->  DEV' : 'MeteoShoot'}</h1>
             <p className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '20px', color: '#8B9B99', marginBottom: '32px' }}>SHOOTING PLANNER</p>
             
             <div>
@@ -3662,18 +3662,18 @@
                           position: 'absolute', top: 0, left: 0, right: 0, height: '130px', zIndex: 10,
                           background: 'linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.15) 75%, transparent 100%)',
                           backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
-                          maskImage: 'linear-gradient(to bottom, black 0%, black 60%, transparent 100%)',
-                          WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 60%, transparent 100%)',
+                          maskImage: 'linear-gradient(to bottom, black 0%, black 40%, transparent 100%)',
+                          WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 40%, transparent 100%)',
                           pointerEvents: 'none'
                         }}/>
                         {/* Dark gradient overlay */}
                         <div style={{ 
                           position: 'absolute', top: 0, left: 0, right: 0, height: '93px', zIndex: 10,
-                          background: 'linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.25) 60%, transparent 100%)',
+                          background: 'linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 70%, transparent 100%)',
                           pointerEvents: 'none'
                         }}/>
                         {/* Full-width filet at 172px */}
-                        <div style={{ position: 'absolute', top: '93px', left: 0, right: 0, height: '1px', background: 'rgba(255,255,255,0.12)', zIndex: 12 }}/>
+                        <div style={{ position: 'absolute', top: '93px', left: 0, right: 0, height: '1px', background: '#ffffff', zIndex: 12 }}/>
                         {/* Slider content layer */}
                         <div style={{ 
                           position: 'absolute', top: 0, left: 0, right: 0, height: '93px', zIndex: 11,
@@ -3742,13 +3742,13 @@
                             {/* Sunrise ▲ - base on filet, pointing UP (inside zone) */}
                             <div style={{ position: 'absolute', bottom: 0, left: srLeft, transform: 'translateX(-50%)' }}>
                               <svg width="10" height="8" viewBox="0 0 10 8">
-                                <polygon points="5,0 10,8 0,8" fill="rgba(255,255,255,0.4)"/>
+                                <polygon points="5,0 10,8 0,8" fill="#ffffff"/>
                               </svg>
                             </div>
                             {/* Sunset ▼ - base on filet, pointing DOWN (outside zone) */}
                             <div style={{ position: 'absolute', top: 0, left: ssLeft, transform: 'translateX(-50%)' }}>
                               <svg width="10" height="8" viewBox="0 0 10 8">
-                                <polygon points="5,8 10,0 0,0" fill="rgba(255,255,255,0.4)"/>
+                                <polygon points="5,8 10,0 0,0" fill="#ffffff"/>
                               </svg>
                             </div>
                           </div>
@@ -5149,7 +5149,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v445</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v446</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
