@@ -428,7 +428,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v488</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v489</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2406,6 +2406,8 @@
       const [mapType, setMapType] = useState('hybrid');
       const [mapZoom, setMapZoom] = useState(16);
       const [showMapFull, setShowMapFull] = useState(false);
+      const [mapRevealProgress, setMapRevealProgress] = useState(0);
+      const mapRevealedRef = React.useRef(false);
       const [showSunLines, setShowSunLines] = useState(true);
       const [sunDate, setSunDate] = useState(() => new Date());
       const [showDatePicker, setShowDatePicker] = useState(false);
@@ -2419,48 +2421,47 @@
       const sunHourTargetRef = React.useRef(sunHour);
       const sunTimesSnapRef = React.useRef({ sr: 6, ss: 18 });
       const snapBounceRef = React.useRef(null);
+      const isDraggingSlider = React.useRef(false);
       
-      // Magnetic resistance during drag
+      // Magnetic resistance during drag — pull toward sr/ss triangles
       const magneticSunHour = (raw) => {
         const { sr, ss } = sunTimesSnapRef.current;
-        const snapRadius = 0.12; // ~7min
-        const pullStrength = 0.6;
+        const snapRadius = 0.15; // ~9min
         for (const t of [sr, ss]) {
           const dist = Math.abs(raw - t);
           if (dist < snapRadius) {
-            return raw + (t - raw) * pullStrength * (1 - dist / snapRadius);
+            // Cubic ease: stronger pull closer to target
+            const factor = Math.pow(1 - dist / snapRadius, 2) * 0.7;
+            return raw + (t - raw) * factor;
           }
         }
         return raw;
       };
       
-      // Snap release with bounce
+      // Snap release: spring bounce to nearest sr/ss if close
       const handleSliderRelease = () => {
+        isDraggingSlider.current = false;
         const { sr, ss } = sunTimesSnapRef.current;
-        const snapRadius = 0.1;
-        const current = sunHour;
+        const snapRadius = 0.12;
         let snapTo = null;
-        if (Math.abs(current - sr) < snapRadius) snapTo = sr;
-        else if (Math.abs(current - ss) < snapRadius) snapTo = ss;
-        if (snapTo !== null) {
-          if (snapBounceRef.current) cancelAnimationFrame(snapBounceRef.current);
-          const start = current;
-          const target = snapTo;
-          const overshoot = (target - start) * 0.3;
-          const t0 = performance.now();
-          const dur = 300;
-          const bounce = (now) => {
-            const p = Math.min(1, (now - t0) / dur);
-            // Ease-out with overshoot
-            const ease = p < 0.5 
-              ? target + overshoot * Math.sin(p * 2 * Math.PI)
-              : target + overshoot * Math.sin(p * 2 * Math.PI) * (1 - p);
-            const val = start + (target - start) * p + overshoot * Math.sin(p * Math.PI * 2) * (1 - p);
-            setSunHour(p >= 1 ? target : val);
-            if (p < 1) snapBounceRef.current = requestAnimationFrame(bounce);
-          };
-          snapBounceRef.current = requestAnimationFrame(bounce);
-        }
+        if (Math.abs(sunHourTargetRef.current - sr) < snapRadius) snapTo = sr;
+        else if (Math.abs(sunHourTargetRef.current - ss) < snapRadius) snapTo = ss;
+        if (snapTo === null) return;
+        
+        if (snapBounceRef.current) cancelAnimationFrame(snapBounceRef.current);
+        const from = sunHourTargetRef.current;
+        const to = snapTo;
+        const t0 = performance.now();
+        const dur = 350;
+        const bounce = (now) => {
+          const p = Math.min(1, (now - t0) / dur);
+          // Spring-like: overshoot then settle
+          const spring = 1 - Math.exp(-6 * p) * Math.cos(p * Math.PI * 2);
+          setSunHour(from + (to - from) * spring);
+          if (p < 1) snapBounceRef.current = requestAnimationFrame(bounce);
+          else setSunHour(to);
+        };
+        snapBounceRef.current = requestAnimationFrame(bounce);
       };
       const rafRef = React.useRef(null);
       useEffect(() => {
@@ -3018,6 +3019,50 @@
           backgroundColor: '#262c30',
         });
         mapInstanceRef.current = map;
+        
+        // Reveal animation — start after tiles load
+        if (!mapRevealedRef.current) {
+          google.maps.event.addListenerOnce(map, 'tilesloaded', () => {
+            if (mapRevealedRef.current) return;
+            mapRevealedRef.current = true;
+            // Set slider to start of range
+            const st2 = (project?.lat && project?.lng && window.SunCalc) ? SunCalc.getTimes(new Date(), project.lat, project.lng) : null;
+            const sr2 = st2?.sunrise ? st2.sunrise.getHours() + st2.sunrise.getMinutes()/60 : 6;
+            const ss2 = st2?.sunset ? st2.sunset.getHours() + st2.sunset.getMinutes()/60 : 18;
+            const range2 = (ss2 - sr2) / (4/6);
+            const min2 = sr2 - (1/6) * range2;
+            setSunHour(min2); // start at far left
+            setSunHourDisplay(min2);
+            sunHourTargetRef.current = min2;
+            
+            // Animate mask open left-to-right
+            const dur = 1000;
+            const t0 = performance.now();
+            const animMask = (now) => {
+              const p = Math.min(1, (now - t0) / dur);
+              const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+              setMapRevealProgress(ease);
+              if (p < 1) requestAnimationFrame(animMask);
+            };
+            requestAnimationFrame(animMask);
+            
+            // Animate slider to current time with delay
+            setTimeout(() => {
+              const now = new Date();
+              const targetH = now.getHours() + now.getMinutes()/60;
+              const sliderDur = 800;
+              const sT0 = performance.now();
+              const startH = min2;
+              const animSlider = (now2) => {
+                const p = Math.min(1, (now2 - sT0) / sliderDur);
+                const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+                setSunHour(startH + (targetH - startH) * ease);
+                if (p < 1) requestAnimationFrame(animSlider);
+              };
+              requestAnimationFrame(animSlider);
+            }, 300); // 300ms delay behind mask
+          });
+        }
         // Counter-filter: restore full saturation on overlay panes (polygons, markers)
         const counterOverlay = new google.maps.OverlayView();
         counterOverlay.onAdd = function() {
@@ -3804,7 +3849,11 @@
                 {project.lat && project.lng ? (
                   <>
                   {showMapFull && <div onClick={() => setShowMapFull(false)} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(30,30,30,0.88)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}/>}
-                  <div style={showMapFull ? { position: 'fixed', top: 'env(safe-area-inset-top, 50px)', left: 0, width: '100vw', height: 'calc(100vh - env(safe-area-inset-top, 50px))', zIndex: 51, overflow: 'hidden' } : { position: 'relative', overflow: 'hidden', flex: 1 }}>
+                  <div style={{
+                    ...(showMapFull ? { position: 'fixed', top: 'env(safe-area-inset-top, 50px)', left: 0, width: '100vw', height: 'calc(100vh - env(safe-area-inset-top, 50px))', zIndex: 51, overflow: 'hidden' } : { position: 'relative', overflow: 'hidden', flex: 1 }),
+                    clipPath: mapRevealProgress >= 1 ? 'none' : `inset(0 ${(1 - mapRevealProgress) * 100}% 0 0)`,
+                    WebkitClipPath: mapRevealProgress >= 1 ? 'none' : `inset(0 ${(1 - mapRevealProgress) * 100}% 0 0)`
+                  }}>
                     {/* Sun time slider - new design */}
                     {(() => {
                       // Slider scale: 75% on mobile
@@ -3928,6 +3977,7 @@
                           {isMobile && <div 
                             style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'auto', zIndex: 3, touchAction: 'none' }}
                             onTouchStart={e => {
+                              isDraggingSlider.current = true;
                               e.preventDefault();
                               const rect = e.currentTarget.getBoundingClientRect();
                               const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
@@ -3970,7 +4020,7 @@
                               type="range" 
                               min={sliderMin} max={sliderMax} step="0.05" 
                               value={sunHour}
-                              onChange={e => setSunHour(magneticSunHour(parseFloat(e.target.value)))}
+                              onChange={e => { isDraggingSlider.current = true; setSunHour(magneticSunHour(parseFloat(e.target.value))); }}
                               onMouseUp={handleSliderRelease}
                               onTouchEnd={handleSliderRelease}
                               style={{ 
@@ -5419,7 +5469,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v488</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v489</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
