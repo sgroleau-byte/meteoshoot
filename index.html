@@ -428,7 +428,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v505</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v506</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -4070,21 +4070,20 @@
                     </div>}
                     {/* Controls pill */}
                     <div style={{ 
-                      position: 'absolute', bottom: '60px', right: '14px', zIndex: 13, 
+                      position: 'absolute', bottom: '80px', right: '12px', zIndex: 13, 
                       display: 'flex', flexDirection: 'column', alignItems: 'center',
-                      background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', 
-                      borderRadius: '40px', 
-                      border: '1.5px solid rgba(255,255,255,0.25)',
-                      padding: '10px 6px', gap: '4px',
-                      boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                      background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', 
+                      borderRadius: '28px', 
+                      border: '1.5px solid rgba(255,255,255,0.2)',
+                      padding: '6px 4px', gap: '0px'
                     }}>
                       <button 
                         onClick={() => setMapType('hybrid')} 
                         className="font-bebas-bold"
                         style={{ letterSpacing: '0.04em', 
-                          fontSize: '16px', padding: '4px 10px', 
+                          fontSize: '13px', padding: '2px 8px', lineHeight: '1.4',
                           background: 'transparent',
-                          color: mapType === 'hybrid' ? '#7dd3c6' : 'rgba(255,255,255,0.6)',
+                          color: mapType === 'hybrid' ? '#7dd3c6' : 'rgba(255,255,255,0.55)',
                           border: 'none',
                           cursor: 'pointer'
                         }}
@@ -4093,26 +4092,26 @@
                         onClick={() => setMapType('roadmap')} 
                         className="font-bebas-bold"
                         style={{ letterSpacing: '0.04em', 
-                          fontSize: '16px', padding: '4px 10px', 
+                          fontSize: '13px', padding: '2px 8px', lineHeight: '1.4',
                           background: 'transparent',
-                          color: mapType === 'roadmap' ? '#7dd3c6' : 'rgba(255,255,255,0.6)',
+                          color: mapType === 'roadmap' ? '#7dd3c6' : 'rgba(255,255,255,0.55)',
                           border: 'none',
                           cursor: 'pointer'
                         }}
                       >MAP</button>
-                      <div style={{ width: '24px', height: '1px', background: 'rgba(255,255,255,0.15)', margin: '2px 0' }}/>
+                      <div style={{ width: '18px', height: '1px', background: 'rgba(255,255,255,0.12)', margin: '3px 0' }}/>
                       <button 
                         onClick={() => { if (drawingMode) { setDrawingMode(false); setDrawingVertices([]); } else { setDrawingMode(true); setEditingBuilding(null); } }}
                         title={drawingMode ? 'Annuler le dessin' : 'Dessiner un bâtiment'}
                         style={{ 
                           background: drawingMode ? 'rgba(125,211,198,0.15)' : 'transparent', 
                           border: 'none', borderRadius: '50%',
-                          cursor: 'pointer', padding: '8px',
-                          color: drawingMode ? '#7dd3c6' : 'rgba(255,255,255,0.6)', 
+                          cursor: 'pointer', padding: '5px',
+                          color: drawingMode ? '#7dd3c6' : 'rgba(255,255,255,0.55)', 
                           display: 'flex', alignItems: 'center', justifyContent: 'center'
                         }}
                       >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
                         </svg>
                       </button>
@@ -4122,44 +4121,49 @@
                         style={{ 
                           background: 'transparent', 
                           border: 'none', borderRadius: '50%',
-                          cursor: 'pointer', padding: '8px',
-                          color: showSunLines ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.25)', 
+                          cursor: 'pointer', padding: '5px',
+                          color: showSunLines ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.2)', 
                           display: 'flex', alignItems: 'center', justifyContent: 'center'
                         }}
                       >
                         {showSunLines ? (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         ) : (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
                         )}
                       </button>
                       <button onClick={() => setShowMapFull(f => !f)} style={{ 
                         background: 'transparent', 
                         border: 'none', borderRadius: '50%',
-                        cursor: 'pointer', padding: '8px',
-                        color: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        cursor: 'pointer', padding: '5px',
+                        color: 'rgba(255,255,255,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center'
                       }}>
                         {showMapFull ? (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
                         ) : (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
                         )}
                       </button>
                     </div>
-                    {/* Custom zoom pills */}
+                    {/* Zoom pill */}
                     {!isMobile && (
-                      <div style={{ position: 'absolute', bottom: '14px', right: '10px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ 
+                        position: 'absolute', bottom: '14px', right: '12px', zIndex: 13, 
+                        display: 'flex', flexDirection: 'column', alignItems: 'center',
+                        background: 'rgba(255,255,255,0.9)', 
+                        borderRadius: '20px', 
+                        overflow: 'hidden'
+                      }}>
                         <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() + 1); }}
-                          style={{ width: '36px', height: '36px', borderRadius: '50%', border: 'none', cursor: 'pointer',
-                            background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
-                            color: 'rgba(255,255,255,0.8)', fontSize: '20px', fontWeight: '300', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                          style={{ width: '32px', height: '32px', border: 'none', cursor: 'pointer',
+                            background: 'transparent',
+                            color: '#333', fontSize: '18px', fontWeight: '300', display: 'flex', alignItems: 'center', justifyContent: 'center',
                           }}>+</button>
+                        <div style={{ width: '20px', height: '1px', background: 'rgba(0,0,0,0.12)' }}/>
                         <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() - 1); }}
-                          style={{ width: '36px', height: '36px', borderRadius: '50%', border: 'none', cursor: 'pointer',
-                            background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
-                            color: 'rgba(255,255,255,0.8)', fontSize: '20px', fontWeight: '300', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                          style={{ width: '32px', height: '32px', border: 'none', cursor: 'pointer',
+                            background: 'transparent',
+                            color: '#333', fontSize: '18px', fontWeight: '300', display: 'flex', alignItems: 'center', justifyContent: 'center',
                           }}>−</button>
                       </div>
                     )}
@@ -5464,7 +5468,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v505</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v506</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
