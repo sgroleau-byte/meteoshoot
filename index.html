@@ -405,7 +405,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v451</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v452</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2392,6 +2392,22 @@
       const originalDateRef = useRef(null);
       const isToday = React.useMemo(() => { const n = new Date(); return sunDate.getDate() === n.getDate() && sunDate.getMonth() === n.getMonth() && sunDate.getFullYear() === n.getFullYear(); }, [sunDate]);
       const [sunHour, setSunHour] = useState(() => { const n = new Date(); return n.getHours() + n.getMinutes()/60; });
+      const [sunHourDisplay, setSunHourDisplay] = useState(sunHour);
+      const sunHourTargetRef = React.useRef(sunHour);
+      const rafRef = React.useRef(null);
+      useEffect(() => {
+        sunHourTargetRef.current = sunHour;
+        const animate = () => {
+          setSunHourDisplay(prev => {
+            const diff = sunHourTargetRef.current - prev;
+            if (Math.abs(diff) < 0.005) return sunHourTargetRef.current;
+            rafRef.current = requestAnimationFrame(animate);
+            return prev + diff * 0.25;
+          });
+        };
+        rafRef.current = requestAnimationFrame(animate);
+        return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+      }, [sunHour]);
       const mapIsNight = React.useMemo(() => {
         if (!project?.lat || !project?.lng || !window.SunCalc) return false;
         const st = SunCalc.getTimes(sunDate, project.lat, project.lng);
@@ -3656,27 +3672,27 @@
                       const srOrangeStart = srTime - 0.25, srOrangeEnd = srTime + 1;
                       const ssOrangeStart = ssTime - 1, ssOrangeEnd = ssTime + 0.25;
                       const morphDuration = 0.5; // 30min transition
-                      if (sunHour < srOrangeStart - morphDuration) {
+                      if (sunHourDisplay < srOrangeStart - morphDuration) {
                         glowColor = BLUE;
-                      } else if (sunHour < srOrangeStart) {
-                        glowColor = hexLerp(BLUE, ORANGE, (sunHour - (srOrangeStart - morphDuration)) / morphDuration);
-                      } else if (sunHour <= srOrangeEnd) {
+                      } else if (sunHourDisplay < srOrangeStart) {
+                        glowColor = hexLerp(BLUE, ORANGE, (sunHourDisplay - (srOrangeStart - morphDuration)) / morphDuration);
+                      } else if (sunHourDisplay <= srOrangeEnd) {
                         glowColor = ORANGE;
-                      } else if (sunHour < srOrangeEnd + morphDuration) {
-                        glowColor = hexLerp(ORANGE, DAY, (sunHour - srOrangeEnd) / morphDuration);
-                      } else if (sunHour < ssOrangeStart - morphDuration) {
+                      } else if (sunHourDisplay < srOrangeEnd + morphDuration) {
+                        glowColor = hexLerp(ORANGE, DAY, (sunHourDisplay - srOrangeEnd) / morphDuration);
+                      } else if (sunHourDisplay < ssOrangeStart - morphDuration) {
                         glowColor = DAY;
-                      } else if (sunHour < ssOrangeStart) {
-                        glowColor = hexLerp(DAY, ORANGE, (sunHour - (ssOrangeStart - morphDuration)) / morphDuration);
-                      } else if (sunHour <= ssOrangeEnd) {
+                      } else if (sunHourDisplay < ssOrangeStart) {
+                        glowColor = hexLerp(DAY, ORANGE, (sunHourDisplay - (ssOrangeStart - morphDuration)) / morphDuration);
+                      } else if (sunHourDisplay <= ssOrangeEnd) {
                         glowColor = ORANGE;
-                      } else if (sunHour < ssOrangeEnd + morphDuration) {
-                        glowColor = hexLerp(ORANGE, BLUE, (sunHour - ssOrangeEnd) / morphDuration);
+                      } else if (sunHourDisplay < ssOrangeEnd + morphDuration) {
+                        glowColor = hexLerp(ORANGE, BLUE, (sunHourDisplay - ssOrangeEnd) / morphDuration);
                       } else {
                         glowColor = BLUE;
                       }
                       
-                      const thumbLeft = `calc(${(sunHour / 24) * 100}% + ${(0.5 - sunHour / 24) * 9}px)`;
+                      const thumbLeft = `calc(${(sunHourDisplay / 24) * 100}% + ${(0.5 - sunHourDisplay / 24) * 9}px)`;
                       const srLeft = `${(srTime / 24) * 100}%`;
                       const ssLeft = `${(ssTime / 24) * 100}%`;
                       
@@ -3730,7 +3746,7 @@
                               opacity: 0.3,
                               pointerEvents: 'none',
                               filter: 'blur(15px)',
-                              transition: 'left 0.15s ease-out, background 0.5s ease'
+                              
                             }}/>
                             
                             {/* The range input */}
@@ -3752,17 +3768,17 @@
                             position: 'absolute',
                             top: '88px',
                             marginTop: '10px',
-                            left: `calc(60px + (100% - 60px - 74px) * ${sunHour / 24})`,
+                            left: `calc(60px + (100% - 60px - 74px) * ${sunHourDisplay / 24})`,
                             transform: 'translateX(-50%)',
                             pointerEvents: 'none',
                             zIndex: 13,
-                            transition: 'left 0.15s ease-out'
+                            
                           }}>
                             <span className="font-bebas-bold" style={{ 
                               fontSize: '24px', color: '#ffffff', letterSpacing: '0.04em',
                               textShadow: '0 1px 4px rgba(0,0,0,0.8)', lineHeight: '1'
                             }}>
-                              {`${Math.floor(sunHour)}H${String(Math.round((sunHour % 1) * 60)).padStart(2, '0')}`}
+                              {`${Math.floor(sunHourDisplay)}H${String(Math.round((sunHourDisplay % 1) * 60)).padStart(2, '0')}`}
                             </span>
                           </div>
                           {/* Triangles on the filet line */}
@@ -5177,7 +5193,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v451</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v452</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
