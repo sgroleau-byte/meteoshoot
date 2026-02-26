@@ -124,10 +124,10 @@
     input::-webkit-contacts-auto-fill-button, input::-webkit-credentials-auto-fill-button { display: none !important; visibility: hidden !important; pointer-events: none !important; position: absolute !important; right: 0 !important; }
     input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus, input:-webkit-autofill:active { -webkit-box-shadow: 0 0 0 30px #1e2224 inset !important; -webkit-text-fill-color: rgba(255,255,255,0.85) !important; transition: background-color 5000s ease-in-out 0s; }
     input[type="range"] { height: 44px; }
-    input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: rgba(255,255,255,0.25); border-radius: 0; }
-    input[type="range"]::-moz-range-track { height: 1px; background: rgba(255,255,255,0.25); border-radius: 0; }
-    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 11px; height: 56px; border-radius: 6px; background: #ffffff; cursor: pointer; border: none; box-shadow: 0 0 12px rgba(255,255,255,0.3), 0 2px 6px rgba(0,0,0,0.4); margin-top: -28px; }
-    input[type="range"]::-moz-range-thumb { width: 11px; height: 56px; border-radius: 6px; background: #ffffff; cursor: pointer; border: none; box-shadow: 0 0 12px rgba(255,255,255,0.3), 0 2px 6px rgba(0,0,0,0.4); }
+    input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: transparent; border-radius: 0; }
+    input[type="range"]::-moz-range-track { height: 1px; background: transparent; border-radius: 0; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 100px; border-radius: 11px; background: #ffffff; cursor: pointer; border: none; box-shadow: 0 0 12px rgba(255,255,255,0.3), 0 2px 6px rgba(0,0,0,0.4); margin-top: -50px; }
+    input[type="range"]::-moz-range-thumb { width: 22px; height: 100px; border-radius: 11px; background: #ffffff; cursor: pointer; border: none; box-shadow: 0 0 12px rgba(255,255,255,0.3), 0 2px 6px rgba(0,0,0,0.4); }
     /* ── Splash Screen ── */
     .splash-overlay {
       position: fixed;
@@ -404,7 +404,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v438</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v439</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3658,22 +3658,22 @@
                         <>
                         {/* Background blur + darken gradient */}
                         <div style={{ 
-                          position: 'absolute', top: 0, left: 0, right: 0, height: '140px', zIndex: 10,
-                          background: 'linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.35) 62%, transparent 100%)',
+                          position: 'absolute', top: 0, left: 0, right: 0, height: '220px', zIndex: 10,
+                          background: 'linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.35) 78%, transparent 100%)',
                           backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-                          maskImage: 'linear-gradient(to bottom, black 0%, black 62%, transparent 100%)',
-                          WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 62%, transparent 100%)',
+                          maskImage: 'linear-gradient(to bottom, black 0%, black 78%, transparent 100%)',
+                          WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 78%, transparent 100%)',
                           pointerEvents: 'none'
                         }}/>
-                        {/* Full-width filet */}
-                        <div style={{ position: 'absolute', top: '87px', left: 0, right: 0, height: '1px', background: 'rgba(255,255,255,0.08)', zIndex: 10 }}/>
+                        {/* Full-width filet at 172px */}
+                        <div style={{ position: 'absolute', top: '172px', left: 0, right: 0, height: '1px', background: 'rgba(255,255,255,0.08)', zIndex: 12 }}/>
                         {/* Slider content layer */}
                         <div style={{ 
-                          position: 'absolute', top: 0, left: 0, right: 0, height: '87px', zIndex: 11,
+                          position: 'absolute', top: 0, left: 0, right: 0, height: '172px', zIndex: 11,
                           pointerEvents: 'none',
                           padding: '0 14px'
                         }}>
-                          {/* Date label - left side, vertically centered */}
+                          {/* Date label - left side, vertically centered in 172px */}
                           <button onClick={() => setShowDatePicker(p => !p)} className="font-bebas-regular" style={{ 
                             position: 'absolute', top: '50%', left: '14px', transform: 'translateY(-50%)', zIndex: 2,
                             background: 'none', border: 'none', cursor: 'pointer',
@@ -3684,7 +3684,7 @@
                             {MONTHS_FR[sunDate.getMonth()]} {sunDate.getDate()}
                           </button>
                           
-                          {/* Slider track area — centered vertically in 87px zone */}
+                          {/* Slider track area — centered vertically in 172px zone */}
                           <div style={{ position: 'absolute', top: '50%', left: '60px', right: '74px', transform: 'translateY(-50%)' }}>
                             {/* Glow behind thumb */}
                             <div style={{
@@ -3692,39 +3692,13 @@
                               top: '50%',
                               left: thumbLeft,
                               transform: 'translate(-50%, -50%)',
-                              width: '125px', height: '125px',
+                              width: '250px', height: '250px',
                               borderRadius: '50%',
                               background: `radial-gradient(circle, ${glowColor} 0%, ${glowColor}66 24%, transparent 70%)`,
                               opacity: 0.45,
                               pointerEvents: 'none',
                               filter: 'blur(8px)'
                             }}/>
-                            
-                            {/* Sunrise triangle ▲ - above track */}
-                            <div style={{
-                              position: 'absolute',
-                              top: '-16px',
-                              left: srLeft,
-                              transform: 'translateX(-50%)',
-                              pointerEvents: 'none'
-                            }}>
-                              <svg width="12" height="12" viewBox="0 0 12 12">
-                                <polygon points="6,0 12,12 0,12" fill="rgba(255,255,255,0.5)"/>
-                              </svg>
-                            </div>
-                            
-                            {/* Sunset triangle ▼ - below track */}
-                            <div style={{
-                              position: 'absolute',
-                              bottom: '-16px',
-                              left: ssLeft,
-                              transform: 'translateX(-50%)',
-                              pointerEvents: 'none'
-                            }}>
-                              <svg width="12" height="12" viewBox="0 0 12 12">
-                                <polygon points="6,12 12,0 0,0" fill="rgba(255,255,255,0.5)"/>
-                              </svg>
-                            </div>
                             
                             {/* The range input */}
                             <input 
@@ -3749,12 +3723,27 @@
                             pointerEvents: 'none',
                           }}>
                             <span className="font-bebas-regular" style={{ 
-                              fontSize: '25px', color: '#ffffff', letterSpacing: '0.04em',
+                              fontSize: '50px', color: '#ffffff', letterSpacing: '0.04em',
                               textShadow: '0 1px 4px rgba(0,0,0,0.8)', lineHeight: '1'
                             }}>
                               {`${Math.floor(sunHour)}H${String(Math.round((sunHour % 1) * 60)).padStart(2, '0')}`}
                             </span>
                           </div>
+                          </div>
+                          {/* Triangles on the filet line — same horizontal bounds as slider */}
+                          <div style={{ position: 'absolute', bottom: 0, left: '60px', right: '74px', height: 0, pointerEvents: 'none', zIndex: 12 }}>
+                            {/* Sunrise ▲ - base on filet, pointing UP (inside zone) */}
+                            <div style={{ position: 'absolute', bottom: 0, left: srLeft, transform: 'translateX(-50%)' }}>
+                              <svg width="25" height="25" viewBox="0 0 25 25">
+                                <polygon points="12.5,0 25,25 0,25" fill="rgba(255,255,255,0.5)"/>
+                              </svg>
+                            </div>
+                            {/* Sunset ▼ - base on filet, pointing DOWN (outside zone) */}
+                            <div style={{ position: 'absolute', top: 0, left: ssLeft, transform: 'translateX(-50%)' }}>
+                              <svg width="25" height="25" viewBox="0 0 25 25">
+                                <polygon points="12.5,25 25,0 0,0" fill="rgba(255,255,255,0.5)"/>
+                              </svg>
+                            </div>
                           </div>
                         </div>
                         </>
@@ -3766,7 +3755,7 @@
                     <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 5, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                       <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#7dd3c6', border: '2px solid #fff', boxShadow: '0 0 8px rgba(125,211,198,0.5), 0 2px 6px rgba(0,0,0,0.4)' }}/>
                     </div>
-                    <div style={{ position: 'absolute', top: '95px', right: '10px', zIndex: 13, display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', borderRadius: '6px', overflow: 'hidden' }}>
+                    <div style={{ position: 'absolute', top: '182px', right: '10px', zIndex: 13, display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', borderRadius: '6px', overflow: 'hidden' }}>
                       <button 
                         onClick={() => setMapType('hybrid')} 
                         className="font-bebas-bold"
@@ -5153,7 +5142,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v438</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v439</div>
                   <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
