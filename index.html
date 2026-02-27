@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v564</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v565</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3377,37 +3377,44 @@
 
         if (sunTimes.sunrise) {
           const srPos = SunCalc.getPosition(sunTimes.sunrise, eLat, eLng);
-          drawLine(srPos.azimuth, '#ffe26b', 0.9, 5);
+          drawLine(srPos.azimuth, '#ffffff', 1, 5);
         }
         if (sunTimes.sunset) {
           const ssPos = SunCalc.getPosition(sunTimes.sunset, eLat, eLng);
-          drawLine(ssPos.azimuth, '#f4143d', 0.9, 5);
+          drawLine(ssPos.azimuth, '#ffffff', 1, 5);
         }
 
-        const srAz = sunTimes.sunrise ? SunCalc.getPosition(sunTimes.sunrise, eLat, eLng).azimuth : 0;
-        const ssAz = sunTimes.sunset ? SunCalc.getPosition(sunTimes.sunset, eLat, eLng).azimuth : 0;
-        const steps = 36;
-        const srBearing = (srAz * 180 / Math.PI + 180) % 360;
-        const ssBearing = (ssAz * 180 / Math.PI + 180) % 360;
-        let startB = srBearing, endB = ssBearing;
-        if (endB < startB) endB += 360;
-        const R = getR() * 1.1;
-        const arcPoints = [{ lat: eLat, lng: eLng }];
-        for (let i = 0; i <= steps; i++) {
-          const b = startB + (endB - startB) * i / steps;
-          const bRad = b * Math.PI / 180;
-          arcPoints.push({
-            lat: eLat + R * Math.cos(bRad),
-            lng: eLng + R * Math.sin(bRad) / Math.cos(eLat * Math.PI / 180)
+        // Shadow pie wedge — dark gradient opposite to sun
+        const simDatePie = new Date(sunDate);
+        simDatePie.setHours(Math.floor(sunHour), Math.round((sunHour % 1) * 60), 0);
+        const sunPosPie = SunCalc.getPosition(simDatePie, eLat, eLng);
+        const sunBearingPie = (sunPosPie.azimuth * 180 / Math.PI + 180) % 360;
+        const shadowBearingPie = (sunBearingPie + 180) % 360;
+        const altDegPie = sunPosPie.altitude * 180 / Math.PI;
+        if (altDegPie > 0) {
+          // Wider wedge when sun is lower
+          const wedgeAngle = Math.max(15, 45 - altDegPie * 0.5);
+          const R = getR() * 1.1;
+          const wedgeSteps = 24;
+          const startAngle = shadowBearingPie - wedgeAngle;
+          const endAngle = shadowBearingPie + wedgeAngle;
+          const wedgePoints = [{ lat: eLat, lng: eLng }];
+          for (let i = 0; i <= wedgeSteps; i++) {
+            const b = startAngle + (endAngle - startAngle) * i / wedgeSteps;
+            const bRad = b * Math.PI / 180;
+            wedgePoints.push({
+              lat: eLat + R * Math.cos(bRad),
+              lng: eLng + R * Math.sin(bRad) / Math.cos(eLat * Math.PI / 180)
+            });
+          }
+          wedgePoints.push({ lat: eLat, lng: eLng });
+          const wedge = new google.maps.Polygon({
+            paths: wedgePoints, strokeColor: '#000000', strokeOpacity: 0,
+            strokeWeight: 0, fillColor: '#000000', fillOpacity: 0.35, map
           });
+          sunLinesRef.current.push(wedge);
         }
-        arcPoints.push({ lat: eLat, lng: eLng });
-        const arc = new google.maps.Polygon({
-          paths: arcPoints, strokeColor: '#ffe26b', strokeOpacity: 0.15,
-          strokeWeight: 1, fillColor: '#000000', fillOpacity: 0.25, map
-        });
-        sunLinesRef.current.push(arc);
-      }, [sunDate, project?.lat, project?.lng, mapZoom, adjustedPos, showSunLines, drawingMode]);
+      }, [sunDate, project?.lat, project?.lng, mapZoom, adjustedPos, showSunLines, drawingMode, sunHour]);
 
       // Hide POI labels in drawing mode or when sun lines hidden
       const savedMapStylesRef = React.useRef(null);
@@ -3489,13 +3496,12 @@
         const lineColor = isNight ? '#6b7db5' : '#ffe26b';
         const lineOpacity = isNight ? 0.5 : (isGoldenBefore || isGoldenAfter) ? 0.8 : 1;
         
-        // Yellow glow line behind the dotted line (day/golden only)
+        // Yellow glow line behind the solid line (day/golden only)
         if (!isNight) {
           const glowLine = new google.maps.Polyline({
             path: [{ lat: eLat, lng: eLng }, { lat: lat2, lng: lng2 }],
-            strokeColor: '#ffe26b', strokeOpacity: 0.1, strokeWeight: 28, map
+            strokeColor: '#ffe26b', strokeOpacity: 0.15, strokeWeight: 36, map
           });
-          // Store on ref for cleanup
           if (!sunPosLineRef._glowLine) sunPosLineRef._glowLine = null;
           if (sunPosLineRef._glowLine) sunPosLineRef._glowLine.setMap(null);
           sunPosLineRef._glowLine = glowLine;
@@ -3505,24 +3511,11 @@
         
         sunPosLineRef.current = new google.maps.Polyline({
           path: [{ lat: eLat, lng: eLng }, { lat: lat2, lng: lng2 }],
-          strokeColor: lineColor, strokeOpacity: 0, strokeWeight: 6,
-          icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: lineOpacity, scale: 2 }, offset: '0', repeat: '10px' }],
+          strokeColor: lineColor, strokeOpacity: lineOpacity, strokeWeight: 3,
           map
         });
 
-        // Shadow line — opposite direction (only during day/golden)
-        if (!isNight) {
-          const shadowBearing = (bearing + 180) % 360;
-          const shadowR = bounds ? Math.min(Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat()), Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng())) * 0.38 : 0.003;
-          const sLat2 = eLat + shadowR * Math.cos(shadowBearing * Math.PI / 180);
-          const sLng2 = eLng + shadowR * Math.sin(shadowBearing * Math.PI / 180) / Math.cos(eLat * Math.PI / 180);
-          shadowLineRef.current = new google.maps.Polyline({
-            path: [{ lat: eLat, lng: eLng }, { lat: sLat2, lng: sLng2 }],
-            strokeColor: '#000000', strokeOpacity: 0, strokeWeight: 8,
-            icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.35, scale: 3 }, offset: '0', repeat: '12px' }],
-            map
-          });
-        }
+        // Shadow pie wedge is drawn in the sun lines effect above
 
         // Sun/Moon dot — custom overlay with motion blur
         if (sunPosMarkerRef.current) {
@@ -4266,7 +4259,7 @@
                     <canvas ref={flareCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}/>
                     {/* Fixed center pin */}
                     <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 5, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#7dd3c6', border: '2px solid #fff', boxShadow: '0 0 8px rgba(125,211,198,0.5), 0 2px 6px rgba(0,0,0,0.4)' }}/>
+                      <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'transparent', border: '3px solid #ffffff', boxShadow: '0 2px 6px rgba(0,0,0,0.4)' }}/>
                     </div>
                     {/* Shape labels top-right */}
                     {buildings.length > 0 && <div style={{ position: 'absolute', top: '145px', right: '-2px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
@@ -5691,7 +5684,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v564</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v565</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
