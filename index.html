@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v577</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v578</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3865,44 +3865,37 @@
               ctx.restore();
             }
             
-            // Sunrise & Sunset line halos — round glows along lines, clipped to day side
+            // Sunrise & Sunset line halos — one big round glow per line, on the line, clipped to day
             if (sunTimes.sunrise && sunTimes.sunset) {
               const srAzR = SunCalc.getPosition(sunTimes.sunrise, eLat, eLng).azimuth;
               const ssAzR = SunCalc.getPosition(sunTimes.sunset, eLat, eLng).azimuth;
               const srScrA = ((srAzR * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
               const ssScrA = ((ssAzR * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
-              const haloLen = Math.max(w, h) * 1.2;
+              const haloLen = Math.max(w, h) * 1.5;
               
               const drawLineHalo = (lineAngle, r, g, b) => {
                 ctx.save();
-                // Clip strictly to day-side arc (sr → ss)
+                // Clip to day-side arc (sr → ss) — glow never crosses white lines
                 ctx.beginPath();
                 ctx.moveTo(centerPx.x, centerPx.y);
                 ctx.arc(centerPx.x, centerPx.y, haloLen, srScrA, ssScrA);
                 ctx.closePath();
                 ctx.clip();
                 
-                // Place round radial glows along the line
-                const dx = Math.cos(lineAngle);
-                const dy = Math.sin(lineAngle);
-                const spots = [0.15, 0.3, 0.5, 0.7, 0.9];
-                for (const t of spots) {
-                  const dist = haloLen * t;
-                  const cx = centerPx.x + dx * dist;
-                  const cy = centerPx.y + dy * dist;
-                  const radius = 60 + dist * 0.25;
-                  
-                  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-                  grad.addColorStop(0, `rgba(${r},${g},${b},0.8)`);
-                  grad.addColorStop(0.2, `rgba(${r},${g},${b},0.5)`);
-                  grad.addColorStop(0.5, `rgba(${r},${g},${b},0.15)`);
-                  grad.addColorStop(0.8, `rgba(${r},${g},${b},0.03)`);
-                  grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
-                  ctx.fillStyle = grad;
-                  ctx.beginPath();
-                  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-                  ctx.fill();
-                }
+                // One big glow centered on the line at 40% distance
+                const dist = haloLen * 0.4;
+                const cx = centerPx.x + Math.cos(lineAngle) * dist;
+                const cy = centerPx.y + Math.sin(lineAngle) * dist;
+                const radius = haloLen * 0.55;
+                
+                const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+                grad.addColorStop(0, `rgba(${r},${g},${b},0.8)`);
+                grad.addColorStop(0.1, `rgba(${r},${g},${b},0.5)`);
+                grad.addColorStop(0.3, `rgba(${r},${g},${b},0.2)`);
+                grad.addColorStop(0.6, `rgba(${r},${g},${b},0.05)`);
+                grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, w, h);
                 ctx.restore();
               };
               drawLineHalo(srScrA, 172, 156, 77);
@@ -6017,7 +6010,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v577</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v578</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
