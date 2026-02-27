@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v569</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v570</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2468,6 +2468,111 @@
       const departureAutocompleteRef = React.useRef(null);
       const mapContainerRef = React.useRef(null);
       const flareCanvasRef = React.useRef(null);
+      const weatherCanvasRef = React.useRef(null);
+      const weatherParticlesRef = React.useRef([]);
+      const weatherAnimRef = React.useRef(null);
+      
+      // Weather particles effect behind slider
+      useEffect(() => {
+        const canvas = weatherCanvasRef.current;
+        if (!canvas) return;
+        
+        // Find hourly weather for current slider position
+        const targetDate = new Date(sunDate);
+        targetDate.setHours(Math.floor(sunHour), 0, 0, 0);
+        const hourly = weather?.hourly?.find(h => {
+          const ht = new Date(h.time);
+          return ht.getFullYear() === targetDate.getFullYear() && ht.getMonth() === targetDate.getMonth() && ht.getDate() === targetDate.getDate() && ht.getHours() === targetDate.getHours();
+        });
+        
+        if (!hourly) { 
+          if (weatherAnimRef.current) cancelAnimationFrame(weatherAnimRef.current);
+          const ctx = canvas.getContext('2d');
+          if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+          return; 
+        }
+        
+        const precip = hourly.precip || 0;
+        const temp = hourly.temp;
+        const cloud = hourly.cloudcover || 0;
+        const wind = hourly.wind || 0;
+        const icon = hourly.icon || '';
+        
+        const isRain = precip > 0 && temp > 0;
+        const isSnow = precip > 0 && temp <= 0;
+        const isFog = icon.includes('fog') || icon.includes('mist');
+        const hasParticles = isRain || isSnow || isFog;
+        
+        if (!hasParticles) {
+          if (weatherAnimRef.current) cancelAnimationFrame(weatherAnimRef.current);
+          const ctx = canvas.getContext('2d');
+          if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+          weatherParticlesRef.current = [];
+          return;
+        }
+        
+        const w = canvas.parentElement?.offsetWidth || 400;
+        const h = canvas.parentElement?.offsetHeight || 200;
+        canvas.width = w; canvas.height = h;
+        
+        // Initialize particles
+        const count = isRain ? Math.min(60, Math.round(precip * 15)) : isSnow ? Math.min(40, Math.round(precip * 10)) : 25;
+        if (weatherParticlesRef.current.length !== count) {
+          weatherParticlesRef.current = Array.from({length: count}, () => ({
+            x: Math.random() * w,
+            y: Math.random() * h,
+            speed: isRain ? 2 + Math.random() * 4 : isSnow ? 0.3 + Math.random() * 0.8 : 0.1 + Math.random() * 0.2,
+            size: isRain ? 1 + Math.random() : isSnow ? 1.5 + Math.random() * 2.5 : 3 + Math.random() * 5,
+            opacity: isRain ? 0.15 + Math.random() * 0.2 : isSnow ? 0.2 + Math.random() * 0.25 : 0.03 + Math.random() * 0.04,
+            drift: isSnow ? -0.3 + Math.random() * 0.6 : isFog ? -0.1 + Math.random() * 0.2 : (wind > 10 ? 0.5 : 0),
+            len: isRain ? 4 + Math.random() * 6 : 0,
+          }));
+        }
+        
+        const animate = () => {
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          ctx.clearRect(0, 0, w, h);
+          
+          weatherParticlesRef.current.forEach(p => {
+            if (isRain) {
+              ctx.strokeStyle = `rgba(180,200,220,${p.opacity})`;
+              ctx.lineWidth = p.size * 0.5;
+              ctx.beginPath();
+              ctx.moveTo(p.x, p.y);
+              ctx.lineTo(p.x + p.drift, p.y + p.len);
+              ctx.stroke();
+              p.y += p.speed;
+              p.x += p.drift;
+            } else if (isSnow) {
+              ctx.fillStyle = `rgba(255,255,255,${p.opacity})`;
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+              ctx.fill();
+              p.y += p.speed;
+              p.x += p.drift + Math.sin(p.y * 0.02) * 0.3;
+            } else if (isFog) {
+              ctx.fillStyle = `rgba(200,200,210,${p.opacity})`;
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+              ctx.fill();
+              p.x += p.drift;
+              p.y += Math.sin(p.x * 0.01) * 0.1;
+            }
+            
+            if (p.y > h + 10) { p.y = -10; p.x = Math.random() * w; }
+            if (p.x > w + 10) p.x = -10;
+            if (p.x < -10) p.x = w + 10;
+          });
+          
+          weatherAnimRef.current = requestAnimationFrame(animate);
+        };
+        
+        if (weatherAnimRef.current) cancelAnimationFrame(weatherAnimRef.current);
+        animate();
+        
+        return () => { if (weatherAnimRef.current) cancelAnimationFrame(weatherAnimRef.current); };
+      }, [sunHour, sunDate, weather]);
 
       // Lens flare — 35mm prime style
       const drawLensFlare = React.useCallback((sunScreenX, sunScreenY, canvasW, canvasH, sunAltitude) => {
@@ -3654,9 +3759,9 @@
               
               // Compute how close shadow center is to sr/ss — fade opacity
               const minDist = Math.min(distToSr, distToSs);
-              const fadeZone = 15 * Math.PI / 180; // fade over 15 degrees
-              const edgeFade = minDist < fadeZone ? minDist / fadeZone : 1;
-              const baseOpacity = 0.55 * edgeFade;
+              const fadeZone = 45 * Math.PI / 180; // fade over 45 degrees — very gradual
+              const edgeFade = minDist < fadeZone ? Math.pow(minDist / fadeZone, 0.7) : 1;
+              const baseOpacity = 0.5 * edgeFade;
               
               // Clip to night-side arc (between sr and ss on shadow side)
               ctx.save();
@@ -4231,6 +4336,10 @@
                           background: 'linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.4) 70%, transparent 100%)',
                           pointerEvents: 'none'
                         }}/>
+                        {/* Weather particles overlay */}
+                        <canvas ref={weatherCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: `${gradH}px`, pointerEvents: 'none', zIndex: 11, opacity: 0.7,
+                          maskImage: 'linear-gradient(to bottom, black 0%, black 50%, transparent 100%)',
+                          WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 50%, transparent 100%)' }}/>
                         {/* Full-width filet at 172px */}
                         <div style={{ position: 'absolute', top: `${filetTop}px`, left: 0, right: 0, height: '1px', background: 'rgba(255,255,255,0.5)', zIndex: 12 }}/>
                         {/* Vignette - dark base, softer, skip top */}
@@ -5814,7 +5923,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v569</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v570</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
