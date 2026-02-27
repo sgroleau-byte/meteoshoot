@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v561</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v562</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2478,12 +2478,22 @@
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvasW, canvasH);
         
-        // No flare if sun below horizon
-        if (sunAltitude <= 0) return;
+        // No flare if sun well below horizon
+        if (sunAltitude <= -0.1) {
+          // Moon glow at night
+          const moonR = Math.min(canvasW, canvasH) * 0.08;
+          const gradM = ctx.createRadialGradient(sunScreenX, sunScreenY, 0, sunScreenX, sunScreenY, moonR);
+          gradM.addColorStop(0, 'rgba(220, 215, 200, 0.15)');
+          gradM.addColorStop(0.3, 'rgba(200, 195, 185, 0.06)');
+          gradM.addColorStop(1, 'rgba(200, 195, 185, 0)');
+          ctx.fillStyle = gradM;
+          ctx.fillRect(0, 0, canvasW, canvasH);
+          return;
+        }
         
-        // Intensity based on altitude — strongest near horizon (golden hour), dimmer overhead
+        // Intensity: strongest near horizon (golden hour), fades as sun goes higher, fades to 0 at sunset
         const altDeg = sunAltitude * 180 / Math.PI;
-        const intensity = altDeg < 5 ? altDeg / 5 : altDeg < 15 ? 1 : Math.max(0.3, 1 - (altDeg - 15) / 60);
+        const intensity = altDeg < -3 ? 0 : altDeg < 0 ? (altDeg + 3) / 3 * 0.5 : altDeg < 5 ? 0.5 + altDeg / 10 : altDeg < 15 ? 1 : Math.max(0.35, 1 - (altDeg - 15) / 50);
         
         const cx = canvasW / 2, cy = canvasH / 2;
         const sx = sunScreenX, sy = sunScreenY;
@@ -2493,7 +2503,7 @@
         ctx.globalCompositeOperation = 'screen';
         
         // 1. Main sun glow — large warm bloom
-        const mainR = Math.min(canvasW, canvasH) * 0.18 * intensity;
+        const mainR = Math.min(canvasW, canvasH) * 0.25 * intensity;
         const grad1 = ctx.createRadialGradient(sx, sy, 0, sx, sy, mainR);
         grad1.addColorStop(0, `rgba(255, 250, 230, ${0.9 * intensity})`);
         grad1.addColorStop(0.1, `rgba(255, 230, 150, ${0.6 * intensity})`);
@@ -2514,8 +2524,8 @@
         // 3. Anamorphic horizontal streak
         ctx.save();
         ctx.translate(sx, sy);
-        const streakW = canvasW * 0.8 * intensity;
-        const streakH = 3;
+        const streakW = canvasW * 1.0 * intensity;
+        const streakH = 4;
         const gradS = ctx.createLinearGradient(-streakW/2, 0, streakW/2, 0);
         gradS.addColorStop(0, 'rgba(255, 200, 100, 0)');
         gradS.addColorStop(0.3, `rgba(255, 220, 150, ${0.25 * intensity})`);
@@ -3476,8 +3486,22 @@
         const isGoldenBefore = sunHour >= (srTime - 1) && sunHour < srTime;
         const isGoldenAfter = sunHour > ssTime && sunHour <= (ssTime + 1);
         const isNight = !isDay && !isGoldenBefore && !isGoldenAfter;
-        const lineColor = isNight ? '#6b7db5' : (isGoldenBefore || isGoldenAfter) ? '#5ab8aa' : '#7dd3c6';
-        const lineOpacity = isNight ? 0.5 : (isGoldenBefore || isGoldenAfter) ? 0.6 : 1;
+        const lineColor = isNight ? '#6b7db5' : '#ffe26b';
+        const lineOpacity = isNight ? 0.5 : (isGoldenBefore || isGoldenAfter) ? 0.8 : 1;
+        
+        // Yellow glow line behind the dotted line (day/golden only)
+        if (!isNight) {
+          const glowLine = new google.maps.Polyline({
+            path: [{ lat: eLat, lng: eLng }, { lat: lat2, lng: lng2 }],
+            strokeColor: '#ffe26b', strokeOpacity: 0.2, strokeWeight: 14, map
+          });
+          // Store on ref for cleanup
+          if (!sunPosLineRef._glowLine) sunPosLineRef._glowLine = null;
+          if (sunPosLineRef._glowLine) sunPosLineRef._glowLine.setMap(null);
+          sunPosLineRef._glowLine = glowLine;
+        } else {
+          if (sunPosLineRef._glowLine) { sunPosLineRef._glowLine.setMap(null); sunPosLineRef._glowLine = null; }
+        }
         
         sunPosLineRef.current = new google.maps.Polyline({
           path: [{ lat: eLat, lng: eLng }, { lat: lat2, lng: lng2 }],
@@ -3532,18 +3556,25 @@
               const proj = this.getProjection();
               if (!proj || !this.div) return;
               const pos = proj.fromLatLngToDivPixel(new google.maps.LatLng(this.lat, this.lng));
-              this.div.style.left = (pos.x - 9) + 'px';
-              this.div.style.top = (pos.y - 9) + 'px';
+              const sz = this._isNight ? 11 : 9;
+              this.div.style.left = (pos.x - sz) + 'px';
+              this.div.style.top = (pos.y - sz) + 'px';
             }
             setNight(n) {
               if (this._isNight === n || !this.div) return;
               this._isNight = n;
               if (n) {
-                this.div.style.background = 'radial-gradient(circle, #c8d4f0 50%, rgba(150,170,220,0.3) 100%)';
-                this.div.style.boxShadow = '0 0 8px rgba(150,170,220,0.5)';
+                this.div.style.width = '22px';
+                this.div.style.height = '22px';
+                this.div.style.background = 'radial-gradient(circle at 40% 35%, #f5f0e8 0%, #e8e0d0 30%, #d0c8b8 60%, #b8b0a0 100%)';
+                this.div.style.boxShadow = '0 0 12px rgba(220,215,200,0.6), 0 0 30px rgba(200,195,180,0.2)';
+                this.div.style.border = '1.5px solid rgba(255,255,255,0.4)';
               } else {
+                this.div.style.width = '18px';
+                this.div.style.height = '18px';
                 this.div.style.background = 'radial-gradient(circle, #ffe26b 50%, rgba(255,226,107,0.3) 100%)';
                 this.div.style.boxShadow = '0 0 8px rgba(255,226,107,0.5)';
+                this.div.style.border = '2px solid rgba(255,255,255,0.6)';
               }
             }
             moveTo(lat, lng) {
@@ -5660,7 +5691,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v561</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v562</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
