@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v560</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v561</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2467,6 +2467,113 @@
       const isMobile = useIsMobile();
       const departureAutocompleteRef = React.useRef(null);
       const mapContainerRef = React.useRef(null);
+      const flareCanvasRef = React.useRef(null);
+
+      // Lens flare — 35mm prime style
+      const drawLensFlare = React.useCallback((sunScreenX, sunScreenY, canvasW, canvasH, sunAltitude) => {
+        const canvas = flareCanvasRef.current;
+        if (!canvas) return;
+        canvas.width = canvasW;
+        canvas.height = canvasH;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvasW, canvasH);
+        
+        // No flare if sun below horizon
+        if (sunAltitude <= 0) return;
+        
+        // Intensity based on altitude — strongest near horizon (golden hour), dimmer overhead
+        const altDeg = sunAltitude * 180 / Math.PI;
+        const intensity = altDeg < 5 ? altDeg / 5 : altDeg < 15 ? 1 : Math.max(0.3, 1 - (altDeg - 15) / 60);
+        
+        const cx = canvasW / 2, cy = canvasH / 2;
+        const sx = sunScreenX, sy = sunScreenY;
+        // Flare axis: sun → center → opposite
+        const dx = cx - sx, dy = cy - sy;
+        
+        ctx.globalCompositeOperation = 'screen';
+        
+        // 1. Main sun glow — large warm bloom
+        const mainR = Math.min(canvasW, canvasH) * 0.18 * intensity;
+        const grad1 = ctx.createRadialGradient(sx, sy, 0, sx, sy, mainR);
+        grad1.addColorStop(0, `rgba(255, 250, 230, ${0.9 * intensity})`);
+        grad1.addColorStop(0.1, `rgba(255, 230, 150, ${0.6 * intensity})`);
+        grad1.addColorStop(0.4, `rgba(255, 180, 80, ${0.15 * intensity})`);
+        grad1.addColorStop(1, 'rgba(255, 180, 80, 0)');
+        ctx.fillStyle = grad1;
+        ctx.fillRect(0, 0, canvasW, canvasH);
+        
+        // 2. Hot center
+        const hotR = mainR * 0.15;
+        const grad0 = ctx.createRadialGradient(sx, sy, 0, sx, sy, hotR);
+        grad0.addColorStop(0, `rgba(255, 255, 255, ${0.95 * intensity})`);
+        grad0.addColorStop(0.5, `rgba(255, 245, 200, ${0.5 * intensity})`);
+        grad0.addColorStop(1, 'rgba(255, 230, 150, 0)');
+        ctx.fillStyle = grad0;
+        ctx.fillRect(0, 0, canvasW, canvasH);
+        
+        // 3. Anamorphic horizontal streak
+        ctx.save();
+        ctx.translate(sx, sy);
+        const streakW = canvasW * 0.8 * intensity;
+        const streakH = 3;
+        const gradS = ctx.createLinearGradient(-streakW/2, 0, streakW/2, 0);
+        gradS.addColorStop(0, 'rgba(255, 200, 100, 0)');
+        gradS.addColorStop(0.3, `rgba(255, 220, 150, ${0.25 * intensity})`);
+        gradS.addColorStop(0.5, `rgba(255, 240, 200, ${0.5 * intensity})`);
+        gradS.addColorStop(0.7, `rgba(255, 220, 150, ${0.25 * intensity})`);
+        gradS.addColorStop(1, 'rgba(255, 200, 100, 0)');
+        ctx.fillStyle = gradS;
+        ctx.fillRect(-streakW/2, -streakH/2, streakW, streakH);
+        // Wider softer streak
+        const gradS2 = ctx.createLinearGradient(-streakW/2, 0, streakW/2, 0);
+        gradS2.addColorStop(0, 'rgba(255, 200, 100, 0)');
+        gradS2.addColorStop(0.35, `rgba(255, 210, 130, ${0.08 * intensity})`);
+        gradS2.addColorStop(0.5, `rgba(255, 230, 180, ${0.15 * intensity})`);
+        gradS2.addColorStop(0.65, `rgba(255, 210, 130, ${0.08 * intensity})`);
+        gradS2.addColorStop(1, 'rgba(255, 200, 100, 0)');
+        ctx.fillStyle = gradS2;
+        ctx.fillRect(-streakW/2, -12, streakW, 24);
+        ctx.restore();
+        
+        // 4. Ghost artifacts along flare axis
+        const ghosts = [
+          { pos: 0.3, size: 0.06, color: [255, 180, 60], alpha: 0.12 },
+          { pos: 0.5, size: 0.09, color: [120, 200, 255], alpha: 0.08 },
+          { pos: 0.65, size: 0.04, color: [255, 130, 80], alpha: 0.15 },
+          { pos: 0.8, size: 0.12, color: [100, 180, 255], alpha: 0.06 },
+          { pos: 1.0, size: 0.05, color: [200, 150, 255], alpha: 0.1 },
+          { pos: 1.2, size: 0.08, color: [255, 200, 100], alpha: 0.07 },
+          { pos: 1.5, size: 0.15, color: [80, 200, 180], alpha: 0.04 },
+          { pos: 1.8, size: 0.03, color: [255, 160, 200], alpha: 0.12 },
+        ];
+        
+        ghosts.forEach(g => {
+          const gx = sx + dx * g.pos;
+          const gy = sy + dy * g.pos;
+          const gr = Math.min(canvasW, canvasH) * g.size;
+          const [r, gc2, b] = g.color;
+          
+          // Ring ghost (hollow circle)
+          const gradG = ctx.createRadialGradient(gx, gy, gr * 0.6, gx, gy, gr);
+          gradG.addColorStop(0, 'rgba(0,0,0,0)');
+          gradG.addColorStop(0.5, `rgba(${r},${gc2},${b},${g.alpha * intensity})`);
+          gradG.addColorStop(0.8, `rgba(${r},${gc2},${b},${g.alpha * 0.5 * intensity})`);
+          gradG.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = gradG;
+          ctx.beginPath();
+          ctx.arc(gx, gy, gr, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        
+        // 5. Subtle rainbow ring near sun
+        const rainR = mainR * 0.6;
+        ctx.strokeStyle = `rgba(255, 180, 100, ${0.06 * intensity})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(sx, sy, rainR, 0, Math.PI * 2);
+        ctx.stroke();
+        
+      }, []);
       const mapInstanceRef = React.useRef(null);
       const sunLinesRef = React.useRef([]);
       const sunPosLineRef = React.useRef(null);
@@ -3347,7 +3454,10 @@
         if (shadowLineRef.current) { shadowLineRef.current.setMap(null); shadowLineRef.current = null; }
         if (sunPosMarkerRef.current) { sunPosMarkerRef.current.setMap(null); }
         
-        if (!showSunLines || drawingMode) return;
+        if (!showSunLines || drawingMode) {
+          if (flareCanvasRef.current) { const fc = flareCanvasRef.current.getContext('2d'); fc && fc.clearRect(0, 0, flareCanvasRef.current.width, flareCanvasRef.current.height); }
+          return;
+        }
         
         const sunTimes = SunCalc.getTimes(sunDate, eLat, eLng);
         const srTime = sunTimes.sunrise ? sunTimes.sunrise.getHours() + sunTimes.sunrise.getMinutes()/60 : 6;
@@ -3465,6 +3575,19 @@
           }
           sunPosMarkerRef.current = new SunDotOverlay(lat2, lng2);
           sunPosMarkerRef.current.setMap(map);
+        }
+        
+        // Lens flare — project sun position to screen
+        const overlay = nightOverlayRef.current;
+        if (overlay && overlay.getProjection() && flareCanvasRef.current) {
+          const proj = overlay.getProjection();
+          const sunPx = proj.fromLatLngToContainerPixel(new google.maps.LatLng(lat2, lng2));
+          if (sunPx) {
+            const container = mapContainerRef.current;
+            const w = container ? container.offsetWidth : 400;
+            const h = container ? container.offsetHeight : 400;
+            drawLensFlare(sunPx.x, sunPx.y, w, h, sunPos.altitude);
+          }
         }
       }, [sunHour, project?.lat, project?.lng, mapType, mapZoom, sunDate, adjustedPos, showSunLines, drawingMode]);
 
@@ -4109,6 +4232,7 @@
                     })()}
                     {/* Map controls - stacked vertically with subtle border */}
                     <div ref={mapContainerRef} style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#262c30', filter: 'saturate(0.50)' }}/>
+                    <canvas ref={flareCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}/>
                     {/* Fixed center pin */}
                     <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 5, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                       <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#7dd3c6', border: '2px solid #fff', boxShadow: '0 0 8px rgba(125,211,198,0.5), 0 2px 6px rgba(0,0,0,0.4)' }}/>
@@ -5536,7 +5660,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v560</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v561</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
