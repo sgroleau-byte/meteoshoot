@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v565</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v566</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3363,13 +3363,21 @@
         
         const sunTimes = SunCalc.getTimes(sunDate, eLat, eLng);
         
+        // Helper: offset a point away from center by pixels (for circle cutout)
+        const circleRadiusPx = 20; // 34px/2 + 3px border
+        const metersPerPx = 156543.03392 * Math.cos(eLat * Math.PI / 180) / Math.pow(2, mapZoom);
+        const offsetDeg = (circleRadiusPx * metersPerPx) / 111320;
+        
         const drawLine = (azRad, color, opacity, weight) => {
           const bearing = (azRad * 180 / Math.PI + 180) % 360;
           const R = getR();
-          const lat2 = eLat + R * Math.cos(bearing * Math.PI / 180);
-          const lng2 = eLng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(eLat * Math.PI / 180);
+          const bRad = bearing * Math.PI / 180;
+          const startLat = eLat + offsetDeg * Math.cos(bRad);
+          const startLng = eLng + offsetDeg * Math.sin(bRad) / Math.cos(eLat * Math.PI / 180);
+          const lat2 = eLat + R * Math.cos(bRad);
+          const lng2 = eLng + R * Math.sin(bRad) / Math.cos(eLat * Math.PI / 180);
           const line = new google.maps.Polyline({
-            path: [{ lat: eLat, lng: eLng }, { lat: lat2, lng: lng2 }],
+            path: [{ lat: startLat, lng: startLng }, { lat: lat2, lng: lng2 }],
             strokeColor: color, strokeOpacity: opacity, strokeWeight: weight, map
           });
           sunLinesRef.current.push(line);
@@ -3392,27 +3400,32 @@
         const shadowBearingPie = (sunBearingPie + 180) % 360;
         const altDegPie = sunPosPie.altitude * 180 / Math.PI;
         if (altDegPie > 0) {
-          // Wider wedge when sun is lower
           const wedgeAngle = Math.max(15, 45 - altDegPie * 0.5);
           const R = getR() * 1.1;
           const wedgeSteps = 24;
           const startAngle = shadowBearingPie - wedgeAngle;
           const endAngle = shadowBearingPie + wedgeAngle;
-          const wedgePoints = [{ lat: eLat, lng: eLng }];
-          for (let i = 0; i <= wedgeSteps; i++) {
-            const b = startAngle + (endAngle - startAngle) * i / wedgeSteps;
-            const bRad = b * Math.PI / 180;
-            wedgePoints.push({
-              lat: eLat + R * Math.cos(bRad),
-              lng: eLng + R * Math.sin(bRad) / Math.cos(eLat * Math.PI / 180)
+          // Gradient rings: center 80% → edge 0%
+          const rings = 6;
+          for (let ring = 0; ring < rings; ring++) {
+            const innerR = ring === 0 ? offsetDeg * 1.2 : R * (ring / rings);
+            const outerR = R * ((ring + 1) / rings);
+            const opacity = 0.8 * (1 - ring / rings);
+            const innerPts = [];
+            const outerPts = [];
+            for (let i = 0; i <= wedgeSteps; i++) {
+              const b = startAngle + (endAngle - startAngle) * i / wedgeSteps;
+              const bRad = b * Math.PI / 180;
+              innerPts.push({ lat: eLat + innerR * Math.cos(bRad), lng: eLng + innerR * Math.sin(bRad) / Math.cos(eLat * Math.PI / 180) });
+              outerPts.push({ lat: eLat + outerR * Math.cos(bRad), lng: eLng + outerR * Math.sin(bRad) / Math.cos(eLat * Math.PI / 180) });
+            }
+            const ringPath = [...outerPts, ...innerPts.reverse()];
+            const wedgeRing = new google.maps.Polygon({
+              paths: ringPath, strokeOpacity: 0, strokeWeight: 0,
+              fillColor: '#000000', fillOpacity: opacity, map
             });
+            sunLinesRef.current.push(wedgeRing);
           }
-          wedgePoints.push({ lat: eLat, lng: eLng });
-          const wedge = new google.maps.Polygon({
-            paths: wedgePoints, strokeColor: '#000000', strokeOpacity: 0,
-            strokeWeight: 0, fillColor: '#000000', fillOpacity: 0.35, map
-          });
-          sunLinesRef.current.push(wedge);
         }
       }, [sunDate, project?.lat, project?.lng, mapZoom, adjustedPos, showSunLines, drawingMode, sunHour]);
 
@@ -3496,10 +3509,18 @@
         const lineColor = isNight ? '#6b7db5' : '#ffe26b';
         const lineOpacity = isNight ? 0.5 : (isGoldenBefore || isGoldenAfter) ? 0.8 : 1;
         
+        // Offset start from circle edge
+        const cRadPx = 20;
+        const mPerPx = 156543.03392 * Math.cos(eLat * Math.PI / 180) / Math.pow(2, mapZoom);
+        const offDeg = (cRadPx * mPerPx) / 111320;
+        const bRad2 = bearing * Math.PI / 180;
+        const startLat = eLat + offDeg * Math.cos(bRad2);
+        const startLng = eLng + offDeg * Math.sin(bRad2) / Math.cos(eLat * Math.PI / 180);
+        
         // Yellow glow line behind the solid line (day/golden only)
         if (!isNight) {
           const glowLine = new google.maps.Polyline({
-            path: [{ lat: eLat, lng: eLng }, { lat: lat2, lng: lng2 }],
+            path: [{ lat: startLat, lng: startLng }, { lat: lat2, lng: lng2 }],
             strokeColor: '#ffe26b', strokeOpacity: 0.15, strokeWeight: 36, map
           });
           if (!sunPosLineRef._glowLine) sunPosLineRef._glowLine = null;
@@ -3510,7 +3531,7 @@
         }
         
         sunPosLineRef.current = new google.maps.Polyline({
-          path: [{ lat: eLat, lng: eLng }, { lat: lat2, lng: lng2 }],
+          path: [{ lat: startLat, lng: startLng }, { lat: lat2, lng: lng2 }],
           strokeColor: lineColor, strokeOpacity: lineOpacity, strokeWeight: 3,
           map
         });
@@ -3646,8 +3667,14 @@
           const lat2 = eLat + R * Math.cos(bearing * Math.PI / 180);
           const lng2 = eLng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(eLat * Math.PI / 180);
           
+          const cRPx2 = 20;
+          const mPPx2 = 156543.03392 * Math.cos(eLat * Math.PI / 180) / Math.pow(2, mapZoom);
+          const offD2 = (cRPx2 * mPPx2) / 111320;
+          const bR2 = bearing * Math.PI / 180;
+          const sLat2 = eLat + offD2 * Math.cos(bR2);
+          const sLng2 = eLng + offD2 * Math.sin(bR2) / Math.cos(eLat * Math.PI / 180);
           currentTimeLineRef.current = new google.maps.Polyline({
-            path: [{ lat: eLat, lng: eLng }, { lat: lat2, lng: lng2 }],
+            path: [{ lat: sLat2, lng: sLng2 }, { lat: lat2, lng: lng2 }],
             strokeColor: '#ffffff', strokeOpacity: 0.35, strokeWeight: 3, map
           });
         }
@@ -4259,7 +4286,7 @@
                     <canvas ref={flareCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}/>
                     {/* Fixed center pin */}
                     <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 5, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                      <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'transparent', border: '3px solid #ffffff', boxShadow: '0 2px 6px rgba(0,0,0,0.4)' }}/>
+                      <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'transparent', border: '3px solid #ffffff', boxShadow: '0 2px 6px rgba(0,0,0,0.4)' }}/>
                     </div>
                     {/* Shape labels top-right */}
                     {buildings.length > 0 && <div style={{ position: 'absolute', top: '145px', right: '-2px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
@@ -4431,6 +4458,28 @@
                         </div>
                       )}
                     </div>
+                    {/* Zoom scale bar */}
+                    {(() => {
+                      const lat = adjustedPos?.lat ?? project?.lat ?? 45;
+                      const mPerPx = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, mapZoom);
+                      const targetPx = 100;
+                      const targetM = targetPx * mPerPx;
+                      const nice = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+                      const best = nice.reduce((a, b) => Math.abs(b - targetM) < Math.abs(a - targetM) ? b : a);
+                      const barPx = Math.round(best / mPerPx);
+                      const label = best >= 1000 ? (best / 1000) + ' km' : best + ' m';
+                      return (
+                        <div style={{ position: 'absolute', bottom: '14px', left: '14px', zIndex: 13, pointerEvents: 'none', display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                            <span className="font-bebas-bold" style={{ fontSize: '12px', color: '#ffffff', letterSpacing: '0.06em', textShadow: '0 1px 3px rgba(0,0,0,0.8)', marginBottom: '2px' }}>{label}</span>
+                            <div style={{ width: barPx + 'px', height: '2px', background: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.6)', position: 'relative' }}>
+                              <div style={{ position: 'absolute', left: 0, top: '-3px', width: '2px', height: '8px', background: '#ffffff' }}/>
+                              <div style={{ position: 'absolute', right: 0, top: '-3px', width: '2px', height: '8px', background: '#ffffff' }}/>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                     {/* Drawing mode hint — near the polygon */}
                     {drawingMode && (
                       <div style={{ position: 'absolute', 
@@ -5684,7 +5733,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v565</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v566</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
