@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v559</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v560</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -4260,24 +4260,26 @@
                       {/* Zoom pill */}
                       {!isMobile && (
                         <div style={{ 
+                          position: 'relative',
                           display: 'flex', flexDirection: 'column', alignItems: 'center',
                           background: 'rgba(255,255,255,0.92)', 
                           borderRadius: '24px', 
                           width: '44px', boxSizing: 'border-box',
                           padding: '14px 0 0 0'
                         }}>
+                          <span className="font-bebas-book"
+                            style={{ width: '100%', height: '28px',
+                              color: '#333', fontSize: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+                            }}>+</span>
+                          <span className="font-bebas-book"
+                            style={{ width: '100%', height: '28px',
+                              color: '#333', fontSize: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+                            }}>−</span>
+                          {/* Invisible 50/50 click overlays */}
                           <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() + 1); }}
-                            className="font-bebas-book"
-                            style={{ width: '100%', height: '28px', border: 'none', cursor: 'pointer',
-                              background: 'transparent',
-                              color: '#333', fontSize: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}>+</button>
+                            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '50%', background: 'transparent', border: 'none', cursor: 'pointer' }}/>
                           <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() - 1); }}
-                            className="font-bebas-book"
-                            style={{ width: '100%', height: '28px', border: 'none', cursor: 'pointer',
-                              background: 'transparent',
-                              color: '#333', fontSize: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}>−</button>
+                            style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: '50%', background: 'transparent', border: 'none', cursor: 'pointer' }}/>
                         </div>
                       )}
                     </div>
@@ -5534,7 +5536,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v559</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v560</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
