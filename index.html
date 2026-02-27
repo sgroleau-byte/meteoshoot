@@ -435,7 +435,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v533</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v534</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2414,6 +2414,7 @@
       const [mapZoom, setMapZoom] = useState(16);
       const [showMapFull, setShowMapFull] = useState(false);
       const mapRevealedRef = React.useRef(false);
+      const [mapRevealed, setMapRevealed] = useState(false);
       const [showSunLines, setShowSunLines] = useState(true);
       const [sunDate, setSunDate] = useState(() => new Date());
       const [showDatePicker, setShowDatePicker] = useState(false);
@@ -2990,6 +2991,7 @@
           google.maps.event.addListenerOnce(map, 'tilesloaded', () => {
             if (mapRevealedRef.current) return;
             mapRevealedRef.current = true;
+            setMapRevealed(true);
             // Set slider to start of range (far left)
             const st2 = (project?.lat && project?.lng && window.SunCalc) ? SunCalc.getTimes(new Date(), project.lat, project.lng) : null;
             const sr2 = st2?.sunrise ? st2.sunrise.getHours() + st2.sunrise.getMinutes()/60 : 6;
@@ -3809,7 +3811,10 @@
                   <>
                   {showMapFull && <div onClick={() => setShowMapFull(false)} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(30,30,30,0.88)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}/>}
                   <div style={{
-                    ...(showMapFull ? { position: 'fixed', top: 'env(safe-area-inset-top, 50px)', left: 0, width: '100vw', height: 'calc(100vh - env(safe-area-inset-top, 50px))', zIndex: 51, overflow: 'hidden' } : { position: 'relative', overflow: 'hidden', flex: 1 })
+                    ...(showMapFull ? { position: 'fixed', top: 'env(safe-area-inset-top, 50px)', left: 0, width: '100vw', height: 'calc(100vh - env(safe-area-inset-top, 50px))', zIndex: 51, overflow: 'hidden' } : { position: 'relative', overflow: 'hidden', flex: 1 }),
+                    clipPath: mapRevealed || showMapFull ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
+                    WebkitClipPath: mapRevealed || showMapFull ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
+                    transition: 'clip-path 1.2s cubic-bezier(0.25, 0.1, 0.25, 1), -webkit-clip-path 1.2s cubic-bezier(0.25, 0.1, 0.25, 1)'
                   }}>
                     {/* Sun time slider - new design */}
                     {(() => {
@@ -5425,7 +5430,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v533</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v534</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
