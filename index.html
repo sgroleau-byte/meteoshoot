@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v575</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v576</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3874,23 +3874,37 @@
               const haloLen = Math.max(w, h) * 1.2;
               
               const drawLineHalo = (lineAngle, r, g, b, inward) => {
-                const glowWidth = 12 * Math.PI / 180;
-                for (let pass = 0; pass < 4; pass++) {
-                  const pw = glowWidth * (1 + pass * 0.6);
-                  const alpha = [0.10, 0.06, 0.03, 0.015][pass];
+                // 4 passes: each wider arc, decreasing opacity
+                const passes = [
+                  { deg: 6, alpha: 0.25 },
+                  { deg: 14, alpha: 0.15 },
+                  { deg: 24, alpha: 0.07 },
+                  { deg: 36, alpha: 0.03 },
+                ];
+                for (const p of passes) {
+                  const pw = p.deg * Math.PI / 180;
                   ctx.save();
+                  // Clip to day-side arc first (sr → ss) — never goes past white lines
+                  ctx.beginPath();
+                  ctx.moveTo(centerPx.x, centerPx.y);
+                  ctx.arc(centerPx.x, centerPx.y, haloLen, srScrA, ssScrA);
+                  ctx.closePath();
+                  ctx.clip();
+                  // Then clip to thin wedge near this line
                   ctx.beginPath();
                   ctx.moveTo(centerPx.x, centerPx.y);
                   if (inward > 0) {
-                    ctx.arc(centerPx.x, centerPx.y, haloLen, lineAngle, lineAngle + pw * inward);
+                    ctx.arc(centerPx.x, centerPx.y, haloLen, lineAngle, lineAngle + pw);
                   } else {
-                    ctx.arc(centerPx.x, centerPx.y, haloLen, lineAngle + pw * inward, lineAngle);
+                    ctx.arc(centerPx.x, centerPx.y, haloLen, lineAngle - pw, lineAngle);
                   }
                   ctx.closePath();
                   ctx.clip();
+                  // Radial gradient from center outward
                   const radGrad = ctx.createRadialGradient(centerPx.x, centerPx.y, 17, centerPx.x, centerPx.y, haloLen);
-                  radGrad.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
-                  radGrad.addColorStop(0.5, `rgba(${r},${g},${b},${alpha * 0.7})`);
+                  radGrad.addColorStop(0, `rgba(${r},${g},${b},${p.alpha})`);
+                  radGrad.addColorStop(0.4, `rgba(${r},${g},${b},${p.alpha * 0.6})`);
+                  radGrad.addColorStop(0.8, `rgba(${r},${g},${b},${p.alpha * 0.2})`);
                   radGrad.addColorStop(1, `rgba(${r},${g},${b},0)`);
                   ctx.fillStyle = radGrad;
                   ctx.fillRect(0, 0, w, h);
@@ -6009,7 +6023,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v575</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v576</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
