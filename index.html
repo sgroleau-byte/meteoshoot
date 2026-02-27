@@ -435,7 +435,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v549</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v550</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2494,12 +2494,13 @@
           const delta = draggingHeight.startY - clientY;
           const newH = Math.max(1, Math.min(200, Math.round(draggingHeight.startH + delta * 0.5)));
           setDraggingHeight(prev => prev ? { ...prev, currentH: newH, offsetY: clientY - prev.startY } : null);
+          // Live update buildings for shadow
+          setBuildings(prev => prev.map((bb, ii) => ii === draggingHeight.idx ? {...bb, height: newH} : bb));
         };
         const onEnd = () => {
           if (draggingHeight) {
             const idx = draggingHeight.idx;
             const h = draggingHeight.currentH;
-            setBuildings(prev => prev.map((bb, ii) => ii === idx ? {...bb, height: h} : bb));
             buildingsSaveTimer.current && clearTimeout(buildingsSaveTimer.current);
             buildingsSaveTimer.current = setTimeout(() => {
               updateProject(project.id, { buildings: buildings.map((bb, ii) => ii === idx ? {...bb, height: h} : bb) });
@@ -4086,7 +4087,7 @@
                       <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#7dd3c6', border: '2px solid #fff', boxShadow: '0 0 8px rgba(125,211,198,0.5), 0 2px 6px rgba(0,0,0,0.4)' }}/>
                     </div>
                     {/* Shape labels top-right */}
-                    {buildings.length > 0 && <div style={{ position: 'absolute', top: '120px', right: '12px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+                    {buildings.length > 0 && <div style={{ position: 'absolute', top: '145px', right: '20px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
                       {buildings.map((b, i) => {
                         const color = BUILDING_COLORS[i % BUILDING_COLORS.length];
                         const displayH = draggingHeight && draggingHeight.idx === i ? draggingHeight.currentH : b.height;
@@ -4100,12 +4101,12 @@
                           {/* Outer colored pill — wraps everything */}
                           <div onClick={() => { setEditingBuilding(i); setBuildingHeight(String(b.height)); setBuildingName(b.name); }} style={{ 
                             display: 'flex', alignItems: 'center', gap: '7px',
-                            background: hexToRgba(color, 0.4), borderRadius: '16px', padding: '2px 3px 2px 6px',
+                            background: hexToRgba(color, 0.25), borderRadius: '16px', padding: '2px 3px 2px 6px',
                             cursor: 'pointer', whiteSpace: 'nowrap'
                           }}>
                             <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: color, flexShrink: 0 }}/>
                             <span className="font-bebas-bold" style={{ 
-                              letterSpacing: '0.06em', fontSize: '17px', color: '#fff', lineHeight: '1', marginTop: '1px'
+                              letterSpacing: '0.06em', fontSize: '17px', color: '#fff', lineHeight: '1', transform: 'translateY(3px)'
                             }}>FORME {i + 1}</span>
                             {/* White height pill — draggable, inside the color pill */}
                             <div style={{ position: 'relative' }}>
@@ -4124,7 +4125,7 @@
                                 onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setDraggingHeight({ idx: i, startY: e.clientY, startH: b.height, currentH: b.height, offsetY: 0 }); }}
                                 onTouchStart={e => { e.stopPropagation(); const t = e.touches[0]; setDraggingHeight({ idx: i, startY: t.clientY, startH: b.height, currentH: b.height, offsetY: 0 }); }}
                               >
-                                <span className="font-bebas-bold" style={{ fontSize: '15px', color: '#000', letterSpacing: '0.04em', lineHeight: '1', marginTop: '1px', display: 'inline-block' }}>{displayH} M</span>
+                                <span className="font-bebas-bold" style={{ fontSize: '17px', color: '#000', letterSpacing: '0.04em', lineHeight: '1', marginTop: '1px', display: 'inline-block' }}>{displayH} M</span>
                               </div>
                             </div>
                           </div>
@@ -5501,7 +5502,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v549</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v550</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
