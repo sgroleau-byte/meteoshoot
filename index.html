@@ -4051,14 +4051,14 @@
                       ))}
                     </div>}
                     {/* Controls pill + Zoom pill wrapper */}
-                    <div style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', right: '12px', zIndex: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+                    <div style={{ position: 'absolute', top: '66%', transform: 'translateY(-50%)', right: '12px', zIndex: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
                       {/* Controls pill */}
                       <div style={{ 
                         display: 'flex', flexDirection: 'column', alignItems: 'center',
                         backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', 
                         borderRadius: '28px', 
                         border: '2px solid rgba(255,255,255,0.9)',
-                        padding: '18px 5px', gap: '12px',
+                        padding: '24px 5px', gap: '16px',
                         width: '46px', boxSizing: 'border-box'
                       }}>
                         <button 
@@ -4133,7 +4133,7 @@
                           background: 'rgba(255,255,255,0.92)', 
                           borderRadius: '24px', 
                           width: '46px', boxSizing: 'border-box',
-                          padding: '6px 0'
+                          padding: '12px 0'
                         }}>
                           <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() + 1); }}
                             style={{ width: '100%', height: '34px', border: 'none', cursor: 'pointer',
