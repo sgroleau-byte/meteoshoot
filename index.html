@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v567</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v568</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3362,7 +3362,7 @@
         const sunTimes = SunCalc.getTimes(sunDate, eLat, eLng);
         
         // Helper: offset a point away from center by pixels (for circle cutout)
-        const circleRadiusPx = 22; // 34px/2 + 3px border
+        const circleRadiusPx = 17; // 34px/2 + 3px border
         const metersPerPx = 156543.03392 * Math.cos(eLat * Math.PI / 180) / Math.pow(2, mapZoom);
         const offsetDeg = (circleRadiusPx * metersPerPx) / 111320;
         
@@ -3483,7 +3483,7 @@
         const lineOpacity = isNight ? 0.7 : (isGoldenBefore || isGoldenAfter) ? 0.8 : 1;
         
         // Offset start from circle edge
-        const cRadPx = 22;
+        const cRadPx = 17;
         const mPerPx = 156543.03392 * Math.cos(eLat * Math.PI / 180) / Math.pow(2, mapZoom);
         const offDeg = (cRadPx * mPerPx) / 111320;
         const bRad2 = bearing * Math.PI / 180;
@@ -3629,10 +3629,12 @@
               const ssScreenAngle = ((ssAzRad * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
               const shadowScreenAngle = (((sunBearingDeg + 180) % 360) - 90) * Math.PI / 180;
               
-              // Wedge half-angle: wider when sun is lower
-              const wedgeHalf = Math.max(15, 45 - altDeg * 0.5) * Math.PI / 180;
-              const maxR = Math.max(w, h) * 0.8;
-              const circleR = 22; // pixels from center (match circle offset)
+              // Wedge half-angle: narrower
+              const wedgeHalf = Math.max(10, 30 - altDeg * 0.4) * Math.PI / 180;
+              // Length scales with sun altitude: short at noon (high sun), long near horizon
+              const shadowLen = altDeg < 10 ? 0.8 : altDeg < 30 ? 0.8 - (altDeg - 10) * 0.02 : altDeg < 60 ? 0.4 - (altDeg - 30) * 0.005 : 0.25;
+              const maxR = Math.max(w, h) * shadowLen;
+              const circleR = 17; // pixels from center (match circle offset)
               
               ctx.save();
               ctx.beginPath();
@@ -3656,10 +3658,10 @@
               ctx.save();
               ctx.beginPath();
               ctx.moveTo(centerPx.x, centerPx.y);
-              ctx.arc(centerPx.x, centerPx.y, maxR, shadowScreenAngle - wedgeHalf * 1.3, shadowScreenAngle + wedgeHalf * 1.3);
+              ctx.arc(centerPx.x, centerPx.y, maxR * 1.1, shadowScreenAngle - wedgeHalf * 1.3, shadowScreenAngle + wedgeHalf * 1.3);
               ctx.closePath();
               ctx.clip();
-              const grad2 = ctx.createRadialGradient(centerPx.x, centerPx.y, circleR, centerPx.x, centerPx.y, maxR * 0.7);
+              const grad2 = ctx.createRadialGradient(centerPx.x, centerPx.y, circleR, centerPx.x, centerPx.y, maxR * 0.5);
               grad2.addColorStop(0, 'rgba(0,0,0,0.15)');
               grad2.addColorStop(0.3, 'rgba(0,0,0,0.05)');
               grad2.addColorStop(1, 'rgba(0,0,0,0)');
@@ -3705,7 +3707,7 @@
           const lat2 = eLat + R * Math.cos(bearing * Math.PI / 180);
           const lng2 = eLng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(eLat * Math.PI / 180);
           
-          const cRPx2 = 22;
+          const cRPx2 = 17;
           const mPPx2 = 156543.03392 * Math.cos(eLat * Math.PI / 180) / Math.pow(2, mapZoom);
           const offD2 = (cRPx2 * mPPx2) / 111320;
           const bR2 = bearing * Math.PI / 180;
@@ -4508,7 +4510,7 @@
                       const barPx = Math.round(best / mPerPx);
                       const label = best >= 1000 ? (best / 1000) + ' km' : best + ' m';
                       return (
-                        <div style={{ position: 'absolute', bottom: '14px', right: '70px', zIndex: 13, pointerEvents: 'none', display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
+                        <div style={{ position: 'absolute', bottom: '14px', right: '10px', zIndex: 13, pointerEvents: 'none', display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                             <span className="font-bebas-bold" style={{ fontSize: '12px', color: '#ffffff', letterSpacing: '0.06em', textShadow: '0 1px 3px rgba(0,0,0,0.8)', marginBottom: '2px' }}>{label}</span>
                             <div style={{ width: barPx + 'px', height: '2px', background: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.6)', position: 'relative' }}>
@@ -5772,7 +5774,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v567</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v568</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
