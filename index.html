@@ -435,7 +435,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v546</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v547</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2484,6 +2484,44 @@
       const [editingBuilding, setEditingBuilding] = useState(null); // index of building being edited
       const [hoveredBuilding, setHoveredBuilding] = useState(null);
       const [heightPickerIdx, setHeightPickerIdx] = useState(null);
+      const [draggingHeight, setDraggingHeight] = useState(null); // { idx, startY, startH, currentH, offsetY }
+      const BUILDING_COLORS = ['#ffe26b', '#7dd3c6', '#ff6b8a', '#b07dff', '#6bff8a'];
+
+      // Height pill drag handlers
+      useEffect(() => {
+        if (!draggingHeight) return;
+        const onMove = (clientY) => {
+          const delta = draggingHeight.startY - clientY;
+          const newH = Math.max(1, Math.min(200, Math.round(draggingHeight.startH + delta * 0.5)));
+          setDraggingHeight(prev => prev ? { ...prev, currentH: newH, offsetY: clientY - prev.startY } : null);
+        };
+        const onEnd = () => {
+          if (draggingHeight) {
+            const idx = draggingHeight.idx;
+            const h = draggingHeight.currentH;
+            setBuildings(prev => prev.map((bb, ii) => ii === idx ? {...bb, height: h} : bb));
+            buildingsSaveTimer.current && clearTimeout(buildingsSaveTimer.current);
+            buildingsSaveTimer.current = setTimeout(() => {
+              updateProject(project.id, { buildings: buildings.map((bb, ii) => ii === idx ? {...bb, height: h} : bb) });
+            }, 500);
+          }
+          setDraggingHeight(null);
+        };
+        const onMouseMove = (e) => onMove(e.clientY);
+        const onTouchMove = (e) => onMove(e.touches[0].clientY);
+        const onMouseUp = () => onEnd();
+        const onTouchEnd = () => onEnd();
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        window.addEventListener('touchmove', onTouchMove, { passive: true });
+        window.addEventListener('touchend', onTouchEnd);
+        return () => {
+          window.removeEventListener('mousemove', onMouseMove);
+          window.removeEventListener('mouseup', onMouseUp);
+          window.removeEventListener('touchmove', onTouchMove);
+          window.removeEventListener('touchend', onTouchEnd);
+        };
+      }, [draggingHeight, buildings, project?.id]);
       const [buildingHeight, setBuildingHeight] = useState('');
       const [buildingName, setBuildingName] = useState('');
       const buildingPolygonsRef = React.useRef([]);
@@ -2621,6 +2659,7 @@
       const finishDrawingFromRef = () => {
         const verts = drawingVerticesRef.current;
         if (verts.length < 3) return;
+        if (buildings.length >= 5) { setDrawingMode(false); setDrawingVertices([]); drawingVerticesRef.current = []; return; }
         const newBuilding = { polygon: [...verts], height: 30, name: '' };
         setBuildings(prev => {
           newBuilding.name = `Bâtiment ${prev.length + 1}`;
@@ -2639,6 +2678,7 @@
 
       const finishDrawing = () => {
         if (drawingVertices.length < 3) return;
+        if (buildings.length >= 5) { setDrawingMode(false); setDrawingVertices([]); return; }
         const newBuilding = { polygon: [...drawingVertices], height: 30, name: `Bâtiment ${buildings.length + 1}` };
         setBuildings(prev => [...prev, newBuilding]);
         setEditingBuilding(buildings.length);
@@ -2723,20 +2763,21 @@
             }
           }
 
-          // Draw building footprint — always yellow, flashy
+          // Draw building footprint — per-shape color
+          const shapeColor = BUILDING_COLORS[idx % BUILDING_COLORS.length];
           // Glow behind
           const glowPoly = new google.maps.Polygon({
             paths: bldg.polygon,
-            strokeColor: '#ffe26b', strokeOpacity: 0.4, strokeWeight: isSelected ? 10 : 6,
+            strokeColor: shapeColor, strokeOpacity: 0.4, strokeWeight: isSelected ? 10 : 6,
             fillColor: 'transparent', fillOpacity: 0, map, zIndex: 24,
           });
           buildingPolygonsRef.current.push(glowPoly);
           
           const poly = new google.maps.Polygon({
             paths: bldg.polygon,
-            strokeColor: '#ffe26b',
+            strokeColor: shapeColor,
             strokeOpacity: isSelected ? 1 : 0.85, strokeWeight: isSelected ? 3.5 : 2.5,
-            fillColor: '#ffe26b',
+            fillColor: shapeColor,
             fillOpacity: 0.12, map, zIndex: 25,
             clickable: true
           });
@@ -2754,7 +2795,7 @@
                 position: v, map, draggable: true,
                 icon: {
                   path: google.maps.SymbolPath.CIRCLE,
-                  scale: 6, fillColor: '#ffe26b', fillOpacity: 1,
+                  scale: 6, fillColor: shapeColor, fillOpacity: 1,
                   strokeColor: '#fff', strokeWeight: 2,
                 },
                 zIndex: 40
@@ -4043,35 +4084,55 @@
                       <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#7dd3c6', border: '2px solid #fff', boxShadow: '0 0 8px rgba(125,211,198,0.5), 0 2px 6px rgba(0,0,0,0.4)' }}/>
                     </div>
                     {/* Shape labels top-right */}
-                    {buildings.length > 0 && <div style={{ position: 'absolute', top: '98px', right: '14px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
-                      {buildings.map((b, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}
+                    {buildings.length > 0 && <div style={{ position: 'absolute', top: '98px', right: '14px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                      {buildings.map((b, i) => {
+                        const color = BUILDING_COLORS[i % BUILDING_COLORS.length];
+                        const displayH = draggingHeight && draggingHeight.idx === i ? draggingHeight.currentH : b.height;
+                        const pillOffsetY = draggingHeight && draggingHeight.idx === i ? draggingHeight.offsetY : 0;
+                        const isDragging = draggingHeight && draggingHeight.idx === i;
+                        return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0px', position: 'relative' }}
                           onMouseEnter={() => setHoveredBuilding(i)} onMouseLeave={() => setHoveredBuilding(null)}>
-                          <span className="font-bebas-bold" onClick={() => { setEditingBuilding(i); setBuildingHeight(String(b.height)); setBuildingName(b.name); }} style={{ 
-                            letterSpacing: '0.06em', fontSize: '20px', color: '#ffffff',
+                          {/* Colored shape pill */}
+                          <div onClick={() => { setEditingBuilding(i); setBuildingHeight(String(b.height)); setBuildingName(b.name); }} style={{ 
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                            background: color, borderRadius: '20px', padding: '4px 12px 4px 8px',
                             cursor: 'pointer', whiteSpace: 'nowrap'
-                          }}>{b.name || `FORME ${i + 1}`}</span>
-                          <span className="font-bebas-bold" onClick={() => setHeightPickerIdx(heightPickerIdx === i ? null : i)} style={{ 
-                            fontSize: '20px', color: 'rgba(255,255,255,0.6)', letterSpacing: '0.04em', cursor: 'pointer', minWidth: '40px', textAlign: 'right'
-                          }}>{b.height} M</span>
-                          {heightPickerIdx === i && (
-                            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', zIndex: 20, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', borderRadius: '8px', padding: '4px 0', maxHeight: '120px', overflowY: 'auto', scrollbarWidth: 'none', width: '55px' }}
-                              ref={el => { if (el) { const target = el.querySelector('[data-active]'); if (target) target.scrollIntoView({ block: 'center' }); } }}>
-                              {Array.from({ length: 100 }, (_, n) => n + 1).map(h => (
-                                <div key={h} data-active={h === b.height ? '' : undefined}
-                                  onClick={() => { setBuildings(prev => prev.map((bb, ii) => ii === i ? {...bb, height: h} : bb)); buildingsSaveTimer.current && clearTimeout(buildingsSaveTimer.current); buildingsSaveTimer.current = setTimeout(() => updateProject(project.id, { buildings: buildings.map((bb, ii) => ii === i ? {...bb, height: h} : bb) }), 500); setHeightPickerIdx(null); }}
-                                  className="font-bebas-bold" style={{ padding: '2px 12px', fontSize: '16px', textAlign: 'center', cursor: 'pointer', color: h === b.height ? '#7dd3c6' : 'rgba(255,255,255,0.6)', background: h === b.height ? 'rgba(125,211,198,0.1)' : 'transparent' }}>{h} M</div>
-                              ))}
+                          }}>
+                            <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: color, border: '2px solid rgba(0,0,0,0.3)', flexShrink: 0 }}/>
+                            <span className="font-bebas-bold" style={{ 
+                              letterSpacing: '0.06em', fontSize: '18px', color: '#000', lineHeight: '1.2'
+                            }}>FORME {i + 1}</span>
+                          </div>
+                          {/* White height pill — draggable */}
+                          <div style={{ position: 'relative', marginLeft: '-2px' }}>
+                            {/* Vertical track on hover */}
+                            {(hoveredBuilding === i || isDragging) && (
+                              <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '-40px', bottom: '-40px', width: '1px', background: 'rgba(255,255,255,0.3)', zIndex: -1, pointerEvents: 'none' }}/>
+                            )}
+                            <div 
+                              style={{ 
+                                background: '#fff', borderRadius: '20px', padding: '4px 10px',
+                                cursor: isDragging ? 'grabbing' : 'grab', userSelect: 'none', WebkitUserSelect: 'none',
+                                transform: `translateY(${pillOffsetY}px)`,
+                                transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                                boxShadow: isDragging ? '0 4px 12px rgba(0,0,0,0.3)' : 'none'
+                              }}
+                              onMouseDown={e => { e.preventDefault(); setDraggingHeight({ idx: i, startY: e.clientY, startH: b.height, currentH: b.height, offsetY: 0 }); }}
+                              onTouchStart={e => { const t = e.touches[0]; setDraggingHeight({ idx: i, startY: t.clientY, startH: b.height, currentH: b.height, offsetY: 0 }); }}
+                            >
+                              <span className="font-bebas-bold" style={{ fontSize: '18px', color: '#000', letterSpacing: '0.04em', lineHeight: '1.2' }}>{displayH} M</span>
                             </div>
-                          )}
+                          </div>
+                          {/* X delete on hover */}
                           <button onClick={(e) => { e.stopPropagation(); deleteBuilding(i); }} style={{ 
-                            background: 'none', border: 'none', cursor: 'pointer', padding: '2px', 
+                            background: 'none', border: 'none', cursor: 'pointer', padding: '2px', marginLeft: '4px',
                             opacity: hoveredBuilding === i ? 1 : 0, transition: 'opacity 0.2s ease', pointerEvents: hoveredBuilding === i ? 'auto' : 'none'
                           }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,100,100,0.8)" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                           </button>
-                        </div>
-                      ))}
+                        </div>);
+                      })}
                     </div>}
                     {/* Controls pill + Zoom pill wrapper */}
                     <div style={{ position: 'absolute', top: '70%', transform: 'translateY(-50%)', right: '12px', zIndex: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '35px' }}>
@@ -5436,7 +5497,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v546</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v547</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
