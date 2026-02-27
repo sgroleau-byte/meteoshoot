@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v570</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v571</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3584,8 +3584,10 @@
         const isGoldenBefore = sunHour >= (srTime - 1) && sunHour < srTime;
         const isGoldenAfter = sunHour > ssTime && sunHour <= (ssTime + 1);
         const isNight = !isDay && !isGoldenBefore && !isGoldenAfter;
-        const lineColor = isNight ? '#c8d8f0' : '#ffe26b';
-        const lineOpacity = isNight ? 0.7 : (isGoldenBefore || isGoldenAfter) ? 0.8 : 1;
+        // Moon mode: as soon as sun passes ss or sr lines
+        const isMoonMode = sunHour > ssTime || sunHour < srTime;
+        const lineColor = isMoonMode ? '#c8d8f0' : '#ffe26b';
+        const lineOpacity = isMoonMode ? 0.7 : (isGoldenBefore || isGoldenAfter) ? 0.8 : 1;
         
         // Offset start from circle edge
         const cRadPx = 17;
@@ -3596,7 +3598,7 @@
         const startLng = eLng + offDeg * Math.sin(bRad2) / Math.cos(eLat * Math.PI / 180);
         
         // Glow line behind the solid line
-        if (!isNight) {
+        if (!isMoonMode) {
           const glowLine = new google.maps.Polyline({
             path: [{ lat: startLat, lng: startLng }, { lat: lat2, lng: lng2 }],
             strokeColor: '#ffe26b', strokeOpacity: 0.15, strokeWeight: 36, map
@@ -3605,10 +3607,10 @@
           if (sunPosLineRef._glowLine) sunPosLineRef._glowLine.setMap(null);
           sunPosLineRef._glowLine = glowLine;
         } else {
-          // Subtle bluish glow at night
+          // Subtle bluish moon glow
           const glowLine = new google.maps.Polyline({
             path: [{ lat: startLat, lng: startLng }, { lat: lat2, lng: lng2 }],
-            strokeColor: '#c8d8f0', strokeOpacity: 0.08, strokeWeight: 24, map
+            strokeColor: '#c8d8f0', strokeOpacity: 0.1, strokeWeight: 24, map
           });
           if (sunPosLineRef._glowLine) sunPosLineRef._glowLine.setMap(null);
           sunPosLineRef._glowLine = glowLine;
@@ -3625,7 +3627,7 @@
         // Sun/Moon dot — custom overlay with motion blur
         if (sunPosMarkerRef.current) {
           sunPosMarkerRef.current.moveTo(lat2, lng2);
-          sunPosMarkerRef.current.setNight(isNight);
+          sunPosMarkerRef.current.setNight(isMoonMode);
           if (!sunPosMarkerRef.current.getMap()) sunPosMarkerRef.current.setMap(map);
         } else {
           class SunDotOverlay extends google.maps.OverlayView {
@@ -3665,8 +3667,8 @@
                 this.div.style.width = '24px';
                 this.div.style.height = '24px';
                 this.div.style.background = 'radial-gradient(circle at 38% 32%, #f8f4ec 0%, #ede6d8 25%, #ddd5c5 50%, #c8bfaf 80%, #b0a898 100%)';
-                this.div.style.boxShadow = '0 0 16px rgba(230,225,210,0.5), 0 0 40px rgba(210,205,190,0.2), inset -3px -2px 5px rgba(0,0,0,0.15), inset 1px 1px 3px rgba(255,255,255,0.3)';
-                this.div.style.border = '1px solid rgba(255,255,255,0.3)';
+                this.div.style.boxShadow = '0 0 8px 2px rgba(240,235,220,0.6), 0 0 20px 6px rgba(220,215,200,0.35), 0 0 45px 12px rgba(200,195,180,0.15), inset -3px -2px 5px rgba(0,0,0,0.15), inset 1px 1px 3px rgba(255,255,255,0.3)';
+                this.div.style.border = '1px solid rgba(255,255,255,0.35)';
               } else {
                 this.div.style.width = '18px';
                 this.div.style.height = '18px';
@@ -5923,7 +5925,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v570</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v571</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
