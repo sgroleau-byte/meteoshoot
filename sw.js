@@ -1,4 +1,4 @@
-const CACHE_VERSION = 413;
+const CACHE_VERSION = 414;
 const CACHE_NAME = 'meteoshoot-v' + CACHE_VERSION;
 
 const STATIC_ASSETS = [

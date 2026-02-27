@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v571</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v572</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3261,7 +3261,7 @@
 
         const map = new google.maps.Map(mapContainerRef.current, {
           center: { lat: project.lat, lng: project.lng },
-          zoom: isMobile ? 14.5 : 16,
+          zoom: isMobile ? 16 : 18,
           mapTypeId: mapType,
           styles: mapType === 'roadmap' ? darkStyle : [
             { stylers: [{ saturation: 0 }] },
@@ -3639,6 +3639,20 @@
               this._isNight = false;
             }
             onAdd() {
+              // Wrapper for halo + moon
+              this.container = document.createElement('div');
+              this.container.style.position = 'absolute';
+              this.container.style.pointerEvents = 'none';
+              this.container.style.zIndex = '20';
+              
+              // Halo div (behind moon)
+              this.halo = document.createElement('div');
+              this.halo.style.position = 'absolute';
+              this.halo.style.borderRadius = '50%';
+              this.halo.style.display = 'none';
+              this.container.appendChild(this.halo);
+              
+              // Moon/sun div
               this.div = document.createElement('div');
               this.div.style.position = 'absolute';
               this.div.style.width = '18px';
@@ -3647,18 +3661,35 @@
               this.div.style.background = 'radial-gradient(circle, #ffe26b 50%, rgba(255,226,107,0.3) 100%)';
               this.div.style.border = '2px solid rgba(255,255,255,0.6)';
               this.div.style.boxShadow = '0 0 8px rgba(255,226,107,0.5)';
-              this.div.style.transition = 'filter 0.15s ease-out, background 0.3s ease, box-shadow 0.3s ease';
+              this.div.style.transition = 'filter 0.15s ease-out, background 0.3s ease, box-shadow 0.3s ease, width 0.3s ease, height 0.3s ease';
               this.div.style.pointerEvents = 'none';
-              this.div.style.zIndex = '20';
-              this.getPanes().overlayMouseTarget.appendChild(this.div);
+              this.container.appendChild(this.div);
+              
+              this.getPanes().overlayMouseTarget.appendChild(this.container);
             }
             draw() {
               const proj = this.getProjection();
-              if (!proj || !this.div) return;
+              if (!proj || !this.container) return;
               const pos = proj.fromLatLngToDivPixel(new google.maps.LatLng(this.lat, this.lng));
-              const sz = this._isNight ? 12 : 9;
-              this.div.style.left = (pos.x - sz) + 'px';
-              this.div.style.top = (pos.y - sz) + 'px';
+              if (this._isNight) {
+                // Moon: 24px, halo: 70px
+                const moonSz = 24, haloSz = 70;
+                this.container.style.left = (pos.x - haloSz/2) + 'px';
+                this.container.style.top = (pos.y - haloSz/2) + 'px';
+                this.container.style.width = haloSz + 'px';
+                this.container.style.height = haloSz + 'px';
+                this.halo.style.left = '0px'; this.halo.style.top = '0px';
+                this.halo.style.width = haloSz + 'px'; this.halo.style.height = haloSz + 'px';
+                this.div.style.left = ((haloSz - moonSz)/2) + 'px';
+                this.div.style.top = ((haloSz - moonSz)/2) + 'px';
+              } else {
+                const sz = 18;
+                this.container.style.left = (pos.x - sz/2) + 'px';
+                this.container.style.top = (pos.y - sz/2) + 'px';
+                this.container.style.width = sz + 'px';
+                this.container.style.height = sz + 'px';
+                this.div.style.left = '0px'; this.div.style.top = '0px';
+              }
             }
             setNight(n) {
               if (this._isNight === n || !this.div) return;
@@ -3666,16 +3697,21 @@
               if (n) {
                 this.div.style.width = '24px';
                 this.div.style.height = '24px';
-                this.div.style.background = 'radial-gradient(circle at 38% 32%, #f8f4ec 0%, #ede6d8 25%, #ddd5c5 50%, #c8bfaf 80%, #b0a898 100%)';
-                this.div.style.boxShadow = '0 0 8px 2px rgba(240,235,220,0.6), 0 0 20px 6px rgba(220,215,200,0.35), 0 0 45px 12px rgba(200,195,180,0.15), inset -3px -2px 5px rgba(0,0,0,0.15), inset 1px 1px 3px rgba(255,255,255,0.3)';
-                this.div.style.border = '1px solid rgba(255,255,255,0.35)';
+                this.div.style.background = 'radial-gradient(circle at 35% 30%, #faf6ee 0%, #f0e8d8 20%, #ddd5c5 45%, #c8bfaf 70%, #b5ad9d 100%)';
+                this.div.style.boxShadow = '0 0 6px 2px rgba(245,240,225,0.7), inset -4px -3px 6px rgba(0,0,0,0.2), inset 2px 2px 4px rgba(255,255,255,0.35), inset -1px 1px 2px rgba(0,0,0,0.1)';
+                this.div.style.border = '1px solid rgba(255,255,255,0.4)';
+                // Halo glow
+                this.halo.style.display = 'block';
+                this.halo.style.background = 'radial-gradient(circle, rgba(230,225,210,0.25) 0%, rgba(210,205,190,0.12) 35%, rgba(190,185,170,0.04) 60%, transparent 75%)';
               } else {
                 this.div.style.width = '18px';
                 this.div.style.height = '18px';
                 this.div.style.background = 'radial-gradient(circle, #ffe26b 50%, rgba(255,226,107,0.3) 100%)';
                 this.div.style.boxShadow = '0 0 8px rgba(255,226,107,0.5)';
                 this.div.style.border = '2px solid rgba(255,255,255,0.6)';
+                this.halo.style.display = 'none';
               }
+              this.draw();
             }
             moveTo(lat, lng) {
               const proj = this.getProjection();
@@ -3702,7 +3738,7 @@
                 this.lng = lng;
               }
             }
-            onRemove() { if (this.div) { this.div.parentNode.removeChild(this.div); this.div = null; } }
+            onRemove() { if (this.container) { this.container.parentNode.removeChild(this.container); this.container = null; this.div = null; this.halo = null; } }
           }
           sunPosMarkerRef.current = new SunDotOverlay(lat2, lng2);
           sunPosMarkerRef.current.setMap(map);
@@ -5925,7 +5961,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v571</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v572</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
