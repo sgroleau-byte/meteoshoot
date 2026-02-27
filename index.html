@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v572</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v573</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3631,12 +3631,13 @@
           if (!sunPosMarkerRef.current.getMap()) sunPosMarkerRef.current.setMap(map);
         } else {
           class SunDotOverlay extends google.maps.OverlayView {
-            constructor(lat, lng) {
+            constructor(lat, lng, moonMode) {
               super();
               this.lat = lat;
               this.lng = lng;
               this.div = null;
               this._isNight = false;
+              this._initMoon = moonMode;
             }
             onAdd() {
               // Wrapper for halo + moon
@@ -3666,6 +3667,17 @@
               this.container.appendChild(this.div);
               
               this.getPanes().overlayMouseTarget.appendChild(this.container);
+              // Apply initial moon mode
+              if (this._initMoon) {
+                this._isNight = true;
+                this.div.style.width = '24px';
+                this.div.style.height = '24px';
+                this.div.style.background = 'radial-gradient(circle at 35% 30%, #faf6ee 0%, #f0e8d8 20%, #ddd5c5 45%, #c8bfaf 70%, #b5ad9d 100%)';
+                this.div.style.boxShadow = '0 0 6px 2px rgba(245,240,225,0.7), inset -4px -3px 6px rgba(0,0,0,0.2), inset 2px 2px 4px rgba(255,255,255,0.35), inset -1px 1px 2px rgba(0,0,0,0.1)';
+                this.div.style.border = '1px solid rgba(255,255,255,0.4)';
+                this.halo.style.display = 'block';
+                this.halo.style.background = 'radial-gradient(circle, rgba(230,225,210,0.25) 0%, rgba(210,205,190,0.12) 35%, rgba(190,185,170,0.04) 60%, transparent 75%)';
+              }
             }
             draw() {
               const proj = this.getProjection();
@@ -3740,7 +3752,7 @@
             }
             onRemove() { if (this.container) { this.container.parentNode.removeChild(this.container); this.container = null; this.div = null; this.halo = null; } }
           }
-          sunPosMarkerRef.current = new SunDotOverlay(lat2, lng2);
+          sunPosMarkerRef.current = new SunDotOverlay(lat2, lng2, isMoonMode);
           sunPosMarkerRef.current.setMap(map);
         }
         
@@ -5961,7 +5973,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v572</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v573</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
