@@ -4059,7 +4059,7 @@
                         backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', 
                         borderRadius: '28px', 
                         border: '2px solid rgba(255,255,255,0.9)',
-                        padding: '18px 5px', gap: '16px',
+                        padding: '24px 5px', gap: '10px',
                         width: '44px', boxSizing: 'border-box'
                       }}>
                         <button 
@@ -4144,19 +4144,19 @@
                           background: 'rgba(255,255,255,0.92)', 
                           borderRadius: '24px', 
                           width: '44px', boxSizing: 'border-box',
-                          padding: '8px 0'
+                          padding: '14px 0'
                         }}>
                           <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() + 1); }}
                             className="font-bebas-book"
-                            style={{ width: '100%', height: '34px', border: 'none', cursor: 'pointer',
+                            style={{ width: '100%', height: '28px', border: 'none', cursor: 'pointer',
                               background: 'transparent',
-                              color: '#333', fontSize: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: '#333', fontSize: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                             }}>+</button>
                           <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() - 1); }}
                             className="font-bebas-book"
-                            style={{ width: '100%', height: '34px', border: 'none', cursor: 'pointer',
+                            style={{ width: '100%', height: '28px', border: 'none', cursor: 'pointer',
                               background: 'transparent',
-                              color: '#333', fontSize: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: '#333', fontSize: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                             }}>−</button>
                         </div>
                       )}
