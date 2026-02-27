@@ -4058,29 +4058,33 @@
                         backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', 
                         borderRadius: '28px', 
                         border: '2px solid rgba(255,255,255,0.9)',
-                        padding: '24px 5px', gap: '16px',
-                        width: '46px', boxSizing: 'border-box'
+                        padding: '24px 7px', gap: '16px',
+                        width: '52px', boxSizing: 'border-box'
                       }}>
                         <button 
                           onClick={() => setMapType('hybrid')} 
-                          className="font-bebas-bold"
+                          className="font-bebas-book"
                           style={{ letterSpacing: '0.04em', 
-                            fontSize: '14px', padding: '0', lineHeight: '1.2',
+                            fontSize: '17px', padding: '0', lineHeight: '1.2',
                             background: 'transparent',
                             color: 'rgba(255,255,255,0.9)',
                             border: 'none',
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            textShadow: mapType === 'hybrid' ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none',
+                            transition: 'text-shadow 0.3s ease'
                           }}
                         >SAT</button>
                         <button 
                           onClick={() => setMapType('roadmap')} 
-                          className="font-bebas-bold"
+                          className="font-bebas-book"
                           style={{ letterSpacing: '0.04em', 
-                            fontSize: '14px', padding: '0', lineHeight: '1.2',
+                            fontSize: '17px', padding: '0', lineHeight: '1.2',
                             background: 'transparent',
                             color: 'rgba(255,255,255,0.9)',
                             border: 'none',
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            textShadow: mapType === 'roadmap' ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none',
+                            transition: 'text-shadow 0.3s ease'
                           }}
                         >MAP</button>
                         <button 
@@ -4090,10 +4094,12 @@
                             border: 'none', borderRadius: '50%',
                             cursor: 'pointer', padding: '3px', marginTop: '2px',
                             color: 'rgba(255,255,255,0.9)', 
-                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            filter: drawingMode ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none',
+                            transition: 'filter 0.3s ease'
                           }}
                         >
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
                           </svg>
                         </button>
@@ -4104,25 +4110,29 @@
                             border: 'none', borderRadius: '50%',
                             cursor: 'pointer', padding: '3px',
                             color: showSunLines ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)', 
-                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            filter: showSunLines ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none',
+                            transition: 'filter 0.3s ease, color 0.3s ease'
                           }}
                         >
                           {showSunLines ? (
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                           ) : (
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
                           )}
                         </button>
                         <button onClick={() => setShowMapFull(f => !f)} style={{ 
                           background: 'transparent', 
                           border: 'none', borderRadius: '50%',
                           cursor: 'pointer', padding: '3px',
-                          color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                          color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          filter: showMapFull ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none',
+                          transition: 'filter 0.3s ease'
                         }}>
                           {showMapFull ? (
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
                           ) : (
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
                           )}
                         </button>
                       </div>
