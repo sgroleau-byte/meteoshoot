@@ -4058,12 +4058,12 @@
                         backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', 
                         borderRadius: '28px', 
                         border: '2px solid rgba(255,255,255,0.9)',
-                        padding: '24px 7px', gap: '16px',
-                        width: '52px', boxSizing: 'border-box'
+                        padding: '24px 5px', gap: '16px',
+                        width: '46px', boxSizing: 'border-box'
                       }}>
                         <button 
                           onClick={() => setMapType('hybrid')} 
-                          className="font-bebas-book"
+                          className="font-bebas-regular"
                           style={{ letterSpacing: '0.04em', 
                             fontSize: '17px', padding: '0', lineHeight: '1.2',
                             background: 'transparent',
@@ -4076,7 +4076,7 @@
                         >SAT</button>
                         <button 
                           onClick={() => setMapType('roadmap')} 
-                          className="font-bebas-book"
+                          className="font-bebas-regular"
                           style={{ letterSpacing: '0.04em', 
                             fontSize: '17px', padding: '0', lineHeight: '1.2',
                             background: 'transparent',
@@ -5892,8 +5892,8 @@
             zIndex: 38, pointerEvents: 'none'
           }}/>}
           {/* Page titles — rendered at App level ABOVE blur */}
-          {!isMobile && displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>DÉTAILS PROJET</h1>}
-          {!isMobile && !displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{view === 'todo' ? 'PROJETS' : view === 'retouching' ? 'ÉDITION' : 'PRÉFÉRENCES'}</h1>}
+          {!isMobile && displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{window.isDev ? 'DEV DEV DEV DEV' : 'DÉTAILS PROJET'}</h1>}
+          {!isMobile && !displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: window.isDev ? '#d83152' : '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{window.isDev ? 'DEV DEV DEV DEV' : (view === 'todo' ? 'PROJETS' : view === 'retouching' ? 'ÉDITION' : 'PRÉFÉRENCES')}</h1>}
           {!(isMobile && showNew) && <Header onChangeView={changeView} onAddProject={() => setShowNew(true)}/>}
           <div style={{ 
             display: isMobile && showNew ? 'none' : 'block'
