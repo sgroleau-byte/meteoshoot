@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v568</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v569</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3620,8 +3620,7 @@
             const altDeg = sunPos.altitude * 180 / Math.PI;
             if (altDeg > 0 && !isNight) {
               const sunBearingDeg = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
-              const shadowAngle = ((sunBearingDeg + 180) % 360) * Math.PI / 180;
-              // Sunrise/sunset bearings for clamping
+              // Sunrise/sunset bearings
               const srAzRad = sunTimes.sunrise ? SunCalc.getPosition(sunTimes.sunrise, eLat, eLng).azimuth : 0;
               const ssAzRad = sunTimes.sunset ? SunCalc.getPosition(sunTimes.sunset, eLat, eLng).azimuth : 0;
               // Convert to screen angles (bearing 0=north=up, canvas 0=right, so rotate -90)
@@ -3629,14 +3628,50 @@
               const ssScreenAngle = ((ssAzRad * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
               const shadowScreenAngle = (((sunBearingDeg + 180) % 360) - 90) * Math.PI / 180;
               
-              // Wedge half-angle: narrower
+              // Wedge half-angle
               const wedgeHalf = Math.max(10, 30 - altDeg * 0.4) * Math.PI / 180;
-              // Length scales with sun altitude: short at noon (high sun), long near horizon
+              // Length scales with altitude
               const shadowLen = altDeg < 10 ? 0.8 : altDeg < 30 ? 0.8 - (altDeg - 10) * 0.02 : altDeg < 60 ? 0.4 - (altDeg - 30) * 0.005 : 0.25;
               const maxR = Math.max(w, h) * shadowLen;
-              const circleR = 17; // pixels from center (match circle offset)
+              const circleR = 17;
               
+              // Normalize angles to find distance from shadow edges to sr/ss lines
+              const normAngle = (a) => { let v = a % (2*Math.PI); if (v < 0) v += 2*Math.PI; return v; };
+              const angleDist = (a, b) => { let d = normAngle(a - b); return d > Math.PI ? 2*Math.PI - d : d; };
+              
+              // Distance from shadow edge to sr and ss lines
+              const distToSr = angleDist(shadowScreenAngle, srScreenAngle);
+              const distToSs = angleDist(shadowScreenAngle, ssScreenAngle);
+              
+              // Clamp wedge so it doesn't pass sr/ss lines (with 5° margin)
+              const margin = 5 * Math.PI / 180;
+              const leftEdge = shadowScreenAngle - wedgeHalf;
+              const rightEdge = shadowScreenAngle + wedgeHalf;
+              const distLeftToSr = angleDist(leftEdge, srScreenAngle);
+              const distLeftToSs = angleDist(leftEdge, ssScreenAngle);
+              const distRightToSr = angleDist(rightEdge, srScreenAngle);
+              const distRightToSs = angleDist(rightEdge, ssScreenAngle);
+              
+              // Compute how close shadow center is to sr/ss — fade opacity
+              const minDist = Math.min(distToSr, distToSs);
+              const fadeZone = 15 * Math.PI / 180; // fade over 15 degrees
+              const edgeFade = minDist < fadeZone ? minDist / fadeZone : 1;
+              const baseOpacity = 0.55 * edgeFade;
+              
+              // Clip to night-side arc (between sr and ss on shadow side)
               ctx.save();
+              // First clip: sr to ss on the shadow side
+              ctx.beginPath();
+              ctx.moveTo(centerPx.x, centerPx.y);
+              // Draw arc from sr line to ss line going through shadow direction (the long way around on shadow side)
+              let srN = normAngle(srScreenAngle);
+              let ssN = normAngle(ssScreenAngle);
+              // The shadow side is the arc from ss → sr going the other way (through shadow)
+              ctx.arc(centerPx.x, centerPx.y, maxR * 1.5, ssScreenAngle, srScreenAngle);
+              ctx.closePath();
+              ctx.clip();
+              
+              // Now draw the wedge within the clipped region
               ctx.beginPath();
               ctx.moveTo(centerPx.x, centerPx.y);
               ctx.arc(centerPx.x, centerPx.y, maxR, shadowScreenAngle - wedgeHalf, shadowScreenAngle + wedgeHalf);
@@ -3645,25 +3680,30 @@
               
               // Smooth radial gradient
               const grad = ctx.createRadialGradient(centerPx.x, centerPx.y, circleR, centerPx.x, centerPx.y, maxR);
-              grad.addColorStop(0, 'rgba(0,0,0,0.55)');
-              grad.addColorStop(0.15, 'rgba(0,0,0,0.35)');
-              grad.addColorStop(0.4, 'rgba(0,0,0,0.15)');
-              grad.addColorStop(0.7, 'rgba(0,0,0,0.05)');
+              grad.addColorStop(0, `rgba(0,0,0,${baseOpacity})`);
+              grad.addColorStop(0.15, `rgba(0,0,0,${0.35 * edgeFade})`);
+              grad.addColorStop(0.4, `rgba(0,0,0,${0.15 * edgeFade})`);
+              grad.addColorStop(0.7, `rgba(0,0,0,${0.05 * edgeFade})`);
               grad.addColorStop(1, 'rgba(0,0,0,0)');
               ctx.fillStyle = grad;
               ctx.fillRect(0, 0, w, h);
-              
-              // Soft edge blur: draw again slightly wider with less opacity for feathered edge
               ctx.restore();
+              
+              // Soft feathered edge (also clipped)
               ctx.save();
+              ctx.beginPath();
+              ctx.moveTo(centerPx.x, centerPx.y);
+              ctx.arc(centerPx.x, centerPx.y, maxR * 1.5, ssScreenAngle, srScreenAngle);
+              ctx.closePath();
+              ctx.clip();
               ctx.beginPath();
               ctx.moveTo(centerPx.x, centerPx.y);
               ctx.arc(centerPx.x, centerPx.y, maxR * 1.1, shadowScreenAngle - wedgeHalf * 1.3, shadowScreenAngle + wedgeHalf * 1.3);
               ctx.closePath();
               ctx.clip();
               const grad2 = ctx.createRadialGradient(centerPx.x, centerPx.y, circleR, centerPx.x, centerPx.y, maxR * 0.5);
-              grad2.addColorStop(0, 'rgba(0,0,0,0.15)');
-              grad2.addColorStop(0.3, 'rgba(0,0,0,0.05)');
+              grad2.addColorStop(0, `rgba(0,0,0,${0.15 * edgeFade})`);
+              grad2.addColorStop(0.3, `rgba(0,0,0,${0.05 * edgeFade})`);
               grad2.addColorStop(1, 'rgba(0,0,0,0)');
               ctx.fillStyle = grad2;
               ctx.fillRect(0, 0, w, h);
@@ -5774,7 +5814,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v568</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v569</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
