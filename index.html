@@ -32,13 +32,7 @@
       document.getElementById('touch-icon-link').href = 'icon-180.png';
     }
   </script>
-  <title>MeteoShoot | Shooting Planner</title>
-  <script>
-    if (isDev) {
-      document.title = 'DEV DEV DEV DEV DEV | Shooting Planner';
-      console.log('[METEOSHOOT] isDev=' + isDev + ', hostname=' + location.hostname + ', title set to: ' + document.title);
-    }
-  </script>
+  <script>document.write('<title>' + (isDev ? 'DEV DEV DEV DEV DEV | Shooting Planner' : 'MeteoShoot | Shooting Planner') + '<\/title>');</script>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Google Maps API -->
@@ -440,7 +434,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v543</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v544</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2488,6 +2482,7 @@
       const drawingVerticesRef = React.useRef([]);
       const [editingBuilding, setEditingBuilding] = useState(null); // index of building being edited
       const [hoveredBuilding, setHoveredBuilding] = useState(null);
+      const [heightPickerIdx, setHeightPickerIdx] = useState(null);
       const [buildingHeight, setBuildingHeight] = useState('');
       const [buildingName, setBuildingName] = useState('');
       const buildingPolygonsRef = React.useRef([]);
@@ -4049,19 +4044,25 @@
                     {/* Shape labels top-right */}
                     {buildings.length > 0 && <div style={{ position: 'absolute', top: '98px', right: '14px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
                       {buildings.map((b, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}
                           onMouseEnter={() => setHoveredBuilding(i)} onMouseLeave={() => setHoveredBuilding(null)}>
                           <span className="font-bebas-bold" onClick={() => { setEditingBuilding(i); setBuildingHeight(String(b.height)); setBuildingName(b.name); }} style={{ 
-                            letterSpacing: '0.06em', fontSize: '20px', color: 'rgba(255,255,255,0.85)',
-                            textShadow: '0 1px 4px rgba(0,0,0,0.8), 0 0 12px rgba(0,0,0,0.5)',
+                            letterSpacing: '0.06em', fontSize: '20px', color: '#ffffff',
                             cursor: 'pointer', whiteSpace: 'nowrap'
                           }}>{b.name || `FORME ${i + 1}`}</span>
-                          <input type="range" min="1" max="100" value={b.height}
-                            onChange={e => { const h = Number(e.target.value); setBuildings(prev => prev.map((bb, ii) => ii === i ? {...bb, height: h} : bb)); }}
-                            onMouseUp={() => { buildingsSaveTimer.current && clearTimeout(buildingsSaveTimer.current); buildingsSaveTimer.current = setTimeout(() => updateProject(project.id, { buildings }), 500); }}
-                            onTouchEnd={() => { buildingsSaveTimer.current && clearTimeout(buildingsSaveTimer.current); buildingsSaveTimer.current = setTimeout(() => updateProject(project.id, { buildings }), 500); }}
-                            style={{ width: '70px', height: '20px', accentColor: '#7dd3c6', cursor: 'pointer', opacity: 0.7 }}/>
-                          <span className="font-bebas-bold" style={{ fontSize: '20px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.04em', textShadow: '0 1px 4px rgba(0,0,0,0.8)', minWidth: '40px', textAlign: 'right' }}>{b.height} M</span>
+                          <span className="font-bebas-bold" onClick={() => setHeightPickerIdx(heightPickerIdx === i ? null : i)} style={{ 
+                            fontSize: '20px', color: 'rgba(255,255,255,0.6)', letterSpacing: '0.04em', cursor: 'pointer', minWidth: '40px', textAlign: 'right'
+                          }}>{b.height} M</span>
+                          {heightPickerIdx === i && (
+                            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '4px', zIndex: 20, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', borderRadius: '8px', padding: '4px 0', maxHeight: '120px', overflowY: 'auto', scrollbarWidth: 'none', width: '55px' }}
+                              ref={el => { if (el) { const target = el.querySelector('[data-active]'); if (target) target.scrollIntoView({ block: 'center' }); } }}>
+                              {Array.from({ length: 100 }, (_, n) => n + 1).map(h => (
+                                <div key={h} data-active={h === b.height ? '' : undefined}
+                                  onClick={() => { setBuildings(prev => prev.map((bb, ii) => ii === i ? {...bb, height: h} : bb)); buildingsSaveTimer.current && clearTimeout(buildingsSaveTimer.current); buildingsSaveTimer.current = setTimeout(() => updateProject(project.id, { buildings: buildings.map((bb, ii) => ii === i ? {...bb, height: h} : bb) }), 500); setHeightPickerIdx(null); }}
+                                  className="font-bebas-bold" style={{ padding: '2px 12px', fontSize: '16px', textAlign: 'center', cursor: 'pointer', color: h === b.height ? '#7dd3c6' : 'rgba(255,255,255,0.6)', background: h === b.height ? 'rgba(125,211,198,0.1)' : 'transparent' }}>{h} M</div>
+                              ))}
+                            </div>
+                          )}
                           <button onClick={(e) => { e.stopPropagation(); deleteBuilding(i); }} style={{ 
                             background: 'none', border: 'none', cursor: 'pointer', padding: '2px', 
                             opacity: hoveredBuilding === i ? 1 : 0, transition: 'opacity 0.2s ease', pointerEvents: hoveredBuilding === i ? 'auto' : 'none'
@@ -4200,35 +4201,6 @@
                         )}
                         <button onClick={() => { setDrawingMode(false); setDrawingVertices([]); }} className="font-bebas-regular"
                           style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>✕</button>
-                      </div>
-                    )}
-                    {/* Building edit panel — positioned near the building */}
-                    {editingBuilding !== null && buildings[editingBuilding] && !drawingMode && (
-                      <div style={{ 
-                        position: 'absolute', 
-                        bottom: '14px', left: '14px',
-                        zIndex: 13,
-                        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-                        borderRadius: '8px', padding: '8px 12px',
-                        border: '1px solid rgba(125,211,198,0.2)',
-                        pointerEvents: 'auto'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                          <input type="text" value={buildingName} onChange={e => setBuildingName(e.target.value)}
-                            onBlur={() => { const idx = editingBuilding; setBuildings(prev => prev.map((b, i) => i === idx ? {...b, name: buildingName} : b)); }}
-                            className="font-bebas-bold" style={{ background: 'none', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.2)', color: '#ffe26b', fontSize: '15px', letterSpacing: '0.04em', outline: 'none', flex: 1, padding: '2px 0', width: '100px' }}/>
-                          <button onClick={() => deleteBuilding(editingBuilding)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF3B30" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                          </button>
-                          <button onClick={() => setEditingBuilding(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: 'rgba(255,255,255,0.5)' }}>✓</button>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <input type="number" value={buildingHeight} onChange={e => setBuildingHeight(e.target.value)}
-                            onBlur={() => { const h = parseFloat(buildingHeight) || 15; const idx = editingBuilding; setBuildings(prev => prev.map((b, i) => i === idx ? {...b, height: h} : b)); }}
-                            onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
-                            style={{ width: '50px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '4px', color: '#fff', fontSize: '14px', padding: '3px 6px', outline: 'none', textAlign: 'center' }}/>
-                          <span className="font-bebas-bold" style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.04em' }}>MÈTRES</span>
-                        </div>
                       </div>
                     )}
                     {/* Date wheel picker */}
@@ -5463,7 +5435,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v543</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v544</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
