@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v563</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v564</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2481,7 +2481,7 @@
         // No flare if sun well below horizon
         if (sunAltitude <= -0.1) {
           // Moon glow at night
-          const moonR = Math.min(canvasW, canvasH) * 0.08;
+          const moonR = Math.min(canvasW, canvasH) * 0.12;
           const gradM = ctx.createRadialGradient(sunScreenX, sunScreenY, 0, sunScreenX, sunScreenY, moonR);
           gradM.addColorStop(0, 'rgba(220, 215, 200, 0.15)');
           gradM.addColorStop(0.3, 'rgba(200, 195, 185, 0.06)');
@@ -2503,7 +2503,7 @@
         ctx.globalCompositeOperation = 'screen';
         
         // 1. Main sun glow — large warm bloom
-        const mainR = Math.min(canvasW, canvasH) * 0.25 * intensity;
+        const mainR = Math.min(canvasW, canvasH) * 0.375 * intensity;
         const grad1 = ctx.createRadialGradient(sx, sy, 0, sx, sy, mainR);
         grad1.addColorStop(0, `rgba(255, 250, 230, ${0.9 * intensity})`);
         grad1.addColorStop(0.1, `rgba(255, 230, 150, ${0.6 * intensity})`);
@@ -2524,8 +2524,8 @@
         // 3. Anamorphic horizontal streak
         ctx.save();
         ctx.translate(sx, sy);
-        const streakW = canvasW * 1.0 * intensity;
-        const streakH = 4;
+        const streakW = canvasW * 1.5 * intensity;
+        const streakH = 6;
         const gradS = ctx.createLinearGradient(-streakW/2, 0, streakW/2, 0);
         gradS.addColorStop(0, 'rgba(255, 200, 100, 0)');
         gradS.addColorStop(0.3, `rgba(255, 220, 150, ${0.25 * intensity})`);
@@ -2542,19 +2542,19 @@
         gradS2.addColorStop(0.65, `rgba(255, 210, 130, ${0.08 * intensity})`);
         gradS2.addColorStop(1, 'rgba(255, 200, 100, 0)');
         ctx.fillStyle = gradS2;
-        ctx.fillRect(-streakW/2, -12, streakW, 24);
+        ctx.fillRect(-streakW/2, -18, streakW, 36);
         ctx.restore();
         
         // 4. Ghost artifacts along flare axis
         const ghosts = [
-          { pos: 0.3, size: 0.06, color: [255, 180, 60], alpha: 0.12 },
-          { pos: 0.5, size: 0.09, color: [120, 200, 255], alpha: 0.08 },
-          { pos: 0.65, size: 0.04, color: [255, 130, 80], alpha: 0.15 },
-          { pos: 0.8, size: 0.12, color: [100, 180, 255], alpha: 0.06 },
-          { pos: 1.0, size: 0.05, color: [200, 150, 255], alpha: 0.1 },
-          { pos: 1.2, size: 0.08, color: [255, 200, 100], alpha: 0.07 },
-          { pos: 1.5, size: 0.15, color: [80, 200, 180], alpha: 0.04 },
-          { pos: 1.8, size: 0.03, color: [255, 160, 200], alpha: 0.12 },
+          { pos: 0.3, size: 0.09, color: [255, 180, 60], alpha: 0.12 },
+          { pos: 0.5, size: 0.135, color: [120, 200, 255], alpha: 0.08 },
+          { pos: 0.65, size: 0.06, color: [255, 130, 80], alpha: 0.15 },
+          { pos: 0.8, size: 0.18, color: [100, 180, 255], alpha: 0.06 },
+          { pos: 1.0, size: 0.075, color: [200, 150, 255], alpha: 0.1 },
+          { pos: 1.2, size: 0.12, color: [255, 200, 100], alpha: 0.07 },
+          { pos: 1.5, size: 0.225, color: [80, 200, 180], alpha: 0.04 },
+          { pos: 1.8, size: 0.045, color: [255, 160, 200], alpha: 0.12 },
         ];
         
         ghosts.forEach(g => {
@@ -5691,7 +5691,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v563</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v564</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
