@@ -33,7 +33,7 @@
     }
   </script>
   <title>MeteoShoot | Shooting Planner</title>
-  <script>if (isDev) document.title = 'DEV DEV DEV DEV DEV | Shooting Planner';</script>
+  <script>if (isDev) { document.title = 'DEV DEV DEV DEV DEV | Shooting Planner'; document.querySelector('title').textContent = 'DEV DEV DEV DEV DEV | Shooting Planner'; }</script>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Google Maps API -->
@@ -446,6 +446,7 @@
     document.getElementById('themeColor').setAttribute('content', '#3d4a47');
     setTimeout(function() { splash.remove(); if (isDev) document.title = 'DEV DEV DEV DEV DEV | Shooting Planner'; }, 900);
   }, 2500);
+  if (isDev) window.addEventListener('DOMContentLoaded', function() { document.title = 'DEV DEV DEV DEV DEV | Shooting Planner'; });
 </script>
 <script>
   // Drag-to-scroll with momentum, bounce & motion blur for .hour-scroll containers
@@ -4058,12 +4059,12 @@
                         backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', 
                         borderRadius: '28px', 
                         border: '2px solid rgba(255,255,255,0.9)',
-                        padding: '24px 5px', gap: '16px',
-                        width: '46px', boxSizing: 'border-box'
+                        padding: '18px 5px', gap: '16px',
+                        width: '44px', boxSizing: 'border-box'
                       }}>
                         <button 
                           onClick={() => setMapType('hybrid')} 
-                          className="font-bebas-regular"
+                          className="font-bebas-bold"
                           style={{ letterSpacing: '0.04em', 
                             fontSize: '17px', padding: '0', lineHeight: '1.2',
                             background: 'transparent',
@@ -4076,7 +4077,7 @@
                         >SAT</button>
                         <button 
                           onClick={() => setMapType('roadmap')} 
-                          className="font-bebas-regular"
+                          className="font-bebas-bold"
                           style={{ letterSpacing: '0.04em', 
                             fontSize: '17px', padding: '0', lineHeight: '1.2',
                             background: 'transparent',
@@ -4142,18 +4143,20 @@
                           display: 'flex', flexDirection: 'column', alignItems: 'center',
                           background: 'rgba(255,255,255,0.92)', 
                           borderRadius: '24px', 
-                          width: '46px', boxSizing: 'border-box',
-                          padding: '12px 0'
+                          width: '44px', boxSizing: 'border-box',
+                          padding: '8px 0'
                         }}>
                           <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() + 1); }}
+                            className="font-bebas-book"
                             style={{ width: '100%', height: '34px', border: 'none', cursor: 'pointer',
                               background: 'transparent',
-                              color: '#333', fontSize: '24px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: '#333', fontSize: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                             }}>+</button>
                           <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() - 1); }}
+                            className="font-bebas-book"
                             style={{ width: '100%', height: '34px', border: 'none', cursor: 'pointer',
                               background: 'transparent',
-                              color: '#333', fontSize: '24px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: '#333', fontSize: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                             }}>−</button>
                         </div>
                       )}
@@ -5892,8 +5895,8 @@
             zIndex: 38, pointerEvents: 'none'
           }}/>}
           {/* Page titles — rendered at App level ABOVE blur */}
-          {!isMobile && displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{window.isDev ? 'DEV DEV DEV DEV' : 'DÉTAILS PROJET'}</h1>}
-          {!isMobile && !displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: window.isDev ? '#d83152' : '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{window.isDev ? 'DEV DEV DEV DEV' : (view === 'todo' ? 'PROJETS' : view === 'retouching' ? 'ÉDITION' : 'PRÉFÉRENCES')}</h1>}
+          {!isMobile && displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>DÉTAILS PROJET</h1>}
+          {!isMobile && !displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{view === 'todo' ? 'PROJETS' : view === 'retouching' ? 'ÉDITION' : 'PRÉFÉRENCES'}</h1>}
           {!(isMobile && showNew) && <Header onChangeView={changeView} onAddProject={() => setShowNew(true)}/>}
           <div style={{ 
             display: isMobile && showNew ? 'none' : 'block'
