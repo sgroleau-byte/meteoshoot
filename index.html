@@ -32,8 +32,17 @@
       document.getElementById('touch-icon-link').href = 'icon-180.png';
     }
   </script>
-  <title>MeteoShoot | Shooting Planner</title>
-  <script>if (isDev) { document.title = 'DEV DEV DEV DEV DEV | Shooting Planner'; document.querySelector('title').textContent = 'DEV DEV DEV DEV DEV | Shooting Planner'; }</script>
+  <title></title>
+  <script>
+    var devTitle = 'DEV DEV DEV DEV DEV | Shooting Planner';
+    var prodTitle = 'MeteoShoot | Shooting Planner';
+    document.title = isDev ? devTitle : prodTitle;
+    if (isDev) {
+      // Keep forcing title for 10 seconds in case anything resets it
+      var _titleInterval = setInterval(function() { document.title = devTitle; }, 500);
+      setTimeout(function() { clearInterval(_titleInterval); }, 10000);
+    }
+  </script>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Google Maps API -->
@@ -435,7 +444,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v534</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v541</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -444,9 +453,8 @@
     var splash = document.getElementById('splashScreen');
     splash.classList.add('splash-hidden');
     document.getElementById('themeColor').setAttribute('content', '#3d4a47');
-    setTimeout(function() { splash.remove(); if (isDev) document.title = 'DEV DEV DEV DEV DEV | Shooting Planner'; }, 900);
+    setTimeout(function() { splash.remove(); }, 900);
   }, 2500);
-  if (isDev) window.addEventListener('DOMContentLoaded', function() { document.title = 'DEV DEV DEV DEV DEV | Shooting Planner'; });
 </script>
 <script>
   // Drag-to-scroll with momentum, bounce & motion blur for .hour-scroll containers
@@ -4052,7 +4060,7 @@
                       ))}
                     </div>}
                     {/* Controls pill + Zoom pill wrapper */}
-                    <div style={{ position: 'absolute', top: '70%', transform: 'translateY(-50%)', right: '12px', zIndex: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
+                    <div style={{ position: 'absolute', top: '70%', transform: 'translateY(-50%)', right: '12px', zIndex: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '35px' }}>
                       {/* Controls pill */}
                       <div style={{ 
                         display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -4144,7 +4152,7 @@
                           background: 'rgba(255,255,255,0.92)', 
                           borderRadius: '24px', 
                           width: '44px', boxSizing: 'border-box',
-                          padding: '14px 0'
+                          padding: '14px 0 0 0'
                         }}>
                           <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() + 1); }}
                             className="font-bebas-book"
@@ -5443,7 +5451,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v534</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v541</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
