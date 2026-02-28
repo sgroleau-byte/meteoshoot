@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v606</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v607</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -4553,8 +4553,8 @@
                       const glowSize = Math.round(250 * S);
                       const hourSize = Math.round(24 * S);
                       const dateSize = Math.round(20 * S);
-                      const triW = Math.round(18 * S);
-                      const triH = Math.round(12 * S);
+                      const triW = Math.round(6 * S);
+                      const triH = Math.round(4 * S);
                       // Compute sun times for glow color and triangles
                       const eLat = adjustedPos?.lat ?? project?.lat;
                       const eLng = adjustedPos?.lng ?? project?.lng;
@@ -4746,18 +4746,22 @@
                               {MONTHS_FR[sunDate.getMonth()]} {sunDate.getDate()}
                             </span>
                           </div>
-                          {/* Triangles on the filet line */}
-                          <div style={{ position: 'absolute', top: `${filetTop}px`, left: 0, right: 0, height: 0, pointerEvents: 'none', zIndex: 12 }}>
-                            {/* Sunrise ▲ - base on filet, pointing UP (inside zone) */}
-                            <div style={{ position: 'absolute', bottom: 0, left: 'calc(100% / 6)', transform: 'translateX(-50%)' }}>
+                          {/* Sunrise/Sunset vertical lines + triangles */}
+                          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: `${filetTop + triH}px`, pointerEvents: 'none', zIndex: 12 }}>
+                            {/* Sunrise vertical line */}
+                            <div style={{ position: 'absolute', top: 0, bottom: `${triH}px`, left: srLeft, width: '1px', background: 'rgba(255,255,255,0.5)', transform: 'translateX(-0.5px)' }}/>
+                            {/* Sunset vertical line */}
+                            <div style={{ position: 'absolute', top: 0, bottom: `${triH}px`, left: ssLeft, width: '1px', background: 'rgba(255,255,255,0.5)', transform: 'translateX(-0.5px)' }}/>
+                            {/* Sunrise ▲ - tip UP, touching bottom of vertical line */}
+                            <div style={{ position: 'absolute', bottom: `${triH}px`, left: srLeft, transform: 'translate(-50%, 100%)' }}>
                               <svg width={triW} height={triH} viewBox={`0 0 ${triW} ${triH}`}>
-                                <polygon points={`${triW/2},0 ${triW},${triH} 0,${triH}`} fill="#ffffff"/>
+                                <path d={`M${triW*0.5},0 L${triW},${triH} Q${triW},${triH} ${triW*0.85},${triH} L${triW*0.15},${triH} Q0,${triH} 0,${triH} Z`} fill="#ffffff" strokeLinejoin="round" stroke="#ffffff" strokeWidth="0.5"/>
                               </svg>
                             </div>
-                            {/* Sunset ▼ - base on filet, pointing DOWN (outside zone) */}
-                            <div style={{ position: 'absolute', top: 0, left: 'calc(100% * 5 / 6)', transform: 'translateX(-50%)' }}>
+                            {/* Sunset ▼ - tip DOWN, touching bottom of vertical line */}
+                            <div style={{ position: 'absolute', top: `${filetTop}px`, left: ssLeft, transform: 'translateX(-50%)' }}>
                               <svg width={triW} height={triH} viewBox={`0 0 ${triW} ${triH}`}>
-                                <polygon points={`${triW/2},${triH} ${triW},0 0,0`} fill="#ffffff"/>
+                                <path d={`M${triW*0.5},${triH} L${triW},0 Q${triW},0 ${triW*0.85},0 L${triW*0.15},0 Q0,0 0,0 Z`} fill="#ffffff" strokeLinejoin="round" stroke="#ffffff" strokeWidth="0.5"/>
                               </svg>
                             </div>
                           </div>
@@ -6248,7 +6252,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v606</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v607</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
