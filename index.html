@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v605</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v606</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -611,14 +611,12 @@
         });
         const j = await res.json();
         observerElev = j.results?.[0]?.elevation ?? 0;
-        console.log('[ELEVATION] Observer elevation:', observerElev, 'm');
       } catch(e) { 
         // Fallback to Open-Meteo
         try {
           const res2 = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`);
           const j2 = await res2.json();
           observerElev = j2.elevation?.[0] ?? j2.elevation ?? 0;
-          console.log('[ELEVATION] Observer elevation (fallback):', observerElev, 'm');
         } catch(e2) { console.warn('Observer elevation error:', e2); return null; }
       }
       
@@ -662,24 +660,14 @@
       const profile = [];
       for (let d = 0; d < ELEV_DIRECTIONS; d++) {
         let maxAngle = 0;
-        let maxElev = 0, maxDist = 0;
         const bearing = d * 360 / ELEV_DIRECTIONS;
         for (let s = 0; s < ELEV_SAMPLES; s++) {
           const idx = d * ELEV_SAMPLES + s;
           const elevDiff = elevations[idx] - observerElev;
           if (elevDiff > 0) {
             const angle = Math.atan2(elevDiff, meta[idx].dist) * 180 / Math.PI;
-            if (angle > maxAngle) { maxAngle = angle; maxElev = elevations[idx]; maxDist = meta[idx].dist; }
+            if (angle > maxAngle) maxAngle = angle;
           }
-        }
-        // Debug: log ALL directions with raw data
-        if (maxAngle > 0) {
-          console.log(`[ELEV-DEBUG] ${bearing}°: maxAngle=${maxAngle.toFixed(2)}° elev=${maxElev}m dist=${maxDist.toFixed(0)}m (observer=${observerElev}m)`);
-        } else {
-          // Log max raw elevation for zero-angle directions
-          let rawMax = 0;
-          for (let s = 0; s < ELEV_SAMPLES; s++) { rawMax = Math.max(rawMax, elevations[d * ELEV_SAMPLES + s]); }
-          console.log(`[ELEV-DEBUG] ${bearing}°: NO ANGLE - maxRawElev=${rawMax}m observer=${observerElev}m diff=${(rawMax - observerElev).toFixed(1)}m`);
         }
         profile.push({ bearing, maxAngle: parseFloat(maxAngle.toFixed(2)) });
       }
@@ -695,16 +683,27 @@
     };
     
     // Check if sun is behind terrain at given bearing + altitude
+    // Returns: 'shadow' | 'warning' | false
+    // 30 min ≈ 7.5° of sun altitude change near horizon
+    const TERRAIN_MARGIN_DEG = 7.5;
     const isTerrainShadow = (profile, sunBearingDeg, sunAltDeg) => {
-      if (!profile || sunAltDeg <= 0) return false;
+      if (!profile) return false;
+      // Allow check down to -7.5° (≈30 min after official sunset)
+      if (sunAltDeg < -TERRAIN_MARGIN_DEG) return false;
       const step = 360 / ELEV_DIRECTIONS;
-      // Find two closest direction samples
       const idx = ((sunBearingDeg % 360) + 360) % 360;
       const i0 = Math.floor(idx / step) % ELEV_DIRECTIONS;
       const i1 = (i0 + 1) % ELEV_DIRECTIONS;
       const frac = (idx / step) - Math.floor(idx / step);
       const horizonAngle = profile[i0].maxAngle * (1 - frac) + profile[i1].maxAngle * frac;
-      return sunAltDeg < horizonAngle;
+      if (horizonAngle <= 0) return false;
+      // In actual shadow: sun below terrain horizon
+      if (sunAltDeg < horizonAngle && sunAltDeg > 0) return 'shadow';
+      // Sun below horizon but terrain was blocking: still affected
+      if (sunAltDeg <= 0) return 'shadow';
+      // Warning: sun approaching terrain (within ~30 min)
+      if (sunAltDeg < horizonAngle + TERRAIN_MARGIN_DEG) return 'warning';
+      return false;
     };
     const MAX_PROJECT_FILES_MB = 30;
 
@@ -3708,9 +3707,7 @@
       React.useEffect(() => {
         if (!elevLat || !elevLng) return;
         let cancelled = false;
-        console.log('[ELEVATION] Fetching for', elevGridLat, elevGridLng);
         getElevationProfile(elevLat, elevLng).then(profile => {
-          if (profile) console.log('[ELEVATION] Profile:', profile.filter(p => p.maxAngle > 0).map(p => `${p.bearing}°=${p.maxAngle}°`).join(', '));
           if (!cancelled && profile) {
             terrainProfileRef.current = profile;
             setTerrainProfile(profile);
@@ -3761,7 +3758,6 @@
         // Terrain shadow check
         const sunAltDeg = sunPos.altitude * 180 / Math.PI;
         const inTerrainShadow = isTerrainShadow(terrainProfileRef.current, bearing, sunAltDeg);
-        if (inTerrainShadow !== terrainShadow) console.log('[TERRAIN] shadow changed:', inTerrainShadow, 'bearing:', bearing.toFixed(1), 'sunAlt:', sunAltDeg.toFixed(1));
         setTerrainShadow(inTerrainShadow);
         
         // Offset start from circle edge
@@ -4977,7 +4973,10 @@
                       );
                     })()}
                     {/* Terrain shadow indicator */}
-                    {terrainShadow && showSunLines && (
+                    {terrainShadow && showSunLines && (() => {
+                      const isShadow = terrainShadow === 'shadow';
+                      const color = isShadow ? '#f0a040' : '#e8c84a';
+                      return (
                       <div style={{ 
                         position: 'absolute', top: '14px', left: '14px', zIndex: 13,
                         background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
@@ -4986,12 +4985,15 @@
                         boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
                         animation: 'fadeIn 0.3s ease'
                       }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f0a040" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M4 20L10 8l4 6 2-3 4 9H4z"/>
                         </svg>
-                        <span className="font-bebas-bold" style={{ fontSize: '14px', color: '#f0a040', letterSpacing: '0.06em', lineHeight: '1' }}>OMBRE TERRAIN</span>
+                        <span className="font-bebas-bold" style={{ fontSize: '14px', color, letterSpacing: '0.06em', lineHeight: '1' }}>
+                          {isShadow ? 'OMBRE TERRAIN' : 'OMBRE TERRAIN ~ 30 MIN'}
+                        </span>
                       </div>
-                    )}
+                      );
+                    })()}
                     {/* Drawing mode hint — near the polygon */}
                     {drawingMode && (
                       <div style={{ position: 'absolute', 
@@ -5422,6 +5424,32 @@
         return () => window.removeEventListener('scroll', onScroll);
       }, [isMobile]);
 
+      // Desktop nav bar — hooks must be before any conditional return
+      const navContainerRef = useRef(null);
+      const navSpanRefs = useRef({});
+      const [barStyle, setBarStyle] = useState({ left: 0, width: 0 });
+      const barInitialized = useRef(false);
+
+      useEffect(() => {
+        if (isMobile) return;
+        const measure = () => {
+          const span = navSpanRefs.current[view];
+          const container = navContainerRef.current;
+          if (!span || !container) return;
+          const cRect = container.getBoundingClientRect();
+          const sRect = span.getBoundingClientRect();
+          setBarStyle({
+            left: sRect.left - cRect.left,
+            width: sRect.width,
+          });
+          if (!barInitialized.current) {
+            requestAnimationFrame(() => { barInitialized.current = true; });
+          }
+        };
+        measure();
+        document.fonts.ready.then(() => measure());
+      }, [view, isMobile]);
+
       if (isMobile) {
         return (
           <nav className="mobile-bottom-nav fixed bottom-0 left-0 right-0 z-40" 
@@ -5496,31 +5524,6 @@
           </nav>
         );
       }
-
-      const navContainerRef = useRef(null);
-      const navSpanRefs = useRef({});
-      const [barStyle, setBarStyle] = useState({ left: 0, width: 0 });
-      const barInitialized = useRef(false);
-
-      useEffect(() => {
-        if (isMobile) return;
-        const measure = () => {
-          const span = navSpanRefs.current[view];
-          const container = navContainerRef.current;
-          if (!span || !container) return;
-          const cRect = container.getBoundingClientRect();
-          const sRect = span.getBoundingClientRect();
-          setBarStyle({
-            left: sRect.left - cRect.left,
-            width: sRect.width,
-          });
-          if (!barInitialized.current) {
-            requestAnimationFrame(() => { barInitialized.current = true; });
-          }
-        };
-        measure();
-        document.fonts.ready.then(() => measure());
-      }, [view, isMobile]);
 
       return (
         <header 
@@ -6245,7 +6248,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v605</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v606</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
