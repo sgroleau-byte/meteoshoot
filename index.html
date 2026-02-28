@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v603</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v605</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -560,10 +560,10 @@
     // Fetches horizon profile around a point (24 directions, 3km radius)
     // Returns array of {bearing, maxAngle} where maxAngle = max elevation angle in degrees
     const ELEV_GRID_PRECISION = 3; // ~111m grid cells
-    const ELEV_PROFILE_VERSION = 2; // bump to invalidate cache
+    const ELEV_PROFILE_VERSION = 3; // bump to invalidate cache
     const ELEV_DIRECTIONS = 36; // every 10°
     const ELEV_SAMPLES = 50; // points per direction
-    const ELEV_RADIUS_M = 3000; // 3km
+    const ELEV_RADIUS_M = 5000; // 5km
     
     const roundGrid = (v) => parseFloat(v.toFixed(ELEV_GRID_PRECISION));
     
@@ -580,16 +580,14 @@
       } catch(e) { console.warn('Elevation cache read error:', e); }
       
       // Build sample points: 36 directions × 50 points
-      // Non-linear spacing: dense near observer (every 20m for first 200m), then spread out
-      const R = 6371000; // Earth radius meters
+      // Non-linear: dense near (every 15m for first 200m), then spread out to 5km
+      const R = 6371000;
       const allLats = [], allLngs = [], meta = [];
       
       const getSampleDist = (s, total) => {
-        // First 15 samples: 20m to 300m (every 20m) — catch nearby cliffs
-        // Next 35 samples: 300m to 3000m (spread out)
-        if (s < 15) return 20 + s * 20;
-        const t = (s - 15) / (total - 15);
-        return 300 + t * (ELEV_RADIUS_M - 300);
+        if (s < 13) return 15 + s * 15; // 15m to 195m (every 15m)
+        const t = (s - 13) / (total - 13);
+        return 200 + t * (ELEV_RADIUS_M - 200);
       };
       
       for (let d = 0; d < ELEV_DIRECTIONS; d++) {
@@ -607,43 +605,83 @@
       // Fetch observer elevation first
       let observerElev = 0;
       try {
-        const res = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`);
+        const res = await fetch('https://api.open-elevation.com/api/v1/lookup', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ locations: [{ latitude: lat, longitude: lng }] })
+        });
         const j = await res.json();
-        observerElev = j.elevation?.[0] ?? j.elevation ?? 0;
-      } catch(e) { console.warn('Observer elevation error:', e); return null; }
+        observerElev = j.results?.[0]?.elevation ?? 0;
+        console.log('[ELEVATION] Observer elevation:', observerElev, 'm');
+      } catch(e) { 
+        // Fallback to Open-Meteo
+        try {
+          const res2 = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`);
+          const j2 = await res2.json();
+          observerElev = j2.elevation?.[0] ?? j2.elevation ?? 0;
+          console.log('[ELEVATION] Observer elevation (fallback):', observerElev, 'm');
+        } catch(e2) { console.warn('Observer elevation error:', e2); return null; }
+      }
       
-      // Fetch all sample elevations in batches of 100
+      // Fetch all sample elevations in batches
       const elevations = new Array(allLats.length).fill(0);
-      const batchSize = 100;
+      const batchSize = 200; // Open-Elevation can handle larger batches
       
       for (let i = 0; i < allLats.length; i += batchSize) {
-        const bLats = allLats.slice(i, i + batchSize).map(v => v.toFixed(5)).join(',');
-        const bLngs = allLngs.slice(i, i + batchSize).map(v => v.toFixed(5)).join(',');
+        const locations = [];
+        for (let k = i; k < Math.min(i + batchSize, allLats.length); k++) {
+          locations.push({ latitude: parseFloat(allLats[k].toFixed(6)), longitude: parseFloat(allLngs[k].toFixed(6)) });
+        }
         try {
-          const res = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${bLats}&longitude=${bLngs}`);
+          const res = await fetch('https://api.open-elevation.com/api/v1/lookup', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ locations })
+          });
           const j = await res.json();
-          const elArr = Array.isArray(j.elevation) ? j.elevation : [j.elevation];
-          for (let k = 0; k < elArr.length; k++) {
-            elevations[i + k] = elArr[k] ?? 0;
+          if (j.results) {
+            for (let k = 0; k < j.results.length; k++) {
+              elevations[i + k] = j.results[k].elevation ?? 0;
+            }
           }
-          // Small delay to be polite
+          if (i + batchSize < allLats.length) await new Promise(r => setTimeout(r, 200));
+        } catch(e) {
+          // Fallback to Open-Meteo for this batch
+          console.warn('[ELEVATION] Open-Elevation failed, trying Open-Meteo fallback');
+          const bLats = allLats.slice(i, i + batchSize).map(v => v.toFixed(5)).join(',');
+          const bLngs = allLngs.slice(i, i + batchSize).map(v => v.toFixed(5)).join(',');
+          try {
+            const res2 = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${bLats}&longitude=${bLngs}`);
+            const j2 = await res2.json();
+            const elArr = Array.isArray(j2.elevation) ? j2.elevation : [j2.elevation];
+            for (let k = 0; k < elArr.length; k++) elevations[i + k] = elArr[k] ?? 0;
+          } catch(e2) { console.warn('Elevation fallback error:', e2); }
           if (i + batchSize < allLats.length) await new Promise(r => setTimeout(r, 100));
-        } catch(e) { console.warn('Elevation batch error:', e); }
+        }
       }
       
       // Compute max elevation angle per direction
       const profile = [];
       for (let d = 0; d < ELEV_DIRECTIONS; d++) {
         let maxAngle = 0;
+        let maxElev = 0, maxDist = 0;
+        const bearing = d * 360 / ELEV_DIRECTIONS;
         for (let s = 0; s < ELEV_SAMPLES; s++) {
           const idx = d * ELEV_SAMPLES + s;
           const elevDiff = elevations[idx] - observerElev;
           if (elevDiff > 0) {
             const angle = Math.atan2(elevDiff, meta[idx].dist) * 180 / Math.PI;
-            if (angle > maxAngle) maxAngle = angle;
+            if (angle > maxAngle) { maxAngle = angle; maxElev = elevations[idx]; maxDist = meta[idx].dist; }
           }
         }
-        profile.push({ bearing: d * 360 / ELEV_DIRECTIONS, maxAngle: parseFloat(maxAngle.toFixed(2)) });
+        // Debug: log ALL directions with raw data
+        if (maxAngle > 0) {
+          console.log(`[ELEV-DEBUG] ${bearing}°: maxAngle=${maxAngle.toFixed(2)}° elev=${maxElev}m dist=${maxDist.toFixed(0)}m (observer=${observerElev}m)`);
+        } else {
+          // Log max raw elevation for zero-angle directions
+          let rawMax = 0;
+          for (let s = 0; s < ELEV_SAMPLES; s++) { rawMax = Math.max(rawMax, elevations[d * ELEV_SAMPLES + s]); }
+          console.log(`[ELEV-DEBUG] ${bearing}°: NO ANGLE - maxRawElev=${rawMax}m observer=${observerElev}m diff=${(rawMax - observerElev).toFixed(1)}m`);
+        }
+        profile.push({ bearing, maxAngle: parseFloat(maxAngle.toFixed(2)) });
       }
       
       // Cache in Supabase
@@ -6207,7 +6245,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v603</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v605</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
