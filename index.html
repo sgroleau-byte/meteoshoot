@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v586</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v587</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3486,15 +3486,8 @@
           sunLinesRef.current.push(line);
         };
 
-        if (sunTimes.sunrise) {
-          const srPos = SunCalc.getPosition(sunTimes.sunrise, eLat, eLng);
-          drawLine(srPos.azimuth, '#ffffff', 1, 5);
-        }
-        if (sunTimes.sunset) {
-          const ssPos = SunCalc.getPosition(sunTimes.sunset, eLat, eLng);
-          drawLine(ssPos.azimuth, '#ffffff', 1, 5);
-        }
-
+        // sr/ss lines drawn on canvas (below: halos, above: lines)
+        
         // Shadow pie wedge — dark gradient opposite to sun
         const simDatePie = new Date(sunDate);
         simDatePie.setHours(Math.floor(sunHour), Math.round((sunHour % 1) * 60), 0);
@@ -3771,17 +3764,20 @@
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, w, h);
             
-            // Sunrise & Sunset line halos — drawn first (behind shadow + flare)
+            // Sunrise & Sunset line halos — drawn first (behind white lines)
             if (sunTimes.sunrise && sunTimes.sunset) {
               const srAzH = SunCalc.getPosition(sunTimes.sunrise, eLat, eLng).azimuth;
               const ssAzH = SunCalc.getPosition(sunTimes.sunset, eLat, eLng).azimuth;
               const srScrH = ((srAzH * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
               const ssScrH = ((ssAzH * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
               const haloLen = Math.max(w, h) * 1.5;
+              const lineLen = Math.max(w, h);
               
               const drawLineHalo = (lineAngle, cr, cg, cb) => {
-                const gx = centerPx.x + Math.cos(lineAngle) * 40;
-                const gy = centerPx.y + Math.sin(lineAngle) * 40;
+                // Center on the line at 50% of visible length
+                const dist = lineLen * 0.45;
+                const gx = centerPx.x + Math.cos(lineAngle) * dist;
+                const gy = centerPx.y + Math.sin(lineAngle) * dist;
                 const radius = 300;
                 
                 ctx.save();
@@ -3802,6 +3798,25 @@
               };
               drawLineHalo(srScrH, 172, 156, 77);
               drawLineHalo(ssScrH, 30, 47, 63);
+              
+              // White sr/ss lines ON TOP of halos
+              const circOff = 17; // circle radius offset in px
+              const drawCanvasLine = (scrAngle) => {
+                const sx = centerPx.x + Math.cos(scrAngle) * circOff;
+                const sy = centerPx.y + Math.sin(scrAngle) * circOff;
+                const ex = centerPx.x + Math.cos(scrAngle) * lineLen;
+                const ey = centerPx.y + Math.sin(scrAngle) * lineLen;
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(sx, sy);
+                ctx.lineTo(ex, ey);
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 5;
+                ctx.stroke();
+                ctx.restore();
+              };
+              drawCanvasLine(srScrH);
+              drawCanvasLine(ssScrH);
             }
             
             // Shadow wedge — smooth radial gradient clamped to sunrise/sunset
@@ -6007,7 +6022,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v586</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v587</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
