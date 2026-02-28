@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v595</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v596</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -4613,7 +4613,7 @@
                             display: 'flex', alignItems: 'center', gap: '0px',
                             background: hexToRgba(color, 0.25), borderRadius: '16px', padding: '2px 3px 2px 6px',
                             whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
-                            opacity: (hoveredBuilding !== null && hoveredBuilding !== i) ? 0.5 : 1,
+                            opacity: (hoveredBuilding !== null && hoveredBuilding !== i) ? 0.15 : 1,
                             transition: 'opacity 0.2s ease'
                           }}>
                             {/* Left half — name click zone */}
@@ -4626,11 +4626,11 @@
                             {/* Right half — height pill, draggable */}
                             <div style={{ position: 'relative' }}>
                               {(hoveredBuilding === i || isDragging) && (<>
-                                <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '-28px', pointerEvents: 'none', opacity: isDragging ? 0.8 : 0.5, transition: 'opacity 0.2s' }}>
-                                  <svg width="12" height="10" viewBox="0 0 12 10" fill="none"><path d="M6 1L11 9H1L6 1Z" fill="#ffffff"/></svg>
+                                <div style={{ position: 'absolute', left: '50%', transform: `translateX(-50%) translateY(${pillOffsetY}px)`, top: '-13px', pointerEvents: 'none', opacity: isDragging ? 0.8 : 0.5, transition: isDragging ? 'none' : 'opacity 0.2s' }}>
+                                  <svg width="10" height="7" viewBox="0 0 10 7" fill="none"><path d="M2 7L5 1L8 7" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
                                 </div>
-                                <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', bottom: '-28px', pointerEvents: 'none', opacity: isDragging ? 0.8 : 0.5, transition: 'opacity 0.2s' }}>
-                                  <svg width="12" height="10" viewBox="0 0 12 10" fill="none"><path d="M6 9L11 1H1L6 9Z" fill="#ffffff"/></svg>
+                                <div style={{ position: 'absolute', left: '50%', transform: `translateX(-50%) translateY(${pillOffsetY}px)`, bottom: '-13px', pointerEvents: 'none', opacity: isDragging ? 0.8 : 0.5, transition: isDragging ? 'none' : 'opacity 0.2s' }}>
+                                  <svg width="10" height="7" viewBox="0 0 10 7" fill="none"><path d="M2 0L5 6L8 0" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
                                 </div>
                               </>)}
                               <div 
@@ -4755,14 +4755,14 @@
                           background: 'rgba(255,255,255,0.92)', 
                           borderRadius: '24px', 
                           width: '36px', boxSizing: 'border-box',
-                          padding: '22px 0 8px 0'
+                          padding: '16px 0 4px 0'
                         }}>
                           <span className="font-bebas-book"
-                            style={{ width: '100%', height: '34px',
+                            style={{ width: '100%', height: '28px',
                               color: '#333', fontSize: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
                             }}>+</span>
                           <span className="font-bebas-book"
-                            style={{ width: '100%', height: '34px',
+                            style={{ width: '100%', height: '28px',
                               color: '#333', fontSize: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
                             }}>−</span>
                           {/* Invisible 50/50 click overlays */}
@@ -6048,7 +6048,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v595</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v596</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
