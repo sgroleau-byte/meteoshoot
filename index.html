@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v592</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v593</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -4612,7 +4612,9 @@
                           <div style={{ 
                             display: 'flex', alignItems: 'center', gap: '0px',
                             background: hexToRgba(color, 0.25), borderRadius: '16px', padding: '2px 3px 2px 6px',
-                            whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.4)'
+                            whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+                            opacity: (hoveredBuilding !== null && hoveredBuilding !== i) ? 0.5 : 1,
+                            transition: 'opacity 0.2s ease'
                           }}>
                             {/* Left half — name click zone */}
                             <div onClick={() => { setEditingBuilding(i); setBuildingHeight(String(b.height)); setBuildingName(b.name); }} style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', padding: '2px 6px 2px 0' }}>
@@ -4623,9 +4625,14 @@
                             </div>
                             {/* Right half — height pill, draggable */}
                             <div style={{ position: 'relative' }}>
-                              {(hoveredBuilding === i || isDragging) && (
-                                <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '-40px', bottom: '-40px', width: '1px', background: 'rgba(255,255,255,0.3)', zIndex: -1, pointerEvents: 'none' }}/>
-                              )}
+                              {(hoveredBuilding === i || isDragging) && (<>
+                                <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: '-28px', pointerEvents: 'none', opacity: isDragging ? 0.8 : 0.5, transition: 'opacity 0.2s' }}>
+                                  <svg width="12" height="10" viewBox="0 0 12 10" fill="none"><path d="M6 1L11 9H1L6 1Z" fill="#ffffff"/></svg>
+                                </div>
+                                <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', bottom: '-28px', pointerEvents: 'none', opacity: isDragging ? 0.8 : 0.5, transition: 'opacity 0.2s' }}>
+                                  <svg width="12" height="10" viewBox="0 0 12 10" fill="none"><path d="M6 9L11 1H1L6 9Z" fill="#ffffff"/></svg>
+                                </div>
+                              </>)}
                               <div 
                                 style={{ 
                                   background: '#fff', borderRadius: '13px', padding: '4px 8px 1px 8px',
@@ -6041,7 +6048,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v592</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v593</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
