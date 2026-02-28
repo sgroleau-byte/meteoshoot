@@ -13,26 +13,27 @@
   <script>
     if (isDev) {
       var devManifest = JSON.stringify({
-        name: "MeteoShoot DEV",
-        short_name: "MeteoShoot DEV",
+        name: "--->  DEV --->  DEV --->  DEV --->  DEV --->  DEV --->  DEV",
+        short_name: "DEV",
         start_url: "/",
         display: "standalone",
         background_color: "#262c30",
-        theme_color: "#694d44",
+        theme_color: "#3d4a47",
         icons: [
-          { src: "icon-192-DevRose.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
-          { src: "icon-512-DevRose.png", sizes: "512x512", type: "image/png", purpose: "any maskable" }
+          { src: "icon-192-DevRose.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "icon-512-DevRose.png", sizes: "512x512", type: "image/png", purpose: "any" }
         ]
       });
       document.getElementById('manifest-link').href = URL.createObjectURL(new Blob([devManifest], {type: 'application/json'}));
       document.getElementById('touch-icon-link').href = 'icon-180-DevRose.png';
-      document.getElementById('themeColor').setAttribute('content', '#694d44');
+      document.getElementById('themeColor').setAttribute('content', '#3d4a47');
     } else {
       document.getElementById('manifest-link').href = 'manifest.json';
       document.getElementById('touch-icon-link').href = 'icon-180.png';
     }
   </script>
   <title>MeteoShoot | Shooting Planner</title>
+  <script>if (isDev) document.title = "DEV DEV DEV DEV DEV | Shooting Planner";</script>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Google Maps API -->
@@ -55,6 +56,13 @@
     }
   </script>
   <style>
+    html { overflow-x: hidden; overflow-y: scroll; }
+    /* Style detail scrollbar to match native thin look */
+    .detail-scroll::-webkit-scrollbar { width: 8px; }
+    .detail-scroll::-webkit-scrollbar-track { background: transparent; }
+    .detail-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+    .detail-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+    .detail-scroll { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
 @font-face {
     font-family: 'Bebas Neue';
     font-weight: 100;
@@ -123,11 +131,16 @@
     input[type=number] { -moz-appearance: textfield; }
     input::-webkit-contacts-auto-fill-button, input::-webkit-credentials-auto-fill-button { display: none !important; visibility: hidden !important; pointer-events: none !important; position: absolute !important; right: 0 !important; }
     input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus, input:-webkit-autofill:active { -webkit-box-shadow: 0 0 0 30px #1e2224 inset !important; -webkit-text-fill-color: rgba(255,255,255,0.85) !important; transition: background-color 5000s ease-in-out 0s; }
-    input[type="range"] { height: 44px; }
-    input[type="range"]::-webkit-slider-runnable-track { height: 3px; background: rgba(255,255,255,0.2); border-radius: 2px; }
-    input[type="range"]::-moz-range-track { height: 3px; background: rgba(255,255,255,0.2); border-radius: 2px; }
-    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: #7dd3c6; cursor: pointer; border: 1.5px solid rgba(255,255,255,0.9); box-shadow: 0 1px 4px rgba(0,0,0,0.5); margin-top: -10.5px; }
-    input[type="range"]::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: #7dd3c6; cursor: pointer; border: 1.5px solid rgba(255,255,255,0.9); box-shadow: 0 1px 4px rgba(0,0,0,0.5); }
+    input[type="range"] { height: 44px; touch-action: none; }
+    input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: transparent; border-radius: 0; }
+    input[type="range"]::-moz-range-track { height: 1px; background: transparent; border-radius: 0; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 9px; height: 54px; border-radius: 5px; background: #ffffff; cursor: pointer; border: none; box-shadow: 0 0 12px rgba(255,255,255,0.5), 0 0 25px rgba(255,255,255,0.2), 0 1px 4px rgba(0,0,0,0.3); margin-top: -21px; }
+    input[type="range"]::-moz-range-thumb { width: 9px; height: 54px; border-radius: 5px; background: #ffffff; cursor: pointer; border: none; box-shadow: 0 0 12px rgba(255,255,255,0.5), 0 0 25px rgba(255,255,255,0.2), 0 1px 4px rgba(0,0,0,0.3); }
+    @media (max-width: 768px) {
+      input[type="range"] { height: 66px; }
+      input[type="range"]::-webkit-slider-thumb { width: 7px; height: 40px; border-radius: 4px; margin-top: -16px; }
+      input[type="range"]::-moz-range-thumb { width: 7px; height: 40px; border-radius: 4px; }
+    }
     /* ── Splash Screen ── */
     .splash-overlay {
       position: fixed;
@@ -188,6 +201,8 @@
       z-index: 3;
       animation: splashHaloOrg 20s ease-in-out infinite;
     }
+    .pill-btn { transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) !important; }
+    .pill-btn:hover { transform: scale(1.2); }
     .splash-subtitle {
       position: relative;
       z-index: 2;
@@ -266,6 +281,24 @@
     .day-cell .day-popup.popup-active { opacity: 1; visibility: visible; pointer-events: auto; transform: translateX(0); }
 
     /* Drag and drop */
+    @keyframes vaporDrift1 {
+      0% { transform: translate(-100%, -50%) scaleY(0.8); opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { transform: translate(200%, -50%) scaleY(0.8); opacity: 0; }
+    }
+    @keyframes vaporDrift2 {
+      0% { transform: translate(200%, -50%) scaleY(0.6); opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { transform: translate(-100%, -50%) scaleY(0.6); opacity: 0; }
+    }
+    @keyframes vaporDrift3 {
+      0% { transform: translate(-80%, -40%) scaleY(1.2); opacity: 0; }
+      15% { opacity: 1; }
+      85% { opacity: 1; }
+      100% { transform: translate(180%, -60%) scaleY(1.2); opacity: 0; }
+    }
     @keyframes sunglowPulse {
       0%, 100% { opacity: 0.1; }
       50% { opacity: 0.35; }
@@ -299,7 +332,7 @@
     .card-info-flare {
       position: absolute;
       width: 1500px;
-      height: 1500px;
+      height: 3000px;
       border-radius: 50%;
       background: radial-gradient(circle, rgba(39,89,102,1) 0%, rgba(39,89,102,0.5) 35%, transparent 65%);
       mix-blend-mode: screen;
@@ -377,6 +410,11 @@
         }
       }
     }
+    /* Google Maps attribution bar — transparent background */
+    .gm-style > div:last-child { background: transparent !important; }
+    .gm-style .gmnoprint, .gm-style .gm-style-cc { background: transparent !important; }
+    .gm-style a[href*="google"], .gm-style .gm-style-cc a { color: rgba(255,255,255,0.3) !important; font-size: 9px !important; }
+    .gm-style .gm-style-cc div { background: transparent !important; }
   </style>
   <script>
     if ('serviceWorker' in navigator) {
@@ -399,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v416</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v600</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -407,7 +445,7 @@
   setTimeout(function() {
     var splash = document.getElementById('splashScreen');
     splash.classList.add('splash-hidden');
-    document.getElementById('themeColor').setAttribute('content', location.hostname.match(/^(meteoshoot\.vercel\.app|meteoshoot\.com|www\.meteoshoot\.com)$/) ? '#3d4a47' : '#694d44');
+    document.getElementById('themeColor').setAttribute('content', '#3d4a47');
     setTimeout(function() { splash.remove(); }, 900);
   }, 2500);
 </script>
@@ -515,7 +553,111 @@
     const TBL_PROJECTS = isDev ? 'projects_dev' : 'projects';
     const TBL_PREFS = isDev ? 'preferences_dev' : 'preferences';
     const TBL_FILES = isDev ? 'project_files_dev' : 'project_files';
+    const TBL_ELEVATION = 'elevation_cache'; // shared global — no dev/prod split
     const STORAGE_BUCKET = 'project-files';
+
+    // ===== TERRAIN ELEVATION PROFILE =====
+    // Fetches horizon profile around a point (24 directions, 3km radius)
+    // Returns array of {bearing, maxAngle} where maxAngle = max elevation angle in degrees
+    const ELEV_GRID_PRECISION = 3; // ~111m grid cells
+    const ELEV_DIRECTIONS = 36; // every 10°
+    const ELEV_SAMPLES = 40; // points per direction
+    const ELEV_RADIUS_M = 3000; // 3km
+    
+    const roundGrid = (v) => parseFloat(v.toFixed(ELEV_GRID_PRECISION));
+    
+    const getElevationProfile = async (lat, lng) => {
+      const gLat = roundGrid(lat), gLng = roundGrid(lng);
+      
+      // Check Supabase cache
+      try {
+        const { data } = await supabase.from(TBL_ELEVATION)
+          .select('profile')
+          .eq('grid_lat', gLat).eq('grid_lng', gLng)
+          .maybeSingle();
+        if (data?.profile) return data.profile;
+      } catch(e) { console.warn('Elevation cache read error:', e); }
+      
+      // Build sample points: 36 directions × 40 points
+      const R = 6371000; // Earth radius meters
+      const allLats = [], allLngs = [], meta = [];
+      
+      for (let d = 0; d < ELEV_DIRECTIONS; d++) {
+        const bearing = (d * 360 / ELEV_DIRECTIONS) * Math.PI / 180;
+        for (let s = 1; s <= ELEV_SAMPLES; s++) {
+          const dist = (s / ELEV_SAMPLES) * ELEV_RADIUS_M;
+          const dLat = (dist * Math.cos(bearing)) / R * (180 / Math.PI);
+          const dLng = (dist * Math.sin(bearing)) / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
+          allLats.push(lat + dLat);
+          allLngs.push(lng + dLng);
+          meta.push({ dir: d, dist });
+        }
+      }
+      
+      // Fetch observer elevation first
+      let observerElev = 0;
+      try {
+        const res = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`);
+        const j = await res.json();
+        observerElev = j.elevation?.[0] ?? j.elevation ?? 0;
+      } catch(e) { console.warn('Observer elevation error:', e); return null; }
+      
+      // Fetch all sample elevations in batches of 100
+      const elevations = new Array(allLats.length).fill(0);
+      const batchSize = 100;
+      
+      for (let i = 0; i < allLats.length; i += batchSize) {
+        const bLats = allLats.slice(i, i + batchSize).map(v => v.toFixed(5)).join(',');
+        const bLngs = allLngs.slice(i, i + batchSize).map(v => v.toFixed(5)).join(',');
+        try {
+          const res = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${bLats}&longitude=${bLngs}`);
+          const j = await res.json();
+          const elArr = Array.isArray(j.elevation) ? j.elevation : [j.elevation];
+          for (let k = 0; k < elArr.length; k++) {
+            elevations[i + k] = elArr[k] ?? 0;
+          }
+          // Small delay to be polite
+          if (i + batchSize < allLats.length) await new Promise(r => setTimeout(r, 100));
+        } catch(e) { console.warn('Elevation batch error:', e); }
+      }
+      
+      // Compute max elevation angle per direction
+      const profile = [];
+      for (let d = 0; d < ELEV_DIRECTIONS; d++) {
+        let maxAngle = 0;
+        for (let s = 0; s < ELEV_SAMPLES; s++) {
+          const idx = d * ELEV_SAMPLES + s;
+          const elevDiff = elevations[idx] - observerElev;
+          if (elevDiff > 0) {
+            const angle = Math.atan2(elevDiff, meta[idx].dist) * 180 / Math.PI;
+            if (angle > maxAngle) maxAngle = angle;
+          }
+        }
+        profile.push({ bearing: d * 360 / ELEV_DIRECTIONS, maxAngle: parseFloat(maxAngle.toFixed(2)) });
+      }
+      
+      // Cache in Supabase
+      try {
+        await supabase.from(TBL_ELEVATION).upsert({
+          grid_lat: gLat, grid_lng: gLng, profile, observer_elevation: observerElev
+        }, { onConflict: 'grid_lat,grid_lng' });
+      } catch(e) { console.warn('Elevation cache write error:', e); }
+      
+      return profile;
+    };
+    
+    // Check if sun is behind terrain at given bearing + altitude
+    const isTerrainShadow = (profile, sunBearingDeg, sunAltDeg) => {
+      if (!profile || sunAltDeg <= 0) return false;
+      const step = 360 / ELEV_DIRECTIONS;
+      // Find two closest direction samples
+      const idx = ((sunBearingDeg % 360) + 360) % 360;
+      const i0 = Math.floor(idx / step) % ELEV_DIRECTIONS;
+      const i1 = (i0 + 1) % ELEV_DIRECTIONS;
+      const frac = (idx / step) - Math.floor(idx / step);
+      const horizonAngle = profile[i0].maxAngle * (1 - frac) + profile[i1].maxAngle * frac;
+      return sunAltDeg < horizonAngle;
+    };
     const MAX_PROJECT_FILES_MB = 30;
 
     // === File helpers ===
@@ -608,7 +750,7 @@
       return (
         <div className="min-h-screen bg-cream flex items-center justify-center" style={{ background: '#262c30' }}>
           <div style={{ maxWidth: '360px', width: '100%', padding: '0 24px' }}>
-            <h1 className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '48px', color: '#FAF9F7', marginBottom: '4px' }}>MeteoShoot</h1>
+            <h1 className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '48px', color: '#FAF9F7', marginBottom: '4px' }}>{window.isDev ? '--->  DEV --->  DEV --->  DEV --->  DEV --->  DEV --->  DEV' : 'MeteoShoot'}</h1>
             <p className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '20px', color: '#8B9B99', marginBottom: '32px' }}>SHOOTING PLANNER</p>
             
             <div>
@@ -619,7 +761,7 @@
                   value={email} 
                   onChange={e => setEmail(e.target.value)}
                   placeholder="ton@email.com"
-                  style={{ background: 'transparent', border: 'none', outline: 'none', color: 'rgba(255,255,255,0.85)', fontSize: '15px', width: '100%' }}
+                  style={{ background: 'transparent', position: 'relative', zIndex: 2, border: 'none', outline: 'none', color: 'rgba(255,255,255,0.85)', fontSize: '15px', width: '100%' }}
                 />
               </div>
               <label className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '18px', color: '#8B9B99', display: 'block', marginBottom: '6px' }}>MOT DE PASSE</label>
@@ -630,7 +772,7 @@
                   onChange={e => setPassword(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSubmit()}
                   placeholder="••••••••"
-                  style={{ background: 'transparent', border: 'none', outline: 'none', color: 'rgba(255,255,255,0.85)', fontSize: '15px', width: '100%' }}
+                  style={{ background: 'transparent', position: 'relative', zIndex: 2, border: 'none', outline: 'none', color: 'rgba(255,255,255,0.85)', fontSize: '15px', width: '100%' }}
                 />
               </div>
               {error && <p style={{ color: '#d83152', fontSize: '13px', marginBottom: '12px' }}>{error}</p>}
@@ -848,7 +990,8 @@
                 isContest: p.is_contest, notes: p.notes, links: p.links || [],
                 departureAddress: p.departure_address, departureLat: p.departure_lat, departureLng: p.departure_lng,
                 travelTime: p.travel_time, sortOrder: p.sort_order,
-                createdAt: p.created_at, shotAt: p.shot_at, completedAt: p.completed_at
+                createdAt: p.created_at, shotAt: p.shot_at, completedAt: p.completed_at,
+                buildings: p.buildings || []
               })));
             } else if (hasLocalData && !alreadyMigrated) {
               // First login with localStorage data → migrate to Supabase
@@ -907,7 +1050,8 @@
                 isContest: p.is_contest, notes: p.notes, links: p.links || [],
                 departureAddress: p.departure_address, departureLat: p.departure_lat, departureLng: p.departure_lng,
                 travelTime: p.travel_time, sortOrder: p.sort_order,
-                createdAt: p.created_at, shotAt: p.shot_at, completedAt: p.completed_at
+                createdAt: p.created_at, shotAt: p.shot_at, completedAt: p.completed_at,
+                buildings: p.buildings || []
               };
               setProjects(prev => {
                 const exists = prev.findIndex(x => x.id === p.id);
@@ -938,7 +1082,7 @@
       };
 
       const addProject = (data) => {
-        const proj = { id: generateId(), name: data.name || 'Nouveau', address: data.address || '', lat: data.lat, lng: data.lng, mandates: data.mandates || [], orientation: data.orientation || [], deliveryDate: data.deliveryDate || null, isContest: data.isContest || false, status: ProjectStatus.TODO, notes: '', links: [], travelTime: data.travelTime || null, departureAddress: data.departureAddress || null, departureLat: data.departureLat || null, departureLng: data.departureLng || null, createdAt: new Date().toISOString(), shotAt: null };
+        const proj = { id: generateId(), name: data.name || 'Nouveau', address: data.address || '', lat: data.lat, lng: data.lng, mandates: data.mandates || [], orientation: data.orientation || [], deliveryDate: data.deliveryDate || null, isContest: data.isContest || false, status: ProjectStatus.TODO, notes: '', links: [], buildings: [], travelTime: data.travelTime || null, departureAddress: data.departureAddress || null, departureLat: data.departureLat || null, departureLng: data.departureLng || null, createdAt: new Date().toISOString(), shotAt: null };
         setProjects(p => {
           const newList = [proj, ...p];
           // Update all sort_orders in Supabase
@@ -954,7 +1098,7 @@
             id: proj.id, user_id: user.id, name: proj.name, address: proj.address,
             lat: proj.lat, lng: proj.lng, status: proj.status,
             mandates: proj.mandates, orientation: proj.orientation,
-            is_contest: proj.isContest, notes: '', links: [],
+            is_contest: proj.isContest, notes: '', links: [], buildings: [],
             departure_address: proj.departureAddress, departure_lat: proj.departureLat, departure_lng: proj.departureLng,
             travel_time: proj.travelTime, sort_order: 0,
             created_at: proj.createdAt
@@ -985,6 +1129,7 @@
           if ('shotAt' in upd) dbUpd.shot_at = upd.shotAt;
           if ('createdAt' in upd) dbUpd.created_at = upd.createdAt;
           if ('completedAt' in upd) dbUpd.completed_at = upd.completedAt;
+          if ('buildings' in upd) dbUpd.buildings = upd.buildings;
           if (Object.keys(dbUpd).length > 0) {
             supabase.from(TBL_PROJECTS).update(dbUpd).eq('id', id)
               .then(({ error }) => { if (error) console.error('Update error:', error); });
@@ -1801,7 +1946,7 @@
         <div className="card-glow-wrap">
         <div 
           className={`project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden animate-card-in border-b border-adaptive`}
-          style={{ minWidth: '1100px', animationDelay: `${index * 0.1}s` }}
+          style={{ animationDelay: `${index * 0.1}s` }}
           onMouseDown={onMouseDownDrag ? (e) => onMouseDownDrag(e, project.id, index) : undefined}
         >
           <div onClick={() => onSelect(project)} className="cursor-pointer" onMouseEnter={() => { if (activeWeatherRowDismiss) { activeWeatherRowDismiss(); activeWeatherRowDismiss = null; } }}>
@@ -2009,10 +2154,10 @@
             }}>
               <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
               <button style={{ background: 'none', border: 'none', padding: '6px 0' }} onClick={() => { setActionsOpen(false); revertProject(project.id); }}>
-                <span className="font-bebas-regular" style={{ color: '#8B9B99', fontSize: '16px', letterSpacing: '0.03em' }}>REMETTRE</span>
+                <span className="font-bebas-bold" style={{ color: '#8B9B99', fontSize: '16px', letterSpacing: '0.03em' }}>REMETTRE</span>
               </button>
               <button style={{ background: 'none', border: 'none', padding: '6px 0' }} onClick={() => { setActionsOpen(false); advanceProject(project.id); }}>
-                <span className="font-bebas-regular" style={{ color: '#8B9B99', fontSize: '16px', letterSpacing: '0.03em' }}>ARCHIVER</span>
+                <span className="font-bebas-bold" style={{ color: '#8B9B99', fontSize: '16px', letterSpacing: '0.03em' }}>ARCHIVER</span>
               </button>
               <button style={{ background: 'none', border: 'none', padding: '6px 0' }} onClick={() => { 
                 if (confirmDelete) { deleteProject(project.id); }
@@ -2170,7 +2315,7 @@
             }}>
               <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
               <button style={{ background: 'none', border: 'none', padding: '6px 0' }} onClick={() => { setActionsOpen2(false); revertProject(project.id); }}>
-                <span className="font-bebas-regular" style={{ color: '#8B9B99', fontSize: '16px', letterSpacing: '0.03em' }}>RÉACTIVER</span>
+                <span className="font-bebas-bold" style={{ color: '#8B9B99', fontSize: '16px', letterSpacing: '0.03em' }}>RÉACTIVER</span>
               </button>
               <button style={{ background: 'none', border: 'none', padding: '6px 0' }} onClick={() => { 
                 if (confirmDelete) { deleteProject(project.id); }
@@ -2350,9 +2495,9 @@
       return (
         <div style={posStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px 8px' }}>
-            <button onClick={leftBtn.action} className="font-bebas-regular" style={{ background: 'none', border: 'none', color: leftBtn.color, fontSize: '20px', cursor: 'pointer', letterSpacing: '0.05em' }}>{leftBtn.label}</button>
+            <button onClick={leftBtn.action} className="font-bebas-bold" style={{ background: 'none', border: 'none', color: leftBtn.color, fontSize: '20px', cursor: 'pointer', letterSpacing: '0.05em' }}>{leftBtn.label}</button>
             <span className="font-bebas-bold" style={{ fontSize: '16px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.05em' }}>{title || 'DATE SOLEIL'}</span>
-            <button onClick={onClose} className="font-bebas-regular" style={{ background: 'none', border: 'none', color: '#FAF9F7', fontSize: '20px', cursor: 'pointer', letterSpacing: '0.05em', textShadow: '0 0 12px rgba(255,255,255,0.4), 0 0 25px rgba(255,255,255,0.15)' }}>OK</button>
+            <button onClick={onClose} className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FAF9F7', fontSize: '20px', cursor: 'pointer', letterSpacing: '0.05em', textShadow: '0 0 12px rgba(255,255,255,0.4), 0 0 25px rgba(255,255,255,0.15)' }}>OK</button>
           </div>
           <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', position: 'relative' }}>
             <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '300px', height: itemH, background: 'rgba(255,255,255,0.08)', borderRadius: '10px', pointerEvents: 'none' }}/>
@@ -2374,6 +2519,9 @@
       const [mapType, setMapType] = useState('hybrid');
       const [mapZoom, setMapZoom] = useState(16);
       const [showMapFull, setShowMapFull] = useState(false);
+      const mapRevealedRef = React.useRef(false);
+      const [mapRevealed, setMapRevealed] = useState(false);
+      const [showSunLines, setShowSunLines] = useState(true);
       const [sunDate, setSunDate] = useState(() => new Date());
       const [showDatePicker, setShowDatePicker] = useState(false);
       const [editingCreatedDate, setEditingCreatedDate] = useState(false);
@@ -2381,14 +2529,40 @@
       const [detailPickerPos, setDetailPickerPos] = useState({ top: 0, left: 0 });
       const originalDateRef = useRef(null);
       const isToday = React.useMemo(() => { const n = new Date(); return sunDate.getDate() === n.getDate() && sunDate.getMonth() === n.getMonth() && sunDate.getFullYear() === n.getFullYear(); }, [sunDate]);
-      const [sunHour, setSunHour] = useState(() => { const n = new Date(); return n.getHours() + n.getMinutes()/60; });
-      const mapIsNight = React.useMemo(() => {
-        if (!project?.lat || !project?.lng || !window.SunCalc) return false;
+      const [sunHour, setSunHour] = useState(0);
+      const [sunHourDisplay, setSunHourDisplay] = useState(0);
+      const sunHourTargetRef = React.useRef(sunHour);
+      const sunTimesSnapRef = React.useRef({ sr: 6, ss: 18 });
+      
+      // Smooth magnetic: gaussian-shaped pull, no hard edges
+      const magneticSunHour = (raw) => raw;
+      
+      const rafRef = React.useRef(null);
+      useEffect(() => {
+        sunHourTargetRef.current = sunHour;
+        const animate = () => {
+          setSunHourDisplay(prev => {
+            const diff = sunHourTargetRef.current - prev;
+            if (Math.abs(diff) < 0.003) return sunHourTargetRef.current;
+            rafRef.current = requestAnimationFrame(animate);
+            return prev + diff * 0.3;
+          });
+        };
+        rafRef.current = requestAnimationFrame(animate);
+        return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+      }, [sunHour]);
+      const nightOpacity = React.useMemo(() => {
+        if (!project?.lat || !project?.lng || !window.SunCalc) return 0;
         const st = SunCalc.getTimes(sunDate, project.lat, project.lng);
         const sr = st.sunrise ? st.sunrise.getHours() + st.sunrise.getMinutes()/60 : 6;
         const ss = st.sunset ? st.sunset.getHours() + st.sunset.getMinutes()/60 : 18;
-        return sunHour < (sr - 1) || sunHour > (ss + 1);
+        // Progressive: 0 during day, fade over 1h after sunset / before sunrise
+        if (sunHour >= sr && sunHour <= ss) return 0;
+        if (sunHour > ss && sunHour < ss + 1) return (sunHour - ss);
+        if (sunHour < sr && sunHour > sr - 1) return (sr - sunHour);
+        return 1;
       }, [sunHour, project?.lat, project?.lng, sunDate]);
+      const mapIsNight = nightOpacity >= 1;
       const [showHelp, setShowHelp] = useState(false);
       const [editingName, setEditingName] = useState(false);
       const addressInputRef = React.useRef(null);
@@ -2397,21 +2571,635 @@
       const isMobile = useIsMobile();
       const departureAutocompleteRef = React.useRef(null);
       const mapContainerRef = React.useRef(null);
+      const flareCanvasRef = React.useRef(null);
+      const weatherCanvasRef = React.useRef(null);
+      const weatherParticlesRef = React.useRef([]);
+      const weatherAnimRef = React.useRef(null);
+      
+      // Weather particles effect behind slider
+      useEffect(() => {
+        const canvas = weatherCanvasRef.current;
+        if (!canvas) return;
+        
+        // Find hourly weather for current slider position
+        const targetDate = new Date(sunDate);
+        targetDate.setHours(Math.floor(sunHour), 0, 0, 0);
+        const hourly = weather?.hourly?.find(h => {
+          const ht = new Date(h.time);
+          return ht.getFullYear() === targetDate.getFullYear() && ht.getMonth() === targetDate.getMonth() && ht.getDate() === targetDate.getDate() && ht.getHours() === targetDate.getHours();
+        });
+        
+        if (!hourly) { 
+          if (weatherAnimRef.current) cancelAnimationFrame(weatherAnimRef.current);
+          const ctx = canvas.getContext('2d');
+          if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+          return; 
+        }
+        
+        const precip = hourly.precip || 0;
+        const temp = hourly.temp;
+        const cloud = hourly.cloudcover || 0;
+        const wind = hourly.wind || 0;
+        const icon = hourly.icon || '';
+        
+        const isRain = precip > 0 && temp > 0;
+        const isSnow = precip > 0 && temp <= 0;
+        const isFog = icon.includes('fog') || icon.includes('mist');
+        const hasParticles = isRain || isSnow || isFog;
+        
+        if (!hasParticles) {
+          if (weatherAnimRef.current) cancelAnimationFrame(weatherAnimRef.current);
+          const ctx = canvas.getContext('2d');
+          if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+          weatherParticlesRef.current = [];
+          return;
+        }
+        
+        const w = canvas.parentElement?.offsetWidth || 400;
+        const h = canvas.parentElement?.offsetHeight || 200;
+        canvas.width = w; canvas.height = h;
+        
+        // Initialize particles
+        const count = isRain ? Math.min(60, Math.round(precip * 15)) : isSnow ? Math.min(40, Math.round(precip * 10)) : 25;
+        if (weatherParticlesRef.current.length !== count) {
+          weatherParticlesRef.current = Array.from({length: count}, () => ({
+            x: Math.random() * w,
+            y: Math.random() * h,
+            speed: isRain ? 2 + Math.random() * 4 : isSnow ? 0.3 + Math.random() * 0.8 : 0.1 + Math.random() * 0.2,
+            size: isRain ? 1 + Math.random() : isSnow ? 1.5 + Math.random() * 2.5 : 3 + Math.random() * 5,
+            opacity: isRain ? 0.15 + Math.random() * 0.2 : isSnow ? 0.2 + Math.random() * 0.25 : 0.03 + Math.random() * 0.04,
+            drift: isSnow ? -0.3 + Math.random() * 0.6 : isFog ? -0.1 + Math.random() * 0.2 : (wind > 10 ? 0.5 : 0),
+            len: isRain ? 4 + Math.random() * 6 : 0,
+          }));
+        }
+        
+        const animate = () => {
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          ctx.clearRect(0, 0, w, h);
+          
+          weatherParticlesRef.current.forEach(p => {
+            if (isRain) {
+              ctx.strokeStyle = `rgba(180,200,220,${p.opacity})`;
+              ctx.lineWidth = p.size * 0.5;
+              ctx.beginPath();
+              ctx.moveTo(p.x, p.y);
+              ctx.lineTo(p.x + p.drift, p.y + p.len);
+              ctx.stroke();
+              p.y += p.speed;
+              p.x += p.drift;
+            } else if (isSnow) {
+              ctx.fillStyle = `rgba(255,255,255,${p.opacity})`;
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+              ctx.fill();
+              p.y += p.speed;
+              p.x += p.drift + Math.sin(p.y * 0.02) * 0.3;
+            } else if (isFog) {
+              ctx.fillStyle = `rgba(200,200,210,${p.opacity})`;
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+              ctx.fill();
+              p.x += p.drift;
+              p.y += Math.sin(p.x * 0.01) * 0.1;
+            }
+            
+            if (p.y > h + 10) { p.y = -10; p.x = Math.random() * w; }
+            if (p.x > w + 10) p.x = -10;
+            if (p.x < -10) p.x = w + 10;
+          });
+          
+          weatherAnimRef.current = requestAnimationFrame(animate);
+        };
+        
+        if (weatherAnimRef.current) cancelAnimationFrame(weatherAnimRef.current);
+        animate();
+        
+        return () => { if (weatherAnimRef.current) cancelAnimationFrame(weatherAnimRef.current); };
+      }, [sunHour, sunDate, weather]);
+
+      // Lens flare — 35mm prime style
+      const drawLensFlare = React.useCallback((sunScreenX, sunScreenY, canvasW, canvasH, sunAltitude) => {
+        const canvas = flareCanvasRef.current;
+        if (!canvas) return;
+        // Don't set canvas.width/height here — already set by caller
+        const ctx = canvas.getContext('2d');
+        
+        // No flare if sun well below horizon
+        if (sunAltitude <= -0.1) {
+          // Moon glow at night
+          const moonR = Math.min(canvasW, canvasH) * 0.12;
+          const gradM = ctx.createRadialGradient(sunScreenX, sunScreenY, 0, sunScreenX, sunScreenY, moonR);
+          gradM.addColorStop(0, 'rgba(220, 215, 200, 0.15)');
+          gradM.addColorStop(0.3, 'rgba(200, 195, 185, 0.06)');
+          gradM.addColorStop(1, 'rgba(200, 195, 185, 0)');
+          ctx.fillStyle = gradM;
+          ctx.fillRect(0, 0, canvasW, canvasH);
+          return;
+        }
+        
+        // Intensity: strongest near horizon (golden hour), fades as sun goes higher, fades to 0 at sunset
+        const altDeg = sunAltitude * 180 / Math.PI;
+        const intensity = altDeg < -3 ? 0 : altDeg < 0 ? (altDeg + 3) / 3 * 0.5 : altDeg < 5 ? 0.5 + altDeg / 10 : altDeg < 15 ? 1 : Math.max(0.35, 1 - (altDeg - 15) / 50);
+        
+        const cx = canvasW / 2, cy = canvasH / 2;
+        const sx = sunScreenX, sy = sunScreenY;
+        // Flare axis: sun → center → opposite
+        const dx = cx - sx, dy = cy - sy;
+        
+        ctx.globalCompositeOperation = 'screen';
+        
+        // 1. Main sun glow — large warm bloom
+        const mainR = Math.min(canvasW, canvasH) * 0.375 * intensity;
+        const grad1 = ctx.createRadialGradient(sx, sy, 0, sx, sy, mainR);
+        grad1.addColorStop(0, `rgba(255, 250, 230, ${0.9 * intensity})`);
+        grad1.addColorStop(0.1, `rgba(255, 230, 150, ${0.6 * intensity})`);
+        grad1.addColorStop(0.4, `rgba(255, 180, 80, ${0.15 * intensity})`);
+        grad1.addColorStop(1, 'rgba(255, 180, 80, 0)');
+        ctx.fillStyle = grad1;
+        ctx.fillRect(0, 0, canvasW, canvasH);
+        
+        // 2. Hot center
+        const hotR = mainR * 0.15;
+        const grad0 = ctx.createRadialGradient(sx, sy, 0, sx, sy, hotR);
+        grad0.addColorStop(0, `rgba(255, 255, 255, ${0.95 * intensity})`);
+        grad0.addColorStop(0.5, `rgba(255, 245, 200, ${0.5 * intensity})`);
+        grad0.addColorStop(1, 'rgba(255, 230, 150, 0)');
+        ctx.fillStyle = grad0;
+        ctx.fillRect(0, 0, canvasW, canvasH);
+        
+        // 3. Anamorphic horizontal streak
+        ctx.save();
+        ctx.translate(sx, sy);
+        const streakW = canvasW * 1.5 * intensity;
+        const streakH = 6;
+        const gradS = ctx.createLinearGradient(-streakW/2, 0, streakW/2, 0);
+        gradS.addColorStop(0, 'rgba(255, 200, 100, 0)');
+        gradS.addColorStop(0.3, `rgba(255, 220, 150, ${0.25 * intensity})`);
+        gradS.addColorStop(0.5, `rgba(255, 240, 200, ${0.5 * intensity})`);
+        gradS.addColorStop(0.7, `rgba(255, 220, 150, ${0.25 * intensity})`);
+        gradS.addColorStop(1, 'rgba(255, 200, 100, 0)');
+        ctx.fillStyle = gradS;
+        ctx.fillRect(-streakW/2, -streakH/2, streakW, streakH);
+        // Wider softer streak
+        const gradS2 = ctx.createLinearGradient(-streakW/2, 0, streakW/2, 0);
+        gradS2.addColorStop(0, 'rgba(255, 200, 100, 0)');
+        gradS2.addColorStop(0.35, `rgba(255, 210, 130, ${0.08 * intensity})`);
+        gradS2.addColorStop(0.5, `rgba(255, 230, 180, ${0.15 * intensity})`);
+        gradS2.addColorStop(0.65, `rgba(255, 210, 130, ${0.08 * intensity})`);
+        gradS2.addColorStop(1, 'rgba(255, 200, 100, 0)');
+        ctx.fillStyle = gradS2;
+        ctx.fillRect(-streakW/2, -18, streakW, 36);
+        ctx.restore();
+        
+        // 4. Ghost artifacts along flare axis
+        const ghosts = [
+          { pos: 0.3, size: 0.09, color: [255, 180, 60], alpha: 0.12 },
+          { pos: 0.5, size: 0.135, color: [120, 200, 255], alpha: 0.08 },
+          { pos: 0.65, size: 0.06, color: [255, 130, 80], alpha: 0.15 },
+          { pos: 0.8, size: 0.18, color: [100, 180, 255], alpha: 0.06 },
+          { pos: 1.0, size: 0.075, color: [200, 150, 255], alpha: 0.1 },
+          { pos: 1.2, size: 0.12, color: [255, 200, 100], alpha: 0.07 },
+          { pos: 1.5, size: 0.225, color: [80, 200, 180], alpha: 0.04 },
+          { pos: 1.8, size: 0.045, color: [255, 160, 200], alpha: 0.12 },
+        ];
+        
+        ghosts.forEach(g => {
+          const gx = sx + dx * g.pos;
+          const gy = sy + dy * g.pos;
+          const gr = Math.min(canvasW, canvasH) * g.size;
+          const [r, gc2, b] = g.color;
+          
+          // Ring ghost (hollow circle)
+          const gradG = ctx.createRadialGradient(gx, gy, gr * 0.6, gx, gy, gr);
+          gradG.addColorStop(0, 'rgba(0,0,0,0)');
+          gradG.addColorStop(0.5, `rgba(${r},${gc2},${b},${g.alpha * intensity})`);
+          gradG.addColorStop(0.8, `rgba(${r},${gc2},${b},${g.alpha * 0.5 * intensity})`);
+          gradG.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = gradG;
+          ctx.beginPath();
+          ctx.arc(gx, gy, gr, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        
+        // 5. Subtle rainbow ring near sun
+        const rainR = mainR * 0.6;
+        ctx.strokeStyle = `rgba(255, 180, 100, ${0.06 * intensity})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(sx, sy, rainR, 0, Math.PI * 2);
+        ctx.stroke();
+        
+      }, []);
       const mapInstanceRef = React.useRef(null);
       const sunLinesRef = React.useRef([]);
       const sunPosLineRef = React.useRef(null);
       const shadowLineRef = React.useRef(null);
       const sunPosMarkerRef = React.useRef(null);
+      const sunBearingRef = React.useRef(null);
       const nightOverlayRef = React.useRef(null);
       const markerRef = React.useRef(null);
       const [adjustedPos, setAdjustedPos] = useState(null);
+      const effectiveCenterRef = React.useRef(null);
+      
+      // === Terrain Elevation Shadow ===
+      const [terrainProfile, setTerrainProfile] = useState(null);
+      const [terrainShadow, setTerrainShadow] = useState(false);
+      const terrainProfileRef = React.useRef(null);
+      
+      // === Buildings & Shadow Simulation ===
+      const [buildings, setBuildings] = useState(() => project?.buildings || []);
+      const [drawingMode, setDrawingMode] = useState(false);
+      const [drawingVertices, setDrawingVertices] = useState([]);
+      const drawingVerticesRef = React.useRef([]);
+      const [editingBuilding, setEditingBuilding] = useState(null); // index of building being edited
+      const [hoveredBuilding, setHoveredBuilding] = useState(null);
+      const [heightPickerIdx, setHeightPickerIdx] = useState(null);
+      const [draggingHeight, setDraggingHeight] = useState(null); // { idx, startY, startH, currentH, offsetY }
+      const BUILDING_COLORS = ['#ffe26b', '#7dd3c6', '#ff6b8a', '#b07dff', '#6bff8a'];
+
+      // Height pill drag handlers
+      useEffect(() => {
+        if (!draggingHeight) return;
+        const onMove = (clientY) => {
+          const delta = draggingHeight.startY - clientY;
+          const newH = Math.max(1, Math.min(200, Math.round(draggingHeight.startH + delta * 0.5)));
+          setDraggingHeight(prev => prev ? { ...prev, currentH: newH, offsetY: clientY - prev.startY } : null);
+          // Live update buildings for shadow
+          setBuildings(prev => prev.map((bb, ii) => ii === draggingHeight.idx ? {...bb, height: newH} : bb));
+        };
+        const onEnd = () => {
+          if (draggingHeight) {
+            const idx = draggingHeight.idx;
+            const h = draggingHeight.currentH;
+            buildingsSaveTimer.current && clearTimeout(buildingsSaveTimer.current);
+            buildingsSaveTimer.current = setTimeout(() => {
+              updateProject(project.id, { buildings: buildings.map((bb, ii) => ii === idx ? {...bb, height: h} : bb) });
+            }, 500);
+          }
+          setDraggingHeight(null);
+        };
+        const onMouseMove = (e) => onMove(e.clientY);
+        const onTouchMove = (e) => onMove(e.touches[0].clientY);
+        const onMouseUp = () => onEnd();
+        const onTouchEnd = () => onEnd();
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        window.addEventListener('touchmove', onTouchMove, { passive: true });
+        window.addEventListener('touchend', onTouchEnd);
+        return () => {
+          window.removeEventListener('mousemove', onMouseMove);
+          window.removeEventListener('mouseup', onMouseUp);
+          window.removeEventListener('touchmove', onTouchMove);
+          window.removeEventListener('touchend', onTouchEnd);
+        };
+      }, [draggingHeight, buildings, project?.id]);
+      const [buildingHeight, setBuildingHeight] = useState('');
+      const [buildingName, setBuildingName] = useState('');
+      const buildingPolygonsRef = React.useRef([]);
+      const shadowPolygonsRef = React.useRef([]);
+      const wallPolygonsRef = React.useRef([]);
+      const roofPolygonsRef = React.useRef([]);
+      const drawingPolygonRef = React.useRef(null);
+      const drawingMarkersRef = React.useRef([]);
+      const drawClickListenerRef = React.useRef(null);
+      const [editPanelPos, setEditPanelPos] = useState(null);
+      const [drawPanelPos, setDrawPanelPos] = useState(null);
+      const skipMapRecreateRef = React.useRef(false);
       // Reset adjustedPos when switching projects
-      useEffect(() => { setAdjustedPos(null); }, [project?.id]);
+      useEffect(() => { setAdjustedPos(null); effectiveCenterRef.current = null; }, [project?.id]);
+      
+      // Load buildings from project
+      useEffect(() => { setBuildings(project?.buildings || []); setDrawingMode(false); setDrawingVertices([]); setEditingBuilding(null); }, [project?.id]);
+      
+      // Save buildings to project when changed (debounced)
+      const buildingsSaveTimer = React.useRef(null);
+      useEffect(() => {
+        if (!project?.id) return;
+        if (buildingsSaveTimer.current) clearTimeout(buildingsSaveTimer.current);
+        buildingsSaveTimer.current = setTimeout(() => {
+          updateProject(project.id, { buildings });
+        }, 500);
+        return () => { if (buildingsSaveTimer.current) clearTimeout(buildingsSaveTimer.current); };
+      }, [buildings]);
+
+      // Drawing mode — add click listener on map
+      useEffect(() => {
+        const map = mapInstanceRef.current;
+        if (!map) return;
+        // Clean up previous listener
+        if (drawClickListenerRef.current) {
+          google.maps.event.removeListener(drawClickListenerRef.current);
+          drawClickListenerRef.current = null;
+        }
+        if (!drawingMode) {
+          // Clean drawing preview
+          if (drawingPolygonRef.current) { drawingPolygonRef.current.setMap(null); drawingPolygonRef.current = null; }
+          drawingMarkersRef.current.forEach(m => m.setMap(null));
+          drawingMarkersRef.current = [];
+          return;
+        }
+        map.setOptions({ draggableCursor: 'crosshair' });
+        drawClickListenerRef.current = map.addListener('click', (e) => {
+          const pt = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+          const next = [...drawingVerticesRef.current, pt];
+          drawingVerticesRef.current = next;
+          setDrawingVertices(next);
+        });
+        // Double-click to finish
+        const dblClickListener = map.addListener('dblclick', (e) => {
+          e.stop();
+          if (drawingVerticesRef.current.length >= 3) {
+            finishDrawingFromRef();
+          }
+        });
+        // Enter key to finish
+        const enterHandler = (e) => {
+          if (e.key === 'Enter' && drawingVerticesRef.current.length >= 3) {
+            finishDrawingFromRef();
+          }
+        };
+        document.addEventListener('keydown', enterHandler);
+        return () => {
+          if (drawClickListenerRef.current) {
+            google.maps.event.removeListener(drawClickListenerRef.current);
+            drawClickListenerRef.current = null;
+          }
+          google.maps.event.removeListener(dblClickListener);
+          document.removeEventListener('keydown', enterHandler);
+          map.setOptions({ draggableCursor: null });
+        };
+      }, [drawingMode]);
+
+      // Update drawing preview polygon + vertex markers
+      useEffect(() => {
+        const map = mapInstanceRef.current;
+        if (!map) return;
+        // Update preview polygon
+        if (drawingPolygonRef.current) drawingPolygonRef.current.setMap(null);
+        drawingMarkersRef.current.forEach(m => m.setMap(null));
+        drawingMarkersRef.current = [];
+        if (drawingVertices.length >= 2) {
+          const nextColor = BUILDING_COLORS[buildings.length % BUILDING_COLORS.length];
+          // Glow polygon (behind)
+          const glow = new google.maps.Polygon({
+            paths: drawingVertices,
+            strokeColor: nextColor, strokeOpacity: 0.3, strokeWeight: 8,
+            fillColor: nextColor, fillOpacity: 0.08, map, zIndex: 29
+          });
+          drawingMarkersRef.current.push(glow); // reuse array for cleanup
+          // Main polygon
+          drawingPolygonRef.current = new google.maps.Polygon({
+            paths: drawingVertices,
+            strokeColor: nextColor, strokeOpacity: 0.9, strokeWeight: 2,
+            fillColor: nextColor, fillOpacity: 0.2, map,
+            zIndex: 30
+          });
+        }
+        drawingVertices.forEach((v, i) => {
+          const isFirst = i === 0;
+          const nextColor = BUILDING_COLORS[buildings.length % BUILDING_COLORS.length];
+          const canClose = isFirst && drawingVertices.length >= 3;
+          // White circle border behind checkmark when closeable
+          if (canClose) {
+            const circleBg = new google.maps.Marker({
+              position: v, map,
+              icon: { path: google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: nextColor, fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 3, strokeOpacity: 1 },
+              zIndex: 36, clickable: false
+            });
+            drawingMarkersRef.current.push(circleBg);
+          }
+          const marker = new google.maps.Marker({
+            position: v, map,
+            icon: canClose ? {
+              path: 'M-2.5,0 L-1,2 L2.5,-2',
+              scale: 2,
+              fillColor: 'transparent', fillOpacity: 0,
+              strokeColor: '#ffffff', strokeWeight: 3, strokeOpacity: 1,
+              anchor: new google.maps.Point(0, 0),
+            } : {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: isFirst ? 10 : 5,
+              fillColor: nextColor,
+              fillOpacity: 1,
+              strokeColor: '#fff',
+              strokeWeight: isFirst ? 2.5 : 1.5,
+            },
+            zIndex: 37,
+            clickable: canClose
+          });
+          // Add pulsing circle behind first vertex when closeable
+          if (canClose) {
+            const pulseCircle = new google.maps.Marker({
+              position: v, map,
+              icon: { path: google.maps.SymbolPath.CIRCLE, scale: 20, fillColor: nextColor, fillOpacity: 0.3, strokeColor: nextColor, strokeWeight: 2, strokeOpacity: 0.5 },
+              zIndex: 34, clickable: false
+            });
+            drawingMarkersRef.current.push(pulseCircle);
+          }
+          if (canClose) {
+            marker.addListener('click', () => {
+              finishDrawingFromRef();
+            });
+          }
+          drawingMarkersRef.current.push(marker);
+        });
+        // Calculate panel position near last vertex
+        if (drawingVertices.length >= 1 && nightOverlayRef.current && nightOverlayRef.current.getProjection()) {
+          const last = drawingVertices[drawingVertices.length - 1];
+          const proj = nightOverlayRef.current.getProjection();
+          const px = proj.fromLatLngToContainerPixel(new google.maps.LatLng(last.lat, last.lng));
+          if (px) setDrawPanelPos({ x: px.x, y: px.y });
+        } else {
+          setDrawPanelPos(null);
+        }
+      }, [drawingVertices, buildings.length]);
+
+      const finishDrawingFromRef = () => {
+        const verts = drawingVerticesRef.current;
+        if (verts.length < 3) return;
+        if (buildings.length >= 5) { setDrawingMode(false); setDrawingVertices([]); drawingVerticesRef.current = []; return; }
+        const newBuilding = { polygon: [...verts], height: 30, name: '' };
+        setBuildings(prev => {
+          newBuilding.name = `Bâtiment ${prev.length + 1}`;
+          setEditingBuilding(prev.length);
+          return [...prev, newBuilding];
+        });
+        setBuildingHeight('30');
+        setBuildingName(newBuilding.name);
+        drawingVerticesRef.current = [];
+        setDrawingVertices([]);
+        setDrawingMode(false);
+        if (drawingPolygonRef.current) { drawingPolygonRef.current.setMap(null); drawingPolygonRef.current = null; }
+        drawingMarkersRef.current.forEach(m => m.setMap(null));
+        drawingMarkersRef.current = [];
+      };
+
+      const finishDrawing = () => {
+        if (drawingVertices.length < 3) return;
+        if (buildings.length >= 5) { setDrawingMode(false); setDrawingVertices([]); return; }
+        const newBuilding = { polygon: [...drawingVertices], height: 30, name: `Bâtiment ${buildings.length + 1}` };
+        setBuildings(prev => [...prev, newBuilding]);
+        setEditingBuilding(buildings.length);
+        setBuildingHeight('30');
+        setBuildingName(newBuilding.name);
+        setDrawingVertices([]);
+        setDrawingMode(false);
+        if (drawingPolygonRef.current) { drawingPolygonRef.current.setMap(null); drawingPolygonRef.current = null; }
+        drawingMarkersRef.current.forEach(m => m.setMap(null));
+        drawingMarkersRef.current = [];
+      };
+
+      const deleteBuilding = (idx) => {
+        setBuildings(prev => prev.filter((_, i) => i !== idx));
+        if (editingBuilding === idx) setEditingBuilding(null);
+        else if (editingBuilding > idx) setEditingBuilding(editingBuilding - 1);
+      };
+
+      // Draw building polygons + shadow + 3D extrusion on map
+      useEffect(() => {
+        const map = mapInstanceRef.current;
+        if (!map || !window.SunCalc) return;
+        const eLat = adjustedPos?.lat ?? project?.lat;
+        const eLng = adjustedPos?.lng ?? project?.lng;
+        if (!eLat || !eLng) return;
+
+        // Clear previous
+        buildingPolygonsRef.current.forEach(p => p.setMap(null));
+        buildingPolygonsRef.current = [];
+        shadowPolygonsRef.current.forEach(p => p.setMap(null));
+        shadowPolygonsRef.current = [];
+        wallPolygonsRef.current.forEach(p => p.setMap(null));
+        wallPolygonsRef.current = [];
+        roofPolygonsRef.current.forEach(p => p.setMap(null));
+        roofPolygonsRef.current = [];
+
+        // Sun position for shadow calc
+        const simDate = new Date(sunDate);
+        simDate.setHours(Math.floor(sunHour), Math.round((sunHour % 1) * 60), 0);
+        const sunPos = SunCalc.getPosition(simDate, eLat, eLng);
+        const sunAlt = sunPos.altitude;
+        const sunAz = sunPos.azimuth;
+
+
+        buildings.forEach((bldg, idx) => {
+          const isSelected = editingBuilding === idx;
+          const n = bldg.polygon.length;
+          if (n < 3) return;
+
+          // Draw shadow — fade smoothly near sunrise/sunset
+          if (sunAlt > -0.05) {
+            // Opacity fades: full at alt>5°, fading 0°-5°, gone below -3°
+            const altDeg = sunAlt * 180 / Math.PI;
+            const shadowOpacity = altDeg >= 5 ? 1 : altDeg <= -3 ? 0 : (altDeg + 3) / 8;
+            if (shadowOpacity > 0) {
+            const shadowLen = Math.min(bldg.height / Math.tan(Math.max(sunAlt, 0.01)), 2000);
+            const sunBearingFromNorth = (sunAz * 180 / Math.PI + 180) % 360;
+            const shadowBearing = (sunBearingFromNorth + 180) % 360;
+            const shadowBearingRad = shadowBearing * Math.PI / 180;
+            const dLat = (shadowLen * Math.cos(shadowBearingRad)) / 111320;
+            const dLng = (shadowLen * Math.sin(shadowBearingRad)) / (111320 * Math.cos(eLat * Math.PI / 180));
+
+            const projVerts = bldg.polygon.map(v => ({ lat: v.lat + dLat, lng: v.lng + dLng }));
+
+            // Projected footprint — with holes for all building footprints
+            const shadowFoot = new google.maps.Polygon({
+              paths: projVerts, strokeWeight: 0, strokeOpacity: 0,
+              fillColor: '#000000', fillOpacity: 0.3 * shadowOpacity, map, zIndex: 18, clickable: false
+            });
+            shadowPolygonsRef.current.push(shadowFoot);
+
+            // Wall quads connecting footprint to projection — with holes
+            for (let i = 0; i < n; i++) {
+              const j = (i + 1) % n;
+              const quad = new google.maps.Polygon({
+                paths: [bldg.polygon[i], bldg.polygon[j], projVerts[j], projVerts[i]],
+                strokeWeight: 0, strokeOpacity: 0,
+                fillColor: '#000000', fillOpacity: 0.25 * shadowOpacity, map, zIndex: 18, clickable: false
+              });
+              shadowPolygonsRef.current.push(quad);
+            }
+            }
+          }
+
+          // Draw building footprint — per-shape color
+          const shapeColor = BUILDING_COLORS[idx % BUILDING_COLORS.length];
+          // Glow behind
+          const glowPoly = new google.maps.Polygon({
+            paths: bldg.polygon,
+            strokeColor: shapeColor, strokeOpacity: 0.4, strokeWeight: isSelected ? 10 : 6,
+            fillColor: 'transparent', fillOpacity: 0, map, zIndex: 24,
+          });
+          buildingPolygonsRef.current.push(glowPoly);
+          
+          const poly = new google.maps.Polygon({
+            paths: bldg.polygon,
+            strokeColor: shapeColor,
+            strokeOpacity: isSelected ? 1 : 0.85, strokeWeight: isSelected ? 2.5 : 1.5,
+            fillColor: shapeColor,
+            fillOpacity: 0.12, map, zIndex: 25,
+            clickable: true
+          });
+          poly.addListener('click', () => {
+            setEditingBuilding(idx);
+            setBuildingHeight(String(bldg.height));
+            setBuildingName(bldg.name);
+          });
+          buildingPolygonsRef.current.push(poly);
+          
+          // Draggable vertex markers for selected building
+          if (isSelected) {
+            bldg.polygon.forEach((v, vi) => {
+              const vertexMarker = new google.maps.Marker({
+                position: v, map, draggable: true,
+                icon: {
+                  path: google.maps.SymbolPath.CIRCLE,
+                  scale: 6, fillColor: shapeColor, fillOpacity: 1,
+                  strokeColor: '#fff', strokeWeight: 2,
+                },
+                zIndex: 40
+              });
+              vertexMarker.addListener('dragend', (e) => {
+                const newPos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+                setBuildings(prev => prev.map((b, bi) => {
+                  if (bi !== idx) return b;
+                  const newPoly = [...b.polygon];
+                  newPoly[vi] = newPos;
+                  return { ...b, polygon: newPoly };
+                }));
+              });
+              buildingPolygonsRef.current.push(vertexMarker);
+            });
+          }
+        });
+
+        // Calculate edit panel position near the selected building
+        if (editingBuilding !== null && buildings[editingBuilding]) {
+          const bldg = buildings[editingBuilding];
+          const centroid = bldg.polygon.reduce((acc, v) => ({ lat: acc.lat + v.lat / bldg.polygon.length, lng: acc.lng + v.lng / bldg.polygon.length }), { lat: 0, lng: 0 });
+          const overlay = nightOverlayRef.current;
+          if (overlay && overlay.getProjection()) {
+            const proj = overlay.getProjection();
+            const px = proj.fromLatLngToContainerPixel(new google.maps.LatLng(centroid.lat, centroid.lng));
+            if (px) setEditPanelPos({ x: px.x, y: px.y });
+          }
+        } else {
+          setEditPanelPos(null);
+        }
+
+        return () => {
+          buildingPolygonsRef.current.forEach(p => p.setMap(null));
+          shadowPolygonsRef.current.forEach(p => p.setMap(null));
+          wallPolygonsRef.current.forEach(p => p.setMap(null));
+          roofPolygonsRef.current.forEach(p => p.setMap(null));
+        };
+      }, [buildings, sunHour, sunDate, adjustedPos, editingBuilding, project?.lat, project?.lng, mapType]);
 
       // === Project files ===
       const [projectFiles, setProjectFiles] = useState([]);
       const [fileUrls, setFileUrls] = useState({});
       const [uploading, setUploading] = useState(false);
+      const [uploadProgress, setUploadProgress] = useState(0);
       const [dragOver, setDragOver] = useState(false);
       const [previewFile, setPreviewFile] = useState(null);
       const fileInputRef = React.useRef(null);
@@ -2444,11 +3232,14 @@
         const newTotalMB = totalFilesMB + valid.reduce((s, f) => s + f.size, 0) / (1024 * 1024);
         if (newTotalMB > MAX_PROJECT_FILES_MB) { alert(`Limite de ${MAX_PROJECT_FILES_MB} MB par projet dépassée`); return; }
         setUploading(true);
+        setUploadProgress(0);
         try {
-          for (const f of valid) {
+          for (let i = 0; i < valid.length; i++) {
+            const f = valid[i];
             console.log('Uploading:', f.name);
             await fileHelpers.upload(project.id, user.id, f);
             console.log('Uploaded:', f.name);
+            setUploadProgress(Math.round(((i + 1) / valid.length) * 100));
           }
           const updated = await fileHelpers.list(project.id);
           console.log('Files after upload:', updated.length);
@@ -2548,6 +3339,11 @@
       // Interactive Google Map with dark mode
       useEffect(() => {
         if (!mapContainerRef.current || !project?.lat || !project?.lng || !window.google) return;
+        // Skip map recreation when just confirming adjusted position
+        if (skipMapRecreateRef.current) {
+          skipMapRecreateRef.current = false;
+          return;
+        }
         
         const darkStyle = [
           { elementType: 'geometry', stylers: [{ color: '#2d2d2d' }] },
@@ -2574,23 +3370,108 @@
 
         const map = new google.maps.Map(mapContainerRef.current, {
           center: { lat: project.lat, lng: project.lng },
-          zoom: 16,
+          zoom: isMobile ? 16 : 18,
           mapTypeId: mapType,
           styles: mapType === 'roadmap' ? darkStyle : [
+            { stylers: [{ saturation: 0 }] },
             { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
             { featureType: 'transit', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
           ],
           disableDefaultUI: true,
-          zoomControl: !isMobile,
-          gestureHandling: 'greedy',
+          disableDoubleClickZoom: true,
+          zoomControl: false,
+          gestureHandling: isMobile ? 'cooperative' : 'greedy',
+          scrollwheel: false,
           mapTypeControl: false,
+          clickableIcons: false,
           backgroundColor: '#262c30',
         });
         mapInstanceRef.current = map;
-        // Stop wheel from scrolling parent — let map zoom instead
-        mapContainerRef.current.addEventListener('wheel', (e) => e.stopPropagation(), { passive: false });
+        
+        // Reveal animation — start after tiles load
+        if (!mapRevealedRef.current) {
+          google.maps.event.addListenerOnce(map, 'tilesloaded', () => {
+            if (mapRevealedRef.current) return;
+            mapRevealedRef.current = true;
+            setMapRevealed(true);
+            // Set slider to start of range (far left)
+            const st2 = (project?.lat && project?.lng && window.SunCalc) ? SunCalc.getTimes(new Date(), project.lat, project.lng) : null;
+            const sr2 = st2?.sunrise ? st2.sunrise.getHours() + st2.sunrise.getMinutes()/60 : 6;
+            const ss2 = st2?.sunset ? st2.sunset.getHours() + st2.sunset.getMinutes()/60 : 18;
+            const range2 = (ss2 - sr2) / (4/6);
+            const min2 = sr2 - (1/6) * range2;
+            setSunHour(min2);
+            setSunHourDisplay(min2);
+            sunHourTargetRef.current = min2;
+            
+            // Animate slider to center of range
+            setTimeout(() => {
+              const targetH = min2 + range2 / 2;
+              const sliderDur = 1000;
+              const sT0 = performance.now();
+              const startH = min2;
+              const animSlider = (now2) => {
+                const p = Math.min(1, (now2 - sT0) / sliderDur);
+                // Match clip easing: cubic-bezier(0.22, 0.61, 0.36, 1)
+                const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+                setSunHour(startH + (targetH - startH) * ease);
+                if (p < 1) requestAnimationFrame(animSlider);
+              };
+              requestAnimationFrame(animSlider);
+            }, 200);
+          });
+        }
+        // Desaturation: CSS filter on container, counter-filter on all overlay panes
+        const counterOverlay = new google.maps.OverlayView();
+        counterOverlay.onAdd = function() {
+          const applyCounter = () => {
+            const panes = this.getPanes();
+            if (!panes) return;
+            Object.values(panes).forEach(pane => {
+              if (pane && pane.style) pane.style.filter = 'saturate(2.0)';
+            });
+          };
+          applyCounter();
+          // Reapply periodically in case panes get recreated
+          this._interval = setInterval(applyCounter, 2000);
+        };
+        counterOverlay.draw = function() {};
+        counterOverlay.onRemove = function() { if (this._interval) clearInterval(this._interval); };
+        counterOverlay.setMap(map);
+        // Manual scroll zoom — keeps center fixed (no cursor-biased panning)
+        mapContainerRef.current.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const delta = e.deltaY < 0 ? 1 : -1;
+          const current = map.getZoom();
+          map.setZoom(current + delta);
+        }, { passive: false });
         // No panBy — center pin is at visual center
         map.addListener('idle', () => { const z = map.getZoom(); if (z !== mapZoom) setMapZoom(z); });
+
+        // Keep center anchored during scroll-zoom (not drag)
+        let isDragging = false;
+        map.addListener('dragstart', () => { isDragging = true; });
+        map.addListener('dragend', () => { isDragging = false; });
+        map.addListener('zoom_changed', () => {
+          if (!isDragging) {
+            const anchor = effectiveCenterRef.current || { lat: project.lat, lng: project.lng };
+            map.setCenter(anchor);
+          }
+          // Immediately reposition sun dot to avoid drift during zoom animation
+          if (sunPosMarkerRef.current && sunBearingRef.current) {
+            const sb = sunBearingRef.current;
+            const b = map.getBounds();
+            if (b) {
+              const R = Math.min(Math.abs(b.getNorthEast().lat() - b.getSouthWest().lat()), Math.abs(b.getNorthEast().lng() - b.getSouthWest().lng())) * 0.38;
+              const newLat = sb.eLat + R * Math.cos(sb.bearing * Math.PI / 180);
+              const newLng = sb.eLng + R * Math.sin(sb.bearing * Math.PI / 180) / Math.cos(sb.eLat * Math.PI / 180);
+              sunPosMarkerRef.current.lat = newLat;
+              sunPosMarkerRef.current.lng = newLng;
+              sunPosMarkerRef.current.draw();
+            }
+          }
+        });
 
         // Night overlay — inserted into mapPane so it's BELOW polylines
         class NightOverlay extends google.maps.OverlayView {
@@ -2609,7 +3490,7 @@
             this.getPanes().mapPane.appendChild(this.div);
           }
           draw() {}
-          setNight(n) { if (this.div) this.div.style.opacity = n ? '1' : '0'; }
+          setNight(opacity) { if (this.div) this.div.style.opacity = String(opacity); }
           onRemove() { if (this.div) { this.div.parentNode.removeChild(this.div); this.div = null; } }
         }
         if (nightOverlayRef.current) nightOverlayRef.current.setMap(null);
@@ -2624,9 +3505,12 @@
           const c = map.getCenter();
           const dist = Math.abs(c.lat() - project.lat) + Math.abs(c.lng() - project.lng);
           if (dist > 0.00005) {
-            setAdjustedPos({ lat: c.lat(), lng: c.lng() });
+            const pos = { lat: c.lat(), lng: c.lng() };
+            setAdjustedPos(pos);
+            effectiveCenterRef.current = pos;
           } else {
             setAdjustedPos(null);
+            effectiveCenterRef.current = null;
           }
         });
 
@@ -2639,9 +3523,36 @@
           if (shadowLineRef.current) { shadowLineRef.current.setMap(null); shadowLineRef.current = null; }
           if (sunPosMarkerRef.current) { sunPosMarkerRef.current.setMap(null); sunPosMarkerRef.current = null; }
           if (nightOverlayRef.current) { nightOverlayRef.current.setMap(null); nightOverlayRef.current = null; }
+          buildingPolygonsRef.current.forEach(p => p.setMap(null)); buildingPolygonsRef.current = [];
+          shadowPolygonsRef.current.forEach(p => p.setMap(null)); shadowPolygonsRef.current = [];
+          wallPolygonsRef.current.forEach(p => p.setMap(null)); wallPolygonsRef.current = [];
+          roofPolygonsRef.current.forEach(p => p.setMap(null)); roofPolygonsRef.current = [];
           google.maps.event.removeListener(panListener);
         };
-      }, [project?.lat, project?.lng, mapType]);
+      }, [project?.lat, project?.lng]);
+
+      // Switch map type without recreating — preserves overlays & zoom
+      useEffect(() => {
+        const map = mapInstanceRef.current;
+        if (!map) return;
+        map.setMapTypeId(mapType);
+        const darkStyle = [
+          { elementType: 'geometry', stylers: [{ color: '#2c2c2c' }] },
+          { elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+          { elementType: 'labels.text.stroke', stylers: [{ color: '#212121' }] },
+          { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#3c3c3c' }] },
+          { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+          { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
+          { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4a4a4a' }] },
+          { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+        ];
+        const satStyle = [
+          { stylers: [{ saturation: 0 }] },
+          { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
+          { featureType: 'transit', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
+        ];
+        map.setOptions({ styles: mapType === 'roadmap' ? darkStyle : satStyle });
+      }, [mapType]);
 
       // Redraw sun lines when sunDate or adjustedPos changes
       useEffect(() => {
@@ -2653,6 +3564,7 @@
         sunLinesRef.current.forEach(l => l.setMap(null));
         sunLinesRef.current = [];
         
+        if (!showSunLines || drawingMode) return;
         const bounds = map.getBounds();
         const getR = () => {
           if (!bounds) return 0.003;
@@ -2663,51 +3575,60 @@
         
         const sunTimes = SunCalc.getTimes(sunDate, eLat, eLng);
         
+        // Helper: offset a point away from center by pixels (for circle cutout)
+        const circleRadiusPx = 17; // 34px/2 + 3px border
+        const metersPerPx = 156543.03392 * Math.cos(eLat * Math.PI / 180) / Math.pow(2, mapZoom);
+        const offsetDeg = (circleRadiusPx * metersPerPx) / 111320;
+        
         const drawLine = (azRad, color, opacity, weight) => {
           const bearing = (azRad * 180 / Math.PI + 180) % 360;
           const R = getR();
-          const lat2 = eLat + R * Math.cos(bearing * Math.PI / 180);
-          const lng2 = eLng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(eLat * Math.PI / 180);
+          const bRad = bearing * Math.PI / 180;
+          const startLat = eLat + offsetDeg * Math.cos(bRad);
+          const startLng = eLng + offsetDeg * Math.sin(bRad) / Math.cos(eLat * Math.PI / 180);
+          const lat2 = eLat + R * Math.cos(bRad);
+          const lng2 = eLng + R * Math.sin(bRad) / Math.cos(eLat * Math.PI / 180);
           const line = new google.maps.Polyline({
-            path: [{ lat: eLat, lng: eLng }, { lat: lat2, lng: lng2 }],
+            path: [{ lat: startLat, lng: startLng }, { lat: lat2, lng: lng2 }],
             strokeColor: color, strokeOpacity: opacity, strokeWeight: weight, map
           });
           sunLinesRef.current.push(line);
         };
 
-        if (sunTimes.sunrise) {
-          const srPos = SunCalc.getPosition(sunTimes.sunrise, eLat, eLng);
-          drawLine(srPos.azimuth, '#ffe26b', 0.9, 5);
+        // sr/ss lines drawn on canvas (below: halos, above: lines)
+        
+        // Shadow pie wedge — dark gradient opposite to sun
+        const simDatePie = new Date(sunDate);
+        simDatePie.setHours(Math.floor(sunHour), Math.round((sunHour % 1) * 60), 0);
+        const sunPosPie = SunCalc.getPosition(simDatePie, eLat, eLng);
+        const sunBearingPie = (sunPosPie.azimuth * 180 / Math.PI + 180) % 360;
+        const shadowBearingPie = (sunBearingPie + 180) % 360;
+        const altDegPie = sunPosPie.altitude * 180 / Math.PI;
+        if (altDegPie > 0) {
+          // Shadow wedge drawn on canvas overlay for smooth gradient
         }
-        if (sunTimes.sunset) {
-          const ssPos = SunCalc.getPosition(sunTimes.sunset, eLat, eLng);
-          drawLine(ssPos.azimuth, '#f4143d', 0.9, 5);
-        }
+      }, [sunDate, project?.lat, project?.lng, mapZoom, adjustedPos, showSunLines, drawingMode, sunHour]);
 
-        const srAz = sunTimes.sunrise ? SunCalc.getPosition(sunTimes.sunrise, eLat, eLng).azimuth : 0;
-        const ssAz = sunTimes.sunset ? SunCalc.getPosition(sunTimes.sunset, eLat, eLng).azimuth : 0;
-        const steps = 36;
-        const srBearing = (srAz * 180 / Math.PI + 180) % 360;
-        const ssBearing = (ssAz * 180 / Math.PI + 180) % 360;
-        let startB = srBearing, endB = ssBearing;
-        if (endB < startB) endB += 360;
-        const R = getR() * 1.1;
-        const arcPoints = [{ lat: eLat, lng: eLng }];
-        for (let i = 0; i <= steps; i++) {
-          const b = startB + (endB - startB) * i / steps;
-          const bRad = b * Math.PI / 180;
-          arcPoints.push({
-            lat: eLat + R * Math.cos(bRad),
-            lng: eLng + R * Math.sin(bRad) / Math.cos(eLat * Math.PI / 180)
-          });
+      // Hide POI labels in drawing mode or when sun lines hidden
+      const savedMapStylesRef = React.useRef(null);
+      useEffect(() => {
+        const map = mapInstanceRef.current;
+        if (!map) return;
+        if (drawingMode || !showSunLines) {
+          savedMapStylesRef.current = map.get('styles') || [];
+          const poiHidden = [
+            ...savedMapStylesRef.current.filter(s => s.featureType !== 'poi' && s.featureType !== 'transit'),
+            { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+            { featureType: 'transit', stylers: [{ visibility: 'off' }] }
+          ];
+          map.setOptions({ styles: poiHidden });
+        } else {
+          if (savedMapStylesRef.current !== null) {
+            map.setOptions({ styles: savedMapStylesRef.current });
+            savedMapStylesRef.current = null;
+          }
         }
-        arcPoints.push({ lat: eLat, lng: eLng });
-        const arc = new google.maps.Polygon({
-          paths: arcPoints, strokeColor: '#ffe26b', strokeOpacity: 0.15,
-          strokeWeight: 1, fillColor: '#000000', fillOpacity: 0.25, map
-        });
-        sunLinesRef.current.push(arc);
-      }, [sunDate, project?.lat, project?.lng, mapZoom, adjustedPos]);
+      }, [drawingMode, showSunLines]);
 
       // Escape key closes fullscreen map
       useEffect(() => {
@@ -2731,6 +3652,24 @@
         return () => { document.body.style.overflow = ''; };
       }, [showMapFull]);
 
+      // Fetch terrain elevation profile when position changes
+      React.useEffect(() => {
+        const lat = adjustedPos?.lat ?? project?.lat;
+        const lng = adjustedPos?.lng ?? project?.lng;
+        console.log('[ELEVATION] Effect triggered, lat:', lat, 'lng:', lng);
+        if (!lat || !lng) return;
+        let cancelled = false;
+        getElevationProfile(lat, lng).then(profile => {
+          console.log('[ELEVATION] Profile received:', profile ? profile.length + ' directions' : 'null');
+          if (profile) console.log('[ELEVATION] Max angles:', profile.filter(p => p.maxAngle > 0).map(p => `${p.bearing}°=${p.maxAngle}°`).join(', '));
+          if (!cancelled && profile) {
+            terrainProfileRef.current = profile;
+            setTerrainProfile(profile);
+          }
+        });
+        return () => { cancelled = true; };
+      }, [roundGrid(adjustedPos?.lat ?? project?.lat ?? 0), roundGrid(adjustedPos?.lng ?? project?.lng ?? 0)]);
+
       // Separate effect for sun position line (slider) — lightweight update
       useEffect(() => {
         const map = mapInstanceRef.current;
@@ -2741,6 +3680,12 @@
         // Remove previous position line only (keep marker for smooth update)
         if (sunPosLineRef.current) { sunPosLineRef.current.setMap(null); sunPosLineRef.current = null; }
         if (shadowLineRef.current) { shadowLineRef.current.setMap(null); shadowLineRef.current = null; }
+        if (sunPosMarkerRef.current) { sunPosMarkerRef.current.setMap(null); }
+        
+        if (!showSunLines || drawingMode) {
+          if (flareCanvasRef.current) { const fc = flareCanvasRef.current.getContext('2d'); fc && fc.clearRect(0, 0, flareCanvasRef.current.width, flareCanvasRef.current.height); }
+          return;
+        }
         
         const sunTimes = SunCalc.getTimes(sunDate, eLat, eLng);
         const srTime = sunTimes.sunrise ? sunTimes.sunrise.getHours() + sunTimes.sunrise.getMinutes()/60 : 6;
@@ -2750,6 +3695,7 @@
         simDate.setHours(Math.floor(sunHour), Math.round((sunHour % 1) * 60), 0);
         const sunPos = SunCalc.getPosition(simDate, eLat, eLng);
         const bearing = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
+        sunBearingRef.current = { bearing, eLat, eLng };
         const bounds = map.getBounds(); const R = bounds ? Math.min(Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat()), Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng())) * 0.38 : 0.003;
         const lat2 = eLat + R * Math.cos(bearing * Math.PI / 180);
         const lng2 = eLng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(eLat * Math.PI / 180);
@@ -2758,45 +3704,82 @@
         const isGoldenBefore = sunHour >= (srTime - 1) && sunHour < srTime;
         const isGoldenAfter = sunHour > ssTime && sunHour <= (ssTime + 1);
         const isNight = !isDay && !isGoldenBefore && !isGoldenAfter;
-        const lineColor = isNight ? '#6b7db5' : (isGoldenBefore || isGoldenAfter) ? '#5ab8aa' : '#7dd3c6';
-        const lineOpacity = isNight ? 0.5 : (isGoldenBefore || isGoldenAfter) ? 0.6 : 1;
+        // Moon mode: as soon as sun passes ss or sr lines
+        const isMoonMode = sunHour > ssTime || sunHour < srTime;
+        const lineColor = isMoonMode ? '#c8d8f0' : '#ffe26b';
+        const lineOpacity = isMoonMode ? 0.7 : (isGoldenBefore || isGoldenAfter) ? 0.8 : 1;
+        
+        // Terrain shadow check
+        const sunAltDeg = sunPos.altitude * 180 / Math.PI;
+        const inTerrainShadow = isTerrainShadow(terrainProfileRef.current, bearing, sunAltDeg);
+        if (terrainProfileRef.current) console.log('[TERRAIN] bearing:', bearing.toFixed(1), 'sunAlt:', sunAltDeg.toFixed(1), 'shadow:', inTerrainShadow);
+        setTerrainShadow(inTerrainShadow);
+        
+        // Offset start from circle edge
+        const cRadPx = 17;
+        const mPerPx = 156543.03392 * Math.cos(eLat * Math.PI / 180) / Math.pow(2, mapZoom);
+        const offDeg = (cRadPx * mPerPx) / 111320;
+        const bRad2 = bearing * Math.PI / 180;
+        const startLat = eLat + offDeg * Math.cos(bRad2);
+        const startLng = eLng + offDeg * Math.sin(bRad2) / Math.cos(eLat * Math.PI / 180);
+        
+        // Glow line behind the solid line
+        if (!isMoonMode) {
+          const glowLine = new google.maps.Polyline({
+            path: [{ lat: startLat, lng: startLng }, { lat: lat2, lng: lng2 }],
+            strokeColor: '#ffe26b', strokeOpacity: 0.15, strokeWeight: 36, map
+          });
+          if (!sunPosLineRef._glowLine) sunPosLineRef._glowLine = null;
+          if (sunPosLineRef._glowLine) sunPosLineRef._glowLine.setMap(null);
+          sunPosLineRef._glowLine = glowLine;
+        } else {
+          // Subtle bluish moon glow
+          const glowLine = new google.maps.Polyline({
+            path: [{ lat: startLat, lng: startLng }, { lat: lat2, lng: lng2 }],
+            strokeColor: '#c8d8f0', strokeOpacity: 0.1, strokeWeight: 24, map
+          });
+          if (sunPosLineRef._glowLine) sunPosLineRef._glowLine.setMap(null);
+          sunPosLineRef._glowLine = glowLine;
+        }
         
         sunPosLineRef.current = new google.maps.Polyline({
-          path: [{ lat: eLat, lng: eLng }, { lat: lat2, lng: lng2 }],
-          strokeColor: lineColor, strokeOpacity: 0, strokeWeight: 6,
-          icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: lineOpacity, scale: 2 }, offset: '0', repeat: '10px' }],
-          map
+          path: [{ lat: startLat, lng: startLng }, { lat: lat2, lng: lng2 }],
+          strokeColor: lineColor, strokeOpacity: lineOpacity, strokeWeight: 3,
+          zIndex: 100, map
         });
 
-        // Shadow line — opposite direction (only during day/golden)
-        if (!isNight) {
-          const shadowBearing = (bearing + 180) % 360;
-          const shadowR = bounds ? Math.min(Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat()), Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng())) * 0.38 : 0.003;
-          const sLat2 = eLat + shadowR * Math.cos(shadowBearing * Math.PI / 180);
-          const sLng2 = eLng + shadowR * Math.sin(shadowBearing * Math.PI / 180) / Math.cos(eLat * Math.PI / 180);
-          shadowLineRef.current = new google.maps.Polyline({
-            path: [{ lat: eLat, lng: eLng }, { lat: sLat2, lng: sLng2 }],
-            strokeColor: '#000000', strokeOpacity: 0, strokeWeight: 8,
-            icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.35, scale: 3 }, offset: '0', repeat: '12px' }],
-            map
-          });
-        }
+        // Shadow pie wedge is drawn in the sun lines effect above
 
         // Sun/Moon dot — custom overlay with motion blur
         if (sunPosMarkerRef.current) {
           sunPosMarkerRef.current.moveTo(lat2, lng2);
-          sunPosMarkerRef.current.setNight(isNight);
+          sunPosMarkerRef.current.setNight(isMoonMode);
           if (!sunPosMarkerRef.current.getMap()) sunPosMarkerRef.current.setMap(map);
         } else {
           class SunDotOverlay extends google.maps.OverlayView {
-            constructor(lat, lng) {
+            constructor(lat, lng, moonMode) {
               super();
               this.lat = lat;
               this.lng = lng;
               this.div = null;
               this._isNight = false;
+              this._initMoon = moonMode;
             }
             onAdd() {
+              // Wrapper for halo + moon
+              this.container = document.createElement('div');
+              this.container.style.position = 'absolute';
+              this.container.style.pointerEvents = 'none';
+              this.container.style.zIndex = '20';
+              
+              // Halo div (behind moon)
+              this.halo = document.createElement('div');
+              this.halo.style.position = 'absolute';
+              this.halo.style.borderRadius = '50%';
+              this.halo.style.display = 'none';
+              this.container.appendChild(this.halo);
+              
+              // Moon/sun div
               this.div = document.createElement('div');
               this.div.style.position = 'absolute';
               this.div.style.width = '18px';
@@ -2804,29 +3787,69 @@
               this.div.style.borderRadius = '50%';
               this.div.style.background = 'radial-gradient(circle, #ffe26b 50%, rgba(255,226,107,0.3) 100%)';
               this.div.style.border = '2px solid rgba(255,255,255,0.6)';
-              this.div.style.boxShadow = '0 0 8px rgba(255,226,107,0.5)';
-              this.div.style.transition = 'filter 0.15s ease-out, background 0.3s ease, box-shadow 0.3s ease';
+              this.div.style.boxShadow = '0 0 6px 2px rgba(255,226,107,0.9), 0 0 14px 4px rgba(255,226,107,0.5), 0 0 3px 1px rgba(255,255,255,0.8)';
+              this.div.style.transition = 'filter 0.15s ease-out, background 0.3s ease, box-shadow 0.3s ease, width 0.3s ease, height 0.3s ease';
               this.div.style.pointerEvents = 'none';
-              this.div.style.zIndex = '20';
-              this.getPanes().overlayMouseTarget.appendChild(this.div);
+              this.container.appendChild(this.div);
+              
+              this.getPanes().overlayMouseTarget.appendChild(this.container);
+              // Apply initial moon mode
+              if (this._initMoon) {
+                this._isNight = true;
+                this.div.style.width = '24px';
+                this.div.style.height = '24px';
+                this.div.style.background = 'radial-gradient(circle at 35% 30%, #faf6ee 0%, #f0e8d8 20%, #ddd5c5 45%, #c8bfaf 70%, #b5ad9d 100%)';
+                this.div.style.boxShadow = '0 0 6px 2px rgba(245,240,225,0.7), inset -4px -3px 6px rgba(0,0,0,0.2), inset 2px 2px 4px rgba(255,255,255,0.35), inset -1px 1px 2px rgba(0,0,0,0.1)';
+                this.div.style.border = '1px solid rgba(255,255,255,0.4)';
+                this.halo.style.display = 'block';
+                this.halo.style.background = 'radial-gradient(circle, rgba(230,225,210,0.25) 0%, rgba(210,205,190,0.12) 35%, rgba(190,185,170,0.04) 60%, transparent 75%)';
+              }
             }
             draw() {
               const proj = this.getProjection();
-              if (!proj || !this.div) return;
+              if (!proj || !this.container) return;
               const pos = proj.fromLatLngToDivPixel(new google.maps.LatLng(this.lat, this.lng));
-              this.div.style.left = (pos.x - 9) + 'px';
-              this.div.style.top = (pos.y - 9) + 'px';
+              if (this._isNight) {
+                // Moon: 24px, halo: 70px
+                const moonSz = 24, haloSz = 70;
+                this.container.style.left = (pos.x - haloSz/2) + 'px';
+                this.container.style.top = (pos.y - haloSz/2) + 'px';
+                this.container.style.width = haloSz + 'px';
+                this.container.style.height = haloSz + 'px';
+                this.halo.style.left = '0px'; this.halo.style.top = '0px';
+                this.halo.style.width = haloSz + 'px'; this.halo.style.height = haloSz + 'px';
+                this.div.style.left = ((haloSz - moonSz)/2) + 'px';
+                this.div.style.top = ((haloSz - moonSz)/2) + 'px';
+              } else {
+                const sz = 18;
+                this.container.style.left = (pos.x - sz/2) + 'px';
+                this.container.style.top = (pos.y - sz/2) + 'px';
+                this.container.style.width = sz + 'px';
+                this.container.style.height = sz + 'px';
+                this.div.style.left = '0px'; this.div.style.top = '0px';
+              }
             }
             setNight(n) {
               if (this._isNight === n || !this.div) return;
               this._isNight = n;
               if (n) {
-                this.div.style.background = 'radial-gradient(circle, #c8d4f0 50%, rgba(150,170,220,0.3) 100%)';
-                this.div.style.boxShadow = '0 0 8px rgba(150,170,220,0.5)';
+                this.div.style.width = '24px';
+                this.div.style.height = '24px';
+                this.div.style.background = 'radial-gradient(circle at 35% 30%, #faf6ee 0%, #f0e8d8 20%, #ddd5c5 45%, #c8bfaf 70%, #b5ad9d 100%)';
+                this.div.style.boxShadow = '0 0 6px 2px rgba(245,240,225,0.7), inset -4px -3px 6px rgba(0,0,0,0.2), inset 2px 2px 4px rgba(255,255,255,0.35), inset -1px 1px 2px rgba(0,0,0,0.1)';
+                this.div.style.border = '1px solid rgba(255,255,255,0.4)';
+                // Halo glow
+                this.halo.style.display = 'block';
+                this.halo.style.background = 'radial-gradient(circle, rgba(230,225,210,0.25) 0%, rgba(210,205,190,0.12) 35%, rgba(190,185,170,0.04) 60%, transparent 75%)';
               } else {
+                this.div.style.width = '18px';
+                this.div.style.height = '18px';
                 this.div.style.background = 'radial-gradient(circle, #ffe26b 50%, rgba(255,226,107,0.3) 100%)';
-                this.div.style.boxShadow = '0 0 8px rgba(255,226,107,0.5)';
+                this.div.style.boxShadow = '0 0 6px 2px rgba(255,226,107,0.9), 0 0 14px 4px rgba(255,226,107,0.5), 0 0 3px 1px rgba(255,255,255,0.8)';
+                this.div.style.border = '2px solid rgba(255,255,255,0.6)';
+                this.halo.style.display = 'none';
               }
+              this.draw();
             }
             moveTo(lat, lng) {
               const proj = this.getProjection();
@@ -2853,17 +3876,205 @@
                 this.lng = lng;
               }
             }
-            onRemove() { if (this.div) { this.div.parentNode.removeChild(this.div); this.div = null; } }
+            onRemove() { if (this.container) { this.container.parentNode.removeChild(this.container); this.container = null; this.div = null; this.halo = null; } }
           }
-          sunPosMarkerRef.current = new SunDotOverlay(lat2, lng2);
+          sunPosMarkerRef.current = new SunDotOverlay(lat2, lng2, isMoonMode);
           sunPosMarkerRef.current.setMap(map);
         }
-      }, [sunHour, project?.lat, project?.lng, mapType, mapZoom, sunDate, adjustedPos]);
+        
+        // Lens flare + shadow wedge — project to screen
+        const overlay = nightOverlayRef.current;
+        if (overlay && overlay.getProjection() && flareCanvasRef.current) {
+          const proj = overlay.getProjection();
+          const sunPx = proj.fromLatLngToContainerPixel(new google.maps.LatLng(lat2, lng2));
+          const centerPx = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat, eLng));
+          if (sunPx && centerPx) {
+            const container = mapContainerRef.current;
+            const w = container ? container.offsetWidth : 400;
+            const h = container ? container.offsetHeight : 400;
+            const canvas = flareCanvasRef.current;
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, w, h);
+            
+            // Sunrise & Sunset line halos — drawn first (behind white lines)
+            if (sunTimes.sunrise && sunTimes.sunset) {
+              const srAzH = SunCalc.getPosition(sunTimes.sunrise, eLat, eLng).azimuth;
+              const ssAzH = SunCalc.getPosition(sunTimes.sunset, eLat, eLng).azimuth;
+              const srScrH = ((srAzH * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
+              const ssScrH = ((ssAzH * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
+              const haloLen = Math.max(w, h) * 1.5;
+              const rDegH = (() => {
+                const b = map.getBounds();
+                if (!b) return 0.003;
+                const latS = Math.abs(b.getNorthEast().lat() - b.getSouthWest().lat());
+                const lngS = Math.abs(b.getNorthEast().lng() - b.getSouthWest().lng());
+                return Math.min(latS, lngS) * 0.38;
+              })();
+              const endPtH = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat + rDegH, eLng));
+              const centerPtH = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat, eLng));
+              const lineLenPx = Math.abs(endPtH.y - centerPtH.y);
+              
+              const drawLineHalo = (lineAngle, cr, cg, cb) => {
+                const dist = lineLenPx * 0.45;
+                const gx = centerPx.x + Math.cos(lineAngle) * dist;
+                const gy = centerPx.y + Math.sin(lineAngle) * dist;
+                const radius = 300;
+                
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(centerPx.x, centerPx.y);
+                ctx.arc(centerPx.x, centerPx.y, haloLen, srScrH, ssScrH);
+                ctx.closePath();
+                ctx.clip();
+                
+                const hGrad = ctx.createRadialGradient(gx, gy, 0, gx, gy, radius);
+                hGrad.addColorStop(0, 'rgba('+cr+','+cg+','+cb+',1)');
+                hGrad.addColorStop(0.2, 'rgba('+cr+','+cg+','+cb+',0.6)');
+                hGrad.addColorStop(0.5, 'rgba('+cr+','+cg+','+cb+',0.2)');
+                hGrad.addColorStop(1, 'rgba('+cr+','+cg+','+cb+',0)');
+                ctx.fillStyle = hGrad;
+                ctx.fillRect(0, 0, w, h);
+                ctx.restore();
+              };
+              drawLineHalo(srScrH, 172, 156, 77);
+              drawLineHalo(ssScrH, 30, 47, 63);
+            }
+            
+            // Shadow wedge — smooth radial gradient clamped to sunrise/sunset
+            const altDeg = sunPos.altitude * 180 / Math.PI;
+            if (altDeg > 0 && !isNight) {
+              const sunBearingDeg = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
+              // Sunrise/sunset bearings
+              const srAzRad = sunTimes.sunrise ? SunCalc.getPosition(sunTimes.sunrise, eLat, eLng).azimuth : 0;
+              const ssAzRad = sunTimes.sunset ? SunCalc.getPosition(sunTimes.sunset, eLat, eLng).azimuth : 0;
+              // Convert to screen angles (bearing 0=north=up, canvas 0=right, so rotate -90)
+              const srScreenAngle = ((srAzRad * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
+              const ssScreenAngle = ((ssAzRad * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
+              const shadowScreenAngle = (((sunBearingDeg + 180) % 360) - 90) * Math.PI / 180;
+              
+              // Wedge half-angle
+              const wedgeHalf = Math.max(10, 30 - altDeg * 0.4) * Math.PI / 180;
+              // Length scales with altitude
+              const shadowLen = altDeg < 10 ? 0.8 : altDeg < 30 ? 0.8 - (altDeg - 10) * 0.02 : altDeg < 60 ? 0.4 - (altDeg - 30) * 0.005 : 0.25;
+              const maxR = Math.max(w, h) * shadowLen;
+              const circleR = 17;
+              
+              // Normalize angles to find distance from shadow edges to sr/ss lines
+              const normAngle = (a) => { let v = a % (2*Math.PI); if (v < 0) v += 2*Math.PI; return v; };
+              const angleDist = (a, b) => { let d = normAngle(a - b); return d > Math.PI ? 2*Math.PI - d : d; };
+              
+              // Distance from shadow edge to sr and ss lines
+              const distToSr = angleDist(shadowScreenAngle, srScreenAngle);
+              const distToSs = angleDist(shadowScreenAngle, ssScreenAngle);
+              
+              // Clamp wedge so it doesn't pass sr/ss lines (with 5° margin)
+              const margin = 5 * Math.PI / 180;
+              const leftEdge = shadowScreenAngle - wedgeHalf;
+              const rightEdge = shadowScreenAngle + wedgeHalf;
+              const distLeftToSr = angleDist(leftEdge, srScreenAngle);
+              const distLeftToSs = angleDist(leftEdge, ssScreenAngle);
+              const distRightToSr = angleDist(rightEdge, srScreenAngle);
+              const distRightToSs = angleDist(rightEdge, ssScreenAngle);
+              
+              // Compute how close shadow center is to sr/ss — fade opacity
+              const minDist = Math.min(distToSr, distToSs);
+              const fadeZone = 45 * Math.PI / 180; // fade over 45 degrees — very gradual
+              const edgeFade = minDist < fadeZone ? Math.pow(minDist / fadeZone, 0.7) : 1;
+              const baseOpacity = 0.5 * edgeFade;
+              
+              // Clip to night-side arc (between sr and ss on shadow side)
+              ctx.save();
+              // First clip: sr to ss on the shadow side
+              ctx.beginPath();
+              ctx.moveTo(centerPx.x, centerPx.y);
+              // Draw arc from sr line to ss line going through shadow direction (the long way around on shadow side)
+              let srN = normAngle(srScreenAngle);
+              let ssN = normAngle(ssScreenAngle);
+              // The shadow side is the arc from ss → sr going the other way (through shadow)
+              ctx.arc(centerPx.x, centerPx.y, maxR * 1.5, ssScreenAngle, srScreenAngle);
+              ctx.closePath();
+              ctx.clip();
+              
+              // Now draw the wedge within the clipped region
+              ctx.beginPath();
+              ctx.moveTo(centerPx.x, centerPx.y);
+              ctx.arc(centerPx.x, centerPx.y, maxR, shadowScreenAngle - wedgeHalf, shadowScreenAngle + wedgeHalf);
+              ctx.closePath();
+              ctx.clip();
+              
+              // Smooth radial gradient — soft and blurry
+              const grad = ctx.createRadialGradient(centerPx.x, centerPx.y, circleR, centerPx.x, centerPx.y, maxR);
+              grad.addColorStop(0, `rgba(0,0,0,${0.40 * edgeFade})`);
+              grad.addColorStop(0.1, `rgba(0,0,0,${0.28 * edgeFade})`);
+              grad.addColorStop(0.3, `rgba(0,0,0,${0.12 * edgeFade})`);
+              grad.addColorStop(0.6, `rgba(0,0,0,${0.04 * edgeFade})`);              grad.addColorStop(1, 'rgba(0,0,0,0)');
+              ctx.fillStyle = grad;
+              ctx.fillRect(0, 0, w, h);
+              ctx.restore();
+              
+              // Soft feathered edge (also clipped)
+              ctx.save();
+              ctx.beginPath();
+              ctx.moveTo(centerPx.x, centerPx.y);
+              ctx.arc(centerPx.x, centerPx.y, maxR * 1.5, ssScreenAngle, srScreenAngle);
+              ctx.closePath();
+              ctx.clip();
+              ctx.beginPath();
+              ctx.moveTo(centerPx.x, centerPx.y);
+              ctx.arc(centerPx.x, centerPx.y, maxR * 1.3, shadowScreenAngle - wedgeHalf * 1.8, shadowScreenAngle + wedgeHalf * 1.8);
+              ctx.closePath();
+              ctx.clip();
+              const grad2 = ctx.createRadialGradient(centerPx.x, centerPx.y, circleR, centerPx.x, centerPx.y, maxR * 0.6);
+              grad2.addColorStop(0, `rgba(0,0,0,${0.12 * edgeFade})`);
+              grad2.addColorStop(0.3, `rgba(0,0,0,${0.05 * edgeFade})`);
+              grad2.addColorStop(1, 'rgba(0,0,0,0)');
+              ctx.fillStyle = grad2;
+              ctx.fillRect(0, 0, w, h);
+              ctx.restore();
+            }
+            
+            // White sr/ss lines — on top of shadow + halos
+            if (sunTimes.sunrise && sunTimes.sunset) {
+              const srAzW = SunCalc.getPosition(sunTimes.sunrise, eLat, eLng).azimuth;
+              const ssAzW = SunCalc.getPosition(sunTimes.sunset, eLat, eLng).azimuth;
+              const srScrW = ((srAzW * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
+              const ssScrW = ((ssAzW * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
+              const rDegW = (() => {
+                const b = map.getBounds();
+                if (!b) return 0.003;
+                const latS = Math.abs(b.getNorthEast().lat() - b.getSouthWest().lat());
+                const lngS = Math.abs(b.getNorthEast().lng() - b.getSouthWest().lng());
+                return Math.min(latS, lngS) * 0.38;
+              })();
+              const endPtW = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat + rDegW, eLng));
+              const centerPtW = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat, eLng));
+              const wLinePx = Math.abs(endPtW.y - centerPtW.y);
+              const circOff = 17;
+              const drawCanvasLine = (scrAngle) => {
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(centerPx.x + Math.cos(scrAngle) * circOff, centerPx.y + Math.sin(scrAngle) * circOff);
+                ctx.lineTo(centerPx.x + Math.cos(scrAngle) * wLinePx, centerPx.y + Math.sin(scrAngle) * wLinePx);
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+                ctx.restore();
+              };
+              drawCanvasLine(srScrW);
+              drawCanvasLine(ssScrW);
+            }
+            
+            // Lens flare
+            drawLensFlare(sunPx.x, sunPx.y, w, h, sunPos.altitude);
+          }
+        }
+      }, [sunHour, project?.lat, project?.lng, mapType, mapZoom, sunDate, adjustedPos, showSunLines, drawingMode]);
 
       // Night overlay toggle
       useEffect(() => {
-        if (nightOverlayRef.current) nightOverlayRef.current.setNight(mapIsNight);
-      }, [mapIsNight]);
+        if (nightOverlayRef.current) nightOverlayRef.current.setNight(nightOpacity);
+      }, [nightOpacity]);
 
       // Cloud layer (OpenWeatherMap)
       // Always show current time line on map
@@ -2875,6 +4086,8 @@
         const eLng = adjustedPos?.lng ?? project.lng;
         
         if (currentTimeLineRef.current) { currentTimeLineRef.current.setMap(null); currentTimeLineRef.current = null; }
+        
+        if (!showSunLines || drawingMode) return;
         
         const now = new Date();
         const sunTimes = SunCalc.getTimes(now, eLat, eLng);
@@ -2889,12 +4102,18 @@
           const lat2 = eLat + R * Math.cos(bearing * Math.PI / 180);
           const lng2 = eLng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(eLat * Math.PI / 180);
           
+          const cRPx2 = 17;
+          const mPPx2 = 156543.03392 * Math.cos(eLat * Math.PI / 180) / Math.pow(2, mapZoom);
+          const offD2 = (cRPx2 * mPPx2) / 111320;
+          const bR2 = bearing * Math.PI / 180;
+          const sLat2 = eLat + offD2 * Math.cos(bR2);
+          const sLng2 = eLng + offD2 * Math.sin(bR2) / Math.cos(eLat * Math.PI / 180);
           currentTimeLineRef.current = new google.maps.Polyline({
-            path: [{ lat: eLat, lng: eLng }, { lat: lat2, lng: lng2 }],
+            path: [{ lat: sLat2, lng: sLng2 }, { lat: lat2, lng: lng2 }],
             strokeColor: '#ffffff', strokeOpacity: 0.35, strokeWeight: 3, map
           });
         }
-      }, [project?.lat, project?.lng, mapType, mapZoom, adjustedPos]);
+      }, [project?.lat, project?.lng, mapType, mapZoom, adjustedPos, showSunLines, drawingMode]);
 
       if (!project) return null;
       const sun = weather?.daily?.[0];
@@ -3042,7 +4261,6 @@
 
       return (
         <div className="pb-8 pt-6 animate-fade-in" style={isMobile ? { paddingTop: 'calc(24px + 25px)' } : { paddingTop: '75px' }}>
-          {!isMobile && <h1 className="font-bebas-regular" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>DÉTAILS PROJET</h1>}
           {/* Bande météo + infos — même layout que l'accueil */}
           <div className={`border-b border-adaptive py-4 ${isMobile ? 'px-4' : 'px-8'} overflow-hidden`}>
             <button onClick={onClose} className="text-charcoal-muted hover:text-charcoal transition-colors mb-4" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
@@ -3110,7 +4328,7 @@
               </div>
             ) : (
               /* ===== DESKTOP: original horizontal ===== */
-              <div className="flex items-center gap-0" style={{ minWidth: '1375px' }}>
+              <div className="flex items-center gap-0" style={{ width: '100%' }}>
                 <div className="min-w-0">
                   {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10}/> : <p className="text-charcoal-muted text-sm italic py-2">Météo non disponible</p>}
                 </div>
@@ -3178,21 +4396,21 @@
 
           {/* Édition + Carte — layout with map bottom-right */}
           <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} pt-6`} style={{ position: 'relative' }}>
-            <div className={`flex gap-8 ${isMobile ? 'flex-col' : 'flex-wrap lg:flex-nowrap'} items-stretch`} style={isMobile ? {} : { minWidth: '1100px' }}>
+            <div className={`flex gap-8 ${isMobile ? 'flex-col' : 'flex-nowrap'} items-stretch`} style={isMobile ? {} : {}}>
               
               {/* Colonne gauche — Édition */}
-              <div className="w-full lg:w-7/12 space-y-5">
+              <div style={isMobile ? {} : { width: '700px', flexShrink: 0 }} className={`${isMobile ? 'w-full' : ''} space-y-5`}>
                 {/* Address inputs with box style like modal */}
                 <div>
                   <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>ADRESSE DU PROJET</label>
-                  <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <input ref={addressInputRef} type="text" defaultValue={project.address || ''} placeholder="Entrer l'adresse..." className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1 }}/>
                     {project.address && <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(project.address)}`} target="_blank" rel="noopener" onClick={e => e.stopPropagation()} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Itinéraire"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>}
                   </div>
                 </div>
                 <div>
                   <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>ADRESSE DE DÉPART</label>
-                  <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <input ref={departureInputRef} type="text" defaultValue={project.departureAddress || prefs.homeAddress || ''} placeholder="Hôtel, B&B..." className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1 }}
                       onBlur={(e) => {
                         const val = e.target.value.trim();
@@ -3270,126 +4488,488 @@
               </div>
 
               {/* Colonne droite — Carte Google Maps interactive, square, bottom-right */}
-              <div className={`${isMobile ? 'w-full' : 'w-full lg:w-5/12'} flex-shrink-0 flex flex-col`} style={{ minHeight: isMobile ? '450px' : '500px', order: isMobile ? -1 : 0 }}>
+              <div className={`${isMobile ? 'w-full' : ''} flex-shrink-0 flex flex-col`} style={{ minHeight: isMobile ? '450px' : '500px', order: isMobile ? -1 : 0, flex: isMobile ? undefined : 1 }}>
                 {project.lat && project.lng ? (
                   <>
                   {showMapFull && <div onClick={() => setShowMapFull(false)} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(30,30,30,0.88)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}/>}
-                  <div style={showMapFull ? { position: 'fixed', top: 'env(safe-area-inset-top, 50px)', left: 0, width: '100vw', height: 'calc(100vh - env(safe-area-inset-top, 50px))', zIndex: 51, overflow: 'hidden' } : { position: 'relative', overflow: 'hidden', flex: 1 }}>
-                    {/* Sun time slider - overlaid at top of map with blur gradient */}
-                    <div style={{ 
-                      position: 'absolute', top: '0', left: '0', right: '0', zIndex: 10,
-                      background: 'linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.2) 40%, transparent 100%)',
-                      backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-                      maskImage: 'linear-gradient(to bottom, black 0%, black 30%, transparent 100%)',
-                      WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 30%, transparent 100%)',
-                      padding: '10px 14px 120px 14px',
-                      pointerEvents: 'none'
-                    }}/>
-                    {/* Slider + time label on top, not affected by mask */}
-                    <div style={{ 
-                      position: 'absolute', top: '0', left: '0', right: '0', zIndex: 11,
-                      padding: '10px 14px 120px 14px'
-                    }}>
-                      <div style={{ position: 'relative', marginTop: '24px', marginRight: '60px', display: 'flex', alignItems: 'center' }}>
-                        <div style={{ position: 'relative', flex: 1 }}>
+                  <div style={{
+                    ...(showMapFull ? { position: 'fixed', top: 'env(safe-area-inset-top, 50px)', left: 0, width: '100vw', height: 'calc(100vh - env(safe-area-inset-top, 50px))', zIndex: 51, overflow: 'hidden' } : { position: 'relative', overflow: 'hidden', flex: 1 }),
+                    clipPath: mapRevealed || showMapFull ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
+                    WebkitClipPath: mapRevealed || showMapFull ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
+                    transition: 'clip-path 1.2s cubic-bezier(0.25, 0.1, 0.25, 1), -webkit-clip-path 1.2s cubic-bezier(0.25, 0.1, 0.25, 1)'
+                  }}>
+                    {/* Sun time slider - new design */}
+                    {(() => {
+                      // Slider scale: 75% on mobile
+                      const S = isMobile ? 0.75 : 1;
+                      const filetTop = Math.round(88 * S);
+                      const blurH = Math.round(130 * S);
+                      const gradH = Math.round(140 * S);
+                      const glowSize = Math.round(250 * S);
+                      const hourSize = Math.round(24 * S);
+                      const dateSize = Math.round(20 * S);
+                      const triW = Math.round(18 * S);
+                      const triH = Math.round(12 * S);
+                      // Compute sun times for glow color and triangles
+                      const eLat = adjustedPos?.lat ?? project?.lat;
+                      const eLng = adjustedPos?.lng ?? project?.lng;
+                      const st = (eLat && eLng && window.SunCalc) ? SunCalc.getTimes(sunDate, eLat, eLng) : null;
+                      const srTime = st?.sunrise ? st.sunrise.getHours() + st.sunrise.getMinutes()/60 : 6;
+                      const ssTime = st?.sunset ? st.sunset.getHours() + st.sunset.getMinutes()/60 : 18;
+                      sunTimesSnapRef.current = { sr: srTime, ss: ssTime };
+                      
+                      // Dynamic slider range: sunrise at 20%, sunset at 80%
+                      const sliderRange = (ssTime - srTime) / (4/6);
+                      const sliderMin = srTime - (1/6) * sliderRange;
+                      const sliderMax = sliderMin + sliderRange;
+                      
+                      // Glow color logic — smooth morphing
+                      const lerp = (a, b, t) => a + (b - a) * Math.max(0, Math.min(1, t));
+                      const hexLerp = (hex1, hex2, t) => {
+                        const r1 = parseInt(hex1.slice(1,3),16), g1 = parseInt(hex1.slice(3,5),16), b1 = parseInt(hex1.slice(5,7),16);
+                        const r2 = parseInt(hex2.slice(1,3),16), g2 = parseInt(hex2.slice(3,5),16), b2 = parseInt(hex2.slice(5,7),16);
+                        const r = Math.round(lerp(r1,r2,t)), g = Math.round(lerp(g1,g2,t)), b = Math.round(lerp(b1,b2,t));
+                        return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+                      };
+                      const DARK = '#003089', BLUE = '#1a66f3', ORANGE = '#ffc600', DAY = '#FFF3ba';
+                      let glowColor = DAY;
+                      // Relative to sunrise/sunset:
+                      // sr-1h → sr-15min: blue | sr-15min → sr+15min: orange | then day
+                      // ss-1h → ss+15min: orange | ss+15min → ss+1h: blue | then dark
+                      const m = 0.25; // 15min morph
+                      if (sunHourDisplay < srTime - 1 - m) {
+                        glowColor = DARK;
+                      } else if (sunHourDisplay < srTime - 1) {
+                        glowColor = hexLerp(DARK, BLUE, (sunHourDisplay - (srTime - 1 - m)) / m);
+                      } else if (sunHourDisplay < srTime - 0.25) {
+                        glowColor = BLUE;
+                      } else if (sunHourDisplay < srTime - 0.25 + m) {
+                        glowColor = hexLerp(BLUE, ORANGE, (sunHourDisplay - (srTime - 0.25)) / m);
+                      } else if (sunHourDisplay <= srTime + 0.25) {
+                        glowColor = ORANGE;
+                      } else if (sunHourDisplay < srTime + 0.25 + m) {
+                        glowColor = hexLerp(ORANGE, DAY, (sunHourDisplay - (srTime + 0.25)) / m);
+                      } else if (sunHourDisplay < ssTime - 1 - m) {
+                        glowColor = DAY;
+                      } else if (sunHourDisplay < ssTime - 1) {
+                        glowColor = hexLerp(DAY, ORANGE, (sunHourDisplay - (ssTime - 1 - m)) / m);
+                      } else if (sunHourDisplay <= ssTime + 0.25) {
+                        glowColor = ORANGE;
+                      } else if (sunHourDisplay < ssTime + 0.25 + m) {
+                        glowColor = hexLerp(ORANGE, BLUE, (sunHourDisplay - (ssTime + 0.25)) / m);
+                      } else if (sunHourDisplay < ssTime + 1) {
+                        glowColor = BLUE;
+                      } else if (sunHourDisplay < ssTime + 1 + m) {
+                        glowColor = hexLerp(BLUE, DARK, (sunHourDisplay - (ssTime + 1)) / m);
+                      } else {
+                        glowColor = DARK;
+                      }
+                      
+                      const thumbLeft = `${((sunHourDisplay - sliderMin) / sliderRange) * 100}%`;
+                      const srLeft = '20%';
+                      const ssLeft = '80%';
+                      
+                      return (
+                        <>
+                        {/* Background blur + darken gradient */}
                         <div style={{ 
-                          position: 'absolute', 
-                          top: '-22px',
-                          left: `calc(${(sunHour / 24) * 100}% + ${(0.5 - sunHour / 24) * 24}px)`,
-                          transform: 'translateX(-50%)',
-                          pointerEvents: 'none',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center'
-                        }}>
-                          <span className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '20px', color: '#ffffff', textShadow: '0 1px 3px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.6)', lineHeight: '1' }}>
-                            {`${Math.floor(sunHour)}H${String(Math.round((sunHour % 1) * 60)).padStart(2, '0')}`}
-                          </span>
-                        </div>
-                        {/* Chevrons beside thumb */}
+                          position: 'absolute', top: 0, left: 0, right: 0, height: `${blurH}px`, zIndex: 10,
+                          background: 'linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.15) 75%, transparent 100%)',
+                          backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+                          maskImage: 'linear-gradient(to bottom, black 0%, black 40%, transparent 100%)',
+                          WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 40%, transparent 100%)',
+                          pointerEvents: 'none'
+                        }}/>
+                        {/* Dark gradient overlay */}
+                        <div style={{ 
+                          position: 'absolute', top: 0, left: 0, right: 0, height: `${gradH}px`, zIndex: 10,
+                          background: 'linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.4) 70%, transparent 100%)',
+                          pointerEvents: 'none'
+                        }}/>
+                        {/* Weather particles overlay */}
+                        <canvas ref={weatherCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: `${gradH}px`, pointerEvents: 'none', zIndex: 11, opacity: 0.7,
+                          maskImage: 'linear-gradient(to bottom, black 0%, black 50%, transparent 100%)',
+                          WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 50%, transparent 100%)' }}/>
+                        {/* Full-width filet at 172px */}
+                        <div style={{ position: 'absolute', top: `${filetTop}px`, left: 0, right: 0, height: '1px', background: 'rgba(255,255,255,0.5)', zIndex: 12 }}/>
+                        {/* Vignette - dark base, softer, skip top */}
                         <div style={{
-                          position: 'absolute',
-                          top: '50%',
-                          left: `calc(${(sunHour / 24) * 100}% + ${(0.5 - sunHour / 24) * 24}px)`,
-                          transform: 'translate(-50%, calc(-30% - 10px))',
-                          pointerEvents: 'none',
-                          display: 'flex', alignItems: 'center', gap: '16px'
+                          position: 'absolute', inset: 0, zIndex: 4, pointerEvents: 'none',
+                          background: 'radial-gradient(ellipse 75% 70% at 50% 55%, transparent 35%, rgba(0,0,0,0.20) 50%, rgba(0,0,0,0.45) 70%, rgba(0,0,0,0.65) 90%, rgba(0,0,0,0.80) 100%)',
+                          mixBlendMode: 'multiply',
+                          maskImage: 'linear-gradient(to bottom, transparent 0%, black 15%)',
+                          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 15%)'
+                        }}/>
+                        {/* Blue night tint */}
+                        {(() => {
+                          const h = sunHourDisplay;
+                          let nightAmt = 0;
+                          if (h < srTime - 0.25) nightAmt = 1;
+                          else if (h < srTime) nightAmt = (srTime - h) / 0.25;
+                          else if (h > ssTime + 0.25) nightAmt = 1;
+                          else if (h > ssTime) nightAmt = (h - ssTime) / 0.25;
+                          else nightAmt = 0;
+                          if (nightAmt <= 0) return null;
+                          return <div style={{
+                            position: 'absolute', inset: 0, zIndex: 3, pointerEvents: 'none',
+                            background: `rgba(10, 20, 60, ${0.25 * nightAmt})`
+                          }}/>;
+                        })()}
+                        {/* Slider content layer */}
+                        <div style={{ 
+                          position: 'absolute', top: 0, left: 0, right: 0, height: `${filetTop}px`, zIndex: 11,
+                          pointerEvents: 'none'
                         }}>
-                          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-                          <div style={{ width: '6px' }}/>
-                          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+                          
+                          {/* Slider track area — centered vertically in 172px zone */}
+                          {isMobile && <div 
+                            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'auto', zIndex: 3, touchAction: 'none' }}
+                            onTouchStart={e => {
+                              e.preventDefault();
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
+                              setSunHour(magneticSunHour(sliderMin + pct * sliderRange));
+                            }}
+                            onTouchMove={e => {
+                              e.preventDefault();
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
+                              setSunHour(magneticSunHour(sliderMin + pct * sliderRange));
+                            }}
+                          />}
+                          <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, transform: 'translateY(-50%)' }}>
+                            {/* Glow behind thumb */}
+                            <div style={{
+                              position: 'absolute',
+                              top: '50%',
+                              left: thumbLeft,
+                              transform: 'translate(-50%, -50%)',
+                              width: `${glowSize}px`, height: `${glowSize}px`,
+                              borderRadius: '50%',
+                              background: `radial-gradient(circle, ${glowColor} 0%, ${glowColor} 24%, ${glowColor}80 45%, transparent 70%)`,
+                              opacity: 0.3,
+                              pointerEvents: 'none',
+                              filter: 'blur(15px)',
+                              
+                            }}/>
+                            {/* Vapor wisps */}
+                            <div style={{ position: 'absolute', top: '50%', left: thumbLeft, width: `${Math.round(300*S)}px`, height: `${Math.round(120*S)}px`, transform: 'translate(-50%, -50%)', pointerEvents: 'none', overflow: 'visible' }}>
+                              <div style={{ position: 'absolute', top: '50%', left: '20%', width: '120px', height: '40px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}30 0%, ${glowColor}10 50%, transparent 75%)`, filter: 'blur(12px)', animation: 'vaporDrift1 8s ease-in-out infinite', opacity: 0.6 }}/>
+                              <div style={{ position: 'absolute', top: '50%', left: '60%', width: '90px', height: '35px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}25 0%, ${glowColor}0c 50%, transparent 75%)`, filter: 'blur(10px)', animation: 'vaporDrift2 11s ease-in-out infinite', animationDelay: '-3s', opacity: 0.5 }}/>
+                              <div style={{ position: 'absolute', top: '50%', left: '40%', width: '150px', height: '50px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}20 0%, ${glowColor}08 50%, transparent 75%)`, filter: 'blur(14px)', animation: 'vaporDrift3 14s ease-in-out infinite', animationDelay: '-7s', opacity: 0.45 }}/>
+                              <div style={{ position: 'absolute', top: '50%', left: '10%', width: '100px', height: '30px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}28 0%, ${glowColor}0a 50%, transparent 75%)`, filter: 'blur(8px)', animation: 'vaporDrift1 6s ease-in-out infinite', animationDelay: '-2s', opacity: 0.4 }}/>
+                              <div style={{ position: 'absolute', top: '50%', left: '70%', width: '130px', height: '45px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}1a 0%, ${glowColor}08 50%, transparent 75%)`, filter: 'blur(16px)', animation: 'vaporDrift2 16s ease-in-out infinite', animationDelay: '-5s', opacity: 0.35 }}/>
+                            </div>
+                            
+                            {/* The range input */}
+                            <input 
+                              type="range" 
+                              min={sliderMin} max={sliderMax} step="0.05" 
+                              value={sunHour}
+                              onChange={e => setSunHour(magneticSunHour(parseFloat(e.target.value)))}
+                              style={{ 
+                                width: '100%', appearance: 'none', WebkitAppearance: 'none', 
+                                background: 'transparent', position: 'relative', zIndex: 2, 
+                                outline: 'none', cursor: 'pointer',
+                                pointerEvents: 'auto'
+                              }}
+                            />
+                          </div>
+                          {/* Time + date display below filet */}
+                          <div style={{
+                            position: 'absolute',
+                            top: `${filetTop}px`,
+                            marginTop: `${Math.round(10 * S)}px`,
+                            left: `${((sunHourDisplay - sliderMin) / sliderRange) * 100}%`,
+                            transform: 'translateX(-50%)',
+                            pointerEvents: 'auto',
+                            zIndex: 13,
+                            display: 'flex', alignItems: 'baseline', gap: `${Math.round(8 * S)}px`,
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap'
+                          }} onClick={() => setShowDatePicker(p => !p)}>
+                            <span className="font-bebas-bold" style={{ 
+                              fontSize: `${hourSize}px`, color: '#ffffff', letterSpacing: '0.04em',
+                              lineHeight: '1'
+                            }}>
+                              {`${Math.floor(sunHourDisplay)}H${String(Math.round((sunHourDisplay % 1) * 60)).padStart(2, '0')}`}
+                            </span>
+                            <span className="font-bebas-regular" style={{ 
+                              fontSize: `${dateSize}px`, color: '#ffffff', letterSpacing: '0.04em',
+                              lineHeight: '1'
+                            }}>
+                              {MONTHS_FR[sunDate.getMonth()]} {sunDate.getDate()}
+                            </span>
+                          </div>
+                          {/* Triangles on the filet line */}
+                          <div style={{ position: 'absolute', top: `${filetTop}px`, left: 0, right: 0, height: 0, pointerEvents: 'none', zIndex: 12 }}>
+                            {/* Sunrise ▲ - base on filet, pointing UP (inside zone) */}
+                            <div style={{ position: 'absolute', bottom: 0, left: 'calc(100% / 6)', transform: 'translateX(-50%)' }}>
+                              <svg width={triW} height={triH} viewBox={`0 0 ${triW} ${triH}`}>
+                                <polygon points={`${triW/2},0 ${triW},${triH} 0,${triH}`} fill="#ffffff"/>
+                              </svg>
+                            </div>
+                            {/* Sunset ▼ - base on filet, pointing DOWN (outside zone) */}
+                            <div style={{ position: 'absolute', top: 0, left: 'calc(100% * 5 / 6)', transform: 'translateX(-50%)' }}>
+                              <svg width={triW} height={triH} viewBox={`0 0 ${triW} ${triH}`}>
+                                <polygon points={`${triW/2},${triH} ${triW},0 0,0`} fill="#ffffff"/>
+                              </svg>
+                            </div>
+                          </div>
                         </div>
-                        <input 
-                          type="range" 
-                          min="0" max="24" step="0.25" 
-                          value={sunHour}
-                          onChange={e => setSunHour(parseFloat(e.target.value))}
-                          style={{ 
-                            width: '100%', appearance: 'none', WebkitAppearance: 'none', 
-                            background: 'transparent', 
-                            outline: 'none', cursor: 'pointer'
-                          }}
-                        />
-                        </div>
-                      </div>
-                    </div>
+                        </>
+                      );
+                    })()}
                     {/* Map controls - stacked vertically with subtle border */}
-                    <div ref={mapContainerRef} style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#262c30' }}/>
+                    <div ref={mapContainerRef} style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#262c30', filter: 'saturate(0.50)' }}/>
+                    <canvas ref={flareCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}/>
+                    {nightOpacity > 0 && <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 3, background: `radial-gradient(ellipse at center, transparent 30%, rgba(0,0,15,${0.4 * nightOpacity}) 70%, rgba(0,0,15,${0.7 * nightOpacity}) 100%)`, transition: 'opacity 0.5s ease' }}/>}
                     {/* Fixed center pin */}
                     <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 5, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#7dd3c6', border: '2px solid #fff', boxShadow: '0 0 8px rgba(125,211,198,0.5), 0 2px 6px rgba(0,0,0,0.4)' }}/>
+                      <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'transparent', border: '4px solid #ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.5)' }}/>
                     </div>
-                    <div style={{ position: 'absolute', top: '80px', right: '10px', zIndex: 13, display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', borderRadius: '6px', overflow: 'hidden' }}>
-                      <button 
-                        onClick={() => setMapType('hybrid')} 
-                        className="font-bebas-bold"
-                        style={{ letterSpacing: '0.04em', 
-                          fontSize: '16px', padding: '4px 10px', 
-                          background: 'transparent', 
-                          color: mapType === 'hybrid' ? '#7dd3c6' : 'rgba(255,255,255,0.75)',
-                          border: 'none', borderBottom: '1px solid rgba(255,255,255,0.1)',
-                          cursor: 'pointer'
-                        }}
-                      >SAT</button>
-                      <button 
-                        onClick={() => setMapType('roadmap')} 
-                        className="font-bebas-bold"
-                        style={{ letterSpacing: '0.04em', 
-                          fontSize: '16px', padding: '4px 10px', 
-                          background: 'transparent', 
-                          color: mapType === 'roadmap' ? '#7dd3c6' : 'rgba(255,255,255,0.75)',
-                          border: 'none', borderBottom: '1px solid rgba(255,255,255,0.1)',
-                          cursor: 'pointer'
-                        }}
-                      >MAP</button>
-                      <button onClick={() => setShowMapFull(f => !f)} style={{ 
-                        background: 'transparent', 
-                        border: 'none',
-                        borderRadius: '0',
-                        cursor: 'pointer', padding: '5px 10px',
-                        color: 'rgba(255,255,255,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    {/* Shape labels top-right */}
+                    {buildings.length > 0 && <div style={{ position: 'absolute', top: '145px', right: '-2px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+                      {buildings.map((b, i) => {
+                        const color = BUILDING_COLORS[i % BUILDING_COLORS.length];
+                        const displayH = draggingHeight && draggingHeight.idx === i ? draggingHeight.currentH : b.height;
+                        const pillOffsetY = draggingHeight && draggingHeight.idx === i ? draggingHeight.offsetY : 0;
+                        const isDragging = draggingHeight && draggingHeight.idx === i;
+                        // hex to rgba
+                        const hexToRgba = (hex, a) => { const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16); return `rgba(${r},${g},${b},${a})`; };
+                        return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0px', position: 'relative', zIndex: isDragging ? 20 : 1 }}
+                          onMouseEnter={() => setHoveredBuilding(i)} onMouseLeave={() => setHoveredBuilding(null)}>
+                          {/* Outer colored pill — wraps everything */}
+                          <div style={{ 
+                            display: 'flex', alignItems: 'center', gap: '0px',
+                            background: hexToRgba(color, 0.25), borderRadius: '16px', padding: '2px 3px 2px 6px',
+                            whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+                            opacity: (hoveredBuilding !== null && hoveredBuilding !== i) ? 0.15 : 1,
+                            transition: 'opacity 0.2s ease'
+                          }}>
+                            {/* Left half — name click zone */}
+                            <div onClick={() => { setEditingBuilding(i); setBuildingHeight(String(b.height)); setBuildingName(b.name); }} style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', padding: '2px 6px 2px 0' }}>
+                              <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: color, flexShrink: 0 }}/>
+                              <span className="font-bebas-bold" style={{ 
+                                letterSpacing: '0.06em', fontSize: '17px', color: '#fff', lineHeight: '1', padding: '3px 0 0 0'
+                              }}>FORME {i + 1}</span>
+                            </div>
+                            {/* Right half — height pill, draggable */}
+                            <div style={{ position: 'relative' }}>
+                              {(hoveredBuilding === i || isDragging) && (<>
+                                <div style={{ position: 'absolute', left: '50%', transform: `translateX(-50%) translateY(${pillOffsetY}px)`, top: '-13px', pointerEvents: 'none', opacity: isDragging ? 0.8 : 0.5, transition: isDragging ? 'none' : 'opacity 0.2s' }}>
+                                  <svg width="10" height="7" viewBox="0 0 10 7" fill="none"><path d="M2 7L5 1L8 7" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                                </div>
+                                <div style={{ position: 'absolute', left: '50%', transform: `translateX(-50%) translateY(${pillOffsetY}px)`, bottom: '-13px', pointerEvents: 'none', opacity: isDragging ? 0.8 : 0.5, transition: isDragging ? 'none' : 'opacity 0.2s' }}>
+                                  <svg width="10" height="7" viewBox="0 0 10 7" fill="none"><path d="M2 0L5 6L8 0" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                                </div>
+                              </>)}
+                              <div 
+                                style={{ 
+                                  background: '#fff', borderRadius: '13px', padding: '4px 8px 1px 8px',
+                                  cursor: isDragging ? 'grabbing' : 'grab', userSelect: 'none', WebkitUserSelect: 'none',
+                                  transform: `translateY(${pillOffsetY}px)`,
+                                  transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                                  boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                                  minWidth: '48px', textAlign: 'center'
+                                }}
+                                onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setDraggingHeight({ idx: i, startY: e.clientY, startH: b.height, currentH: b.height, offsetY: 0 }); }}
+                                onTouchStart={e => { e.stopPropagation(); const t = e.touches[0]; setDraggingHeight({ idx: i, startY: t.clientY, startH: b.height, currentH: b.height, offsetY: 0 }); }}
+                              >
+                                <span className="font-bebas-bold" style={{ fontSize: '17px', color: '#000', letterSpacing: '0.04em', lineHeight: '1' }}>{displayH} M</span>
+                              </div>
+                            </div>
+                          </div>
+                          {/* X delete on hover */}
+                          <button onClick={(e) => { e.stopPropagation(); deleteBuilding(i); }} style={{ 
+                            background: 'none', border: 'none', cursor: 'pointer', padding: '2px', marginLeft: '4px',
+                            opacity: hoveredBuilding === i ? 1 : 0, transition: 'opacity 0.2s ease', pointerEvents: hoveredBuilding === i ? 'auto' : 'none'
+                          }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,100,100,0.8)" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                          </button>
+                        </div>);
+                      })}
+                    </div>}
+                    {/* Controls pill + Zoom pill wrapper */}
+                    <div style={{ position: 'absolute', top: '70%', transform: 'translateY(-50%)', right: '12px', zIndex: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '35px' }}>
+                      {/* Controls pill */}
+                      <div style={{ 
+                        display: 'flex', flexDirection: 'column', alignItems: 'center',
+                        backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', 
+                        borderRadius: '28px', 
+                        border: '2px solid rgba(255,255,255,0.9)',
+                        padding: '10px 2px', gap: '2px',
+                        width: '44px', boxSizing: 'border-box'
                       }}>
-                        {showMapFull ? (
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-                        ) : (
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-                        )}
-                      </button>
+                        <button 
+                          onClick={() => setMapType('hybrid')} 
+                          className="font-bebas-bold pill-btn"
+                          style={{ letterSpacing: '0.04em', 
+                            fontSize: '17px', padding: '6px 12px', lineHeight: '1.2',
+                            background: 'transparent',
+                            color: 'rgba(255,255,255,0.9)',
+                            border: 'none',
+                            cursor: 'pointer',
+                            textShadow: mapType === 'hybrid' ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none',
+                            transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                          }}
+                        >SAT</button>
+                        <button 
+                          onClick={() => setMapType('roadmap')} 
+                          className="font-bebas-bold pill-btn"
+                          style={{ letterSpacing: '0.04em', 
+                            fontSize: '17px', padding: '6px 12px', lineHeight: '1.2',
+                            background: 'transparent',
+                            color: 'rgba(255,255,255,0.9)',
+                            border: 'none',
+                            cursor: 'pointer',
+                            textShadow: mapType === 'roadmap' ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none',
+                            transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                          }}
+                        >MAP</button>
+                        <button 
+                          onClick={() => { if (drawingMode) { setDrawingMode(false); setDrawingVertices([]); } else { setDrawingMode(true); setEditingBuilding(null); } }}
+                          className="pill-btn"
+                          style={{ 
+                            background: 'transparent', 
+                            border: 'none', borderRadius: '50%',
+                            cursor: 'pointer', padding: '8px', marginTop: '2px',
+                            color: 'rgba(255,255,255,0.9)', 
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            filter: drawingMode ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none',
+                            transition: 'filter 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                          }}
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+                          </svg>
+                        </button>
+                        <button 
+                          onClick={() => setShowSunLines(v => !v)}
+                          className="pill-btn"
+                          style={{ 
+                            background: 'transparent', 
+                            border: 'none', borderRadius: '50%',
+                            cursor: 'pointer', padding: '8px',
+                            color: showSunLines ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)', 
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            filter: showSunLines ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none',
+                            transition: 'filter 0.3s ease, color 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                          }}
+                        >
+                          {showSunLines ? (
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                          ) : (
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                          )}
+                        </button>
+                        <button className="pill-btn" onClick={() => setShowMapFull(f => !f)} style={{ 
+                          background: 'transparent', 
+                          border: 'none', borderRadius: '50%',
+                          cursor: 'pointer', padding: '8px',
+                          color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          filter: showMapFull ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none',
+                          transition: 'filter 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
+                        }}>
+                          {showMapFull ? (
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                          ) : (
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                          )}
+                        </button>
+                      </div>
+                      {/* Zoom pill */}
+                      {!isMobile && (
+                        <div style={{ 
+                          position: 'relative',
+                          display: 'flex', flexDirection: 'column', alignItems: 'center',
+                          background: 'rgba(255,255,255,0.92)', 
+                          borderRadius: '24px', 
+                          width: '36px', boxSizing: 'border-box',
+                          padding: '16px 0 4px 0'
+                        }}>
+                          <span className="font-bebas-book"
+                            style={{ width: '100%', height: '28px',
+                              color: '#333', fontSize: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+                            }}>+</span>
+                          <span className="font-bebas-book"
+                            style={{ width: '100%', height: '28px',
+                              color: '#333', fontSize: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+                            }}>−</span>
+                          {/* Invisible 50/50 click overlays */}
+                          <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() + 1); }}
+                            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '50%', background: 'transparent', border: 'none', cursor: 'pointer' }}/>
+                          <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() - 1); }}
+                            style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: '50%', background: 'transparent', border: 'none', cursor: 'pointer' }}/>
+                        </div>
+                      )}
                     </div>
-                    {/* Date button - top left */}
-                    <button onClick={() => setShowDatePicker(p => !p)} className="font-bebas-bold" style={{ 
-                      position: 'absolute', top: '80px', left: '10px', zIndex: 13,
-                      background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
-                      borderRadius: '6px', border: 'none', cursor: 'pointer',
-                      padding: '6px 10px', fontSize: '14px', letterSpacing: '0.05em',
-                      color: isToday ? 'rgba(255,255,255,0.75)' : '#7dd3c6',
-                    }}>
-                      {MONTHS_FR[sunDate.getMonth()]} {sunDate.getDate()}
-                    </button>
+                    {/* Zoom scale bar */}
+                    {(() => {
+                      const lat = adjustedPos?.lat ?? project?.lat ?? 45;
+                      const mPerPx = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, mapZoom);
+                      const targetPx = 100;
+                      const targetM = targetPx * mPerPx;
+                      const nice = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+                      const best = nice.reduce((a, b) => Math.abs(b - targetM) < Math.abs(a - targetM) ? b : a);
+                      const barPx = Math.round(best / mPerPx);
+                      const label = best >= 1000 ? (best / 1000) + ' km' : best + ' m';
+                      return (
+                        <div style={{ position: 'absolute', bottom: '14px', right: '10px', zIndex: 13, pointerEvents: 'none', display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                            <span className="font-bebas-bold" style={{ fontSize: '12px', color: '#ffffff', letterSpacing: '0.06em', textShadow: '0 1px 3px rgba(0,0,0,0.8)', marginBottom: '2px' }}>{label}</span>
+                            <div style={{ width: barPx + 'px', height: '2px', background: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.6)', position: 'relative' }}>
+                              <div style={{ position: 'absolute', left: 0, top: '-3px', width: '2px', height: '8px', background: '#ffffff' }}/>
+                              <div style={{ position: 'absolute', right: 0, top: '-3px', width: '2px', height: '8px', background: '#ffffff' }}/>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {/* Terrain shadow indicator */}
+                    {terrainShadow && showSunLines && (
+                      <div style={{ 
+                        position: 'absolute', top: '14px', left: '14px', zIndex: 13,
+                        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+                        borderRadius: '10px', padding: '5px 12px 3px 10px',
+                        display: 'flex', alignItems: 'center', gap: '7px',
+                        boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+                        animation: 'fadeIn 0.3s ease'
+                      }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f0a040" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M4 20L10 8l4 6 2-3 4 9H4z"/>
+                        </svg>
+                        <span className="font-bebas-bold" style={{ fontSize: '14px', color: '#f0a040', letterSpacing: '0.06em', lineHeight: '1' }}>OMBRE TERRAIN</span>
+                      </div>
+                    )}
+                    {/* Drawing mode hint — near the polygon */}
+                    {drawingMode && (
+                      <div style={{ position: 'absolute', 
+                        bottom: '14px', left: '50%', transform: 'translateX(-50%)',
+                        zIndex: 13, 
+                        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', borderRadius: '8px', padding: '6px 14px',
+                        display: 'flex', alignItems: 'center', gap: '10px'
+                      }}>
+                        <span className="font-bebas-bold" style={{ fontSize: '14px', color: '#7dd3c6', letterSpacing: '0.04em' }}>
+                          {drawingVertices.length === 0 ? 'CLIQUER POUR PLACER LE PREMIER POINT' : 
+                           drawingVertices.length < 3 ? `${drawingVertices.length} POINT${drawingVertices.length > 1 ? 'S' : ''} — CONTINUEZ` :
+                           `${drawingVertices.length} POINTS`}
+                        </span>
+                        {drawingVertices.length >= 3 && (
+                          <button onClick={() => finishDrawing()} className="font-bebas-bold"
+                            style={{ background: 'rgba(125,211,198,0.3)', border: '1px solid rgba(125,211,198,0.5)', borderRadius: '4px', cursor: 'pointer', padding: '2px 10px', color: '#7dd3c6', fontSize: '14px', letterSpacing: '0.04em' }}>OK</button>
+                        )}
+                        <button onClick={() => { setDrawingMode(false); setDrawingVertices([]); }} className="font-bebas-regular"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>✕</button>
+                      </div>
+                    )}
                     {/* Date wheel picker */}
                     {showDatePicker && <DateWheelPicker date={sunDate} onChange={setSunDate} onClose={() => setShowDatePicker(false)} />}
                     {/* Update position button - shown when marker is dragged */}
                     {adjustedPos && (
                       <div style={{ position: 'absolute', bottom: '14px', left: '50%', transform: 'translateX(-50%)', zIndex: 13, display: 'flex', gap: '8px' }}>
-                        <button onClick={() => { updateProject(project.id, { lat: adjustedPos.lat, lng: adjustedPos.lng }); setAdjustedPos(null); }} className="font-bebas-bold" style={{
+                        <button onClick={() => { skipMapRecreateRef.current = true; effectiveCenterRef.current = null; updateProject(project.id, { lat: adjustedPos.lat, lng: adjustedPos.lng }); setAdjustedPos(null); }} className="font-bebas-bold" style={{
                           background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
                           borderRadius: '8px', border: '1px solid rgba(125,211,198,0.3)', cursor: 'pointer',
                           padding: '8px 16px', fontSize: '14px', letterSpacing: '0.05em',
@@ -3415,37 +4995,63 @@
           </div>
 
           {/* Fichiers */}
-          <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} mt-6`} style={{ maxWidth: isMobile ? '100%' : '58.333%' }}>
+          <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} mt-6`} style={{ maxWidth: isMobile ? '100%' : '700px' }}>
             <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>FICHIERS</label>
             {projectFiles.length > 0 && <span className="font-bebas-light" style={{ fontSize: '14px', color: '#404A48', letterSpacing: '0.04em', marginLeft: '12px' }}>{totalFilesMB.toFixed(1)} / {MAX_PROJECT_FILES_MB} MB</span>}
-            
+
+            {/* Upload zone — desktop only, before files */}
+            {!isMobile && project?.status !== 'done' && (
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFileUpload(e.dataTransfer.files); }}
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  borderStyle: 'dashed', borderWidth: '2.5px', borderColor: dragOver ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.15)',
+                  borderRadius: '8px',
+                  padding: '18px 12px', cursor: 'pointer', marginTop: '10px', minHeight: '60px',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                  background: dragOver ? 'rgba(255,255,255,0.03)' : 'transparent',
+                  boxShadow: dragOver ? '0 0 12px rgba(255,255,255,0.08), inset 0 0 12px rgba(255,255,255,0.03)' : 'none',
+                  transition: 'all 0.25s ease'
+                }}
+              >
+                <input ref={fileInputRef} type="file" multiple accept=".jpg,.jpeg,.png,.webp,.heic,.pdf" style={{ display: 'none' }}
+                  onChange={(e) => { handleFileUpload(e.target.files); e.target.value = ''; }}
+                />
+                <span className="text-charcoal" style={{ fontSize: '15px', color: uploading ? '#7dd3c6' : 'rgba(255,255,255,0.4)' }}>
+                  {uploading ? `Téléversement... ${uploadProgress}%` : 'Glisser ou cliquer pour ajouter...'}
+                </span>
+                {uploading && (
+                  <div style={{ width: '80%', height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                    <div style={{ width: `${uploadProgress}%`, height: '100%', background: '#7dd3c6', borderRadius: '2px', transition: 'width 0.3s ease' }}/>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Files list — below upload zone */}
             {projectFiles.length > 0 && (
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '8px', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '12px' }}>
                 {projectFiles.map(f => {
-                  const url = fileUrls[f.id];
                   const isPdf = f.mime_type === 'application/pdf' || f.filename.toLowerCase().endsWith('.pdf');
+                  const ext = f.filename.split('.').pop().toUpperCase();
+                  const sizeMB = (f.size_bytes / (1024 * 1024)).toFixed(1);
                   return (
-                    <div key={f.id} style={{ position: 'relative', width: '100px', height: '100px', borderRadius: '10px', overflow: 'hidden', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', flexShrink: 0 }}
+                    <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer', transition: 'background 0.15s' }}
                       onClick={() => setPreviewFile(f)}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
                     >
-                      {isPdf ? (
-                        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                          <span className="font-bebas-bold" style={{ fontSize: '22px', color: '#8B9B99', letterSpacing: '0.04em' }}>PDF</span>
-                          <span className="font-bebas-light" style={{ fontSize: '11px', color: '#404A48', letterSpacing: '0.02em', textAlign: 'center', padding: '0 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '90px' }}>{f.filename}</span>
-                        </div>
-                      ) : url ? (
-                        <img src={url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={f.filename} loading="lazy"/>
-                      ) : (
-                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <span style={{ color: '#404A48', fontSize: '12px' }}>...</span>
-                        </div>
-                      )}
+                      <span style={{ fontSize: '10px', fontWeight: 600, color: isPdf ? '#e8967a' : '#7dd3c6', background: isPdf ? 'rgba(232,150,122,0.12)' : 'rgba(125,211,198,0.1)', padding: '2px 6px', borderRadius: '3px', letterSpacing: '0.03em', flexShrink: 0 }}>{ext}</span>
+                      <span style={{ fontSize: '14px', color: '#c8d0ce', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.filename}</span>
+                      <span style={{ fontSize: '11px', color: '#556462', flexShrink: 0 }}>{sizeMB} MB</span>
                       {!isMobile && (
-                        <button onClick={(e) => { e.stopPropagation(); handleFileDelete(f); }} style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: 0.7, transition: 'opacity 0.2s' }}
+                        <button onClick={(e) => { e.stopPropagation(); handleFileDelete(f); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', opacity: 0.5, transition: 'opacity 0.15s', flexShrink: 0 }}
                           onMouseEnter={e => e.currentTarget.style.opacity = 1}
-                          onMouseLeave={e => e.currentTarget.style.opacity = 0.7}
+                          onMouseLeave={e => e.currentTarget.style.opacity = 0.5}
                         >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF3B30" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF3B30" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                         </button>
                       )}
                     </div>
@@ -3454,32 +5060,8 @@
               </div>
             )}
 
-            {/* Upload zone — desktop only */}
-            {!isMobile && project?.status !== 'done' && (
-              <div
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFileUpload(e.dataTransfer.files); }}
-                onClick={() => fileInputRef.current?.click()}
-                style={{
-                  border: dragOver ? '1px solid rgba(125,211,198,0.4)' : '1px solid rgba(255,255,255,0.15)',
-                  padding: '18px 12px', cursor: 'pointer', marginTop: '4px', minHeight: '60px',
-                  display: 'flex', alignItems: 'center',
-                  background: dragOver ? 'rgba(125,211,198,0.03)' : 'transparent',
-                  transition: 'all 0.2s'
-                }}
-              >
-                <input ref={fileInputRef} type="file" multiple accept=".jpg,.jpeg,.png,.webp,.heic,.pdf" style={{ display: 'none' }}
-                  onChange={(e) => { handleFileUpload(e.target.files); e.target.value = ''; }}
-                />
-                <span className="text-charcoal" style={{ fontSize: '15px', color: uploading ? '#7dd3c6' : 'rgba(255,255,255,0.85)' }}>
-                  {uploading ? 'Téléversement...' : 'Glisser ou cliquer pour ajouter...'}
-                </span>
-              </div>
-            )}
-
             {projectFiles.length === 0 && isMobile && (
-              <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', marginTop: '4px' }}>
+              <div style={{ border: '1px dashed rgba(255,255,255,0.15)', padding: '18px 12px', marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60px' }}>
                 <span style={{ fontSize: '15px', color: 'rgba(255,255,255,0.4)' }}>Aucun fichier</span>
               </div>
             )}
@@ -3626,11 +5208,11 @@
                 }}>
                   <div className="mb-5">
                     <label className="newproj-label font-bebas-book">NOM DU PROJET</label>
-                    <input ref={nameInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet" style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
+                    <input ref={nameInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet" style={{ background: 'transparent', position: 'relative', zIndex: 2, border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
                   </div>
                   <div className="mb-5">
                     <label className="newproj-label font-bebas-book">ADRESSE DU PROJET</label>
-                    <input ref={addressInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder="Entrer l'adresse..." style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
+                    <input ref={addressInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder="Entrer l'adresse..." style={{ background: 'transparent', position: 'relative', zIndex: 2, border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
                   </div>
                   <div className="mb-5">
                     <label className="newproj-label font-bebas-book">MANDAT</label>
@@ -3732,7 +5314,7 @@
                   <button onClick={handleSubmit} disabled={loading || !form.name.trim()} className="font-bebas-bold">{loading ? 'CRÉATION...' : 'AJOUTER'}</button>
                   <div style={{ width: '1px', background: 'rgba(255,255,255,0.15)', alignSelf: 'stretch', marginLeft: '20px', marginRight: '20px', marginTop: '-9px' }}/>
                   <button onClick={handleClose} className="font-bebas-bold">ANNULER</button>
-                  {justCreated && <span className="font-bebas-regular" style={{ letterSpacing: '0.04em', fontSize: '14px', color: 'rgba(255,255,255,0.4)', marginLeft: '16px' }}>✓ {justCreated} AJOUTÉ</span>}
+                  {justCreated && <span className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '14px', color: 'rgba(255,255,255,0.4)', marginLeft: '16px' }}>✓ {justCreated} AJOUTÉ</span>}
                 </div>
               </div>
             </React.Fragment>
@@ -4038,31 +5620,31 @@
 
       if (status === 'prompt') return (
         <div style={{ margin: '0 12px', marginBottom: '15px', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', overflow: 'hidden', padding: '24px 28px', textAlign: 'center' }}>
-          <div className="font-bebas-regular" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>MÉTÉO DE VOTRE POSITION ACTUELLE</div>
+          <div className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>MÉTÉO DE VOTRE POSITION ACTUELLE</div>
           <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>Votre navigateur vous demandera l'autorisation d'accéder à votre position.</div>
-          <button onClick={requestGeo} className="font-bebas-regular" style={{ letterSpacing: '0.04em', background: 'none', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: '20px', color: '#FAF9F7', fontSize: '16px', padding: '8px 24px', cursor: 'pointer', textShadow: '0 0 12px rgba(255,255,255,0.3)' }}>ACTIVER LA LOCALISATION</button>
+          <button onClick={requestGeo} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: '20px', color: '#FAF9F7', fontSize: '16px', padding: '8px 24px', cursor: 'pointer', textShadow: '0 0 12px rgba(255,255,255,0.3)' }}>ACTIVER LA LOCALISATION</button>
         </div>
       );
       if (status === 'loading') return (
         <div style={{ margin: '0 12px', marginBottom: '35px', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', overflow: 'hidden', padding: '24px 28px', textAlign: 'center' }}>
-          <div className="font-bebas-regular" style={{ letterSpacing: '0.04em', fontSize: '13px', color: '#424a48' }}>Chargement météo...</div>
+          <div className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '13px', color: '#424a48' }}>Chargement météo...</div>
         </div>
       );
       if (status === 'denied') return (
         <div style={{ margin: '0 12px', marginBottom: '15px', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', overflow: 'hidden', padding: '24px 28px', textAlign: 'center' }}>
-          <div className="font-bebas-regular" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>LOCALISATION REFUSÉE</div>
+          <div className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>LOCALISATION REFUSÉE</div>
           <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>Pour réactiver, allez dans Réglages &gt; Safari &gt; Localisation, ou dans les réglages de votre navigateur.</div>
-          <button onClick={() => { localStorage.removeItem('geo-permission'); requestGeo(); }} className="font-bebas-regular" style={{ letterSpacing: '0.04em', background: 'none', border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: '20px', color: 'rgba(255,255,255,0.5)', fontSize: '14px', padding: '6px 20px', cursor: 'pointer' }}>RÉESSAYER</button>
+          <button onClick={() => { localStorage.removeItem('geo-permission'); requestGeo(); }} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: '20px', color: 'rgba(255,255,255,0.5)', fontSize: '14px', padding: '6px 20px', cursor: 'pointer' }}>RÉESSAYER</button>
         </div>
       );
       if (status === 'error' || !geoData) return null;
 
       // Done: show full weather card
       return (
-        <div style={{ margin: '0 12px', marginBottom: '15px', borderRadius: '37px', background: 'transparent', overflow: 'hidden', padding: '20px 28px 5px' }}>
+        <div style={{ margin: '0 12px', marginBottom: '15px', borderRadius: '37px', background: 'transparent', position: 'relative', zIndex: 2, overflow: 'hidden', padding: '20px 28px 5px' }}>
           {/* Top row: date + city */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '2px', gap: '12px', paddingLeft: '0', textAlign: 'center' }}>
-            <div className="font-bebas-regular" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap', width: '100%', textAlign: 'center' }}>
+            <div className="font-bebas-bold" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap', width: '100%', textAlign: 'center' }}>
               AUJOURD'HUI {dateStr} / {geoData.cityName}
             </div>
           </div>
@@ -4072,11 +5654,11 @@
             <div style={{ flex: '0 0 auto' }}>
               <div style={{ display: 'flex', gap: '28px', alignItems: 'flex-end' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-regular" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.05em', marginBottom: '2px' }}>LEVER</div>
+                  <div className="font-bebas-bold" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.05em', marginBottom: '2px' }}>LEVER</div>
                   <div className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '25px', color: '#ffffff', lineHeight: '1' }}>{fmtSun(geoData.sunrise)}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-regular" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.05em', marginBottom: '2px' }}>COUCHER</div>
+                  <div className="font-bebas-bold" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.05em', marginBottom: '2px' }}>COUCHER</div>
                   <div className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '25px', color: '#ffffff', lineHeight: '1' }}>{fmtSun(geoData.sunset)}</div>
                 </div>
               </div>
@@ -4099,11 +5681,11 @@
               </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                  <span className="font-bebas-regular" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.35)' }}>MAX</span>
+                  <span className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.35)' }}>MAX</span>
                   <span className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '25px', color: '#ffffff', lineHeight: '1' }}>{geoData.high}°</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '2px' }}>
-                  <span className="font-bebas-regular" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.35)' }}>MIN</span>
+                  <span className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.35)' }}>MIN</span>
                   <span className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '25px', color: '#ffffff', lineHeight: '1' }}>{geoData.low}°</span>
                 </div>
               </div>
@@ -4475,7 +6057,7 @@
       
       return (
         <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px' }}>
-          {!isMobile && <h1 className="font-bebas-regular" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>PROJETS</h1>}
+          {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>PROJETS</h1>}
           {!isMobile && <div className="px-4 md:px-6">
             <div ref={plusRef} style={{ width: '68px', height: '88px', marginLeft: '-6px' }}/>
           </div>}
@@ -4494,7 +6076,7 @@
       const done = projects.filter(p => p.status === ProjectStatus.DONE);
       return (
         <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px' }}>
-          {!isMobile && <h1 className="font-bebas-regular" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>ÉDITION</h1>}
+          {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>ÉDITION</h1>}
           {retouching.length === 0 ? <div className="text-center py-16"><p className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '24px' }}>Aucun projet en édition</p></div>
           : <div style={{ paddingBottom: '80px' }}>{retouching.map((p, i) => <RetouchingCard key={p.id} project={p} onSelect={onSelect} index={i}/>)}</div>}
           {done.length > 0 && <>
@@ -4561,7 +6143,7 @@
 
       return (
         <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px' }}>
-          {!isMobile && <h1 className="font-bebas-regular" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>PRÉFÉRENCES</h1>}
+          {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>PRÉFÉRENCES</h1>}
           <div className={isMobile ? 'px-4' : 'pl-8 md:pl-12'}>
             {msg && <div className={`mb-6 p-3 rounded ${msg.type === "success" ? "bg-transparent" : "bg-red-50 text-red-700"}`} style={msg.type === "success" ? { color: "#7dd3c6" } : {}}>{msg.text}</div>}
             <div>
@@ -4614,8 +6196,8 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v416</div>
-                  <div className="font-bebas-regular" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v600</div>
+                  <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
             </div>
@@ -4677,7 +6259,7 @@
         onCreated();
       };
 
-      const inputStyle = { background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', padding: '12px 14px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '16px', borderRadius: '8px' };
+      const inputStyle = { background: 'transparent', position: 'relative', zIndex: 2, border: '1px solid rgba(255,255,255,0.15)', padding: '12px 14px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '16px', borderRadius: '8px' };
 
       return (
         <div style={{
@@ -4766,7 +6348,7 @@
           border: '1px solid rgba(255,255,255,0.1)',
           animation: 'fadeIn 0.3s ease'
         }}>
-          <span className="font-bebas-regular" style={{ letterSpacing: '0.04em', fontSize: '16px', color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>PROJET SUPPRIMÉ</span>
+          <span className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '16px', color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>PROJET SUPPRIMÉ</span>
           <button onClick={onUndo} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: 'none', color: '#FAF9F7', fontSize: '16px', cursor: 'pointer', textShadow: '0 0 12px rgba(255,255,255,0.4)', padding: '0' }}>ANNULER</button>
           <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>{/iPhone|iPad|Android/i.test(navigator.userAgent) ? '' : '⌘Z'}</span>
         </div>
@@ -4886,14 +6468,17 @@
         };
       }, [isMobile]);
       
-      // Keep detail mounted during slide-out animation
       useEffect(() => {
         if (selectedId) {
           setDisplayedProjectId(selectedId);
+          document.documentElement.style.overflow = 'hidden';
+          document.body.style.overflow = 'hidden';
         } else {
-          const timer = setTimeout(() => setDisplayedProjectId(null), 600);
-          return () => clearTimeout(timer);
+          setDisplayedProjectId(null);
+          document.documentElement.style.overflow = '';
+          document.body.style.overflow = '';
         }
+        return () => { document.documentElement.style.overflow = ''; document.body.style.overflow = ''; };
       }, [selectedId]);
 
       // Track plus button position
@@ -5043,47 +6628,51 @@
       });
 
       return (
-        <div className="min-h-screen bg-cream" style={{ position: 'relative', overflow: 'hidden' }}>
-          {/* Mobile top blur overlay for standalone mode */}
-          {isMobile && <div id="top-blur-overlay" style={{ 
-            position: 'fixed', top: 0, left: 0, right: 0, 
-            height: 'calc(env(safe-area-inset-top, 0px) + 36px)',
-            background: 'transparent',
-            backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-            WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 100%)',
-            maskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 100%)',
-            zIndex: 40, pointerEvents: 'none',
-            willChange: 'backdrop-filter'
-          }}/>}
+        <div className="min-h-screen bg-cream" style={{ position: 'relative' }}>
           {/* Soft radial gradient background - dark mode only */}
           <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', background: `radial-gradient(ellipse 60% 40% at ${plusRect ? plusRect.cx : window.innerWidth * 0.5}px ${plusRect && !selectedId ? plusRect.cy : 120}px, rgba(45,80,70,0.35) 0%, rgba(44,44,44,0) 70%)` }}/>
+          {/* Top blur overlay — desktop only, full width */}
+          {!isMobile && <div style={{ 
+            position: 'fixed', top: 0, left: 0, right: 0, 
+            height: '72px',
+            backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+            WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 35%, transparent 100%)',
+            maskImage: 'linear-gradient(to bottom, black 0%, black 35%, transparent 100%)',
+            zIndex: 39, pointerEvents: 'none'
+          }}/>}
+          {/* Top content fade — bg color to transparent */}
+          {!isMobile && <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0,
+            height: '50px',
+            background: 'linear-gradient(to bottom, #262c30 0%, transparent 100%)',
+            zIndex: 38, pointerEvents: 'none'
+          }}/>}
+          {/* Page titles — rendered at App level ABOVE blur */}
+          {!isMobile && displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>DÉTAILS PROJET</h1>}
+          {!isMobile && !displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{view === 'todo' ? 'PROJETS' : view === 'retouching' ? 'ÉDITION' : 'PRÉFÉRENCES'}</h1>}
           {!(isMobile && showNew) && <Header onChangeView={changeView} onAddProject={() => setShowNew(true)}/>}
           <div style={{ 
-            display: isMobile && showNew ? 'none' : 'block',
-            minHeight: '100vh'
+            display: isMobile && showNew ? 'none' : 'block'
           }}>
-          <main className="animate-fade-in" style={{ position: 'relative', zIndex: 1, overflow: 'hidden' }}>
+          <main className="animate-fade-in" style={{ position: 'relative', zIndex: 1 }}>
             <div style={{
-              transform: selectedId ? 'translateX(-30%)' : 'translateX(0)',
-              opacity: selectedId ? 0 : 1,
-              transition: 'transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease',
               pointerEvents: selectedId ? 'none' : 'auto',
-              position: selectedId || displayedProjectId ? 'absolute' : 'relative',
-              width: '100%',
-              overflow: selectedId ? 'hidden' : 'visible'
+              position: 'relative',
+              width: '100%'
             }}>
               {view === 'todo' && <TodoView onSelect={openProject} onAddProject={() => setShowNew(true)} addingProject={showNew} plusRef={plusRef}/>}
               {view === 'retouching' && <RetouchingView onSelect={openProject}/>}
               {view === 'preferences' && <PreferencesView/>}
             </div>
-            <div style={{
-              transform: selectedId ? 'translateX(0)' : 'translateX(100%)',
-              opacity: selectedId ? 1 : 0,
-              transition: 'transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease',
-              pointerEvents: selectedId ? 'auto' : 'none'
+            {displayedProjectId && <div className="detail-scroll" style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              overflowX: 'hidden',
+              overflowY: 'auto',
+              zIndex: 10,
+              background: '#262c30'
             }}>
-              {displayedProjectId && <ProjectDetail projectId={displayedProjectId} onClose={closeProject}/>}
-            </div>
+              <ProjectDetail projectId={displayedProjectId} onClose={closeProject}/>
+            </div>}
           </main>
           </div>
           {/* Mobile slide-in new project screen */}
@@ -5111,6 +6700,13 @@
     };
 
     ReactDOM.createRoot(document.getElementById('root')).render(<AuthProvider><AppWithAuth/></AuthProvider>);
+  </script>
+  <script>
+    // Force title after everything loads
+    document.title = isDev ? 'DEV DEV DEV DEV DEV | Shooting Planner' : 'MeteoShoot | Shooting Planner';
+    window.addEventListener('load', function() {
+      document.title = isDev ? 'DEV DEV DEV DEV DEV | Shooting Planner' : 'MeteoShoot | Shooting Planner';
+    });
   </script>
 </body>
 </html>
