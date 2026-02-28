@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v610</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v611</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -4746,46 +4746,43 @@
                               {MONTHS_FR[sunDate.getMonth()]} {sunDate.getDate()}
                             </span>
                           </div>
-                          {/* Terrain shadow alert — follows slider */}
+                          {/* Terrain shadow alert — follows slider, above filet */}
                           {terrainShadow && showSunLines && (() => {
                             const thumbPct = ((sunHourDisplay - sliderMin) / sliderRange) * 100;
                             const noonPct = ((((srTime + ssTime) / 2) - sliderMin) / sliderRange) * 100;
                             const isMorning = thumbPct < noonPct;
-                            // Position alert to right in morning, left in evening
+                            const fontSize = Math.round(13 * S);
                             return (
                               <div style={{
                                 position: 'absolute',
-                                top: `${filetTop}px`,
-                                marginTop: `${Math.round(10 * S)}px`,
+                                bottom: `${Math.round(88 * S - filetTop + 8) * -1}px`,
+                                top: `${Math.round(20 * S)}px`,
                                 left: `${thumbPct}%`,
                                 transform: isMorning ? 'translateX(20px)' : 'translateX(calc(-100% - 20px))',
                                 pointerEvents: 'none',
                                 zIndex: 12,
-                                display: 'flex', alignItems: 'flex-start', gap: `${Math.round(6 * S)}px`,
+                                display: 'flex', flexDirection: 'column', alignItems: isMorning ? 'flex-start' : 'flex-end',
                                 whiteSpace: 'nowrap',
                                 animation: 'fadeIn 0.3s ease'
                               }}>
                                 {/* Mountain icon with red glow */}
-                                <div style={{ position: 'relative', flexShrink: 0, marginTop: '1px' }}>
+                                <div style={{ position: 'relative', marginBottom: '2px' }}>
                                   <div style={{
                                     position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-                                    width: '40px', height: '40px', borderRadius: '50%',
+                                    width: '50px', height: '50px', borderRadius: '50%',
                                     background: 'radial-gradient(circle, rgba(220,50,50,0.3) 0%, rgba(220,50,50,0.08) 50%, transparent 70%)',
-                                    filter: 'blur(6px)'
+                                    filter: 'blur(8px)'
                                   }}/>
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e03030" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative' }}>
+                                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#e03030" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative' }}>
                                     <path d="M4 20L10 8l4 6 2-3 4 9H4z"/>
                                   </svg>
                                 </div>
-                                {/* Text */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0px', lineHeight: '1' }}>
-                                  <span className="font-bebas-book" style={{ fontSize: `${Math.round(11 * S)}px`, color: '#ffffff', letterSpacing: '0.06em', lineHeight: '1.1' }}>
-                                    ATTENTION
-                                  </span>
-                                  <span className="font-bebas-book" style={{ fontSize: `${Math.round(11 * S)}px`, color: '#ffffff', letterSpacing: '0.06em', lineHeight: '1.1' }}>
-                                    OMBRE RELIEF
-                                  </span>
-                                </div>
+                                <span className="font-bebas-book" style={{ fontSize: `${fontSize}px`, color: '#ffffff', letterSpacing: '0.06em', lineHeight: '1.15' }}>
+                                  ATTENTION
+                                </span>
+                                <span className="font-bebas-book" style={{ fontSize: `${fontSize}px`, color: '#ffffff', letterSpacing: '0.06em', lineHeight: '1.15' }}>
+                                  OMBRE RELIEF
+                                </span>
                               </div>
                             );
                           })()}
@@ -6291,7 +6288,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v610</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v611</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
