@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v621</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v622</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -4764,15 +4764,17 @@
                                 whiteSpace: 'nowrap',
                                 animation: 'fadeIn 0.3s ease'
                               }}>
-                                {/* Shadow cast by slider onto alert */}
+                                {/* Shadow cast by slider — trapezoid, narrow top, wide bottom-right */}
                                 <div style={{
                                   position: 'absolute',
-                                  top: 0, bottom: 0,
-                                  [isMorning ? 'left' : 'right']: 0,
-                                  width: '100%',
+                                  top: 0, left: isMorning ? 0 : undefined, right: isMorning ? undefined : 0,
+                                  width: '100%', height: '100%',
+                                  clipPath: isMorning
+                                    ? 'polygon(0% 0%, 8% 0%, 100% 100%, 0% 100%)'
+                                    : 'polygon(92% 0%, 100% 0%, 100% 100%, 0% 100%)',
                                   background: isMorning
-                                    ? 'linear-gradient(to right, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.2) 30%, transparent 65%)'
-                                    : 'linear-gradient(to left, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.2) 30%, transparent 65%)',
+                                    ? 'linear-gradient(to bottom right, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 60%, transparent 100%)'
+                                    : 'linear-gradient(to bottom left, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 60%, transparent 100%)',
                                   pointerEvents: 'none',
                                   zIndex: 2
                                 }}/>
@@ -6299,7 +6301,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v621</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v622</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
