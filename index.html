@@ -437,7 +437,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v598</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v599</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -553,7 +553,111 @@
     const TBL_PROJECTS = isDev ? 'projects_dev' : 'projects';
     const TBL_PREFS = isDev ? 'preferences_dev' : 'preferences';
     const TBL_FILES = isDev ? 'project_files_dev' : 'project_files';
+    const TBL_ELEVATION = 'elevation_cache'; // shared global — no dev/prod split
     const STORAGE_BUCKET = 'project-files';
+
+    // ===== TERRAIN ELEVATION PROFILE =====
+    // Fetches horizon profile around a point (24 directions, 3km radius)
+    // Returns array of {bearing, maxAngle} where maxAngle = max elevation angle in degrees
+    const ELEV_GRID_PRECISION = 3; // ~111m grid cells
+    const ELEV_DIRECTIONS = 36; // every 10°
+    const ELEV_SAMPLES = 40; // points per direction
+    const ELEV_RADIUS_M = 3000; // 3km
+    
+    const roundGrid = (v) => parseFloat(v.toFixed(ELEV_GRID_PRECISION));
+    
+    const getElevationProfile = async (lat, lng) => {
+      const gLat = roundGrid(lat), gLng = roundGrid(lng);
+      
+      // Check Supabase cache
+      try {
+        const { data } = await supabase.from(TBL_ELEVATION)
+          .select('profile')
+          .eq('grid_lat', gLat).eq('grid_lng', gLng)
+          .maybeSingle();
+        if (data?.profile) return data.profile;
+      } catch(e) { console.warn('Elevation cache read error:', e); }
+      
+      // Build sample points: 36 directions × 40 points
+      const R = 6371000; // Earth radius meters
+      const allLats = [], allLngs = [], meta = [];
+      
+      for (let d = 0; d < ELEV_DIRECTIONS; d++) {
+        const bearing = (d * 360 / ELEV_DIRECTIONS) * Math.PI / 180;
+        for (let s = 1; s <= ELEV_SAMPLES; s++) {
+          const dist = (s / ELEV_SAMPLES) * ELEV_RADIUS_M;
+          const dLat = (dist * Math.cos(bearing)) / R * (180 / Math.PI);
+          const dLng = (dist * Math.sin(bearing)) / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
+          allLats.push(lat + dLat);
+          allLngs.push(lng + dLng);
+          meta.push({ dir: d, dist });
+        }
+      }
+      
+      // Fetch observer elevation first
+      let observerElev = 0;
+      try {
+        const res = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`);
+        const j = await res.json();
+        observerElev = j.elevation?.[0] ?? j.elevation ?? 0;
+      } catch(e) { console.warn('Observer elevation error:', e); return null; }
+      
+      // Fetch all sample elevations in batches of 100
+      const elevations = new Array(allLats.length).fill(0);
+      const batchSize = 100;
+      
+      for (let i = 0; i < allLats.length; i += batchSize) {
+        const bLats = allLats.slice(i, i + batchSize).map(v => v.toFixed(5)).join(',');
+        const bLngs = allLngs.slice(i, i + batchSize).map(v => v.toFixed(5)).join(',');
+        try {
+          const res = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${bLats}&longitude=${bLngs}`);
+          const j = await res.json();
+          const elArr = Array.isArray(j.elevation) ? j.elevation : [j.elevation];
+          for (let k = 0; k < elArr.length; k++) {
+            elevations[i + k] = elArr[k] ?? 0;
+          }
+          // Small delay to be polite
+          if (i + batchSize < allLats.length) await new Promise(r => setTimeout(r, 100));
+        } catch(e) { console.warn('Elevation batch error:', e); }
+      }
+      
+      // Compute max elevation angle per direction
+      const profile = [];
+      for (let d = 0; d < ELEV_DIRECTIONS; d++) {
+        let maxAngle = 0;
+        for (let s = 0; s < ELEV_SAMPLES; s++) {
+          const idx = d * ELEV_SAMPLES + s;
+          const elevDiff = elevations[idx] - observerElev;
+          if (elevDiff > 0) {
+            const angle = Math.atan2(elevDiff, meta[idx].dist) * 180 / Math.PI;
+            if (angle > maxAngle) maxAngle = angle;
+          }
+        }
+        profile.push({ bearing: d * 360 / ELEV_DIRECTIONS, maxAngle: parseFloat(maxAngle.toFixed(2)) });
+      }
+      
+      // Cache in Supabase
+      try {
+        await supabase.from(TBL_ELEVATION).upsert({
+          grid_lat: gLat, grid_lng: gLng, profile, observer_elevation: observerElev
+        }, { onConflict: 'grid_lat,grid_lng' });
+      } catch(e) { console.warn('Elevation cache write error:', e); }
+      
+      return profile;
+    };
+    
+    // Check if sun is behind terrain at given bearing + altitude
+    const isTerrainShadow = (profile, sunBearingDeg, sunAltDeg) => {
+      if (!profile || sunAltDeg <= 0) return false;
+      const step = 360 / ELEV_DIRECTIONS;
+      // Find two closest direction samples
+      const idx = ((sunBearingDeg % 360) + 360) % 360;
+      const i0 = Math.floor(idx / step) % ELEV_DIRECTIONS;
+      const i1 = (i0 + 1) % ELEV_DIRECTIONS;
+      const frac = (idx / step) - Math.floor(idx / step);
+      const horizonAngle = profile[i0].maxAngle * (1 - frac) + profile[i1].maxAngle * frac;
+      return sunAltDeg < horizonAngle;
+    };
     const MAX_PROJECT_FILES_MB = 30;
 
     // === File helpers ===
@@ -2698,6 +2802,11 @@
       const [adjustedPos, setAdjustedPos] = useState(null);
       const effectiveCenterRef = React.useRef(null);
       
+      // === Terrain Elevation Shadow ===
+      const [terrainProfile, setTerrainProfile] = useState(null);
+      const [terrainShadow, setTerrainShadow] = useState(false);
+      const terrainProfileRef = React.useRef(null);
+      
       // === Buildings & Shadow Simulation ===
       const [buildings, setBuildings] = useState(() => project?.buildings || []);
       const [drawingMode, setDrawingMode] = useState(false);
@@ -3543,6 +3652,21 @@
         return () => { document.body.style.overflow = ''; };
       }, [showMapFull]);
 
+      // Fetch terrain elevation profile when position changes
+      React.useEffect(() => {
+        const lat = adjustedPos?.lat ?? project?.lat;
+        const lng = adjustedPos?.lng ?? project?.lng;
+        if (!lat || !lng) return;
+        let cancelled = false;
+        getElevationProfile(lat, lng).then(profile => {
+          if (!cancelled && profile) {
+            terrainProfileRef.current = profile;
+            setTerrainProfile(profile);
+          }
+        });
+        return () => { cancelled = true; };
+      }, [roundGrid(adjustedPos?.lat ?? project?.lat ?? 0), roundGrid(adjustedPos?.lng ?? project?.lng ?? 0)]);
+
       // Separate effect for sun position line (slider) — lightweight update
       useEffect(() => {
         const map = mapInstanceRef.current;
@@ -3581,6 +3705,11 @@
         const isMoonMode = sunHour > ssTime || sunHour < srTime;
         const lineColor = isMoonMode ? '#c8d8f0' : '#ffe26b';
         const lineOpacity = isMoonMode ? 0.7 : (isGoldenBefore || isGoldenAfter) ? 0.8 : 1;
+        
+        // Terrain shadow check
+        const sunAltDeg = sunPos.altitude * 180 / Math.PI;
+        const inTerrainShadow = isTerrainShadow(terrainProfileRef.current, bearing, sunAltDeg);
+        setTerrainShadow(inTerrainShadow);
         
         // Offset start from circle edge
         const cRadPx = 17;
@@ -4794,6 +4923,22 @@
                         </div>
                       );
                     })()}
+                    {/* Terrain shadow indicator */}
+                    {terrainShadow && showSunLines && (
+                      <div style={{ 
+                        position: 'absolute', top: '14px', left: '14px', zIndex: 13,
+                        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+                        borderRadius: '10px', padding: '5px 12px 3px 10px',
+                        display: 'flex', alignItems: 'center', gap: '7px',
+                        boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+                        animation: 'fadeIn 0.3s ease'
+                      }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f0a040" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M4 20L10 8l4 6 2-3 4 9H4z"/>
+                        </svg>
+                        <span className="font-bebas-bold" style={{ fontSize: '14px', color: '#f0a040', letterSpacing: '0.06em', lineHeight: '1' }}>OMBRE TERRAIN</span>
+                      </div>
+                    )}
                     {/* Drawing mode hint — near the polygon */}
                     {drawingMode && (
                       <div style={{ position: 'absolute', 
@@ -6047,7 +6192,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v598</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v599</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
