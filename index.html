@@ -281,6 +281,11 @@
     .day-cell .day-popup.popup-active { opacity: 1; visibility: visible; pointer-events: auto; transform: translateX(0); }
 
     /* Drag and drop */
+    @keyframes terrainGlowPulse {
+      0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      50% { opacity: 0.15; transform: translate(-50%, -50%) scale(1.6); }
+      100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    }
     @keyframes vaporDrift1 {
       0% { transform: translate(-100%, -50%) scaleY(0.8); opacity: 0; }
       10% { opacity: 1; }
@@ -437,7 +442,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v625</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v628</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3547,7 +3552,7 @@
         // Fixed center pin — map pans behind it
         if (markerRef.current) markerRef.current.setMap(null);
         markerRef.current = null;
-        // Detect map pan → update adjustedPos
+        // Detect map pan → update adjustedPos + auto-update project address
         const panListener = map.addListener('idle', () => {
           const c = map.getCenter();
           const dist = Math.abs(c.lat() - project.lat) + Math.abs(c.lng() - project.lng);
@@ -3555,6 +3560,17 @@
             const pos = { lat: c.lat(), lng: c.lng() };
             setAdjustedPos(pos);
             effectiveCenterRef.current = pos;
+            // Auto-update project position + reverse geocode address
+            skipMapRecreateRef.current = true;
+            try {
+              const geocoder = new google.maps.Geocoder();
+              geocoder.geocode({ location: pos }, (results, status) => {
+                const addr = (status === 'OK' && results[0]) ? results[0].formatted_address : pos.lat.toFixed(5) + ', ' + pos.lng.toFixed(5);
+                updateProject(project.id, { lat: pos.lat, lng: pos.lng, address: addr });
+              });
+            } catch(e) {
+              updateProject(project.id, { lat: pos.lat, lng: pos.lng, address: pos.lat.toFixed(5) + ', ' + pos.lng.toFixed(5) });
+            }
           } else {
             setAdjustedPos(null);
             effectiveCenterRef.current = null;
@@ -4449,7 +4465,7 @@
                 <div>
                   <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>ADRESSE DU PROJET</label>
                   <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input ref={addressInputRef} type="text" defaultValue={project.address || ''} placeholder="Entrer l'adresse..." className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1 }}/>
+                    <input key={project.address || ''} ref={addressInputRef} type="text" defaultValue={project.address || ''} placeholder="Entrer l'adresse..." className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1 }}/>
                     {project.address && <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(project.address)}`} target="_blank" rel="noopener" onClick={e => e.stopPropagation()} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Itinéraire"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>}
                   </div>
                 </div>
@@ -4682,39 +4698,37 @@
                               setSunHour(magneticSunHour(sliderMin + pct * sliderRange));
                             }}
                           />}
-                          <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, transform: 'translateY(-50%)' }}>
-                            {/* Glow behind thumb */}
-                            <div style={{
-                              position: 'absolute',
-                              top: '50%',
-                              left: thumbLeft,
-                              transform: 'translate(-50%, -50%)',
-                              width: `${glowSize}px`, height: `${glowSize}px`,
-                              borderRadius: '50%',
-                              background: `radial-gradient(circle, ${glowColor} 0%, ${glowColor} 24%, ${glowColor}80 45%, transparent 70%)`,
-                              opacity: 0.3,
-                              pointerEvents: 'none',
-                              filter: 'blur(15px)',
-                              
-                            }}/>
-                            {/* Vapor wisps */}
-                            <div style={{ position: 'absolute', top: '50%', left: thumbLeft, width: `${Math.round(300*S)}px`, height: `${Math.round(120*S)}px`, transform: 'translate(-50%, -50%)', pointerEvents: 'none', overflow: 'visible' }}>
-                              <div style={{ position: 'absolute', top: '50%', left: '20%', width: '120px', height: '40px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}30 0%, ${glowColor}10 50%, transparent 75%)`, filter: 'blur(12px)', animation: 'vaporDrift1 8s ease-in-out infinite', opacity: 0.6 }}/>
-                              <div style={{ position: 'absolute', top: '50%', left: '60%', width: '90px', height: '35px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}25 0%, ${glowColor}0c 50%, transparent 75%)`, filter: 'blur(10px)', animation: 'vaporDrift2 11s ease-in-out infinite', animationDelay: '-3s', opacity: 0.5 }}/>
-                              <div style={{ position: 'absolute', top: '50%', left: '40%', width: '150px', height: '50px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}20 0%, ${glowColor}08 50%, transparent 75%)`, filter: 'blur(14px)', animation: 'vaporDrift3 14s ease-in-out infinite', animationDelay: '-7s', opacity: 0.45 }}/>
-                              <div style={{ position: 'absolute', top: '50%', left: '10%', width: '100px', height: '30px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}28 0%, ${glowColor}0a 50%, transparent 75%)`, filter: 'blur(8px)', animation: 'vaporDrift1 6s ease-in-out infinite', animationDelay: '-2s', opacity: 0.4 }}/>
-                              <div style={{ position: 'absolute', top: '50%', left: '70%', width: '130px', height: '45px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}1a 0%, ${glowColor}08 50%, transparent 75%)`, filter: 'blur(16px)', animation: 'vaporDrift2 16s ease-in-out infinite', animationDelay: '-5s', opacity: 0.35 }}/>
-                            </div>
-                            
-                            {/* The range input */}
-                            <input 
-                              type="range" 
-                              min={sliderMin} max={sliderMax} step="0.05" 
+                          {/* z:1 — Glow + wisps (back) */}
+                          <div style={{
+                            position: 'absolute',
+                            top: '50%',
+                            left: thumbLeft,
+                            transform: 'translate(-50%, -50%)',
+                            width: `${glowSize}px`, height: `${glowSize}px`,
+                            borderRadius: '50%',
+                            background: `radial-gradient(circle, ${glowColor} 0%, ${glowColor} 24%, ${glowColor}80 45%, transparent 70%)`,
+                            opacity: 0.3,
+                            pointerEvents: 'none',
+                            filter: 'blur(15px)',
+                            zIndex: 1
+                          }}/>
+                          <div style={{ position: 'absolute', top: '50%', left: thumbLeft, width: `${Math.round(300*S)}px`, height: `${Math.round(120*S)}px`, transform: 'translate(-50%, -50%)', pointerEvents: 'none', overflow: 'visible', zIndex: 1 }}>
+                            <div style={{ position: 'absolute', top: '50%', left: '20%', width: '120px', height: '40px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}30 0%, ${glowColor}10 50%, transparent 75%)`, filter: 'blur(12px)', animation: 'vaporDrift1 8s ease-in-out infinite', opacity: 0.6 }}/>
+                            <div style={{ position: 'absolute', top: '50%', left: '60%', width: '90px', height: '35px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}25 0%, ${glowColor}0c 50%, transparent 75%)`, filter: 'blur(10px)', animation: 'vaporDrift2 11s ease-in-out infinite', animationDelay: '-3s', opacity: 0.5 }}/>
+                            <div style={{ position: 'absolute', top: '50%', left: '40%', width: '150px', height: '50px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}20 0%, ${glowColor}08 50%, transparent 75%)`, filter: 'blur(14px)', animation: 'vaporDrift3 14s ease-in-out infinite', animationDelay: '-7s', opacity: 0.45 }}/>
+                            <div style={{ position: 'absolute', top: '50%', left: '10%', width: '100px', height: '30px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}28 0%, ${glowColor}0a 50%, transparent 75%)`, filter: 'blur(8px)', animation: 'vaporDrift1 6s ease-in-out infinite', animationDelay: '-2s', opacity: 0.4 }}/>
+                            <div style={{ position: 'absolute', top: '50%', left: '70%', width: '130px', height: '45px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}1a 0%, ${glowColor}08 50%, transparent 75%)`, filter: 'blur(16px)', animation: 'vaporDrift2 16s ease-in-out infinite', animationDelay: '-5s', opacity: 0.35 }}/>
+                          </div>
+                          {/* z:4 — Slider thumb (front) */}
+                          <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, transform: 'translateY(-50%)', zIndex: 4 }}>
+                            <input
+                              type="range"
+                              min={sliderMin} max={sliderMax} step="0.05"
                               value={sunHour}
                               onChange={e => setSunHour(magneticSunHour(parseFloat(e.target.value)))}
-                              style={{ 
-                                width: '100%', appearance: 'none', WebkitAppearance: 'none', 
-                                background: 'transparent', position: 'relative', zIndex: 2, 
+                              style={{
+                                width: '100%', appearance: 'none', WebkitAppearance: 'none',
+                                background: 'transparent', position: 'relative', zIndex: 2,
                                 outline: 'none', cursor: 'pointer',
                                 pointerEvents: 'auto'
                               }}
@@ -4748,52 +4762,59 @@
                           </div>
                           {/* Terrain shadow alert — follows slider, above filet */}
                           {terrainShadow && showSunLines && (() => {
-                            const thumbPct = ((sunHourDisplay - sliderMin) / sliderRange) * 100;
+                            const thumbPct = ((sunHour - sliderMin) / sliderRange) * 100;
                             const noonPct = ((((srTime + ssTime) / 2) - sliderMin) / sliderRange) * 100;
                             const isMorning = thumbPct < noonPct;
                             const fontSize = Math.round(15.7 * S);
                             return (
                               <div style={{
                                 position: 'absolute',
-                                bottom: `${Math.round((88 * S) - filetTop + 10)}px`,
+                                bottom: `${Math.round((88 * S) - filetTop + 14)}px`,
                                 left: `${thumbPct}%`,
-                                transform: isMorning ? 'translateX(20px)' : 'translateX(calc(-100% - 20px))',
+                                transform: isMorning ? 'translateX(25px)' : 'translateX(calc(-100% - 25px))',
                                 pointerEvents: 'none',
+                                zIndex: 2,
                                 display: 'flex', flexDirection: 'column', alignItems: isMorning ? 'flex-start' : 'flex-end',
                                 whiteSpace: 'nowrap',
-                                animation: 'fadeIn 0.3s ease'
+                                animation: 'fadeIn 1.5s ease'
                               }}>
-                                {/* Shadow — point at top, base at bottom, behind white slider (z:1 < thumb z:2) */}
+                                {/* Shadow warning — triangle, point at slider, base at bottom */}
                                 <div style={{
                                   position: 'absolute',
-                                  top: 0,
-                                  left: isMorning ? '-20px' : 0,
-                                  right: isMorning ? 0 : '-20px',
-                                  width: 'calc(100% + 20px)', height: 'calc(100% + 15px)',
+                                  top: '6px',
+                                  left: isMorning ? '-25px' : 0,
+                                  right: isMorning ? 0 : '-25px',
+                                  width: 'calc(100% + 25px)', height: 'calc(100% - 5px)',
                                   clipPath: isMorning
                                     ? 'polygon(0% 0%, 5% 0%, 100% 100%, 0% 100%)'
                                     : 'polygon(95% 0%, 100% 0%, 100% 100%, 0% 100%)',
-                                  background: 'linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 60%, transparent 100%)',
+                                  background: isMorning
+                                    ? 'linear-gradient(to right, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.1) 100%)'
+                                    : 'linear-gradient(to left, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.1) 100%)',
                                   pointerEvents: 'none',
-                                  zIndex: 1
+                                  zIndex: 1,
+                                  maskImage: 'linear-gradient(to bottom, black 0%, black 30%, rgba(0,0,0,0.5) 100%)',
+                                  WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 30%, rgba(0,0,0,0.5) 100%)',
+                                  filter: 'blur(3px)'
                                 }}/>
-                                {/* Mountain icon with red glow */}
-                                <div style={{ position: 'relative', marginBottom: '2px', zIndex: 3 }}>
+                                {/* Mountain icon with red glow — behind shadow */}
+                                <div style={{ position: 'relative', marginBottom: '2px', zIndex: -2, marginTop: '0px' }}>
                                   <div style={{
                                     position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
                                     width: '70px', height: '70px', borderRadius: '50%',
-                                    background: 'radial-gradient(circle, rgba(255,28,52,0.45) 0%, rgba(255,28,52,0.15) 40%, rgba(255,28,52,0.04) 60%, transparent 75%)',
-                                    filter: 'blur(10px)'
+                                    background: 'radial-gradient(circle, rgba(255,28,52,0.7) 0%, rgba(255,28,52,0.3) 40%, rgba(255,28,52,0.08) 60%, transparent 75%)',
+                                    filter: 'blur(10px)',
+                                    animation: 'terrainGlowPulse 3s ease-in-out infinite'
                                   }}/>
                                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff1c34" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative' }}>
                                     <path d="M4 20L10 8l4 6 2-3 4 9H4z"/>
                                   </svg>
                                 </div>
-                                <span className="font-bebas-book" style={{ fontSize: `${fontSize}px`, color: '#ffffff', letterSpacing: '0.2em', lineHeight: '1.15', position: 'relative', zIndex: 3 }}>
+                                <span className="font-bebas-book" style={{ fontSize: `${fontSize}px`, color: '#ffffff', letterSpacing: '0.2em', lineHeight: '1.15', position: 'relative', zIndex: -2 }}>
                                   ATTENTION
                                 </span>
-                                <span className="font-bebas-book" style={{ fontSize: `${fontSize}px`, color: '#ffffff', letterSpacing: '0.2em', lineHeight: '1.15', position: 'relative', zIndex: 3 }}>
-                                  OMBRE RELIEF
+                                <span className="font-bebas-book" style={{ fontSize: `${fontSize}px`, color: '#ffffff', letterSpacing: '0.2em', lineHeight: '1.15', position: 'relative', zIndex: -2 }}>
+                                  OMBRE POSSIBLE
                                 </span>
                               </div>
                             );
@@ -5051,23 +5072,7 @@
                     )}
                     {/* Date wheel picker */}
                     {showDatePicker && <DateWheelPicker date={sunDate} onChange={setSunDate} onClose={() => setShowDatePicker(false)} />}
-                    {/* Update position button - shown when marker is dragged */}
-                    {adjustedPos && (
-                      <div style={{ position: 'absolute', bottom: '14px', left: '50%', transform: 'translateX(-50%)', zIndex: 13, display: 'flex', gap: '8px' }}>
-                        <button onClick={() => { skipMapRecreateRef.current = true; effectiveCenterRef.current = null; updateProject(project.id, { lat: adjustedPos.lat, lng: adjustedPos.lng }); setAdjustedPos(null); }} className="font-bebas-bold" style={{
-                          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
-                          borderRadius: '8px', border: '1px solid rgba(125,211,198,0.3)', cursor: 'pointer',
-                          padding: '8px 16px', fontSize: '14px', letterSpacing: '0.05em',
-                          color: '#7dd3c6', textShadow: '0 0 8px rgba(125,211,198,0.3)', whiteSpace: 'nowrap'
-                        }}>METTRE À JOUR</button>
-                        <button onClick={() => { setAdjustedPos(null); if (mapInstanceRef.current) mapInstanceRef.current.panTo({ lat: project.lat, lng: project.lng }); }} className="font-bebas-bold" style={{
-                          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
-                          borderRadius: '8px', border: 'none', cursor: 'pointer',
-                          padding: '8px 12px', fontSize: '14px', letterSpacing: '0.05em',
-                          color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap'
-                        }}>ANNULER</button>
-                      </div>
-                    )}
+                    {/* Position auto-updates on map pan — no button needed */}
                   </div>
                   </>
                 ) : (
@@ -6282,7 +6287,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v625</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v628</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
