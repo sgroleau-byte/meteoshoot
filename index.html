@@ -3,11 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#3d4a47" id="themeColor">
+  <meta name="theme-color" content="#191c1f" id="themeColor">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MeteoShoot">
   <script>var isDev = !location.hostname.match(/^(meteoshoot\.vercel\.app|meteoshoot\.com|www\.meteoshoot\.com)$/);</script>
+  <link rel="preload" href="imgProjet/splash-o.png" as="image">
+  <link rel="preload" href="imgProjet/splash-typoMeteoshoot.png" as="image">
   <link rel="manifest" id="manifest-link">
   <link rel="apple-touch-icon" id="touch-icon-link">
   <script>
@@ -26,7 +28,7 @@
       });
       document.getElementById('manifest-link').href = URL.createObjectURL(new Blob([devManifest], {type: 'application/json'}));
       document.getElementById('touch-icon-link').href = 'icon-180-DevRose.png';
-      document.getElementById('themeColor').setAttribute('content', '#3d4a47');
+      document.getElementById('themeColor').setAttribute('content', window.innerWidth < 768 ? '#191c1f' : '#3d4a47');
     } else {
       document.getElementById('manifest-link').href = 'manifest.json';
       document.getElementById('touch-icon-link').href = 'icon-180.png';
@@ -56,7 +58,8 @@
     }
   </script>
   <style>
-    html { overflow-x: hidden; overflow-y: scroll; }
+    html { overflow-x: hidden; overflow-y: scroll; scrollbar-width: none; -ms-overflow-style: none; }
+    html::-webkit-scrollbar { display: none; }
     /* Style detail scrollbar to match native thin look */
     .detail-scroll::-webkit-scrollbar { width: 8px; }
     .detail-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -154,6 +157,9 @@
       transition: opacity 0.8s ease-out;
       padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
+    @media (max-width: 767px) {
+      .splash-overlay { background: #191c1f; }
+    }
     .splash-overlay.splash-hidden {
       opacity: 0;
       pointer-events: none;
@@ -164,12 +170,12 @@
       transform: translateZ(0) scale(0.95);
       animation: splashLogoReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0s forwards;
       will-change: transform, opacity;
+      z-index: 6;
     }
     .splash-logo-img {
       width: clamp(280px, 55vw, 580px);
       height: auto;
       opacity: 1;
-      mix-blend-mode: multiply;
       display: block;
     }
     .splash-flare {
@@ -213,8 +219,7 @@
       letter-spacing: 0.05em;
       margin-top: 18px;
       opacity: 0;
-      transform: translateY(8px);
-      animation: splashSubReveal 0.5s ease-out 0.2s forwards;
+      animation: splashSubFade 0.5s ease-out 0.1s forwards;
     }
     .splash-badge {
       position: absolute;
@@ -248,6 +253,15 @@
       85%  { transform: translate(calc(-50% + 51px), -51%) scale(1.02, 0.98) rotate(0.5deg); }
       100% { transform: translate(calc(-50% + 50px), -50%) scale(1, 1) rotate(0deg); }
     }
+    @keyframes flareOrgFloat {
+      0%   { transform: translate(0, 0) scale(1) rotate(0deg); }
+      15%  { transform: translate(2px, -1px) scale(1.04, 0.97) rotate(1.5deg); }
+      30%  { transform: translate(-3px, 1px) scale(0.97, 1.03) rotate(-1deg); }
+      50%  { transform: translate(3px, -2px) scale(1.03, 0.96) rotate(2deg); }
+      70%  { transform: translate(-2px, 0) scale(0.98, 1.04) rotate(-1.5deg); }
+      85%  { transform: translate(1px, -1px) scale(1.02, 0.98) rotate(0.5deg); }
+      100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+    }
     @keyframes splashHaloOrg {
       0%   { left: calc(50% - 140px); top: 46%; transform: translate(-50%, -50%) translateZ(0) scale(1, 1) rotate(0deg); }
       15%  { left: calc(50% - 95px);  top: 44%; transform: translate(-50%, -51%) translateZ(0) scale(1.06, 0.94) rotate(2deg); }
@@ -257,9 +271,9 @@
       80%  { left: calc(50% - 80px);  top: 44%; transform: translate(-50%, -51%) translateZ(0) scale(1.03, 0.97) rotate(1.5deg); }
       100% { left: calc(50% - 140px); top: 46%; transform: translate(-50%, -50%) translateZ(0) scale(1, 1) rotate(0deg); }
     }
-    @keyframes splashSubReveal {
-      0% { opacity: 0; transform: translateY(8px); }
-      100% { opacity: 1; transform: translateY(0); }
+    @keyframes splashSubFade {
+      0% { opacity: 0; }
+      100% { opacity: 1; }
     }
     @keyframes splashBadgeReveal {
       0% { opacity: 0; }
@@ -431,27 +445,44 @@
 <body class="bg-cream min-h-screen">
 <script>
   // Apply dark mode
-  document.body.classList.add('dark-mode'); document.body.style.backgroundColor = '#262c30';
+  document.body.classList.add('dark-mode'); document.body.style.backgroundColor = window.innerWidth < 768 ? '#191c1f' : '#262c30';
 </script>
 
 <!-- ── Splash Screen ── -->
 <div class="splash-overlay" id="splashScreen">
   <div class="splash-halo"></div>
   <div class="splash-logo-area" style="opacity:0">
-    <img class="splash-logo-img" src="imgProjet/splash-typoMeteoshoot.png" alt="meteoshoot" />
     <img class="splash-flare" src="imgProjet/splash-o.png" alt="" style="opacity:0" />
+    <img class="splash-logo-img" src="imgProjet/splash-typoMeteoshoot.png" alt="meteoshoot" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v629</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v631.92</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
 <script>
   setTimeout(function() {
     var splash = document.getElementById('splashScreen');
+    var flare = document.querySelector('.splash-flare');
+    // Move flare out of splash before removing it
+    if (flare) {
+      flare.id = 'persistentFlare';
+      var rect = flare.getBoundingClientRect();
+      flare.dataset.splashWidth = rect.width + 'px';
+      flare.style.position = 'fixed';
+      flare.style.zIndex = '30';
+      flare.style.pointerEvents = 'none';
+      flare.style.mixBlendMode = 'color-dodge';
+      flare.style.opacity = '0';
+      flare.style.width = rect.width + 'px';
+      flare.style.transform = 'none';
+      flare.style.animation = 'none';
+      flare.style.transition = 'opacity 1s ease';
+      document.body.appendChild(flare);
+    }
     splash.classList.add('splash-hidden');
-    document.getElementById('themeColor').setAttribute('content', '#3d4a47');
+    document.getElementById('themeColor').setAttribute('content', window.innerWidth < 768 ? '#191c1f' : '#3d4a47');
     setTimeout(function() { splash.remove(); }, 900);
   }, 2500);
 </script>
@@ -801,7 +832,7 @@
       };
 
       return (
-        <div className="min-h-screen bg-cream flex items-center justify-center" style={{ background: '#262c30' }}>
+        <div className="min-h-screen bg-cream flex items-center justify-center" style={{ background: window.innerWidth < 768 ? '#191c1f' : '#262c30' }}>
           <div style={{ maxWidth: '360px', width: '100%', padding: '0 24px' }}>
             <h1 className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '48px', color: '#FAF9F7', marginBottom: '4px' }}>{window.isDev ? '--->  DEV --->  DEV --->  DEV --->  DEV --->  DEV --->  DEV' : 'MeteoShoot'}</h1>
             <p className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '20px', color: '#8B9B99', marginBottom: '32px' }}>SHOOTING PLANNER</p>
@@ -1795,19 +1826,21 @@
       const scrollRef = useRef(null);
       const contentRef = useRef(null);
       const actionsRef = useRef(null);
+      const haloWhiteRef = useRef(null);
       const actionsOpen = openActionsId === project.id;
       const setActionsOpen = (v) => setOpenActionsId(v ? project.id : null);
-      const actionW = 110;
+      const actionW = 160;
 
       useEffect(() => {
         const card = cardRef.current;
         if (!card || !isMobile) return;
         let startX = 0, startY = 0, locked = false, mode = null, open = false, px = 0, lastMoveX = 0, lastMoveT = 0, velocity = 0;
         const ease = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
-        
+
         const setTx = (v) => {
           px = v;
           if (contentRef.current) contentRef.current.style.transform = `translateX(${-v}px)`;
+          if (haloWhiteRef.current) haloWhiteRef.current.style.transform = `translateX(${-v}px)`;
           if (actionsRef.current) actionsRef.current.style.transform = `translateX(${actionW - v}px)`;
         };
 
@@ -1823,6 +1856,7 @@
           }
         };
 
+        let touchInScroll = false;
         const onStart = (e) => {
           startX = e.touches[0].clientX;
           startY = e.touches[0].clientY;
@@ -1831,7 +1865,9 @@
           lastMoveX = startX;
           lastMoveT = Date.now();
           velocity = 0;
+          touchInScroll = scrollRef.current && scrollRef.current.contains(e.target);
           if (contentRef.current) { contentRef.current.style.transition = 'none'; contentRef.current.style.willChange = 'transform'; }
+          if (haloWhiteRef.current) { haloWhiteRef.current.style.transition = 'none'; haloWhiteRef.current.style.willChange = 'transform'; }
           if (actionsRef.current) { actionsRef.current.style.transition = 'none'; actionsRef.current.style.willChange = 'transform'; }
         };
 
@@ -1852,6 +1888,7 @@
               if (open) {
                 open = false;
                 if (contentRef.current) contentRef.current.style.transition = ease;
+                if (haloWhiteRef.current) haloWhiteRef.current.style.transition = ease;
                 if (actionsRef.current) actionsRef.current.style.transition = ease;
                 setTx(0);
                 setTimeout(() => { setActionsOpen(false); }, 600);
@@ -1861,9 +1898,13 @@
             locked = true;
             if (open) {
               mode = 'close';
-            } else {
-              const sc = scrollRef.current;
-              if (sc && sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 2 && dx < 0) {
+            } else if (dx < 0) {
+              if (touchInScroll) {
+                const sc = scrollRef.current;
+                if (sc && sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 2) {
+                  mode = 'open';
+                }
+              } else {
                 mode = 'open';
               }
             }
@@ -1890,15 +1931,18 @@
               : (px > actionW * 0.7 && v > -0.3);
             open = snap;
             if (contentRef.current) contentRef.current.style.transition = ease;
+            if (haloWhiteRef.current) haloWhiteRef.current.style.transition = ease;
             if (actionsRef.current) actionsRef.current.style.transition = ease;
             setTx(snap ? actionW : 0);
-            setTimeout(() => { 
+            setTimeout(() => {
               setActionsOpen(snap);
               if (contentRef.current) contentRef.current.style.willChange = '';
+              if (haloWhiteRef.current) haloWhiteRef.current.style.willChange = '';
               if (actionsRef.current) actionsRef.current.style.willChange = '';
             }, 600);
           } else {
             if (contentRef.current) { contentRef.current.style.transition = ease; contentRef.current.style.willChange = ''; }
+            if (haloWhiteRef.current) { haloWhiteRef.current.style.transition = ease; haloWhiteRef.current.style.willChange = ''; }
             if (actionsRef.current) { actionsRef.current.style.transition = ease; actionsRef.current.style.willChange = ''; }
           }
           mode = null;
@@ -1941,35 +1985,42 @@
         const tx = actionsOpen ? actionW : 0;
         const ease = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
         return (
-          <div ref={cardRef} data-open={actionsOpen} data-project-id={project.id} className={isFirstMount.current ? 'animate-card-in' : ''} 
-            style={{ position: 'relative', overflow: 'hidden', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', margin: '0 12px', marginBottom: '15px', ...(isFirstMount.current ? { animationDelay: `${index * 0.1}s` } : {}), WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
+          <div ref={cardRef} data-open={actionsOpen} data-project-id={project.id} className={isFirstMount.current ? 'animate-card-in' : ''}
+            style={{ position: 'relative', margin: '0 12px', marginBottom: '40px', ...(isFirstMount.current ? { animationDelay: `${index * 0.1}s` } : {}), WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
           >
-            {/* Turquoise glow - center below card, only top visible */}
-            <div style={{ position: 'absolute', left: '50%', bottom: '-350px', width: '700px', height: '500px', borderRadius: '50%', background: 'radial-gradient(ellipse 60% 45%, rgba(100,200,190,0.4) 0%, rgba(100,200,190,0.15) 40%, rgba(100,200,190,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translateX(-50%)', zIndex: 0 }}/>
-            {/* Teal flare - bottom left */}
-            <div style={{ position: 'absolute', left: '-400px', bottom: '-400px', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(251,227,127,0.4) 0%, rgba(251,227,127,0.1) 40%, rgba(251,227,127,0) 70%)', pointerEvents: 'none', zIndex: 0 }}/>
-            <div ref={contentRef} style={{ transform: `translateX(${-tx}px)`, transition: ease, padding: '20px 24px', position: 'relative', willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
+            {/* Layer 2 — fond coins ronds + halos + contours flous */}
+            <div style={{ position: 'absolute', top: 0, left: '-15px', right: 0, bottom: '-15px', borderRadius: '25px', overflow: 'hidden', background: 'rgba(0,0,0,0.14)', WebkitMaskImage: 'linear-gradient(to right, transparent, black 50px, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', WebkitMaskComposite: 'destination-in', maskImage: 'linear-gradient(to right, transparent, black 50px, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', maskComposite: 'intersect', pointerEvents: 'none' }}>
+              <div style={{ position: 'absolute', left: '50%', bottom: '-350px', width: '700px', height: '500px', borderRadius: '50%', background: 'radial-gradient(ellipse 60% 45%, rgba(100,200,190,0.6) 0%, rgba(100,200,190,0.3) 40%, rgba(100,200,190,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translateX(-50%)' }}/>
+              <div style={{ position: 'absolute', left: '-400px', bottom: '-400px', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(251,227,127,0.4) 0%, rgba(251,227,127,0.1) 40%, rgba(251,227,127,0) 70%)', pointerEvents: 'none' }}/>
+            </div>
+            {/* Layer 1.5 — masque coins ronds + halo blanc central */}
+            <div ref={haloWhiteRef} style={{ position: 'absolute', top: '-5px', left: 0, right: 0, bottom: '-5px', borderRadius: '25px', overflow: 'hidden', pointerEvents: 'none' }}>
+              <div style={{ position: 'absolute', left: '-500px', top: '50%', transform: 'translateY(-50%)', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 40%, rgba(255,255,255,0) 70%)', pointerEvents: 'none' }}/>
+            </div>
+            {/* Layer 1 — contenu */}
+            <div ref={contentRef} style={{ transform: `translateX(${-tx}px)`, transition: ease, padding: '5px 5px', position: 'relative', zIndex: 1, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
               {actionsOpen && (
-                <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} 
+                <div style={{ position: 'absolute', inset: 0, zIndex: 10 }}
                   onClick={() => { setActionsOpen(false); }}
                 />
               )}
-              <div onClick={() => { if (!actionsOpen) onSelect(project); }}>
-                <h3 className="font-bebas-book text-charcoal" style={{ letterSpacing: '0.04em', fontSize: '24px', lineHeight: '1.1', marginBottom: '0' }}>
-                  {project.name} {project.isContest && <StarIcon/>}
-                </h3>
-                <div style={{ position: 'relative' }}>
-                  <div style={{ position: 'absolute', inset: 0, left: '-24px', right: '-150px', background: 'linear-gradient(to top, rgba(0,0,0,0.13), transparent)', pointerEvents: 'none', zIndex: 0 }}/>
-                  <div className="flex items-center gap-2 font-bebas-light uppercase" style={{ letterSpacing: '0.04em', fontSize: '17px', lineHeight: '1', marginTop: '2px', marginBottom: '0', position: 'relative', zIndex: 1, padding: '4px 0' }}>
-                  {project.mandates?.length > 0 && (
-                    <span style={{ flexShrink: 0 }}>
-                      {project.mandates.map((m, i) => <React.Fragment key={m}>{i > 0 && <span style={{ color: '#4a5054' }}>{'\u00A0\u00A0|\u00A0\u00A0'}</span>}{m === 'DRONE+C' ? <span><span style={{ color: colorActive }}>DRONE.</span><span style={{ color: '#d83152' }}>C</span></span> : <span style={{ color: colorActive }}>{m}</span>}</React.Fragment>)}
-                    </span>
-                  )}
+              <div onClick={() => { if (!actionsOpen) onSelect(project); }} style={{ display: 'flex', flexDirection: 'row', gap: '0' }}>
+                {project.mandates?.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', paddingRight: '10px', borderRight: '1px solid rgba(255,255,255,0.15)', marginRight: '10px', flexShrink: 0 }}>
+                    {['INT', 'EXT', 'DRONE', 'DRONE+C', 'VID'].filter(x => project.mandates.includes(x)).map((m) => {
+                      const label = m === 'DRONE+C' ? 'DRONE' : m === 'DRONE' ? 'DRONE' : m;
+                      return <span key={m} className="font-bebas-book uppercase" style={{ fontSize: '15px', lineHeight: '0.9', letterSpacing: '0.04em', color: colorActive }}>{m === 'DRONE+C' ? <span><span style={{ color: colorActive }}>DRON</span><span style={{ color: '#d83152' }}>E</span></span> : label}</span>;
+                    })}
                   </div>
+                )}
+                <div style={{ flex: 1, textAlign: 'left', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start' }}>
+                  <span className="font-bebas-book text-charcoal" style={{ letterSpacing: '0.04em', fontSize: '24px', lineHeight: '0.9' }}>
+                    {project.name} {project.isContest && <StarIcon/>}
+                  </span>
                 </div>
               </div>
-              <div style={{ position: 'relative' }}>
+              <div style={{ height: '1px', background: 'linear-gradient(to right, rgba(255,255,255,0.15), rgba(255,255,255,0))', margin: '4px -5px 0 -5px' }}/>
+              <div style={{ position: 'relative', margin: '0 -5px' }}>
                 <div ref={scrollRef}
                   style={{ display: 'flex', overflowX: actionsOpen ? 'hidden' : 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', marginTop: '6px' }}
                 >
@@ -1977,18 +2028,17 @@
                     {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} onDayClick={() => { if (!actionsOpen) onSelect(project); }}/> : <p className="text-charcoal-muted text-sm italic py-2">Météo non disponible</p>}
                   </div>
                 </div>
-                {project.lat && project.lng && <div style={{ position: 'absolute', right: '-24px', top: 0, bottom: 0, width: '36px', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', WebkitMaskImage: 'linear-gradient(to left, black, transparent)', maskImage: 'linear-gradient(to left, black, transparent)', pointerEvents: 'none', zIndex: 2 }}/>}
               </div>
             </div>
-            <div ref={actionsRef} style={{ 
+            <div ref={actionsRef} style={{
               position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW}px`,
               display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: '16px', paddingRight: '20px',
-              transform: `translateX(${actionW - tx}px)`, transition: ease
+              transform: `translateX(${actionW - tx}px)`, transition: ease, zIndex: 1
             }}>
               {/* Red/pink glow - moves with swipe */}
               <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
-              <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: 'none', whiteSpace: 'nowrap' }} onClick={() => { setActionsOpen(false); advanceProject(project.id); }}>EN ÉDITION</button>
-              {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>SUPPRIMER ?</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
+              {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmDone) { setActionsOpen(false); advanceProject(project.id); setConfirmDone(false); } else { setConfirmDone(true); setConfirmDelete(false); setTimeout(() => setConfirmDone(false), 3000); } }}>{confirmDone ? 'EN ÉDITION ?' : 'EN ÉDITION'}</button>}
+              {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>SUPPRIMER ?</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '-3px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
             </div>
           </div>
         );
@@ -2058,7 +2108,7 @@
       );
     };
 
-    const RetouchingCard = ({ project, onSelect, index = 0 }) => {
+    const RetouchingCard = ({ project, onSelect, index = 0, openActionsId, setOpenActionsId }) => {
       const { advanceProject, revertProject, deleteProject, updateProject, prefs } = useStore();
       const [confirmDelete, setConfirmDelete] = useState(false);
       const [confirmReady, setConfirmReady] = useState(false);
@@ -2094,50 +2144,89 @@
       const cardRef = useRef(null);
       const contentRef = useRef(null);
       const actionsRef = useRef(null);
-      const [actionsOpen, setActionsOpen] = useState(false);
-      const actionW = 140;
+      const haloWhiteRef = useRef(null);
+      const actionsOpen = openActionsId === project.id;
+      const setActionsOpen = (v) => setOpenActionsId ? setOpenActionsId(v ? project.id : null) : null;
+      const actionW = 210;
 
       useEffect(() => {
         const card = cardRef.current;
         if (!card || !isMobile) return;
         let startX = 0, startY = 0, locked = false, mode = null, open = false, px = 0, lastMoveX = 0, lastMoveT = 0, velocity = 0;
         const ease = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
-        
+
         const setTx = (v) => {
           px = v;
           if (contentRef.current) contentRef.current.style.transform = `translateX(${-v}px)`;
+          if (haloWhiteRef.current) haloWhiteRef.current.style.transform = `translateX(${-v}px)`;
           if (actionsRef.current) actionsRef.current.style.transform = `translateX(${actionW - v}px)`;
         };
 
-        let rafId = null, pendingTx = null;
-        const rafSetTx = (v) => { pendingTx = v; if (!rafId) { rafId = requestAnimationFrame(() => { rafId = null; if (pendingTx !== null) setTx(pendingTx); }); } };
+        let rafId = null;
+        let pendingTx = null;
+        const rafSetTx = (v) => {
+          pendingTx = v;
+          if (!rafId) {
+            rafId = requestAnimationFrame(() => {
+              rafId = null;
+              if (pendingTx !== null) setTx(pendingTx);
+            });
+          }
+        };
 
         const onStart = (e) => {
-          startX = e.touches[0].clientX; startY = e.touches[0].clientY;
-          locked = false; mode = null; lastMoveX = startX; lastMoveT = Date.now(); velocity = 0;
-          if (contentRef.current) { contentRef.current.style.transition = 'none'; }
-          if (actionsRef.current) { actionsRef.current.style.transition = 'none'; }
+          startX = e.touches[0].clientX;
+          startY = e.touches[0].clientY;
+          locked = false;
+          mode = null;
+          lastMoveX = startX;
+          lastMoveT = Date.now();
+          velocity = 0;
+          if (contentRef.current) { contentRef.current.style.transition = 'none'; contentRef.current.style.willChange = 'transform'; }
+          if (haloWhiteRef.current) { haloWhiteRef.current.style.transition = 'none'; haloWhiteRef.current.style.willChange = 'transform'; }
+          if (actionsRef.current) { actionsRef.current.style.transition = 'none'; actionsRef.current.style.willChange = 'transform'; }
         };
 
         const onMove = (e) => {
           const dx = e.touches[0].clientX - startX;
           const dy = e.touches[0].clientY - startY;
-          const now = Date.now(); const dt = now - (lastMoveT || now);
+          const now = Date.now();
+          const dt = now - (lastMoveT || now);
           if (dt > 0) velocity = (e.touches[0].clientX - (lastMoveX || e.touches[0].clientX)) / dt;
-          lastMoveX = e.touches[0].clientX; lastMoveT = now;
+          lastMoveX = e.touches[0].clientX;
+          lastMoveT = now;
 
           if (!locked) {
             if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-            if (Math.abs(dy) > Math.abs(dx)) { 
+            if (Math.abs(dy) > Math.abs(dx)) {
               mode = null; locked = true;
-              if (open) { open = false; if (contentRef.current) contentRef.current.style.transition = ease; if (actionsRef.current) actionsRef.current.style.transition = ease; setTx(0); setTimeout(() => setActionsOpen(false), 600); }
+              if (open) {
+                open = false;
+                if (contentRef.current) contentRef.current.style.transition = ease;
+                if (haloWhiteRef.current) haloWhiteRef.current.style.transition = ease;
+                if (actionsRef.current) actionsRef.current.style.transition = ease;
+                setTx(0);
+                setTimeout(() => { setActionsOpen(false); }, 600);
+              }
               return;
             }
             locked = true;
-            mode = open ? 'close' : (dx < 0 ? 'open' : null);
+            if (open) {
+              mode = 'close';
+            } else if (dx < 0) {
+              mode = 'open';
+            }
           }
-          if (mode === 'close') { e.preventDefault(); rafSetTx(Math.max(0, Math.min(actionW, actionW - dx))); }
-          else if (mode === 'open') { e.preventDefault(); rafSetTx(Math.min(actionW, Math.max(0, Math.abs(dx) - 8))); }
+
+          if (mode === 'close') {
+            e.preventDefault();
+            e.stopPropagation();
+            rafSetTx(Math.max(0, Math.min(actionW, actionW - dx)));
+          } else if (mode === 'open') {
+            e.preventDefault();
+            e.stopPropagation();
+            rafSetTx(Math.min(actionW, Math.max(0, Math.abs(dx) - 8)));
+          }
         };
 
         const onEnd = () => {
@@ -2145,79 +2234,118 @@
           if (pendingTx !== null) { setTx(pendingTx); pendingTx = null; }
           if (mode === 'close' || mode === 'open') {
             const v = velocity || 0;
-            const snap = mode === 'open' ? (px > actionW * 0.3 || v < -0.3) : (px > actionW * 0.7 && v > -0.3);
+            const snap = mode === 'open'
+              ? (px > actionW * 0.3 || v < -0.3)
+              : (px > actionW * 0.7 && v > -0.3);
             open = snap;
             if (contentRef.current) contentRef.current.style.transition = ease;
+            if (haloWhiteRef.current) haloWhiteRef.current.style.transition = ease;
             if (actionsRef.current) actionsRef.current.style.transition = ease;
             setTx(snap ? actionW : 0);
-            setTimeout(() => setActionsOpen(snap), 600);
+            setTimeout(() => {
+              setActionsOpen(snap);
+              if (contentRef.current) contentRef.current.style.willChange = '';
+              if (haloWhiteRef.current) haloWhiteRef.current.style.willChange = '';
+              if (actionsRef.current) actionsRef.current.style.willChange = '';
+            }, 600);
           } else {
-            if (contentRef.current) contentRef.current.style.transition = ease;
-            if (actionsRef.current) actionsRef.current.style.transition = ease;
+            if (contentRef.current) { contentRef.current.style.transition = ease; contentRef.current.style.willChange = ''; }
+            if (haloWhiteRef.current) { haloWhiteRef.current.style.transition = ease; haloWhiteRef.current.style.willChange = ''; }
+            if (actionsRef.current) { actionsRef.current.style.transition = ease; actionsRef.current.style.willChange = ''; }
           }
           mode = null;
         };
 
+        const syncOpen = () => {
+          const newOpen = card.dataset.open === 'true';
+          if (open && !newOpen) {
+            if (contentRef.current) contentRef.current.style.transition = ease;
+            if (haloWhiteRef.current) haloWhiteRef.current.style.transition = ease;
+            if (actionsRef.current) actionsRef.current.style.transition = ease;
+            setTx(0);
+          }
+          open = newOpen;
+        };
+        const attrObs = new MutationObserver(syncOpen);
+        attrObs.observe(card, { attributes: true, attributeFilter: ['data-open'] });
+
         card.addEventListener('touchstart', onStart, { passive: true });
         card.addEventListener('touchmove', onMove, { passive: false });
         card.addEventListener('touchend', onEnd, { passive: true });
-        return () => { if (rafId) cancelAnimationFrame(rafId); card.removeEventListener('touchstart', onStart); card.removeEventListener('touchmove', onMove); card.removeEventListener('touchend', onEnd); };
+        return () => {
+          if (rafId) cancelAnimationFrame(rafId);
+          card.removeEventListener('touchstart', onStart);
+          card.removeEventListener('touchmove', onMove);
+          card.removeEventListener('touchend', onEnd);
+          attrObs.disconnect();
+        };
       }, [isMobile]);
+
+      const isFirstMount = useRef(true);
+      useEffect(() => {
+        const timer = setTimeout(() => { isFirstMount.current = false; }, 600);
+        return () => clearTimeout(timer);
+      }, []);
 
       if (isMobile) {
         const tx = actionsOpen ? actionW : 0;
         const ease = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
         return (
-          <div ref={cardRef} style={{ position: 'relative', overflow: 'hidden', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', margin: '0 12px', marginBottom: '15px', WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}>
-            {/* Amber glow */}
-            <div style={{ position: 'absolute', left: '-300px', bottom: '-300px', width: '550px', height: '550px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(251,227,127,0.25) 0%, rgba(251,227,127,0.06) 40%, rgba(251,227,127,0) 70%)', pointerEvents: 'none', zIndex: 0 }}/>
-            <div ref={contentRef} style={{ transform: `translateX(${-tx}px)`, transition: ease, padding: '20px 24px', position: 'relative', zIndex: 1 }}>
-              {actionsOpen && <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} onClick={() => setActionsOpen(false)}/>}
-              <div onClick={() => { if (!actionsOpen) onSelect(project); }}>
-                <h3 className="font-bebas-book text-charcoal" style={{ letterSpacing: '0.04em', fontSize: '24px', lineHeight: '1.1', marginBottom: '4px' }}>
-                  {project.name} {project.isContest && <StarIcon/>}
-                </h3>
-                <div className="flex items-center gap-2 font-bebas-light uppercase" style={{ letterSpacing: '0.04em', fontSize: '17px', lineHeight: '1', padding: '4px 0' }}>
-                  {project.mandates?.length > 0 && (
-                    <span style={{ flexShrink: 0 }}>
-                      {project.mandates.map((m, i) => <React.Fragment key={m}>{i > 0 && <span style={{ color: '#4a5054' }}>{'\u00A0\u00A0|\u00A0\u00A0'}</span>}{m === 'DRONE+C' ? <span><span style={{ color: '#FAF9F7' }}>DRONE.</span><span style={{ color: '#d83152' }}>C</span></span> : <span style={{ color: '#FAF9F7' }}>{m}</span>}</React.Fragment>)}
+          <div ref={cardRef} data-open={actionsOpen} data-project-id={project.id} className={isFirstMount.current ? 'animate-card-in' : ''}
+            style={{ position: 'relative', margin: '0 12px', marginBottom: '40px', ...(isFirstMount.current ? { animationDelay: `${index * 0.1}s` } : {}), WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
+          >
+            {/* Layer 2 — fond coins ronds + halos + contours flous */}
+            <div style={{ position: 'absolute', top: 0, left: '-15px', right: 0, bottom: '-15px', borderRadius: '25px', overflow: 'hidden', background: 'rgba(0,0,0,0.14)', WebkitMaskImage: 'linear-gradient(to right, transparent, black 50px, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', WebkitMaskComposite: 'destination-in', maskImage: 'linear-gradient(to right, transparent, black 50px, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', maskComposite: 'intersect', pointerEvents: 'none' }}>
+              <div style={{ position: 'absolute', left: '50%', bottom: '-350px', width: '700px', height: '500px', borderRadius: '50%', background: 'radial-gradient(ellipse 60% 45%, rgba(39,80,84,0.6) 0%, rgba(39,80,84,0.3) 40%, rgba(39,80,84,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translateX(-50%)' }}/>
+              <div style={{ position: 'absolute', left: '-400px', bottom: '-400px', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(15,117,143,0.4) 0%, rgba(15,117,143,0.1) 40%, rgba(15,117,143,0) 70%)', pointerEvents: 'none' }}/>
+            </div>
+            {/* Layer 1.5 — masque coins ronds + halo blanc central */}
+            <div ref={haloWhiteRef} style={{ position: 'absolute', top: '-5px', left: 0, right: 0, bottom: '-5px', borderRadius: '25px', overflow: 'hidden', pointerEvents: 'none' }}>
+              <div style={{ position: 'absolute', left: '-500px', top: '50%', transform: 'translateY(-50%)', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 40%, rgba(255,255,255,0) 70%)', pointerEvents: 'none' }}/>
+            </div>
+            {/* Layer 1 — contenu */}
+            <div ref={contentRef} style={{ transform: `translateX(${-tx}px)`, transition: ease, padding: '5px 5px', position: 'relative', zIndex: 1, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
+              {actionsOpen && (
+                <div style={{ position: 'absolute', inset: 0, zIndex: 10 }}
+                  onClick={() => { setActionsOpen(false); }}
+                />
+              )}
+              <div onClick={() => { if (!actionsOpen) onSelect(project); }} style={{ display: 'flex', flexDirection: 'row', gap: '0' }}>
+                {project.mandates?.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', paddingRight: '10px', borderRight: '1px solid rgba(255,255,255,0.15)', marginRight: '10px', flexShrink: 0 }}>
+                    {['INT', 'EXT', 'DRONE', 'DRONE+C', 'VID'].filter(x => project.mandates.includes(x)).map((m) => {
+                      const label = m === 'DRONE+C' ? 'DRONE' : m === 'DRONE' ? 'DRONE' : m;
+                      return <span key={m} className="font-bebas-book uppercase" style={{ fontSize: '15px', lineHeight: '0.9', letterSpacing: '0.04em', color: colorActive }}>{m === 'DRONE+C' ? <span><span style={{ color: colorActive }}>DRON</span><span style={{ color: '#d83152' }}>E</span></span> : label}</span>;
+                    })}
+                  </div>
+                )}
+                <div style={{ flex: 1, textAlign: 'left' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start' }}>
+                    <span className="font-bebas-book text-charcoal" style={{ letterSpacing: '0.04em', fontSize: '24px', lineHeight: '0.9' }}>
+                      {project.name} {project.isContest && <StarIcon/>}
                     </span>
-                  )}
-                </div>
-              </div>
-              {/* Info columns */}
-              <div onClick={() => { if (!actionsOpen) onSelect(project); }} className="font-bebas-bold uppercase" style={{ letterSpacing: '0.04em', display: 'flex', gap: '0', marginTop: '10px', fontSize: '18px', lineHeight: '1.3' }}>
-                <div style={{ borderLeft: '1px solid rgba(255,255,255,0.08)', paddingLeft: '8px', minWidth: '100px' }}>
-                  <div style={{ color: '#404A48' }}>CRÉÉ</div>
-                  <div style={{ color: '#FAF9F7' }}>{formatDateShort(project.createdAt)}</div>
-                  <div style={{ color: '#8B9B99' }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</div>
-                </div>
-                <div style={{ borderLeft: '1px solid rgba(255,255,255,0.08)', paddingLeft: '8px', marginLeft: '12px', minWidth: '100px' }}>
-                  <div style={{ color: '#404A48' }}>ÉDITION</div>
-                  <div style={{ color: '#FAF9F7' }}>{project.shotAt ? formatDateShort(project.shotAt) : '- - -'}</div>
-                  <div style={{ color: daysColor }}>{days !== null ? `${days} ${days <= 1 ? 'JOUR' : 'JOURS'}` : ''}</div>
+                  </div>
+                  <div style={{ height: '1px', background: 'linear-gradient(to right, rgba(255,255,255,0.15), rgba(255,255,255,0))', margin: '4px 0 0 -11px' }}/>
+                  {/* Info line — CRÉÉ X JOURS ÉDITION X JOURS */}
+                  <div className="uppercase" style={{ letterSpacing: '0.04em', display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '6px', fontSize: '16px', lineHeight: '1.3', padding: '4px 0 2px 0', color: '#fff' }}>
+                    <span className="font-bebas-book">CRÉÉ</span>
+                    <span className="font-bebas-regular">{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
+                    <span className="font-bebas-book" style={{ marginLeft: '12px' }}>ÉDITION</span>
+                    <span className="font-bebas-regular">{days !== null ? `${days} ${days <= 1 ? 'JOUR' : 'JOURS'}` : '- - -'}</span>
+                  </div>
                 </div>
               </div>
             </div>
-            {/* Swipe actions */}
-            <div ref={actionsRef} style={{ 
+            <div ref={actionsRef} style={{
               position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW}px`,
-              display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', gap: '6px', paddingRight: '20px',
-              transform: `translateX(${actionW - tx}px)`, transition: ease
+              display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: '12px', paddingRight: '20px',
+              transform: `translateX(${actionW - tx}px)`, transition: ease, zIndex: 1
             }}>
-              <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
-              <button style={{ background: 'none', border: 'none', padding: '6px 0' }} onClick={() => { setActionsOpen(false); revertProject(project.id); }}>
-                <span className="font-bebas-bold" style={{ color: '#8B9B99', fontSize: '16px', letterSpacing: '0.03em' }}>REMETTRE</span>
-              </button>
-              <button style={{ background: 'none', border: 'none', padding: '6px 0' }} onClick={() => { setActionsOpen(false); advanceProject(project.id); }}>
-                <span className="font-bebas-bold" style={{ color: '#8B9B99', fontSize: '16px', letterSpacing: '0.03em' }}>ARCHIVER</span>
-              </button>
-              <button style={{ background: 'none', border: 'none', padding: '6px 0' }} onClick={() => { 
-                if (confirmDelete) { deleteProject(project.id); }
-                else { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }
-              }}>
-                {confirmDelete ? <span className="font-bebas-bold" style={{ color: '#FF3B30', fontSize: '16px', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)' }}>SUPPRIMER ?</span> : <span style={{ color: '#FF3B30', display: 'flex', alignItems: 'center', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))' }}><TrashIcon/></span>}
-              </button>
+              {/* Red/pink glow */}
+              <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '280px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
+              {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmRevert) { setActionsOpen(false); revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setConfirmDone(false); setConfirmDelete(false); setTimeout(() => setConfirmRevert(false), 3000); } }}>{confirmRevert ? 'REMETTRE ?' : 'REMETTRE'}</button>}
+              {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmDone) { setActionsOpen(false); advanceProject(project.id); setConfirmDone(false); } else { setConfirmDone(true); setConfirmRevert(false); setConfirmDelete(false); setTimeout(() => setConfirmDone(false), 3000); } }}>{confirmDone ? 'ARCHIVER ?' : 'ARCHIVER'}</button>}
+              {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>SUPPRIMER ?</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '-3px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
             </div>
           </div>
         );
@@ -2291,7 +2419,7 @@
       const contentRef2 = useRef(null);
       const actionsRef2 = useRef(null);
       const [actionsOpen2, setActionsOpen2] = useState(false);
-      const actionW2 = 120;
+      const actionW2 = 160;
 
       useEffect(() => {
         const card = cardRef2.current;
@@ -2334,48 +2462,55 @@
         const tx2 = actionsOpen2 ? actionW2 : 0;
         const ease2 = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
         return (
-          <div ref={cardRef2} style={{ position: 'relative', overflow: 'hidden', borderRadius: '37px', background: 'rgba(0,0,0,0.10)', margin: '0 12px', marginBottom: '15px', opacity: 0.5, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}>
-            <div ref={contentRef2} style={{ transform: `translateX(${-tx2}px)`, transition: ease2, padding: '20px 24px' }}>
+          <div ref={cardRef2} style={{ position: 'relative', margin: '0 12px', marginBottom: '40px', opacity: 0.5, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}>
+            {/* Layer 2 — fond coins ronds + halos + contours flous */}
+            <div style={{ position: 'absolute', top: 0, left: '-15px', right: 0, bottom: '-15px', borderRadius: '25px', overflow: 'hidden', background: 'rgba(0,0,0,0.14)', WebkitMaskImage: 'linear-gradient(to right, transparent, black 50px, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', WebkitMaskComposite: 'destination-in', maskImage: 'linear-gradient(to right, transparent, black 50px, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', maskComposite: 'intersect', pointerEvents: 'none' }}>
+              <div style={{ position: 'absolute', left: '50%', bottom: '-350px', width: '700px', height: '500px', borderRadius: '50%', background: 'radial-gradient(ellipse 60% 45%, rgba(39,80,84,0.6) 0%, rgba(39,80,84,0.3) 40%, rgba(39,80,84,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translateX(-50%)' }}/>
+              <div style={{ position: 'absolute', left: '-400px', bottom: '-400px', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(15,117,143,0.4) 0%, rgba(15,117,143,0.1) 40%, rgba(15,117,143,0) 70%)', pointerEvents: 'none' }}/>
+            </div>
+            {/* Layer 1.5 — masque coins ronds + halo blanc central */}
+            <div style={{ position: 'absolute', top: '-5px', left: 0, right: 0, bottom: '-5px', borderRadius: '25px', overflow: 'hidden', pointerEvents: 'none' }}>
+              <div style={{ position: 'absolute', left: '-500px', top: '50%', transform: 'translateY(-50%)', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 40%, rgba(255,255,255,0) 70%)', pointerEvents: 'none' }}/>
+            </div>
+            {/* Layer 1 — contenu */}
+            <div ref={contentRef2} style={{ transform: `translateX(${-tx2}px)`, transition: ease2, padding: '5px 5px', position: 'relative', zIndex: 1, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
               {actionsOpen2 && <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} onClick={() => setActionsOpen2(false)}/>}
-              <h3 className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '24px', lineHeight: '1.1', color: colorCharcoal, marginBottom: '4px' }}>
-                {project.name} {project.isContest && <StarIcon/>}
-              </h3>
-              <div className="flex items-center gap-2 font-bebas-light uppercase" style={{ letterSpacing: '0.04em', fontSize: '17px', lineHeight: '1', padding: '4px 0' }}>
+              <div style={{ display: 'flex', flexDirection: 'row', gap: '0' }}>
                 {project.mandates?.length > 0 && (
-                  <span style={{ flexShrink: 0 }}>
-                    {project.mandates.map((m, i) => <React.Fragment key={m}>{i > 0 && <span style={{ color: '#4a5054' }}>{'\u00A0\u00A0|\u00A0\u00A0'}</span>}<span style={{ color: colorCharcoal }}>{m === 'DRONE+C' ? 'DRONE.C' : m}</span></React.Fragment>)}
-                  </span>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', paddingRight: '10px', borderRight: '1px solid rgba(255,255,255,0.15)', marginRight: '10px', flexShrink: 0 }}>
+                    {['INT', 'EXT', 'DRONE', 'DRONE+C', 'VID'].filter(x => project.mandates.includes(x)).map((m) => {
+                      const label = m === 'DRONE+C' ? 'DRONE' : m === 'DRONE' ? 'DRONE' : m;
+                      return <span key={m} className="font-bebas-book uppercase" style={{ fontSize: '15px', lineHeight: '0.9', letterSpacing: '0.04em', color: colorActive }}>{m === 'DRONE+C' ? <span><span style={{ color: colorActive }}>DRON</span><span style={{ color: '#d83152' }}>E</span></span> : label}</span>;
+                    })}
+                  </div>
                 )}
-              </div>
-              <div className="font-bebas-bold uppercase" style={{ letterSpacing: '0.04em', display: 'flex', gap: '0', marginTop: '10px', fontSize: '18px', lineHeight: '1.3' }}>
-                <div style={{ borderLeft: '1px solid rgba(255,255,255,0.06)', paddingLeft: '8px', minWidth: '100px' }}>
-                  <div style={{ color: colorInactive }}>CRÉÉ</div>
-                  <div style={{ color: colorCharcoal }}>{formatDateShort(project.createdAt)}</div>
-                  <div style={{ color: colorInactive }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</div>
+                <div style={{ flex: 1, textAlign: 'left' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start' }}>
+                    <span className="font-bebas-book text-charcoal" style={{ letterSpacing: '0.04em', fontSize: '24px', lineHeight: '0.9' }}>
+                      {project.name} {project.isContest && <StarIcon/>}
+                    </span>
+                  </div>
+                  <div style={{ height: '1px', background: 'linear-gradient(to right, rgba(255,255,255,0.15), rgba(255,255,255,0))', margin: '4px 0 0 -11px' }}/>
+                  {/* Info line — CRÉÉ X JOURS ÉDITION X JOURS */}
+                  <div className="uppercase" style={{ letterSpacing: '0.04em', display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '6px', fontSize: '16px', lineHeight: '1.3', padding: '4px 0 2px 0', color: '#fff' }}>
+                    <span className="font-bebas-book">CRÉÉ</span>
+                    <span className="font-bebas-regular">{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
+                    {project.shotAt && <><span className="font-bebas-book" style={{ marginLeft: '12px' }}>ÉDITION</span>
+                    <span className="font-bebas-regular">{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? 'JOUR' : 'JOURS'}</span></>}
+                  </div>
                 </div>
-                {project.shotAt && <div style={{ borderLeft: '1px solid rgba(255,255,255,0.06)', paddingLeft: '8px', marginLeft: '12px', minWidth: '100px' }}>
-                  <div style={{ color: colorInactive }}>ÉDITION</div>
-                  <div style={{ color: colorCharcoal }}>{formatDateShort(project.shotAt)}</div>
-                  <div style={{ color: colorInactive }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? 'JOUR' : 'JOURS'}</div>
-                </div>}
               </div>
             </div>
             {/* Swipe actions */}
-            <div ref={actionsRef2} style={{ 
+            <div ref={actionsRef2} style={{
               position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW2}px`,
-              display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', gap: '6px', paddingRight: '20px',
-              transform: `translateX(${actionW2 - tx2}px)`, transition: ease2
+              display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: '12px', paddingRight: '20px',
+              transform: `translateX(${actionW2 - tx2}px)`, transition: ease2, zIndex: 1
             }}>
-              <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
-              <button style={{ background: 'none', border: 'none', padding: '6px 0' }} onClick={() => { setActionsOpen2(false); revertProject(project.id); }}>
-                <span className="font-bebas-bold" style={{ color: '#8B9B99', fontSize: '16px', letterSpacing: '0.03em' }}>RÉACTIVER</span>
-              </button>
-              <button style={{ background: 'none', border: 'none', padding: '6px 0' }} onClick={() => { 
-                if (confirmDelete) { deleteProject(project.id); }
-                else { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }
-              }}>
-                {confirmDelete ? <span className="font-bebas-bold" style={{ color: '#FF3B30', fontSize: '16px', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)' }}>SUPPRIMER ?</span> : <span style={{ color: '#FF3B30', display: 'flex', alignItems: 'center', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))' }}><TrashIcon/></span>}
-              </button>
+              {/* Red/pink glow */}
+              <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '280px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
+              {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmRevert) { setActionsOpen2(false); revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setConfirmDelete(false); setTimeout(() => setConfirmRevert(false), 3000); } }}>{confirmRevert ? 'RÉACTIVER ?' : 'RÉACTIVER'}</button>}
+              {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>SUPPRIMER ?</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '-3px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
             </div>
           </div>
         );
@@ -2631,6 +2766,7 @@
       
       // Weather particles effect behind slider
       useEffect(() => {
+        if (isMobile) return;
         const canvas = weatherCanvasRef.current;
         if (!canvas) return;
         
@@ -3791,7 +3927,7 @@
         if (!isMoonMode) {
           const glowLine = new google.maps.Polyline({
             path: [{ lat: startLat, lng: startLng }, { lat: lat2, lng: lng2 }],
-            strokeColor: '#ffe26b', strokeOpacity: 0.15, strokeWeight: 36, map
+            strokeColor: '#ffe26b', strokeOpacity: isMobile ? 0.017 : 0.15, strokeWeight: 36, map
           });
           if (!sunPosLineRef._glowLine) sunPosLineRef._glowLine = null;
           if (sunPosLineRef._glowLine) sunPosLineRef._glowLine.setMap(null);
@@ -3800,7 +3936,7 @@
           // Subtle bluish moon glow
           const glowLine = new google.maps.Polyline({
             path: [{ lat: startLat, lng: startLng }, { lat: lat2, lng: lng2 }],
-            strokeColor: '#c8d8f0', strokeOpacity: 0.1, strokeWeight: 24, map
+            strokeColor: '#c8d8f0', strokeOpacity: isMobile ? 0.05 : 0.1, strokeWeight: 24, map
           });
           if (sunPosLineRef._glowLine) sunPosLineRef._glowLine.setMap(null);
           sunPosLineRef._glowLine = glowLine;
@@ -4266,7 +4402,7 @@
                     )}
                     {/* Day header */}
                     <div className="flex flex-col flex-shrink-0">
-                      <div className="px-2" style={{ paddingBottom: '0', marginBottom: '-4px' }}>
+                      <div className="px-2" style={{ paddingBottom: '0', marginBottom: '-9px' }}>
                         <span className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '19px', whiteSpace: 'nowrap', color: '#8B9B99' }}>
                           {['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'][day.date.getDay()]} {day.date.getDate()} {['JAN','FÉV','MAR','AVR','MAI','JUN','JUL','AOÛ','SEP','OCT','NOV','DÉC'][day.date.getMonth()]}.
                         </span>
@@ -4318,7 +4454,7 @@
                 );
               })}
             </div>
-            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-cream to-transparent pointer-events-none"/>
+            {!isMobile && <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-cream to-transparent pointer-events-none"/>}
           </div>
         );
       };
@@ -4385,7 +4521,7 @@
                     <span style={{ color: colorCharcoal }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
                   </div>}
                 </div>
-                <div className="border-b border-adaptive" style={{ marginTop: '12px' }}/>
+                <div className="border-b border-adaptive" style={{ marginTop: '12px', marginLeft: '-16px', marginRight: '-16px' }}/>
                 <div style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', marginTop: '12px', marginLeft: '-16px', marginRight: '-16px', paddingLeft: '16px', paddingRight: '16px' }}>
                   {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10}/> : <p className="text-charcoal-muted text-sm italic py-2">Météo non disponible</p>}
                 </div>
@@ -4451,7 +4587,7 @@
           </div>
 
           {/* Météo horaire — redesigned */}
-          {(!isMobile || (project?.lat && project?.lng)) && <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} border-b border-adaptive`}>
+          {(!isMobile || (project?.lat && project?.lng)) && <div className={`${isMobile ? 'pl-4 pr-0' : 'px-8 md:px-12'} border-b border-adaptive`}>
             <div className="pt-3 pb-1">
               <span className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>MÉTÉO HORAIRE</span>
             </div>
@@ -4651,9 +4787,9 @@
                           pointerEvents: 'none'
                         }}/>
                         {/* Weather particles overlay */}
-                        <canvas ref={weatherCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: `${gradH}px`, pointerEvents: 'none', zIndex: 11, opacity: 0.7,
+                        {!isMobile && <canvas ref={weatherCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: `${gradH}px`, pointerEvents: 'none', zIndex: 11, opacity: 0.7,
                           maskImage: 'linear-gradient(to bottom, black 0%, black 50%, transparent 100%)',
-                          WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 50%, transparent 100%)' }}/>
+                          WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 50%, transparent 100%)' }}/>}
                         {/* Full-width filet at 172px */}
                         <div style={{ position: 'absolute', top: `${filetTop}px`, left: 0, right: 0, height: '1px', background: 'rgba(255,255,255,0.5)', zIndex: 12 }}/>
                         {/* Vignette - dark base, softer, skip top */}
@@ -4715,13 +4851,13 @@
                             filter: 'blur(15px)',
                             zIndex: 1
                           }}/>
-                          <div style={{ position: 'absolute', top: '50%', left: thumbLeft, width: `${Math.round(300*S)}px`, height: `${Math.round(120*S)}px`, transform: 'translate(-50%, -50%)', pointerEvents: 'none', overflow: 'visible', zIndex: 1 }}>
+                          {!isMobile && <div style={{ position: 'absolute', top: '50%', left: thumbLeft, width: `${Math.round(300*S)}px`, height: `${Math.round(120*S)}px`, transform: 'translate(-50%, -50%)', pointerEvents: 'none', overflow: 'visible', zIndex: 1 }}>
                             <div style={{ position: 'absolute', top: '50%', left: '20%', width: '120px', height: '40px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}30 0%, ${glowColor}10 50%, transparent 75%)`, filter: 'blur(12px)', animation: 'vaporDrift1 8s ease-in-out infinite', opacity: 0.6 }}/>
                             <div style={{ position: 'absolute', top: '50%', left: '60%', width: '90px', height: '35px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}25 0%, ${glowColor}0c 50%, transparent 75%)`, filter: 'blur(10px)', animation: 'vaporDrift2 11s ease-in-out infinite', animationDelay: '-3s', opacity: 0.5 }}/>
                             <div style={{ position: 'absolute', top: '50%', left: '40%', width: '150px', height: '50px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}20 0%, ${glowColor}08 50%, transparent 75%)`, filter: 'blur(14px)', animation: 'vaporDrift3 14s ease-in-out infinite', animationDelay: '-7s', opacity: 0.45 }}/>
                             <div style={{ position: 'absolute', top: '50%', left: '10%', width: '100px', height: '30px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}28 0%, ${glowColor}0a 50%, transparent 75%)`, filter: 'blur(8px)', animation: 'vaporDrift1 6s ease-in-out infinite', animationDelay: '-2s', opacity: 0.4 }}/>
                             <div style={{ position: 'absolute', top: '50%', left: '70%', width: '130px', height: '45px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}1a 0%, ${glowColor}08 50%, transparent 75%)`, filter: 'blur(16px)', animation: 'vaporDrift2 16s ease-in-out infinite', animationDelay: '-5s', opacity: 0.35 }}/>
-                          </div>
+                          </div>}
                           {/* z:4 — Slider thumb (front) */}
                           <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, transform: 'translateY(-50%)', zIndex: 4 }}>
                             <input
@@ -5504,6 +5640,14 @@
               maskImage: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 100%)',
               overflow: 'hidden'
             }}>
+            {/* Yellow glow - bottom left, subtle */}
+            <div style={{ position: 'absolute', left: '-250px', bottom: 0, width: '500px', height: '86px', overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
+              <div style={{ position: 'absolute', left: 0, bottom: '-300px', width: '500px', height: '500px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(210,188,110,0.30) 0%, rgba(210,188,110,0.04) 40%, rgba(210,188,110,0) 70%)' }}/>
+            </div>
+            {/* Teal glow - center, contours only */}
+            <div style={{ position: 'absolute', left: 'calc(50% + 50px)', bottom: 0, width: '500px', height: '86px', overflow: 'hidden', pointerEvents: 'none', zIndex: 0, transform: 'translateX(-50%)' }}>
+              <div style={{ position: 'absolute', left: 0, bottom: '-370px', width: '500px', height: '500px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(61,130,170,0.35) 0%, rgba(61,130,170,0.1) 40%, rgba(61,130,170,0) 70%)' }}/>
+            </div>
             {/* Black flare - bottom right, in 86px mask (257px @3x) */}
             <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '86px', overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
               <div style={{ position: 'absolute', right: '-400px', bottom: '-400px', width: '760px', height: '760px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0) 70%)' }}/>
@@ -6150,15 +6294,50 @@
       }, [isMobile, todoProjects]);
       
       return (
-        <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px' }}>
+        <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px', ...(isMobile ? { minHeight: '100vh', touchAction: 'pan-y', overflowX: 'clip' } : {}) }}>
           {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>PROJETS</h1>}
           {!isMobile && <div className="px-4 md:px-6">
             <div ref={plusRef} style={{ width: '68px', height: '88px', marginLeft: '-6px' }}/>
           </div>}
           {isMobile && <div ref={plusRef} style={{ width: 0, height: 0 }}/>}
           {isMobile && <GeoWeatherCard/>}
-          {todoProjects.length === 0 ? <div className="text-center py-16"><div className="text-6xl mb-4">📷</div><p className="text-charcoal-muted">{isMobile ? 'Appuyez sur + pour ajouter un projet' : 'Cliquez sur + pour ajouter un projet'}</p></div>
-          : <div ref={listRef} style={{ paddingBottom: '80px' }}>{todoProjects.map((p, i) => <ProjectCard key={p.id} project={p} index={i} onSelect={onSelect} onMouseDownDrag={isMobile ? undefined : handleMouseDownDrag} openActionsId={openActionsId} setOpenActionsId={setOpenActionsId}/>)}</div>}
+          {todoProjects.length === 0 ? (isMobile ? (
+            <div ref={el => {
+              if (!el) return;
+              const flare = document.getElementById('persistentFlare');
+              if (!flare) return;
+              // Position while hidden, then fade in
+              flare.style.transition = 'none';
+              flare.style.opacity = '0';
+              flare.style.animation = 'none';
+              setTimeout(() => {
+                const r = el.getBoundingClientRect();
+                const w = parseFloat(flare.dataset.splashWidth) || 200;
+                flare.style.top = (r.top + r.height / 2 - w / 2 + 30) + 'px';
+                flare.style.left = (r.left + r.width / 2 - w / 2 + 5) + 'px';
+                flare.style.width = w + 'px';
+                flare.style.display = 'block';
+                requestAnimationFrame(() => {
+                  flare.style.transition = 'opacity 1s ease';
+                  flare.style.opacity = '0.7';
+                  flare.style.animation = 'flareOrgFloat 12s ease-in-out infinite';
+                });
+              }, 400);
+            }} onClick={onAddProject} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100vh - 450px)', cursor: 'pointer', position: 'relative' }}>
+              {/* Large soft blue halo */}
+              <div style={{ position: 'absolute', width: '250px', height: '312px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(36,89,117,0.45) 0%, rgba(36,89,117,0.15) 40%, rgba(36,89,117,0) 70%)', pointerEvents: 'none', marginTop: '-50px', marginLeft: '-20px' }}/>
+              {/* White halo around + */}
+              <div style={{ position: 'absolute', width: '60px', height: '60px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 50%, rgba(255,255,255,0) 70%)', pointerEvents: 'none' }}/>
+              <span className="font-bebas-book" style={{ fontSize: '234px', color: '#FFFFFF', lineHeight: 1, textShadow: '0 0 30px rgba(255,255,255,0.15)' }}>+</span>
+            </div>
+          ) : (
+            <div onClick={onAddProject} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100vh - 300px)', cursor: 'pointer', position: 'relative' }}>
+              <div style={{ position: 'absolute', width: '250px', height: '312px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(36,89,117,0.45) 0%, rgba(36,89,117,0.15) 40%, rgba(36,89,117,0) 70%)', pointerEvents: 'none', marginTop: '-30px' }}/>
+              <div style={{ position: 'absolute', width: '60px', height: '60px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 50%, rgba(255,255,255,0) 70%)', pointerEvents: 'none' }}/>
+              <span className="font-bebas-book" style={{ fontSize: '180px', color: '#FFFFFF', lineHeight: 1, textShadow: '0 0 30px rgba(255,255,255,0.15)' }}>+</span>
+            </div>
+          ))
+          : <div ref={el => { const f = document.getElementById('persistentFlare'); if (f) { f.style.opacity = '0'; f.style.animation = 'none'; } return listRef.current = el; }} style={{ paddingTop: '40px', paddingBottom: '80px' }}>{todoProjects.map((p, i) => <ProjectCard key={p.id} project={p} index={i} onSelect={onSelect} onMouseDownDrag={isMobile ? undefined : handleMouseDownDrag} openActionsId={openActionsId} setOpenActionsId={setOpenActionsId}/>)}</div>}
         </div>
       );
     };
@@ -6166,15 +6345,16 @@
     const RetouchingView = ({ onSelect }) => {
       const { projects } = useStore();
       const isMobile = useIsMobile();
+      const [openActionsId, setOpenActionsId] = useState(null);
       const retouching = projects.filter(p => p.status === ProjectStatus.RETOUCHING);
       const done = projects.filter(p => p.status === ProjectStatus.DONE);
       return (
-        <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px' }}>
+        <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px', ...(isMobile ? { minHeight: '100vh', touchAction: 'pan-y', overflowX: 'clip' } : {}) }}>
           {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>ÉDITION</h1>}
           {retouching.length === 0 ? <div className="text-center py-16"><p className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '24px' }}>Aucun projet en édition</p></div>
-          : <div style={{ paddingBottom: '80px' }}>{retouching.map((p, i) => <RetouchingCard key={p.id} project={p} onSelect={onSelect} index={i}/>)}</div>}
+          : <div style={{ paddingBottom: '80px' }}>{retouching.map((p, i) => <RetouchingCard key={p.id} project={p} onSelect={onSelect} index={i} openActionsId={openActionsId} setOpenActionsId={setOpenActionsId}/>)}</div>}
           {done.length > 0 && <>
-            <div className={isMobile ? 'px-6' : 'px-4'} style={{ paddingTop: '16px', paddingBottom: '16px', marginTop: '32px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}><h2 className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '28px', color: '#8B9B99' }}>ARCHIVÉ</h2></div>
+            <div className={isMobile ? 'px-6' : 'px-4'} style={{ paddingTop: '16px', paddingBottom: '16px', marginTop: '32px', }}><h2 className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '28px', color: '#8B9B99' }}>ARCHIVÉ</h2></div>
             <div style={{ paddingBottom: '80px' }}>{done.map(p => <DoneCard key={p.id} project={p}/>)}</div>
           </>}
         </div>
@@ -6290,7 +6470,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v629</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v631.92</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -6455,6 +6635,8 @@
       const plusRef = React.useRef(null);
       const [plusRect, setPlusRect] = useState(null);
       const isMobile = useIsMobile();
+      const [glowReady, setGlowReady] = useState(false);
+      useEffect(() => { const t = setTimeout(() => setGlowReady(true), 800); return () => clearTimeout(t); }, []);
       const [displayedProjectId, setDisplayedProjectId] = useState(null);
 
       // Cmd+Z undo delete (desktop) + shake-to-undo (mobile)
@@ -6596,6 +6778,8 @@
 
       // Browser history management
       const openProject = (p) => {
+        const f = document.getElementById('persistentFlare');
+        if (f) { f.style.display = 'none'; f.style.animation = 'none'; f.style.opacity = '0'; }
         setShowNew(false);
         setSelectedId(p.id);
         window.scrollTo(0, 0);
@@ -6609,6 +6793,8 @@
       };
 
       const changeView = (v) => {
+        const f = document.getElementById('persistentFlare');
+        if (f) { f.style.display = 'none'; f.style.animation = 'none'; f.style.opacity = '0'; }
         setView(v);
         setSelectedId(null);
         window.scrollTo(0, 0);
@@ -6722,9 +6908,9 @@
       });
 
       return (
-        <div className="min-h-screen bg-cream" style={{ position: 'relative' }}>
-          {/* Soft radial gradient background - dark mode only */}
-          <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', background: `radial-gradient(ellipse 60% 40% at ${plusRect ? plusRect.cx : window.innerWidth * 0.5}px ${plusRect && !selectedId ? plusRect.cy : 120}px, rgba(45,80,70,0.35) 0%, rgba(44,44,44,0) 70%)` }}/>
+        <div className="min-h-screen bg-cream" style={{ position: 'relative', ...(isMobile ? { background: 'transparent' } : {}) }}>
+          {/* Soft radial gradient background */}
+          <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', opacity: isMobile && !glowReady ? 0 : 1, transition: 'opacity 0.8s ease', background: `radial-gradient(ellipse 60% 40% at ${plusRect ? plusRect.cx : window.innerWidth * 0.5}px ${plusRect && !selectedId ? plusRect.cy : 120}px, rgba(45,80,70,0.35) 0%, rgba(44,44,44,0) 70%)` }}/>
           {/* Top blur overlay — desktop only, full width */}
           {!isMobile && <div style={{ 
             position: 'fixed', top: 0, left: 0, right: 0, 
@@ -6744,7 +6930,7 @@
           {/* Page titles — rendered at App level ABOVE blur */}
           {!isMobile && displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>DÉTAILS PROJET</h1>}
           {!isMobile && !displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{view === 'todo' ? 'PROJETS' : view === 'retouching' ? 'ÉDITION' : 'PRÉFÉRENCES'}</h1>}
-          {!(isMobile && showNew) && <Header onChangeView={changeView} onAddProject={() => setShowNew(true)}/>}
+          {!(isMobile && showNew) && <Header onChangeView={changeView} onAddProject={() => { const f = document.getElementById('persistentFlare'); if (f) { f.style.display = 'none'; f.style.animation = 'none'; } setShowNew(true); }}/>}
           <div style={{ 
             display: isMobile && showNew ? 'none' : 'block'
           }}>
@@ -6754,7 +6940,7 @@
               position: 'relative',
               width: '100%'
             }}>
-              {view === 'todo' && <TodoView onSelect={openProject} onAddProject={() => setShowNew(true)} addingProject={showNew} plusRef={plusRef}/>}
+              {view === 'todo' && <TodoView onSelect={openProject} onAddProject={() => { const f = document.getElementById('persistentFlare'); if (f) { f.style.display = 'none'; f.style.animation = 'none'; } setShowNew(true); }} addingProject={showNew} plusRef={plusRef}/>}
               {view === 'retouching' && <RetouchingView onSelect={openProject}/>}
               {view === 'preferences' && <PreferencesView/>}
             </div>
@@ -6763,7 +6949,7 @@
               overflowX: 'hidden',
               overflowY: 'auto',
               zIndex: 10,
-              background: '#262c30'
+              background: isMobile ? '#191c1f' : '#262c30'
             }}>
               <ProjectDetail projectId={displayedProjectId} onClose={closeProject}/>
             </div>}
@@ -6783,7 +6969,7 @@
       const { user, loading } = useAuth();
       
       if (loading) return (
-        <div className="min-h-screen flex items-center justify-center" style={{ background: '#262c30' }}>
+        <div className="min-h-screen flex items-center justify-center" style={{ background: window.innerWidth < 768 ? '#191c1f' : '#262c30' }}>
           <p className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '32px', color: '#8B9B99' }}>MeteoShoot</p>
         </div>
       );
