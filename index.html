@@ -91,6 +91,21 @@
     font-weight: 700;
     src: url('fonts/BebasNeue Bold.ttf') format('truetype');
 }
+@font-face {
+    font-family: 'Avenir';
+    font-weight: 300;
+    src: url('fonts/Avenir-Light.ttf') format('truetype');
+}
+@font-face {
+    font-family: 'Avenir';
+    font-weight: 400;
+    src: url('fonts/Avenir-Book.ttf') format('truetype');
+}
+@font-face {
+    font-family: 'Avenir';
+    font-weight: 700;
+    src: url('fonts/Avenir-Medium.ttf') format('truetype');
+}
 
     :root {
       --bg-primary: #FAF9F7;
@@ -127,6 +142,8 @@
     .font-bebas-regular { font-family: 'Bebas Neue', sans-serif; font-weight: 400; letter-spacing: 0.02em; }
     .font-bebas-book { font-family: 'Bebas Neue', sans-serif; font-weight: 500; letter-spacing: 0.02em; }
     .font-bebas-bold { font-family: 'Bebas Neue', sans-serif; font-weight: 700; letter-spacing: 0.02em; }
+    [data-placeholder]:empty::before { content: attr(data-placeholder); color: rgba(255,255,255,0.3); pointer-events: none; }
+    [data-placeholder] a { color: #60a5fa; text-decoration: underline; cursor: pointer; }
     .hour-scroll { scrollbar-width: none; -ms-overflow-style: none; cursor: grab; user-select: none; -webkit-user-select: none; scroll-behavior: smooth; }
     .hour-scroll::-webkit-scrollbar { display: none; }
     .hour-scroll.dragging { cursor: grabbing; user-select: none; scroll-behavior: auto; }
@@ -140,9 +157,9 @@
     input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 9px; height: 54px; border-radius: 5px; background: #ffffff; cursor: pointer; border: none; box-shadow: 0 0 12px rgba(255,255,255,0.5), 0 0 25px rgba(255,255,255,0.2), 0 1px 4px rgba(0,0,0,0.3); margin-top: -21px; }
     input[type="range"]::-moz-range-thumb { width: 9px; height: 54px; border-radius: 5px; background: #ffffff; cursor: pointer; border: none; box-shadow: 0 0 12px rgba(255,255,255,0.5), 0 0 25px rgba(255,255,255,0.2), 0 1px 4px rgba(0,0,0,0.3); }
     @media (max-width: 768px) {
-      input[type="range"] { height: 80px; }
-      input[type="range"]::-webkit-slider-thumb { width: 14px; height: 48px; border-radius: 5px; margin-top: -20px; }
-      input[type="range"]::-moz-range-thumb { width: 14px; height: 48px; border-radius: 5px; }
+      input[type="range"] { height: 66px; }
+      input[type="range"]::-webkit-slider-thumb { width: 7px; height: 40px; border-radius: 4px; margin-top: -16px; }
+      input[type="range"]::-moz-range-thumb { width: 7px; height: 40px; border-radius: 4px; }
     }
     /* ── Splash Screen ── */
     .splash-overlay {
@@ -295,11 +312,6 @@
     .day-cell .day-popup.popup-active { opacity: 1; visibility: visible; pointer-events: auto; transform: translateX(0); }
 
     /* Drag and drop */
-    @keyframes terrainGlowPulse {
-      0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-      50% { opacity: 0.15; transform: translate(-50%, -50%) scale(1.6); }
-      100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-    }
     @keyframes vaporDrift1 {
       0% { transform: translate(-100%, -50%) scaleY(0.8); opacity: 0; }
       10% { opacity: 1; }
@@ -457,7 +469,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v631.94</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v632.44</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -722,11 +734,9 @@
     // Check if sun is behind terrain at given bearing + altitude
     // Returns: 'shadow' | 'warning' | false
     // 30 min ≈ 7.5° of sun altitude change near horizon
-    const TERRAIN_MARGIN_DEG = 7.5;
     const isTerrainShadow = (profile, sunBearingDeg, sunAltDeg) => {
       if (!profile) return false;
-      // Allow check down to -7.5° (≈30 min after official sunset)
-      if (sunAltDeg < -TERRAIN_MARGIN_DEG) return false;
+      if (sunAltDeg <= 0) return false;
       const step = 360 / ELEV_DIRECTIONS;
       const idx = ((sunBearingDeg % 360) + 360) % 360;
       const i0 = Math.floor(idx / step) % ELEV_DIRECTIONS;
@@ -734,12 +744,7 @@
       const frac = (idx / step) - Math.floor(idx / step);
       const horizonAngle = profile[i0].maxAngle * (1 - frac) + profile[i1].maxAngle * frac;
       if (horizonAngle <= 0) return false;
-      // In actual shadow: sun below terrain horizon
-      if (sunAltDeg < horizonAngle && sunAltDeg > 0) return 'shadow';
-      // Sun below horizon but terrain was blocking: still affected
-      if (sunAltDeg <= 0) return 'shadow';
-      // Warning: sun approaching terrain (within ~30 min)
-      if (sunAltDeg < horizonAngle + TERRAIN_MARGIN_DEG) return 'warning';
+      if (sunAltDeg < horizonAngle) return 'shadow';
       return false;
     };
     const MAX_PROJECT_FILES_MB = 30;
@@ -921,18 +926,22 @@
     // ===== GOOGLE MAPS API =====
     const GOOGLE_API_KEY = 'AIzaSyCgOyu05taIWv2-LcfHM_B8okQ_D7gks8U';
 
-    
+    // === API Call Caches (reduce Google Maps billing) ===
+    const _geocodeCache = {};
+    const _reverseGeocodeCache = {};
+    const _travelTimeCache = {};
+
     const geocodeAddress = (address) => {
+      const cacheKey = address.trim().toLowerCase();
+      if (_geocodeCache[cacheKey]) { console.log('[CACHE HIT] geocode:', cacheKey); return Promise.resolve(_geocodeCache[cacheKey]); }
       return new Promise((resolve, reject) => {
         const geocoder = new google.maps.Geocoder();
         geocoder.geocode({ address, region: 'ca' }, (results, status) => {
           if (status === 'OK' && results[0]) {
             const loc = results[0].geometry.location;
-            resolve({
-              lat: loc.lat(),
-              lng: loc.lng(),
-              formattedAddress: results[0].formatted_address
-            });
+            const result = { lat: loc.lat(), lng: loc.lng(), formattedAddress: results[0].formatted_address };
+            _geocodeCache[cacheKey] = result;
+            resolve(result);
           } else {
             reject(new Error('Adresse non trouvée'));
           }
@@ -940,7 +949,23 @@
       });
     };
 
+    const reverseGeocode = (lat, lng) => {
+      const cacheKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+      if (_reverseGeocodeCache[cacheKey]) { console.log('[CACHE HIT] reverse geocode:', cacheKey); return Promise.resolve(_reverseGeocodeCache[cacheKey]); }
+      return new Promise((resolve) => {
+        const geocoder = new google.maps.Geocoder();
+        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+          const addr = (status === 'OK' && results[0]) ? results[0].formatted_address : lat.toFixed(5) + ', ' + lng.toFixed(5);
+          const result = { formattedAddress: addr, results: results || [] };
+          _reverseGeocodeCache[cacheKey] = result;
+          resolve(result);
+        });
+      });
+    };
+
     const getTravelTime = (originLat, originLng, destLat, destLng) => {
+      const cacheKey = `${originLat.toFixed(3)},${originLng.toFixed(3)}→${destLat.toFixed(3)},${destLng.toFixed(3)}`;
+      if (_travelTimeCache[cacheKey]) { console.log('[CACHE HIT] travel time:', cacheKey); return Promise.resolve(_travelTimeCache[cacheKey]); }
       return new Promise((resolve, reject) => {
         const service = new google.maps.DistanceMatrixService();
         service.getDistanceMatrix({
@@ -951,12 +976,9 @@
         }, (response, status) => {
           if (status === 'OK' && response.rows[0]?.elements[0]?.status === 'OK') {
             const element = response.rows[0].elements[0];
-            resolve({
-              durationSeconds: element.duration.value,
-              durationText: element.duration.text,
-              distanceMeters: element.distance.value,
-              distanceText: element.distance.text
-            });
+            const result = { durationSeconds: element.duration.value, durationText: element.duration.text, distanceMeters: element.distance.value, distanceText: element.distance.text };
+            _travelTimeCache[cacheKey] = result;
+            resolve(result);
           } else {
             // Fallback: calculate straight line with estimate
             const R = 6371;
@@ -966,7 +988,9 @@
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             const distance = R * c;
             const durationSeconds = Math.round((distance / 80) * 3600); // ~80km/h average
-            resolve({ durationSeconds, durationText: formatDuration(durationSeconds), distanceMeters: distance * 1000, distanceText: `${Math.round(distance)} km` });
+            const result = { durationSeconds, durationText: formatDuration(durationSeconds), distanceMeters: distance * 1000, distanceText: `${Math.round(distance)} km` };
+            _travelTimeCache[cacheKey] = result;
+            resolve(result);
           }
         });
       });
@@ -2707,6 +2731,7 @@
       const [mapType, setMapType] = useState('hybrid');
       const [mapZoom, setMapZoom] = useState(16);
       const [showMapFull, setShowMapFull] = useState(false);
+      const [mapMenuOpen, setMapMenuOpen] = useState(false);
       const mapRevealedRef = React.useRef(false);
       const [mapRevealed, setMapRevealed] = useState(false);
       const [showSunLines, setShowSunLines] = useState(true);
@@ -2985,6 +3010,7 @@
       const sunPosLineRef = React.useRef(null);
       const shadowLineRef = React.useRef(null);
       const sunPosMarkerRef = React.useRef(null);
+      const sunTimePillsRef = React.useRef([]);
       const sunBearingRef = React.useRef(null);
       const nightOverlayRef = React.useRef(null);
       const markerRef = React.useRef(null);
@@ -3574,6 +3600,7 @@
           mapTypeControl: false,
           clickableIcons: false,
           backgroundColor: '#262c30',
+          ...(isMobile ? { padding: { top: 0, right: 0, bottom: 100, left: 0 } } : {}),
         });
         mapInstanceRef.current = map;
         
@@ -3689,7 +3716,7 @@
         // Fixed center pin — map pans behind it
         if (markerRef.current) markerRef.current.setMap(null);
         markerRef.current = null;
-        // Detect map pan → update adjustedPos + auto-update project address
+        // Detect map pan → update adjustedPos (exploratoire, ne modifie PAS le projet)
         const panListener = map.addListener('idle', () => {
           const c = map.getCenter();
           const dist = Math.abs(c.lat() - project.lat) + Math.abs(c.lng() - project.lng);
@@ -3697,17 +3724,6 @@
             const pos = { lat: c.lat(), lng: c.lng() };
             setAdjustedPos(pos);
             effectiveCenterRef.current = pos;
-            // Auto-update project position + reverse geocode address
-            skipMapRecreateRef.current = true;
-            try {
-              const geocoder = new google.maps.Geocoder();
-              geocoder.geocode({ location: pos }, (results, status) => {
-                const addr = (status === 'OK' && results[0]) ? results[0].formatted_address : pos.lat.toFixed(5) + ', ' + pos.lng.toFixed(5);
-                updateProject(project.id, { lat: pos.lat, lng: pos.lng, address: addr });
-              });
-            } catch(e) {
-              updateProject(project.id, { lat: pos.lat, lng: pos.lng, address: pos.lat.toFixed(5) + ', ' + pos.lng.toFixed(5) });
-            }
           } else {
             setAdjustedPos(null);
             effectiveCenterRef.current = null;
@@ -3724,6 +3740,7 @@
           if (sunPosLineRef.current) { sunPosLineRef.current.setMap(null); sunPosLineRef.current = null; }
           if (shadowLineRef.current) { shadowLineRef.current.setMap(null); shadowLineRef.current = null; }
           if (sunPosMarkerRef.current) { sunPosMarkerRef.current.setMap(null); sunPosMarkerRef.current = null; }
+          sunTimePillsRef.current.forEach(el => el.remove()); sunTimePillsRef.current = [];
           if (nightOverlayRef.current) { nightOverlayRef.current.setMap(null); nightOverlayRef.current = null; }
           buildingPolygonsRef.current.forEach(p => p.setMap(null)); buildingPolygonsRef.current = [];
           shadowPolygonsRef.current.forEach(p => p.setMap(null)); shadowPolygonsRef.current = [];
@@ -3772,7 +3789,7 @@
           if (!bounds) return 0.003;
           const latSpan = Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat());
           const lngSpan = Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng());
-          return Math.min(latSpan, lngSpan) * 0.38;
+          return Math.min(latSpan, lngSpan) * 0.38 * (isMobile ? 0.8 : 1);
         };
         
         const sunTimes = SunCalc.getTimes(sunDate, eLat, eLng);
@@ -3897,7 +3914,7 @@
         const sunPos = SunCalc.getPosition(simDate, eLat, eLng);
         const bearing = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
         sunBearingRef.current = { bearing, eLat, eLng };
-        const bounds = map.getBounds(); const R = bounds ? Math.min(Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat()), Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng())) * 0.38 : 0.003;
+        const bounds = map.getBounds(); const R = bounds ? Math.min(Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat()), Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng())) * 0.38 * (isMobile ? 0.8 : 1) : 0.003;
         const lat2 = eLat + R * Math.cos(bearing * Math.PI / 180);
         const lng2 = eLng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(eLat * Math.PI / 180);
         
@@ -4096,7 +4113,10 @@
             canvas.width = w; canvas.height = h;
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, w, h);
-            
+            // Clean up previous time pills
+            sunTimePillsRef.current.forEach(el => el.remove());
+            sunTimePillsRef.current = [];
+
             // Sunrise & Sunset line halos — drawn first (behind white lines)
             if (sunTimes.sunrise && sunTimes.sunset) {
               const srAzH = SunCalc.getPosition(sunTimes.sunrise, eLat, eLng).azimuth;
@@ -4109,29 +4129,30 @@
                 if (!b) return 0.003;
                 const latS = Math.abs(b.getNorthEast().lat() - b.getSouthWest().lat());
                 const lngS = Math.abs(b.getNorthEast().lng() - b.getSouthWest().lng());
-                return Math.min(latS, lngS) * 0.38;
+                return Math.min(latS, lngS) * 0.38 * (isMobile ? 0.8 : 1);
               })();
               const endPtH = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat + rDegH, eLng));
               const centerPtH = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat, eLng));
               const lineLenPx = Math.abs(endPtH.y - centerPtH.y);
-              
+
               const drawLineHalo = (lineAngle, cr, cg, cb) => {
                 const dist = lineLenPx * 0.45;
                 const gx = centerPx.x + Math.cos(lineAngle) * dist;
                 const gy = centerPx.y + Math.sin(lineAngle) * dist;
-                const radius = 300;
+                const radius = isMobile ? 240 : 300;
                 
                 ctx.save();
+                ctx.globalCompositeOperation = 'overlay';
                 ctx.beginPath();
                 ctx.moveTo(centerPx.x, centerPx.y);
                 ctx.arc(centerPx.x, centerPx.y, haloLen, srScrH, ssScrH);
                 ctx.closePath();
                 ctx.clip();
-                
+
                 const hGrad = ctx.createRadialGradient(gx, gy, 0, gx, gy, radius);
-                hGrad.addColorStop(0, 'rgba('+cr+','+cg+','+cb+',1)');
-                hGrad.addColorStop(0.2, 'rgba('+cr+','+cg+','+cb+',0.6)');
-                hGrad.addColorStop(0.5, 'rgba('+cr+','+cg+','+cb+',0.2)');
+                hGrad.addColorStop(0, 'rgba('+cr+','+cg+','+cb+',0.75)');
+                hGrad.addColorStop(0.2, 'rgba('+cr+','+cg+','+cb+',0.45)');
+                hGrad.addColorStop(0.5, 'rgba('+cr+','+cg+','+cb+',0.15)');
                 hGrad.addColorStop(1, 'rgba('+cr+','+cg+','+cb+',0)');
                 ctx.fillStyle = hGrad;
                 ctx.fillRect(0, 0, w, h);
@@ -4245,7 +4266,7 @@
                 if (!b) return 0.003;
                 const latS = Math.abs(b.getNorthEast().lat() - b.getSouthWest().lat());
                 const lngS = Math.abs(b.getNorthEast().lng() - b.getSouthWest().lng());
-                return Math.min(latS, lngS) * 0.38;
+                return Math.min(latS, lngS) * 0.38 * (isMobile ? 0.8 : 1);
               })();
               const endPtW = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat + rDegW, eLng));
               const centerPtW = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat, eLng));
@@ -4263,6 +4284,25 @@
               };
               drawCanvasLine(srScrW);
               drawCanvasLine(ssScrW);
+
+              // SR/SS time pills at line endpoints (drawn as DOM overlays for sharp text)
+              const formatHM = (d) => { const h = d.getHours(); const m = String(d.getMinutes()).padStart(2, '0'); return `${h}H${m}`; };
+              const drawTimePill = (scrAngle, timeStr, nudgeX, nudgeY) => {
+                const ex = centerPx.x + Math.cos(scrAngle) * wLinePx;
+                const ey = centerPx.y + Math.sin(scrAngle) * wLinePx;
+                const pill = document.createElement('div');
+                pill.className = 'font-bebas-regular';
+                pill.textContent = timeStr;
+                // Pill touches line endpoint at its inner round edge
+                const pillHalfW = 30;
+                const offX = Math.cos(scrAngle) * pillHalfW + (nudgeX || 0);
+                const offY = Math.sin(scrAngle) * pillHalfW + (nudgeY || 0);
+                pill.style.cssText = `position:absolute;left:${ex + offX}px;top:${ey + offY}px;transform:translate(-50%,-50%);background:rgba(0,0,0,0.25);color:#fff;font-size:17px;padding:4px 10px 2px;border-radius:12px;pointer-events:none;white-space:nowrap;letter-spacing:0.04em;line-height:1;z-index:4`;
+                canvas.parentElement.appendChild(pill);
+                sunTimePillsRef.current.push(pill);
+              };
+              if (sunTimes.sunrise) drawTimePill(srScrW, formatHM(sunTimes.sunrise), -3, -4);
+              if (sunTimes.sunset) drawTimePill(ssScrW, formatHM(sunTimes.sunset), 2, -3);
             }
             
             // Lens flare
@@ -4298,7 +4338,7 @@
         if (nowH >= (srTime - 1) && nowH <= (ssTime + 1)) {
           const sunPos = SunCalc.getPosition(now, eLat, eLng);
           const bearing = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
-          const bounds = map.getBounds(); const R = bounds ? Math.min(Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat()), Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng())) * 0.38 : 0.003;
+          const bounds = map.getBounds(); const R = bounds ? Math.min(Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat()), Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng())) * 0.38 * (isMobile ? 0.8 : 1) : 0.003;
           const lat2 = eLat + R * Math.cos(bearing * Math.PI / 180);
           const lng2 = eLng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(eLat * Math.PI / 180);
           
@@ -4596,7 +4636,7 @@
 
           {/* Édition + Carte — layout with map bottom-right */}
           <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} pt-6`} style={{ position: 'relative' }}>
-            <div className={`flex gap-8 ${isMobile ? 'flex-col' : 'flex-nowrap'} items-stretch`} style={isMobile ? {} : {}}>
+            <div className={`flex gap-8 ${isMobile ? 'flex-col' : 'flex-nowrap'} items-start`} style={isMobile ? {} : {}}>
               
               {/* Colonne gauche — Édition */}
               <div style={isMobile ? {} : { width: '700px', flexShrink: 0 }} className={`${isMobile ? 'w-full' : ''} space-y-5`}>
@@ -4604,14 +4644,14 @@
                 <div>
                   <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>ADRESSE DU PROJET</label>
                   <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input key={project.address || ''} ref={addressInputRef} type="text" defaultValue={project.address || ''} placeholder="Entrer l'adresse..." className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1 }}/>
-                    {project.address && <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(project.address)}`} target="_blank" rel="noopener" onClick={e => e.stopPropagation()} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Itinéraire"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>}
+                    <input key={project.address || ''} ref={addressInputRef} type="text" defaultValue={project.address || ''} placeholder="Entrer l'adresse..." className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1, fontFamily: "'Avenir', sans-serif", fontWeight: 300 }}/>
+                    {project.address && <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(project.address)}`} target="_blank" rel="noopener noreferrer" onClick={(e) => { e.preventDefault(); e.stopPropagation(); const tmp = document.createElement('a'); tmp.href = e.currentTarget.href; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); }} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Itinéraire"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>}
                   </div>
                 </div>
                 <div>
                   <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>ADRESSE DE DÉPART</label>
                   <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input ref={departureInputRef} type="text" defaultValue={project.departureAddress || prefs.homeAddress || ''} placeholder="Hôtel, B&B..." className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1 }}
+                    <input ref={departureInputRef} type="text" defaultValue={project.departureAddress || prefs.homeAddress || ''} placeholder="Hôtel, B&B..." className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1, fontFamily: "'Avenir', sans-serif", fontWeight: 300 }}
                       onBlur={(e) => {
                         const val = e.target.value.trim();
                         if (!val || val === prefs.homeAddress) {
@@ -4620,7 +4660,7 @@
                         }
                       }}
                     />
-                    {(project.departureAddress || prefs.homeAddress) && <a href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(project.departureAddress || prefs.homeAddress || '')}&destination=${encodeURIComponent(project.address || '')}`} target="_blank" rel="noopener" onClick={e => e.stopPropagation()} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Itinéraire"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>}
+                    {(project.departureAddress || prefs.homeAddress) && <a href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(project.departureAddress || prefs.homeAddress || '')}&destination=${encodeURIComponent(project.address || '')}`} target="_blank" rel="noopener noreferrer" onClick={(e) => { e.preventDefault(); e.stopPropagation(); const tmp = document.createElement('a'); tmp.href = e.currentTarget.href; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); }} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Itinéraire"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>}
                   </div>
                 </div>
                 <div className="py-5 border-b border-adaptive">
@@ -4636,59 +4676,72 @@
                   </div>
                 </div>
                 
-                {/* Liens */}
-                <div>
-                  <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>LIENS</label>
-                  <div className="flex flex-wrap gap-4 items-center mt-1">
-                    {(project.links || []).map((link, i) => {
-                      const href = link.url.match(/^https?:\/\//) ? link.url : `https://${link.url}`;
-                      return (
-                      <div key={i} className="flex items-center gap-1">
-                        <a href={href} target="_blank" rel="noopener" onClick={e => e.stopPropagation()} className="font-bebas-bold text-lg" style={{ letterSpacing: '0.04em', color: "#7dd3c6" }}>{link.name} ↗</a>
-                        <button onClick={(e) => {
-                          e.stopPropagation();
-                          const newLinks = [...(project.links || [])];
-                          newLinks.splice(i, 1);
-                          updateProject(project.id, { links: newLinks });
-                        }} className="text-charcoal-muted hover:text-red-500 text-sm">✕</button>
-                      </div>
-                      );
-                    })}
-                  </div>
-                  <div className="flex gap-2 items-center" style={{ marginTop: (project.links?.length > 0) ? '12px' : '4px' }}>
-                      <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '4px 8px', display: 'inline-block' }}>
-                        <input type="text" placeholder="Nom" id="newLinkName" className="bg-transparent w-24 text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)' }}/>
-                      </div>
-                      <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '4px 8px', display: 'inline-block' }}>
-                        <input type="text" placeholder="https://..." id="newLinkUrl" className="bg-transparent w-48 text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)' }}/>
-                      </div>
-                      <button 
-                        onClick={() => {
-                          const nameInput = document.getElementById('newLinkName');
-                          const urlInput = document.getElementById('newLinkUrl');
-                          if (nameInput.value && urlInput.value) {
-                            const url = urlInput.value.match(/^https?:\/\//) ? urlInput.value : `https://${urlInput.value}`;
-                            const newLinks = [...(project.links || []), { name: nameInput.value.toUpperCase(), url }];
-                            updateProject(project.id, { links: newLinks });
-                            nameInput.value = '';
-                            urlInput.value = '';
-                          }
-                        }}
-                        className="font-bebas-regular text-charcoal-muted hover:text-blue-500" style={{ letterSpacing: '0.04em', fontSize: '55px', lineHeight: '1', position: 'relative', top: '5px' }}
-                      >+</button>
-                  </div>
-                </div>
-                
                 <div>
                   <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>NOTES</label>
-                  <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '4px' }}>
-                    <textarea value={project.notes || ''} onChange={e => updateProject(project.id, { notes: e.target.value })} placeholder="Notes..." rows={3} className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', resize: 'vertical' }}/>
+                  {/* Mini toolbar */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginTop: '4px', marginBottom: '0px' }}>
+                    <button onClick={() => { const el = document.getElementById('notes-editor-' + project.id); if (el) { el.focus(); document.execCommand('bold', false, null); } }} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '4px', color: 'rgba(255,255,255,0.6)', width: '30px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', fontFamily: 'inherit' }} title="Gras (⌘B)">B</button>
+                    <button onClick={() => { const el = document.getElementById('notes-editor-' + project.id); if (el) { el.focus(); document.execCommand('fontSize', false, '2'); } }} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '4px', color: 'rgba(255,255,255,0.6)', width: '30px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit' }} title="Réduire texte">A−</button>
+                    <button onClick={() => { const el = document.getElementById('notes-editor-' + project.id); if (el) { el.focus(); document.execCommand('fontSize', false, '5'); } }} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '4px', color: 'rgba(255,255,255,0.6)', width: '30px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '15px', fontFamily: 'inherit' }} title="Agrandir texte">A+</button>
+                  </div>
+                  <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '0px' }}>
+                    <div
+                      id={'notes-editor-' + project.id}
+                      contentEditable
+                      suppressContentEditableWarning
+                      ref={(el) => {
+                        if (el && !el.dataset.init) {
+                          let notes = project.notes || '';
+                          // Auto-prepend project address label if not already present
+                          const addr = project.address;
+                          if (addr && !notes.includes(addr)) {
+                            const addrBlock = `<b>Adresse du projet:</b><br>${addr}`;
+                            notes = notes ? `${addrBlock}<br><br>${notes}` : addrBlock;
+                            updateProject(project.id, { notes });
+                          }
+                          el.innerHTML = notes;
+                          el.dataset.init = '1';
+                        }
+                      }}
+                      onInput={(e) => {
+                        updateProject(project.id, { notes: e.currentTarget.innerHTML === '<br>' ? '' : e.currentTarget.innerHTML });
+                      }}
+                      onPaste={(e) => {
+                        const text = (e.clipboardData || window.clipboardData).getData('text/plain').trim();
+                        if (/^https?:\/\/\S+$/.test(text)) {
+                          e.preventDefault();
+                          document.execCommand('insertHTML', false, `<a href="${text}" target="_blank" style="color:#60a5fa;text-decoration:underline">${text}</a>&nbsp;`);
+                        }
+                      }}
+                      onClick={(e) => {
+                        const a = e.target.closest('a');
+                        if (a && a.href) {
+                          e.preventDefault();
+                          const tmp = document.createElement('a');
+                          tmp.href = a.href;
+                          tmp.target = '_blank';
+                          tmp.rel = 'noopener noreferrer';
+                          document.body.appendChild(tmp);
+                          tmp.click();
+                          tmp.remove();
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+                          e.preventDefault();
+                          document.execCommand('bold', false, null);
+                        }
+                      }}
+                      className="w-full bg-transparent text-charcoal"
+                      style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', minHeight: '120px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: '1.5', cursor: 'text', fontFamily: "'Avenir', sans-serif", fontWeight: 300 }}
+                      data-placeholder="Notes..."
+                    />
                   </div>
                 </div>
               </div>
 
               {/* Colonne droite — Carte Google Maps interactive, square, bottom-right */}
-              <div className={`${isMobile ? 'w-full' : ''} flex-shrink-0 flex flex-col`} style={{ minHeight: isMobile ? '450px' : '500px', order: isMobile ? -1 : 0, flex: isMobile ? undefined : 1 }}>
+              <div className={`${isMobile ? 'w-full' : ''} flex flex-col`} style={{ minHeight: isMobile ? '450px' : undefined, height: isMobile ? undefined : '800px', order: isMobile ? -1 : 0, flex: isMobile ? undefined : '1 0 auto', position: isMobile ? undefined : 'sticky', top: isMobile ? undefined : '20px', alignSelf: isMobile ? undefined : 'flex-start' }}>
                 {project.lat && project.lng ? (
                   <>
                   {showMapFull && <div onClick={() => setShowMapFull(false)} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(30,30,30,0.88)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}/>}
@@ -4722,7 +4775,40 @@
                       const sliderRange = (ssTime - srTime) / (4/6);
                       const sliderMin = srTime - (1/6) * sliderRange;
                       const sliderMax = sliderMin + sliderRange;
-                      
+
+                      // Pre-compute terrain shadow segments across sunrise→sunset
+                      const shadowSegments = (() => {
+                        const profile = terrainProfileRef.current;
+                        if (!profile || !eLat || !eLng || !window.SunCalc) return [];
+                        const segments = [];
+                        let inShadow = false;
+                        let segStart = 0;
+                        const step = 0.05; // ~3 min steps for precision
+                        const baseDate = new Date(sunDate.getFullYear(), sunDate.getMonth(), sunDate.getDate());
+                        const baseMs = baseDate.getTime();
+                        for (let h = srTime; h <= ssTime + step; h += step) {
+                          const hClamped = Math.min(h, ssTime);
+                          const d = new Date(baseMs + hClamped * 3600000);
+                          const sp = SunCalc.getPosition(d, eLat, eLng);
+                          const bearing = (sp.azimuth * 180 / Math.PI + 180) % 360;
+                          const altDeg = sp.altitude * 180 / Math.PI;
+                          const shadow = isTerrainShadow(profile, bearing, altDeg);
+                          if (shadow && !inShadow) { segStart = h; inShadow = true; }
+                          else if (!shadow && inShadow) {
+                            const startPct = ((segStart - sliderMin) / sliderRange) * 100;
+                            const endPct = ((h - sliderMin) / sliderRange) * 100;
+                            segments.push({ startPct, endPct });
+                            inShadow = false;
+                          }
+                        }
+                        if (inShadow) {
+                          const startPct = ((segStart - sliderMin) / sliderRange) * 100;
+                          const endPct = ((ssTime - sliderMin) / sliderRange) * 100;
+                          segments.push({ startPct, endPct });
+                        }
+                        return segments;
+                      })();
+
                       // Glow color logic — smooth morphing
                       const lerp = (a, b, t) => a + (b - a) * Math.max(0, Math.min(1, t));
                       const hexLerp = (hex1, hex2, t) => {
@@ -4822,18 +4908,20 @@
                         }}>
                           
                           {/* Slider track area — centered vertically in 172px zone */}
-                          {isMobile && <div 
-                            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'auto', zIndex: 3, touchAction: 'none' }}
+                          {isMobile && <div
+                            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'auto', zIndex: 3, touchAction: 'none', padding: '0 16px' }}
                             onTouchStart={e => {
                               e.preventDefault();
                               const rect = e.currentTarget.getBoundingClientRect();
-                              const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
+                              const pad = 16;
+                              const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left - pad) / (rect.width - pad * 2)));
                               setSunHour(magneticSunHour(sliderMin + pct * sliderRange));
                             }}
                             onTouchMove={e => {
                               e.preventDefault();
                               const rect = e.currentTarget.getBoundingClientRect();
-                              const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
+                              const pad = 16;
+                              const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left - pad) / (rect.width - pad * 2)));
                               setSunHour(magneticSunHour(sliderMin + pct * sliderRange));
                             }}
                           />}
@@ -4859,7 +4947,7 @@
                             <div style={{ position: 'absolute', top: '50%', left: '70%', width: '130px', height: '45px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}1a 0%, ${glowColor}08 50%, transparent 75%)`, filter: 'blur(16px)', animation: 'vaporDrift2 16s ease-in-out infinite', animationDelay: '-5s', opacity: 0.35 }}/>
                           </div>}
                           {/* z:4 — Slider thumb (front) */}
-                          <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, transform: 'translateY(-50%)', zIndex: 4 }}>
+                          <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, transform: 'translateY(-50%)', zIndex: 4, padding: isMobile ? '0 16px' : 0 }}>
                             <input
                               type="range"
                               min={sliderMin} max={sliderMax} step="0.05"
@@ -4869,7 +4957,7 @@
                                 width: '100%', appearance: 'none', WebkitAppearance: 'none',
                                 background: 'transparent', position: 'relative', zIndex: 2,
                                 outline: 'none', cursor: 'pointer',
-                                pointerEvents: 'auto'
+                                pointerEvents: isMobile ? 'none' : 'auto'
                               }}
                             />
                           </div>
@@ -4899,65 +4987,39 @@
                               {MONTHS_FR[sunDate.getMonth()]} {sunDate.getDate()}
                             </span>
                           </div>
-                          {/* Terrain shadow alert — follows slider, above filet */}
-                          {terrainShadow && showSunLines && (() => {
-                            const thumbPct = ((sunHour - sliderMin) / sliderRange) * 100;
-                            const noonPct = ((((srTime + ssTime) / 2) - sliderMin) / sliderRange) * 100;
-                            const isMorning = thumbPct < noonPct;
-                            const fontSize = Math.round(15.7 * S);
-                            return (
-                              <div style={{
+                          {/* Terrain shadow alert — text top-left + red band on filet */}
+                          {shadowSegments.length > 0 && showSunLines && <>
+                            {/* Label top-left — only when slider is in shadow zone */}
+                            {terrainShadow && <div style={{
+                              position: 'absolute', top: `${Math.round(8 * S)}px`, left: 0, right: 0,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: `${Math.round(6 * S)}px`,
+                              pointerEvents: 'none', zIndex: 13, animation: 'fadeIn 1.5s ease'
+                            }}>
+                              <svg width={isMobile ? 16 : 18} height={isMobile ? 16 : 18} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                                <path d="M4 20L10 8l4 6 2-3 4 9H4z"/>
+                              </svg>
+                              <span className="font-bebas-book" style={{ fontSize: `${isMobile ? 12 : 14}px`, color: '#ffffff', letterSpacing: '0.15em', lineHeight: '1', marginTop: '7px' }}>
+                                OMBRE TERRAIN POSSIBLE
+                              </span>
+                            </div>}
+                            {/* Red band(s) on filet line — clamped between sunrise (20%) and sunset (80%) */}
+                            {shadowSegments.map((seg, i) => {
+                              const clampStart = Math.max(seg.startPct, 20);
+                              const clampEnd = Math.min(seg.endPct, 80);
+                              if (clampEnd <= clampStart) return null;
+                              return <div key={i} style={{
                                 position: 'absolute',
-                                bottom: `${Math.round((88 * S) - filetTop + 14)}px`,
-                                left: `${thumbPct}%`,
-                                transform: isMorning ? 'translateX(25px)' : 'translateX(calc(-100% - 25px))',
+                                top: `${filetTop}px`,
+                                left: `${clampStart}%`,
+                                width: `${clampEnd - clampStart}%`,
+                                height: '10px',
+                                background: 'rgba(255, 40, 50, 0.7)',
                                 pointerEvents: 'none',
-                                zIndex: 2,
-                                display: 'flex', flexDirection: 'column', alignItems: isMorning ? 'flex-start' : 'flex-end',
-                                whiteSpace: 'nowrap',
-                                animation: 'fadeIn 1.5s ease'
-                              }}>
-                                {/* Shadow warning — triangle, point at slider, base at bottom */}
-                                <div style={{
-                                  position: 'absolute',
-                                  top: '6px',
-                                  left: isMorning ? '-25px' : 0,
-                                  right: isMorning ? 0 : '-25px',
-                                  width: 'calc(100% + 25px)', height: 'calc(100% - 5px)',
-                                  clipPath: isMorning
-                                    ? 'polygon(0% 0%, 5% 0%, 100% 100%, 0% 100%)'
-                                    : 'polygon(95% 0%, 100% 0%, 100% 100%, 0% 100%)',
-                                  background: isMorning
-                                    ? 'linear-gradient(to right, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.1) 100%)'
-                                    : 'linear-gradient(to left, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.1) 100%)',
-                                  pointerEvents: 'none',
-                                  zIndex: 1,
-                                  maskImage: 'linear-gradient(to bottom, black 0%, black 30%, rgba(0,0,0,0.5) 100%)',
-                                  WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 30%, rgba(0,0,0,0.5) 100%)',
-                                  filter: 'blur(3px)'
-                                }}/>
-                                {/* Mountain icon with red glow — behind shadow */}
-                                <div style={{ position: 'relative', marginBottom: '2px', zIndex: -2, marginTop: '0px' }}>
-                                  <div style={{
-                                    position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-                                    width: '70px', height: '70px', borderRadius: '50%',
-                                    background: 'radial-gradient(circle, rgba(255,28,52,0.7) 0%, rgba(255,28,52,0.3) 40%, rgba(255,28,52,0.08) 60%, transparent 75%)',
-                                    filter: 'blur(10px)',
-                                    animation: 'terrainGlowPulse 3s ease-in-out infinite'
-                                  }}/>
-                                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff1c34" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative' }}>
-                                    <path d="M4 20L10 8l4 6 2-3 4 9H4z"/>
-                                  </svg>
-                                </div>
-                                <span className="font-bebas-book" style={{ fontSize: `${fontSize}px`, color: '#ffffff', letterSpacing: '0.2em', lineHeight: '1.15', position: 'relative', zIndex: -2 }}>
-                                  ATTENTION
-                                </span>
-                                <span className="font-bebas-book" style={{ fontSize: `${fontSize}px`, color: '#ffffff', letterSpacing: '0.2em', lineHeight: '1.15', position: 'relative', zIndex: -2 }}>
-                                  OMBRE POSSIBLE
-                                </span>
-                              </div>
-                            );
-                          })()}
+                                zIndex: 12,
+                                borderRadius: '2px'
+                              }}/>;
+                            })}
+                          </>}
                           {/* Sunrise/Sunset vertical lines + triangles */}
                           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: `${filetTop + triH}px`, pointerEvents: 'none', zIndex: 10 }}>
                             {/* Sunrise vertical line */}
@@ -4989,150 +5051,160 @@
                     <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 5, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                       <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'transparent', border: '4px solid #ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.5)' }}/>
                     </div>
-                    {/* Shape labels top-right */}
-                    {buildings.length > 0 && <div style={{ position: 'absolute', top: '145px', right: '-2px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
-                      {buildings.map((b, i) => {
-                        const color = BUILDING_COLORS[i % BUILDING_COLORS.length];
-                        const displayH = draggingHeight && draggingHeight.idx === i ? draggingHeight.currentH : b.height;
-                        const pillOffsetY = draggingHeight && draggingHeight.idx === i ? draggingHeight.offsetY : 0;
-                        const isDragging = draggingHeight && draggingHeight.idx === i;
-                        // hex to rgba
-                        const hexToRgba = (hex, a) => { const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16); return `rgba(${r},${g},${b},${a})`; };
-                        return (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0px', position: 'relative', zIndex: isDragging ? 20 : 1 }}
-                          onMouseEnter={() => setHoveredBuilding(i)} onMouseLeave={() => setHoveredBuilding(null)}>
-                          {/* Outer colored pill — wraps everything */}
-                          <div style={{ 
-                            display: 'flex', alignItems: 'center', gap: '0px',
-                            background: hexToRgba(color, 0.25), borderRadius: '16px', padding: '2px 3px 2px 6px',
-                            whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
-                            opacity: (hoveredBuilding !== null && hoveredBuilding !== i) ? 0.15 : 1,
-                            transition: 'opacity 0.2s ease'
-                          }}>
-                            {/* Left half — name click zone */}
-                            <div onClick={() => { setEditingBuilding(i); setBuildingHeight(String(b.height)); setBuildingName(b.name); }} style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', padding: '2px 6px 2px 0' }}>
-                              <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: color, flexShrink: 0 }}/>
-                              <span className="font-bebas-bold" style={{ 
-                                letterSpacing: '0.06em', fontSize: '17px', color: '#fff', lineHeight: '1', padding: '3px 0 0 0'
-                              }}>FORME {i + 1}</span>
-                            </div>
-                            {/* Right half — height pill, draggable */}
-                            <div style={{ position: 'relative' }}>
-                              {(hoveredBuilding === i || isDragging) && (<>
-                                <div style={{ position: 'absolute', left: '50%', transform: `translateX(-50%) translateY(${pillOffsetY}px)`, top: '-13px', pointerEvents: 'none', opacity: isDragging ? 0.8 : 0.5, transition: isDragging ? 'none' : 'opacity 0.2s' }}>
-                                  <svg width="10" height="7" viewBox="0 0 10 7" fill="none"><path d="M2 7L5 1L8 7" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                    {/* Update address button — visible only when map has been dragged */}
+                    {adjustedPos && (
+                      <div style={{ position: 'absolute', bottom: `${isMobile ? 180 : 200}px`, left: '50%', transform: 'translateX(-50%)', zIndex: 15 }}>
+                        <button onClick={async () => {
+                          const pos = adjustedPos;
+                          try {
+                            const result = await reverseGeocode(pos.lat, pos.lng);
+                            skipMapRecreateRef.current = true;
+                            updateProject(project.id, { lat: pos.lat, lng: pos.lng, address: result.formattedAddress });
+                            setAdjustedPos(null);
+                            effectiveCenterRef.current = null;
+                          } catch(e) {
+                            skipMapRecreateRef.current = true;
+                            updateProject(project.id, { lat: pos.lat, lng: pos.lng, address: pos.lat.toFixed(5) + ', ' + pos.lng.toFixed(5) });
+                            setAdjustedPos(null);
+                            effectiveCenterRef.current = null;
+                          }
+                        }} style={{
+                          display: 'flex', alignItems: 'center', gap: '6px',
+                          background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+                          border: '1.5px solid rgba(255,255,255,0.3)', borderRadius: '20px',
+                          padding: '8px 16px', cursor: 'pointer',
+                          boxShadow: '0 4px 16px rgba(0,0,0,0.4)'
+                        }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                          <span className="font-bebas-book" style={{ fontSize: '13px', color: '#ffffff', letterSpacing: '0.08em', lineHeight: '1', paddingTop: '2px' }}>METTRE À JOUR L'ADRESSE</span>
+                        </button>
+                      </div>
+                    )}
+                    {/* Shape labels */}
+                    {buildings.length > 0 && (isMobile ? (
+                      /* Mobile: simple labels top-left under filet */
+                      <div style={{ position: 'absolute', top: `${Math.round(88 * 0.75) + 14}px`, left: '12px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {buildings.map((b, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span className="font-bebas-book" style={{ fontSize: '12px', color: '#fff', letterSpacing: '0.1em', lineHeight: '1' }}>FORME {i + 1}</span>
+                            <button onClick={(e) => { e.stopPropagation(); deleteBuilding(i); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0', display: 'flex', alignItems: 'center' }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      /* Desktop: original pill labels top-right */
+                      <div style={{ position: 'absolute', top: '145px', right: '-2px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+                        {buildings.map((b, i) => {
+                          const color = BUILDING_COLORS[i % BUILDING_COLORS.length];
+                          const displayH = draggingHeight && draggingHeight.idx === i ? draggingHeight.currentH : b.height;
+                          const pillOffsetY = draggingHeight && draggingHeight.idx === i ? draggingHeight.offsetY : 0;
+                          const isDragging = draggingHeight && draggingHeight.idx === i;
+                          const hexToRgba = (hex, a) => { const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16); return `rgba(${r},${g},${b},${a})`; };
+                          return (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0px', position: 'relative', zIndex: isDragging ? 20 : 1 }}
+                            onMouseEnter={() => setHoveredBuilding(i)} onMouseLeave={() => setHoveredBuilding(null)}>
+                            <div style={{
+                              display: 'flex', alignItems: 'center', gap: '0px',
+                              background: hexToRgba(color, 0.25), borderRadius: '16px', padding: '2px 3px 2px 6px',
+                              whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+                              opacity: (hoveredBuilding !== null && hoveredBuilding !== i) ? 0.15 : 1,
+                              transition: 'opacity 0.2s ease'
+                            }}>
+                              <div onClick={() => { setEditingBuilding(i); setBuildingHeight(String(b.height)); setBuildingName(b.name); }} style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', padding: '2px 6px 2px 0' }}>
+                                <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: color, flexShrink: 0 }}/>
+                                <span className="font-bebas-bold" style={{ letterSpacing: '0.06em', fontSize: '17px', color: '#fff', lineHeight: '1', padding: '3px 0 0 0' }}>FORME {i + 1}</span>
+                              </div>
+                              <div style={{ position: 'relative' }}>
+                                {(hoveredBuilding === i || isDragging) && (<>
+                                  <div style={{ position: 'absolute', left: '50%', transform: `translateX(-50%) translateY(${pillOffsetY}px)`, top: '-13px', pointerEvents: 'none', opacity: isDragging ? 0.8 : 0.5, transition: isDragging ? 'none' : 'opacity 0.2s' }}>
+                                    <svg width="10" height="7" viewBox="0 0 10 7" fill="none"><path d="M2 7L5 1L8 7" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                                  </div>
+                                  <div style={{ position: 'absolute', left: '50%', transform: `translateX(-50%) translateY(${pillOffsetY}px)`, bottom: '-13px', pointerEvents: 'none', opacity: isDragging ? 0.8 : 0.5, transition: isDragging ? 'none' : 'opacity 0.2s' }}>
+                                    <svg width="10" height="7" viewBox="0 0 10 7" fill="none"><path d="M2 0L5 6L8 0" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                                  </div>
+                                </>)}
+                                <div style={{ background: '#fff', borderRadius: '13px', padding: '4px 8px 1px 8px', cursor: isDragging ? 'grabbing' : 'grab', userSelect: 'none', WebkitUserSelect: 'none', transform: `translateY(${pillOffsetY}px)`, transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)', boxShadow: '0 2px 8px rgba(0,0,0,0.25)', minWidth: '48px', textAlign: 'center' }}
+                                  onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setDraggingHeight({ idx: i, startY: e.clientY, startH: b.height, currentH: b.height, offsetY: 0 }); }}
+                                  onTouchStart={e => { e.stopPropagation(); const t = e.touches[0]; setDraggingHeight({ idx: i, startY: t.clientY, startH: b.height, currentH: b.height, offsetY: 0 }); }}>
+                                  <span className="font-bebas-bold" style={{ fontSize: '17px', color: '#000', letterSpacing: '0.04em', lineHeight: '1' }}>{displayH} M</span>
                                 </div>
-                                <div style={{ position: 'absolute', left: '50%', transform: `translateX(-50%) translateY(${pillOffsetY}px)`, bottom: '-13px', pointerEvents: 'none', opacity: isDragging ? 0.8 : 0.5, transition: isDragging ? 'none' : 'opacity 0.2s' }}>
-                                  <svg width="10" height="7" viewBox="0 0 10 7" fill="none"><path d="M2 0L5 6L8 0" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
-                                </div>
-                              </>)}
-                              <div 
-                                style={{ 
-                                  background: '#fff', borderRadius: '13px', padding: '4px 8px 1px 8px',
-                                  cursor: isDragging ? 'grabbing' : 'grab', userSelect: 'none', WebkitUserSelect: 'none',
-                                  transform: `translateY(${pillOffsetY}px)`,
-                                  transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                                  boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-                                  minWidth: '48px', textAlign: 'center'
-                                }}
-                                onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setDraggingHeight({ idx: i, startY: e.clientY, startH: b.height, currentH: b.height, offsetY: 0 }); }}
-                                onTouchStart={e => { e.stopPropagation(); const t = e.touches[0]; setDraggingHeight({ idx: i, startY: t.clientY, startH: b.height, currentH: b.height, offsetY: 0 }); }}
-                              >
-                                <span className="font-bebas-bold" style={{ fontSize: '17px', color: '#000', letterSpacing: '0.04em', lineHeight: '1' }}>{displayH} M</span>
                               </div>
                             </div>
-                          </div>
-                          {/* X delete on hover */}
-                          <button onClick={(e) => { e.stopPropagation(); deleteBuilding(i); }} style={{ 
-                            background: 'none', border: 'none', cursor: 'pointer', padding: '2px', marginLeft: '4px',
-                            opacity: hoveredBuilding === i ? 1 : 0, transition: 'opacity 0.2s ease', pointerEvents: hoveredBuilding === i ? 'auto' : 'none'
-                          }}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,100,100,0.8)" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                          </button>
-                        </div>);
-                      })}
-                    </div>}
+                            <button onClick={(e) => { e.stopPropagation(); deleteBuilding(i); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', marginLeft: '4px', opacity: hoveredBuilding === i ? 1 : 0, transition: 'opacity 0.2s ease', pointerEvents: hoveredBuilding === i ? 'auto' : 'none' }}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,100,100,0.8)" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </button>
+                          </div>);
+                        })}
+                      </div>
+                    ))}
                     {/* Controls pill + Zoom pill wrapper */}
-                    <div style={{ position: 'absolute', top: '70%', transform: 'translateY(-50%)', right: '12px', zIndex: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '35px' }}>
-                      {/* Controls pill */}
-                      <div style={{ 
+                    {/* Mobile: small round pill top-right, opens menu on click */}
+                    {isMobile && <>
+                        {/* Small trigger pill */}
+                        <div onClick={() => setMapMenuOpen(v => !v)} style={{
+                          position: 'absolute', top: `${Math.round(88 * 0.75) + 14}px`, right: '12px', zIndex: 14,
+                          backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                          borderRadius: '14px', border: '1.5px solid rgba(255,255,255,0.7)',
+                          padding: '4px 10px', cursor: 'pointer'
+                        }}>
+                          <span className="font-bebas-bold" style={{ fontSize: '12px', color: 'rgba(255,255,255,0.9)', letterSpacing: '0.04em' }}>
+                            {mapType === 'hybrid' ? 'SAT' : 'MAP'}
+                          </span>
+                        </div>
+                        {/* Expanded menu */}
+                        {mapMenuOpen && <div style={{
+                          position: 'absolute', top: `${Math.round(88 * 0.75) + 14}px`, right: '12px', zIndex: 15,
+                          display: 'flex', flexDirection: 'column', alignItems: 'center',
+                          backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                          borderRadius: '20px', border: '1.5px solid rgba(255,255,255,0.7)',
+                          padding: '6px 2px', gap: '0px', width: '38px', boxSizing: 'border-box'
+                        }}>
+                          <button onClick={() => { setMapType('hybrid'); setMapMenuOpen(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '13px', padding: '4px 8px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'hybrid' ? '0 0 10px rgba(255,255,255,0.7)' : 'none' }}>SAT</button>
+                          <button onClick={() => { setMapType('roadmap'); setMapMenuOpen(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '13px', padding: '4px 8px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'roadmap' ? '0 0 10px rgba(255,255,255,0.7)' : 'none' }}>MAP</button>
+                          <button onClick={() => { if (drawingMode) { setDrawingMode(false); setDrawingVertices([]); } else { setDrawingMode(true); setEditingBuilding(null); } setMapMenuOpen(false); }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '5px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: drawingMode ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none' }}>
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                          </button>
+                          <button onClick={() => { setShowSunLines(v => !v); setMapMenuOpen(false); }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '5px', color: showSunLines ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: showSunLines ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none' }}>
+                            {showSunLines ? (
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            ) : (
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                            )}
+                          </button>
+                          <button onClick={() => { setShowMapFull(f => !f); setMapMenuOpen(false); }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '5px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: showMapFull ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none' }}>
+                            {showMapFull ? (
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                            ) : (
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                            )}
+                          </button>
+                        </div>}
+                    </>}
+                    {/* Desktop: original vertical pill */}
+                    {!isMobile && <div style={{ position: 'absolute', top: '70%', transform: 'translateY(-50%)', right: '12px', zIndex: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '35px' }}>
+                      <div style={{
                         display: 'flex', flexDirection: 'column', alignItems: 'center',
-                        backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', 
-                        borderRadius: '28px', 
+                        backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                        borderRadius: '28px',
                         border: '2px solid rgba(255,255,255,0.9)',
                         padding: '10px 2px', gap: '2px',
                         width: '44px', boxSizing: 'border-box'
                       }}>
-                        <button 
-                          onClick={() => setMapType('hybrid')} 
-                          className="font-bebas-bold pill-btn"
-                          style={{ letterSpacing: '0.04em', 
-                            fontSize: '17px', padding: '6px 12px', lineHeight: '1.2',
-                            background: 'transparent',
-                            color: 'rgba(255,255,255,0.9)',
-                            border: 'none',
-                            cursor: 'pointer',
-                            textShadow: mapType === 'hybrid' ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none',
-                            transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
-                          }}
-                        >SAT</button>
-                        <button 
-                          onClick={() => setMapType('roadmap')} 
-                          className="font-bebas-bold pill-btn"
-                          style={{ letterSpacing: '0.04em', 
-                            fontSize: '17px', padding: '6px 12px', lineHeight: '1.2',
-                            background: 'transparent',
-                            color: 'rgba(255,255,255,0.9)',
-                            border: 'none',
-                            cursor: 'pointer',
-                            textShadow: mapType === 'roadmap' ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none',
-                            transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
-                          }}
-                        >MAP</button>
-                        <button 
-                          onClick={() => { if (drawingMode) { setDrawingMode(false); setDrawingVertices([]); } else { setDrawingMode(true); setEditingBuilding(null); } }}
-                          className="pill-btn"
-                          style={{ 
-                            background: 'transparent', 
-                            border: 'none', borderRadius: '50%',
-                            cursor: 'pointer', padding: '8px', marginTop: '2px',
-                            color: 'rgba(255,255,255,0.9)', 
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            filter: drawingMode ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none',
-                            transition: 'filter 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
-                          }}
-                        >
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
-                          </svg>
+                        <button onClick={() => setMapType('hybrid')} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '17px', padding: '6px 12px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'hybrid' ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none', transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>SAT</button>
+                        <button onClick={() => setMapType('roadmap')} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '17px', padding: '6px 12px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'roadmap' ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none', transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>MAP</button>
+                        <button onClick={() => { if (drawingMode) { setDrawingMode(false); setDrawingVertices([]); } else { setDrawingMode(true); setEditingBuilding(null); } }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '8px', marginTop: '2px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: drawingMode ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none', transition: 'filter 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                         </button>
-                        <button 
-                          onClick={() => setShowSunLines(v => !v)}
-                          className="pill-btn"
-                          style={{ 
-                            background: 'transparent', 
-                            border: 'none', borderRadius: '50%',
-                            cursor: 'pointer', padding: '8px',
-                            color: showSunLines ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)', 
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            filter: showSunLines ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none',
-                            transition: 'filter 0.3s ease, color 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
-                          }}
-                        >
+                        <button onClick={() => setShowSunLines(v => !v)} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '8px', color: showSunLines ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: showSunLines ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none', transition: 'filter 0.3s ease, color 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
                           {showSunLines ? (
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                           ) : (
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
                           )}
                         </button>
-                        <button className="pill-btn" onClick={() => setShowMapFull(f => !f)} style={{ 
-                          background: 'transparent', 
-                          border: 'none', borderRadius: '50%',
-                          cursor: 'pointer', padding: '8px',
-                          color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          filter: showMapFull ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none',
-                          transition: 'filter 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)'
-                        }}>
+                        <button className="pill-btn" onClick={() => setShowMapFull(f => !f)} style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '8px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: showMapFull ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none', transition: 'filter 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
                           {showMapFull ? (
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
                           ) : (
@@ -5165,7 +5237,7 @@
                             style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: '50%', background: 'transparent', border: 'none', cursor: 'pointer' }}/>
                         </div>
                       )}
-                    </div>
+                    </div>}
                     {/* Zoom scale bar */}
                     {(() => {
                       const lat = adjustedPos?.lat ?? project?.lat ?? 45;
@@ -5268,7 +5340,7 @@
                   const sizeMB = (f.size_bytes / (1024 * 1024)).toFixed(1);
                   return (
                     <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer', transition: 'background 0.15s' }}
-                      onClick={() => setPreviewFile(f)}
+                      onClick={() => { const url = fileUrls[f.id]; if (url) { const tmp = document.createElement('a'); tmp.href = url; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); } }}
                       onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
                     >
@@ -5808,9 +5880,8 @@
               const lng = pos.coords.longitude;
               let cityName = 'Ma position';
               try {
-                const geocoder = new google.maps.Geocoder();
-                const res = await new Promise((resolve, reject) => geocoder.geocode({ location: { lat, lng } }, (results, status) => status === 'OK' ? resolve(results) : reject(status)));
-                const comps = res[0]?.address_components || [];
+                const rgResult = await reverseGeocode(lat, lng);
+                const comps = rgResult.results[0]?.address_components || [];
                 const locality = comps.find(c => c.types.includes('locality'));
                 const sublocality = comps.find(c => c.types.includes('sublocality'));
                 const admin3 = comps.find(c => c.types.includes('administrative_area_level_3'));
@@ -6470,7 +6541,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v631.94</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v632.44</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
