@@ -469,7 +469,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="opacity:0; animation: splashBadgeReveal 0.5s ease-out 0.4s forwards; position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v632.45</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v632.46</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2729,7 +2729,7 @@
       const [confirm, setConfirm] = useState(false);
       const [confirmDone, setConfirmDone] = useState(false);
       const [mapType, setMapType] = useState('hybrid');
-      const [mapZoom, setMapZoom] = useState(16);
+      const [mapZoom, setMapZoom] = useState(project?.mapZoom || 16);
       const [showMapFull, setShowMapFull] = useState(false);
       const [mapMenuOpen, setMapMenuOpen] = useState(false);
       const mapRevealedRef = React.useRef(false);
@@ -3585,7 +3585,7 @@
 
         const map = new google.maps.Map(mapContainerRef.current, {
           center: { lat: project.lat, lng: project.lng },
-          zoom: isMobile ? 16 : 18,
+          zoom: project.mapZoom || (isMobile ? 16 : 18),
           mapTypeId: mapType,
           styles: mapType === 'roadmap' ? darkStyle : [
             { stylers: [{ saturation: 0 }] },
@@ -5053,18 +5053,18 @@
                     </div>
                     {/* Update address button — visible only when map has been dragged */}
                     {adjustedPos && (
-                      <div style={{ position: 'absolute', bottom: `${isMobile ? 180 : 200}px`, left: '50%', transform: 'translateX(-50%)', zIndex: 15 }}>
+                      <div style={{ position: 'absolute', bottom: `${isMobile ? 100 : 200}px`, left: '50%', transform: 'translateX(-50%)', zIndex: 15 }}>
                         <button onClick={async () => {
                           const pos = adjustedPos;
                           try {
                             const result = await reverseGeocode(pos.lat, pos.lng);
                             skipMapRecreateRef.current = true;
-                            updateProject(project.id, { lat: pos.lat, lng: pos.lng, address: result.formattedAddress });
+                            updateProject(project.id, { lat: pos.lat, lng: pos.lng, address: result.formattedAddress, mapZoom: mapZoom });
                             setAdjustedPos(null);
                             effectiveCenterRef.current = null;
                           } catch(e) {
                             skipMapRecreateRef.current = true;
-                            updateProject(project.id, { lat: pos.lat, lng: pos.lng, address: pos.lat.toFixed(5) + ', ' + pos.lng.toFixed(5) });
+                            updateProject(project.id, { lat: pos.lat, lng: pos.lng, address: pos.lat.toFixed(5) + ', ' + pos.lng.toFixed(5), mapZoom: mapZoom });
                             setAdjustedPos(null);
                             effectiveCenterRef.current = null;
                           }
@@ -5076,7 +5076,7 @@
                           boxShadow: '0 4px 16px rgba(0,0,0,0.4)'
                         }}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                          <span className="font-bebas-book" style={{ fontSize: '13px', color: '#ffffff', letterSpacing: '0.08em', lineHeight: '1', paddingTop: '2px' }}>METTRE À JOUR L'ADRESSE</span>
+                          <span className="font-bebas-book" style={{ fontSize: '13px', color: '#ffffff', letterSpacing: '0.08em', lineHeight: '1', paddingTop: '2px' }}>METTRE À JOUR</span>
                         </button>
                       </div>
                     )}
@@ -5144,7 +5144,7 @@
                     {isMobile && <>
                         {/* Small trigger pill */}
                         <div onClick={() => setMapMenuOpen(v => !v)} style={{
-                          position: 'absolute', top: `${Math.round(88 * 0.75) + 14}px`, right: '12px', zIndex: 14,
+                          position: 'absolute', top: `${Math.round(88 * 0.75) + 50}px`, right: '12px', zIndex: 14,
                           backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
                           borderRadius: '14px', border: '1.5px solid rgba(255,255,255,0.7)',
                           padding: '4px 10px', cursor: 'pointer'
@@ -5155,7 +5155,7 @@
                         </div>
                         {/* Expanded menu */}
                         {mapMenuOpen && <div style={{
-                          position: 'absolute', top: `${Math.round(88 * 0.75) + 14}px`, right: '12px', zIndex: 15,
+                          position: 'absolute', top: `${Math.round(88 * 0.75) + 50}px`, right: '12px', zIndex: 15,
                           display: 'flex', flexDirection: 'column', alignItems: 'center',
                           backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
                           borderRadius: '20px', border: '1.5px solid rgba(255,255,255,0.7)',
@@ -6541,7 +6541,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v632.45</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v632.46</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
