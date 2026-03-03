@@ -478,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.03</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.04</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -5947,12 +5947,12 @@
               if (!today) { setStatus('error'); return; }
               const nowH = new Date().getHours();
               const currentHourly = weather.hourly?.find(h => new Date(h.time).getHours() === nowH);
-              const cloudcover = today.cloudcover ?? currentHourly?.cloudcover ?? null;
-              const icon = today.icon || (cloudcover !== null ? null : 'cloudy');
+              const cloudcover = currentHourly?.cloudcover ?? today.cloudcover ?? null;
+              const icon = currentHourly?.icon || today.icon || (cloudcover !== null ? null : 'cloudy');
               const weatherIcon = cloudcover !== null
                 ? (cloudcover <= 10 ? 'sunny-bright' : cloudcover <= 20 ? 'sunny' : cloudcover <= 30 ? 'sunny-few-clouds' : cloudcover <= 40 ? 'mostly-sunny' : cloudcover <= 55 ? 'partly-cloudy' : cloudcover <= 70 ? 'mostly-cloudy' : cloudcover <= 85 ? 'cloudy-glimpse' : 'cloudy')
                 : (icon || 'cloudy');
-              setGeoData({ cityName, sunrise: today.sunrise, sunset: today.sunset, high: today.high, low: today.low, cloudcover, weatherIcon });
+              setGeoData({ cityName, sunrise: today.sunrise, sunset: today.sunset, high: today.high, low: today.low, cloudcover, weatherIcon, currentTemp: currentHourly?.temp ?? null });
               setStatus('done');
             } catch(e) { console.error('GeoWeather error', e); setStatus('error'); }
           },
@@ -6596,7 +6596,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v633.03</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v633.04</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
