@@ -478,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v632.96</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v632.97</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -5918,10 +5918,12 @@
     const GeoWeatherCard = () => {
       const [geoData, setGeoData] = useState(null);
       const [status, setStatus] = useState(() => localStorage.getItem('geo-permission') === 'granted' ? 'loading' : 'prompt');
+      const [geoError, setGeoError] = useState(null);
 
       const requestGeo = () => {
         setStatus('loading');
-        if (!navigator.geolocation) { setStatus('error'); return; }
+        setGeoError(null);
+        if (!navigator.geolocation) { setStatus('error'); setGeoError('no geolocation API'); return; }
         navigator.geolocation.getCurrentPosition(
           async (pos) => {
             try {
@@ -5956,8 +5958,8 @@
               setStatus('done');
             } catch(e) { console.error('GeoWeather error', e); setStatus('error'); }
           },
-          (err) => { console.error('Geolocation denied', err); setStatus('denied'); },
-          { enableHighAccuracy: false, timeout: 10000 }
+          (err) => { console.error('Geolocation error', err.code, err.message); setGeoError(`code=${err.code} ${err.message}`); setStatus('denied'); },
+          { enableHighAccuracy: true, timeout: 15000 }
         );
       };
 
@@ -5992,7 +5994,8 @@
       if (status === 'denied') return (
         <div style={{ margin: '0 12px', marginBottom: '15px', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', overflow: 'hidden', padding: '24px 28px', textAlign: 'center' }}>
           <div className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>LOCALISATION REFUSÉE</div>
-          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>Pour réactiver, allez dans Réglages &gt; Safari &gt; Localisation, ou dans les réglages de votre navigateur.</div>
+          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>Pour réactiver, allez dans Réglages &gt; Confidentialité &gt; Service de localisation &gt; Safari.</div>
+          {geoError && <div style={{ fontSize: '10px', color: 'rgba(255,100,100,0.5)', marginBottom: '8px', fontFamily: 'monospace' }}>{geoError}</div>}
           <button onClick={() => { localStorage.removeItem('geo-permission'); requestGeo(); }} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: '20px', color: 'rgba(255,255,255,0.5)', fontSize: '14px', padding: '6px 20px', cursor: 'pointer' }}>RÉESSAYER</button>
         </div>
       );
@@ -6596,7 +6599,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v632.96</div>
+                  <div className="font-bebas-light" style={{ fontSize: '14px', color: '#4A5A58', letterSpacing: '0.05em' }}>METEOSHOOT v632.97</div>
                   <div className="font-bebas-bold" style={{ fontSize: '17px', color: '#6B7B79', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
