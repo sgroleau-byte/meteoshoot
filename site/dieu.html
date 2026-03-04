@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#181b1e">
+  <meta name="theme-color" content="#e8e6e1">
   <meta name="robots" content="noindex, nofollow">
   <title>MeteoShoot</title>
   <script>var isDev = !location.hostname.match(/^(meteoshoot\.vercel\.app|meteoshoot\.com|www\.meteoshoot\.com)$/);</script>
@@ -35,42 +35,42 @@
     @font-face { font-family: 'Avenir'; font-weight: 700; src: url('../fonts/Avenir-Medium.ttf') format('truetype'); }
 
     html { overflow-x: hidden; }
-    body { font-family: 'Montserrat', sans-serif; margin: 0; padding: 0; background: #181b1e; color: #FAF9F7; }
+    body { font-family: 'Montserrat', sans-serif; margin: 0; padding: 0; background: #e8e6e1; color: #2C2C2C; }
 
     .tier-badge {
       display: inline-block; padding: 2px 8px; font-size: 11px; letter-spacing: 0.08em;
       font-family: 'Bebas Neue', sans-serif; font-weight: 400; border-radius: 2px;
     }
-    .tier-free { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.5); }
-    .tier-shooter { background: rgba(125,211,198,0.15); color: #7dd3c6; }
-    .tier-god { background: rgba(224,122,43,0.15); color: #E07A2B; }
+    .tier-free { background: rgba(0,0,0,0.05); color: #888; }
+    .tier-shooter { background: rgba(80,170,155,0.12); color: #3a9a8a; }
+    .tier-god { background: rgba(224,122,43,0.12); color: #c4611a; }
 
     .stat-card {
-      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.5); border: 1px solid rgba(0,0,0,0.06);
       padding: 24px; text-align: center; flex: 1; min-width: 140px;
     }
     .stat-number {
       font-family: 'Bebas Neue', sans-serif; font-weight: 300; font-size: 54px;
-      color: rgba(255,255,255,0.8); letter-spacing: 0.02em; line-height: 1;
+      color: #2C2C2C; letter-spacing: 0.02em; line-height: 1;
     }
     .stat-label {
       font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 16px;
-      color: rgba(255,255,255,0.3); letter-spacing: 0.08em; margin-top: 8px;
+      color: #8B9B99; letter-spacing: 0.08em; margin-top: 8px;
     }
 
     .user-row {
-      border-bottom: 1px solid rgba(255,255,255,0.04); padding: 14px 0;
+      border-bottom: 1px solid rgba(0,0,0,0.06); padding: 14px 0;
       display: grid; grid-template-columns: 1.5fr 1fr 1fr 0.8fr 0.6fr 0.8fr;
       align-items: center; gap: 12px; font-size: 15px;
     }
-    .user-row:hover { background: rgba(255,255,255,0.02); }
+    .user-row:hover { background: rgba(255,255,255,0.4); }
 
     .user-header {
-      border-bottom: 1px solid rgba(255,255,255,0.08); padding: 10px 0;
+      border-bottom: 1px solid rgba(0,0,0,0.1); padding: 10px 0;
       display: grid; grid-template-columns: 1.5fr 1fr 1fr 0.8fr 0.6fr 0.8fr;
       gap: 12px; font-size: 14px; letter-spacing: 0.08em;
       font-family: 'Bebas Neue', sans-serif; font-weight: 400;
-      color: rgba(255,255,255,0.3);
+      color: #8B9B99;
     }
 
     .sector-bar {
@@ -78,12 +78,12 @@
     }
 
     select.tier-select {
-      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-      color: rgba(255,255,255,0.7); font-size: 14px; padding: 6px 10px;
+      background: rgba(255,255,255,0.6); border: 1px solid rgba(0,0,0,0.1);
+      color: #404A48; font-size: 14px; padding: 6px 10px;
       font-family: 'Montserrat', sans-serif; cursor: pointer; outline: none;
       appearance: none; -webkit-appearance: none;
     }
-    select.tier-select option { background: #1e2224; color: #fff; }
+    select.tier-select option { background: #fff; color: #2C2C2C; }
 
     @media (max-width: 768px) {
       .user-row, .user-header {
@@ -132,7 +132,7 @@
         <div style={{ marginBottom: '40px' }}>
           <div style={{
             fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '20px',
-            color: 'rgba(255,255,255,0.3)', letterSpacing: '0.1em', marginBottom: '16px'
+            color: '#8B9B99', letterSpacing: '0.1em', marginBottom: '16px'
           }}>STATISTIQUES</div>
 
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '24px' }}>
@@ -146,24 +146,24 @@
 
           <div style={{
             fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '16px',
-            color: 'rgba(255,255,255,0.3)', letterSpacing: '0.08em', marginBottom: '10px'
+            color: '#8B9B99', letterSpacing: '0.08em', marginBottom: '10px'
           }}>PAR SECTEUR</div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {Object.entries(sectors).sort((a, b) => b[1] - a[1]).map(([name, count], i) => (
               <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{
-                  width: '140px', fontSize: '13px', color: 'rgba(255,255,255,0.4)',
+                  width: '140px', fontSize: '13px', color: '#6B7B79',
                   fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300,
                   textAlign: 'right', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
                 }}>{name}</div>
-                <div style={{ flex: 1, background: 'rgba(255,255,255,0.03)', borderRadius: '3px', height: '6px' }}>
+                <div style={{ flex: 1, background: 'rgba(0,0,0,0.06)', borderRadius: '3px', height: '6px' }}>
                   <div className="sector-bar" style={{
                     width: `${(count / maxSector) * 100}%`,
                     background: sectorColors[i % sectorColors.length]
                   }} />
                 </div>
-                <div style={{ width: '28px', fontSize: '13px', color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>{count}</div>
+                <div style={{ width: '28px', fontSize: '13px', color: '#8B9B99', fontFamily: 'monospace' }}>{count}</div>
               </div>
             ))}
           </div>
@@ -183,7 +183,7 @@
         <div>
           <div style={{
             fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '20px',
-            color: 'rgba(255,255,255,0.3)', letterSpacing: '0.1em', marginBottom: '12px'
+            color: '#8B9B99', letterSpacing: '0.1em', marginBottom: '12px'
           }}>UTILISATEURS ({users.length})</div>
 
           <div className="user-header">
@@ -197,7 +197,7 @@
 
           {users.map(u => (
             <div key={u.user_id} className="user-row">
-              <div style={{ color: 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ color: '#404A48', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {u.email}
                 {!u.confirmed_at && (
                   <span style={{ marginLeft: '6px', fontSize: '11px', color: '#E07A2B', letterSpacing: '0.05em' }}>
@@ -205,10 +205,10 @@
                   </span>
                 )}
               </div>
-              <div className="hide-mobile" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              <div className="hide-mobile" style={{ color: '#6B7B79' }}>
                 {u.full_name || '—'}
               </div>
-              <div className="hide-mobile" style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px' }}>
+              <div className="hide-mobile" style={{ color: '#8B9B99', fontSize: '13px' }}>
                 {u.sector || '—'}
               </div>
               <div>
@@ -222,10 +222,10 @@
                   <option value="god">GOD</option>
                 </select>
               </div>
-              <div style={{ color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', fontSize: '15px' }}>
+              <div style={{ color: '#404A48', fontFamily: 'monospace', fontSize: '15px' }}>
                 {u.project_count}
               </div>
-              <div className="hide-mobile" style={{ color: 'rgba(255,255,255,0.25)', fontSize: '13px' }}>
+              <div className="hide-mobile" style={{ color: '#a0b0ae', fontSize: '13px' }}>
                 {formatDate(u.created_at)}
               </div>
             </div>
@@ -286,31 +286,31 @@
       };
 
       if (loading) {
-        return <div style={{ position: 'fixed', inset: 0, background: '#181b1e' }} />;
+        return <div style={{ position: 'fixed', inset: 0, background: '#e8e6e1' }} />;
       }
 
       return (
-        <div style={{ minHeight: '100vh', background: '#181b1e', padding: '40px 24px' }}>
+        <div style={{ minHeight: '100vh', background: '#e8e6e1', padding: '40px 24px' }}>
           <div style={{ maxWidth: '900px', margin: '0 auto' }}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
               <div style={{
                 fontFamily: "'Bebas Neue', sans-serif", fontWeight: 300, fontSize: '34px',
-                color: 'rgba(255,255,255,0.6)', letterSpacing: '0.1em'
+                color: '#404A48', letterSpacing: '0.1em'
               }}>
-                METEOSHOOT <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span> ADMIN
+                METEOSHOOT <span style={{ color: '#c0bcb5' }}>—</span> ADMIN
               </div>
               <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
                 <button
                   onClick={loadData}
                   style={{
-                    background: 'none', border: '1px solid rgba(255,255,255,0.1)',
-                    color: 'rgba(255,255,255,0.4)', padding: '8px 16px', cursor: 'pointer',
+                    background: 'none', border: '1px solid rgba(0,0,0,0.12)',
+                    color: '#8B9B99', padding: '8px 16px', cursor: 'pointer',
                     fontFamily: "'Avenir', 'Montserrat', sans-serif", fontSize: '14px', letterSpacing: '0.05em'
                   }}
                 >↻ REFRESH</button>
                 <a href="/index.html" style={{
-                  color: 'rgba(255,255,255,0.3)', textDecoration: 'none',
+                  color: '#8B9B99', textDecoration: 'none',
                   fontFamily: "'Avenir', 'Montserrat', sans-serif", fontSize: '14px'
                 }}>← APP</a>
                 <button
@@ -319,8 +319,8 @@
                     window.location.href = '/site/login.html';
                   }}
                   style={{
-                    background: 'none', border: '1px solid rgba(255,255,255,0.1)',
-                    color: 'rgba(255,255,255,0.4)', padding: '8px 16px', cursor: 'pointer',
+                    background: 'none', border: '1px solid rgba(0,0,0,0.12)',
+                    color: '#8B9B99', padding: '8px 16px', cursor: 'pointer',
                     fontFamily: "'Avenir', 'Montserrat', sans-serif", fontSize: '14px', letterSpacing: '0.05em'
                   }}
                 >DÉCONNEXION</button>
@@ -338,8 +338,8 @@
           {toast && (
             <div style={{
               position: 'fixed', bottom: '30px', left: '50%', transform: 'translateX(-50%)',
-              background: 'rgba(125,211,198,0.15)', border: '1px solid rgba(125,211,198,0.3)',
-              color: '#7dd3c6', padding: '10px 24px', fontSize: '13px',
+              background: 'rgba(80,170,155,0.12)', border: '1px solid rgba(80,170,155,0.25)',
+              color: '#3a9a8a', padding: '10px 24px', fontSize: '13px',
               fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300,
               letterSpacing: '0.03em', zIndex: 100
             }}>{toast}</div>
