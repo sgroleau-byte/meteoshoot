@@ -98,18 +98,20 @@ ALTER TABLE user_profiles_dev ADD COLUMN IF NOT EXISTS organization TEXT;
 ALTER TABLE user_profiles_dev ADD COLUMN IF NOT EXISTS sector TEXT;
 
 -- 8. Auto-create profile on signup (with metadata)
+-- NOTE: SET search_path = public is required because the trigger fires from
+-- the auth schema, which doesn't include public in its default search_path.
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO user_profiles (user_id, subscription_tier, subscription_status, full_name, organization, sector)
+  INSERT INTO public.user_profiles (user_id, subscription_tier, subscription_status, full_name, organization, sector)
   VALUES (NEW.id, 'free', 'active', NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'organization', NEW.raw_user_meta_data->>'sector');
 
-  INSERT INTO user_profiles_dev (user_id, subscription_tier, subscription_status, full_name, organization, sector)
+  INSERT INTO public.user_profiles_dev (user_id, subscription_tier, subscription_status, full_name, organization, sector)
   VALUES (NEW.id, 'free', 'active', NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'organization', NEW.raw_user_meta_data->>'sector');
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Drop existing trigger if it exists, then create
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
@@ -120,3 +122,43 @@ CREATE TRIGGER on_auth_user_created
 -- 9. Add lang column to preferences tables
 ALTER TABLE preferences ADD COLUMN IF NOT EXISTS lang TEXT DEFAULT 'fr';
 ALTER TABLE preferences_dev ADD COLUMN IF NOT EXISTS lang TEXT DEFAULT 'fr';
+
+-- 10. Row Level Security - Projects
+ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE projects_dev ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users read own projects" ON projects FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users insert own projects" ON projects FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users update own projects" ON projects FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users delete own projects" ON projects FOR DELETE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users read own projects dev" ON projects_dev FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users insert own projects dev" ON projects_dev FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users update own projects dev" ON projects_dev FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users delete own projects dev" ON projects_dev FOR DELETE USING (auth.uid() = user_id);
+
+-- 11. Row Level Security - Preferences
+ALTER TABLE preferences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE preferences_dev ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users read own prefs" ON preferences FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users insert own prefs" ON preferences FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users update own prefs" ON preferences FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users read own prefs dev" ON preferences_dev FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users insert own prefs dev" ON preferences_dev FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users update own prefs dev" ON preferences_dev FOR UPDATE USING (auth.uid() = user_id);
+
+-- 12. Row Level Security - Files
+ALTER TABLE project_files ENABLE ROW LEVEL SECURITY;
+ALTER TABLE project_files_dev ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users read own files" ON project_files FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users insert own files" ON project_files FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users update own files" ON project_files FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users delete own files" ON project_files FOR DELETE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users read own files dev" ON project_files_dev FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users insert own files dev" ON project_files_dev FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users update own files dev" ON project_files_dev FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users delete own files dev" ON project_files_dev FOR DELETE USING (auth.uid() = user_id);
