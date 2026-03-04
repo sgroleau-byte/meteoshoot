@@ -257,15 +257,19 @@
       const [toast, setToast] = useState('');
 
       useEffect(() => {
-        supabaseClient.auth.getSession().then(({ data: { session } }) => {
-          if (!session?.user || session.user.email !== ADMIN_EMAIL) {
-            window.location.href = '/site/login.html';
-            return;
+        // Use onAuthStateChange to wait for session restoration
+        const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event, session) => {
+          if (event === 'INITIAL_SESSION') {
+            if (!session?.user || session.user.email !== ADMIN_EMAIL) {
+              window.location.href = '/site/login.html';
+              return;
+            }
+            setUser(session.user);
+            setLoading(false);
+            loadData();
           }
-          setUser(session.user);
-          setLoading(false);
-          loadData();
         });
+        return () => subscription.unsubscribe();
       }, []);
 
       const loadData = async () => {
