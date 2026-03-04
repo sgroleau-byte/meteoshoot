@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#181b1e">
+  <meta name="robots" content="noindex, nofollow">
+  <title>MeteoShoot</title>
+  <script>var isDev = !location.hostname.match(/^(meteoshoot\.vercel\.app|meteoshoot\.com|www\.meteoshoot\.com)$/);</script>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            orange: { DEFAULT: '#E07A2B', light: '#ffe26b', dark: '#C4611A' },
+          },
+          fontFamily: {
+            bebas: ['Bebas Neue', 'sans-serif'],
+            avenir: ['Montserrat', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+  <style>
+    @font-face { font-family: 'Bebas Neue'; font-weight: 100; src: url('../fonts/BebasNeue Thin.ttf') format('truetype'); }
+    @font-face { font-family: 'Bebas Neue'; font-weight: 300; src: url('../fonts/BebasNeue Light.ttf') format('truetype'); }
+    @font-face { font-family: 'Bebas Neue'; font-weight: 400; src: url('../fonts/BebasNeue Regular.ttf') format('truetype'); }
+    @font-face { font-family: 'Bebas Neue'; font-weight: 500; src: url('../fonts/BebasNeue Book.ttf') format('truetype'); }
+    @font-face { font-family: 'Bebas Neue'; font-weight: 700; src: url('../fonts/BebasNeue Bold.ttf') format('truetype'); }
+    @font-face { font-family: 'Avenir'; font-weight: 300; src: url('../fonts/Avenir-Light.ttf') format('truetype'); }
+    @font-face { font-family: 'Avenir'; font-weight: 400; src: url('../fonts/Avenir-Book.ttf') format('truetype'); }
+    @font-face { font-family: 'Avenir'; font-weight: 700; src: url('../fonts/Avenir-Medium.ttf') format('truetype'); }
+
+    html { overflow-x: hidden; }
+    body { font-family: 'Montserrat', sans-serif; margin: 0; padding: 0; background: #181b1e; color: #FAF9F7; }
+
+    .tier-badge {
+      display: inline-block; padding: 2px 8px; font-size: 11px; letter-spacing: 0.08em;
+      font-family: 'Bebas Neue', sans-serif; font-weight: 400; border-radius: 2px;
+    }
+    .tier-free { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.5); }
+    .tier-shooter { background: rgba(125,211,198,0.15); color: #7dd3c6; }
+    .tier-god { background: rgba(224,122,43,0.15); color: #E07A2B; }
+
+    .stat-card {
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+      padding: 20px; text-align: center; flex: 1; min-width: 120px;
+    }
+    .stat-number {
+      font-family: 'Bebas Neue', sans-serif; font-weight: 300; font-size: 42px;
+      color: rgba(255,255,255,0.8); letter-spacing: 0.02em; line-height: 1;
+    }
+    .stat-label {
+      font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 13px;
+      color: rgba(255,255,255,0.3); letter-spacing: 0.08em; margin-top: 6px;
+    }
+
+    .user-row {
+      border-bottom: 1px solid rgba(255,255,255,0.04); padding: 12px 0;
+      display: grid; grid-template-columns: 1.5fr 1fr 1fr 0.8fr 0.6fr 0.8fr;
+      align-items: center; gap: 12px; font-size: 13px;
+    }
+    .user-row:hover { background: rgba(255,255,255,0.02); }
+
+    .user-header {
+      border-bottom: 1px solid rgba(255,255,255,0.08); padding: 8px 0;
+      display: grid; grid-template-columns: 1.5fr 1fr 1fr 0.8fr 0.6fr 0.8fr;
+      gap: 12px; font-size: 11px; letter-spacing: 0.08em;
+      font-family: 'Bebas Neue', sans-serif; font-weight: 400;
+      color: rgba(255,255,255,0.3);
+    }
+
+    .sector-bar {
+      height: 6px; border-radius: 3px; transition: width 0.5s ease;
+    }
+
+    select.tier-select {
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.7); font-size: 12px; padding: 4px 8px;
+      font-family: 'Montserrat', sans-serif; cursor: pointer; outline: none;
+      appearance: none; -webkit-appearance: none;
+    }
+    select.tier-select option { background: #1e2224; color: #fff; }
+
+    @media (max-width: 768px) {
+      .user-row, .user-header {
+        grid-template-columns: 1fr 0.7fr 0.5fr;
+      }
+      .hide-mobile { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="shared.js"></script>
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, createContext, useContext } = React;
+
+    const ADMIN_EMAIL = 'sgroleau@me.com';
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // ===== i18n =====
+    const LangContext = createContext();
+    const useLang = () => useContext(LangContext);
+    const LangProvider = ({ children }) => {
+      const [lang, setLang] = useState(getDefaultLang());
+      const switchLang = (l) => { setLang(l); localStorage.setItem('sp-lang', l); };
+      const t = (key) => {
+        const tr = TRANSLATIONS[lang];
+        return (tr && tr[key] !== undefined) ? tr[key] : (TRANSLATIONS.fr[key] || key);
+      };
+      return <LangContext.Provider value={{ lang, switchLang, t }}>{children}</LangContext.Provider>;
+    };
+
+    // ===== TIER COLORS =====
+    const tierColors = { free: '#666', shooter: '#7dd3c6', god: '#E07A2B' };
+    const sectorColors = ['#7dd3c6', '#E07A2B', '#d83152', '#ffe26b', '#9b59b6', '#3498db', '#e67e22', '#1abc9c', '#95a5a6', '#e74c3c'];
+
+    // ===== STAT CARD =====
+    const StatCard = ({ value, label }) => (
+      <div className="stat-card">
+        <div className="stat-number">{value}</div>
+        <div className="stat-label">{label}</div>
+      </div>
+    );
+
+    // ===== STATS PANEL =====
+    const StatsPanel = ({ stats, t }) => {
+      if (!stats) return null;
+      const tiers = stats.users_by_tier || {};
+      const sectors = stats.users_by_sector || {};
+      const maxSector = Math.max(...Object.values(sectors), 1);
+
+      return (
+        <div style={{ marginBottom: '40px' }}>
+          <div style={{
+            fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '16px',
+            color: 'rgba(255,255,255,0.3)', letterSpacing: '0.1em', marginBottom: '16px'
+          }}>{t('adminStats')}</div>
+
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '24px' }}>
+            <StatCard value={stats.total_users || 0} label={t('adminTotalUsers')} />
+            <StatCard value={stats.total_projects || 0} label={t('adminTotalProjects')} />
+            <StatCard
+              value={`${tiers.free || 0} / ${tiers.shooter || 0} / ${tiers.god || 0}`}
+              label="FREE / SHOOTER / GOD"
+            />
+          </div>
+
+          <div style={{
+            fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '13px',
+            color: 'rgba(255,255,255,0.3)', letterSpacing: '0.08em', marginBottom: '10px'
+          }}>{t('adminBySector')}</div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {Object.entries(sectors).sort((a, b) => b[1] - a[1]).map(([name, count], i) => (
+              <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '120px', fontSize: '11px', color: 'rgba(255,255,255,0.4)',
+                  fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300,
+                  textAlign: 'right', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                }}>{name}</div>
+                <div style={{ flex: 1, background: 'rgba(255,255,255,0.03)', borderRadius: '3px', height: '6px' }}>
+                  <div className="sector-bar" style={{
+                    width: `${(count / maxSector) * 100}%`,
+                    background: sectorColors[i % sectorColors.length]
+                  }} />
+                </div>
+                <div style={{ width: '24px', fontSize: '11px', color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>{count}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    // ===== USERS TABLE =====
+    const UsersTable = ({ users, t, onTierChange }) => {
+      const formatDate = (d) => {
+        if (!d) return '—';
+        const date = new Date(d);
+        return `${date.getDate()} ${TRANSLATIONS.fr.monthAbbrev[date.getMonth()]} ${date.getFullYear()}`;
+      };
+
+      return (
+        <div>
+          <div style={{
+            fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '16px',
+            color: 'rgba(255,255,255,0.3)', letterSpacing: '0.1em', marginBottom: '12px'
+          }}>{t('adminUsers')} ({users.length})</div>
+
+          <div className="user-header">
+            <div>EMAIL</div>
+            <div className="hide-mobile">NOM</div>
+            <div className="hide-mobile">SECTEUR</div>
+            <div>TIER</div>
+            <div>PROJ.</div>
+            <div className="hide-mobile">DATE</div>
+          </div>
+
+          {users.map(u => (
+            <div key={u.user_id} className="user-row">
+              <div style={{ color: 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {u.email}
+                {!u.confirmed_at && (
+                  <span style={{ marginLeft: '6px', fontSize: '9px', color: '#E07A2B', letterSpacing: '0.05em' }}>
+                    ({t('adminPending')})
+                  </span>
+                )}
+              </div>
+              <div className="hide-mobile" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                {u.full_name || '—'}
+              </div>
+              <div className="hide-mobile" style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px' }}>
+                {u.sector || '—'}
+              </div>
+              <div>
+                <select
+                  className="tier-select"
+                  value={u.subscription_tier || 'free'}
+                  onChange={e => onTierChange(u.user_id, e.target.value)}
+                >
+                  <option value="free">FREE</option>
+                  <option value="shooter">SHOOTER</option>
+                  <option value="god">GOD</option>
+                </select>
+              </div>
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', fontSize: '13px' }}>
+                {u.project_count}
+              </div>
+              <div className="hide-mobile" style={{ color: 'rgba(255,255,255,0.25)', fontSize: '11px' }}>
+                {formatDate(u.created_at)}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    };
+
+    // ===== ADMIN DASHBOARD =====
+    const AdminDashboard = () => {
+      const { t } = useLang();
+      const [user, setUser] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [users, setUsers] = useState([]);
+      const [stats, setStats] = useState(null);
+      const [toast, setToast] = useState('');
+
+      useEffect(() => {
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          if (!session?.user || session.user.email !== ADMIN_EMAIL) {
+            window.location.href = '/site/login.html';
+            return;
+          }
+          setUser(session.user);
+          setLoading(false);
+          loadData();
+        });
+      }, []);
+
+      const loadData = async () => {
+        const [usersRes, statsRes] = await Promise.all([
+          supabaseClient.rpc('admin_get_all_users'),
+          supabaseClient.rpc('admin_get_stats')
+        ]);
+        if (usersRes.data) setUsers(usersRes.data);
+        if (statsRes.data) setStats(statsRes.data);
+        if (usersRes.error) console.error('Users error:', usersRes.error);
+        if (statsRes.error) console.error('Stats error:', statsRes.error);
+      };
+
+      const handleTierChange = async (userId, newTier) => {
+        const { error } = await supabaseClient.rpc('admin_set_tier', {
+          target_user_id: userId,
+          new_tier: newTier
+        });
+        if (error) {
+          console.error('Tier change error:', error);
+        } else {
+          setUsers(prev => prev.map(u =>
+            u.user_id === userId ? { ...u, subscription_tier: newTier } : u
+          ));
+          setToast(t('adminTierChanged'));
+          setTimeout(() => setToast(''), 2000);
+        }
+      };
+
+      if (loading) {
+        return <div style={{ position: 'fixed', inset: 0, background: '#181b1e' }} />;
+      }
+
+      return (
+        <div style={{ minHeight: '100vh', background: '#181b1e', padding: '40px 24px' }}>
+          <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
+              <div style={{
+                fontFamily: "'Bebas Neue', sans-serif", fontWeight: 300, fontSize: '28px',
+                color: 'rgba(255,255,255,0.6)', letterSpacing: '0.1em'
+              }}>
+                METEOSHOOT <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span> {t('adminTitle')}
+              </div>
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                <button
+                  onClick={loadData}
+                  style={{
+                    background: 'none', border: '1px solid rgba(255,255,255,0.1)',
+                    color: 'rgba(255,255,255,0.4)', padding: '6px 14px', cursor: 'pointer',
+                    fontFamily: "'Avenir', 'Montserrat', sans-serif", fontSize: '12px', letterSpacing: '0.05em'
+                  }}
+                >↻ REFRESH</button>
+                <a href="/index.html" style={{
+                  color: 'rgba(255,255,255,0.3)', textDecoration: 'none',
+                  fontFamily: "'Avenir', 'Montserrat', sans-serif", fontSize: '12px'
+                }}>← APP</a>
+              </div>
+            </div>
+
+            {/* Stats */}
+            <StatsPanel stats={stats} t={t} />
+
+            {/* Users table */}
+            <UsersTable users={users} t={t} onTierChange={handleTierChange} />
+          </div>
+
+          {/* Toast */}
+          {toast && (
+            <div style={{
+              position: 'fixed', bottom: '30px', left: '50%', transform: 'translateX(-50%)',
+              background: 'rgba(125,211,198,0.15)', border: '1px solid rgba(125,211,198,0.3)',
+              color: '#7dd3c6', padding: '10px 24px', fontSize: '13px',
+              fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300,
+              letterSpacing: '0.03em', zIndex: 100
+            }}>{toast}</div>
+          )}
+        </div>
+      );
+    };
+
+    // ===== APP ROOT =====
+    const App = () => (
+      <LangProvider>
+        <AdminDashboard />
+      </LangProvider>
+    );
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

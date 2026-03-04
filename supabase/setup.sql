@@ -162,3 +162,59 @@ CREATE POLICY "Users read own files dev" ON project_files_dev FOR SELECT USING (
 CREATE POLICY "Users insert own files dev" ON project_files_dev FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users update own files dev" ON project_files_dev FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Users delete own files dev" ON project_files_dev FOR DELETE USING (auth.uid() = user_id);
+
+-- 13. Admin RPC functions (SECURITY DEFINER — bypass RLS, admin email check inside)
+
+-- List all users with profile + project count
+CREATE OR REPLACE FUNCTION admin_get_all_users()
+RETURNS TABLE (
+  user_id UUID, email TEXT, created_at TIMESTAMPTZ, confirmed_at TIMESTAMPTZ,
+  full_name TEXT, organization TEXT, sector TEXT,
+  subscription_tier TEXT, subscription_status TEXT,
+  project_count BIGINT
+) AS $$
+BEGIN
+  IF (SELECT au.email FROM auth.users au WHERE au.id = auth.uid()) != 'sgroleau@me.com' THEN
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+  RETURN QUERY
+  SELECT au.id, au.email::TEXT, au.created_at, au.confirmed_at,
+    up.full_name, up.organization, up.sector,
+    up.subscription_tier, up.subscription_status,
+    COALESCE(pc.cnt, 0)
+  FROM auth.users au
+  LEFT JOIN public.user_profiles up ON up.user_id = au.id
+  LEFT JOIN (SELECT p.user_id, COUNT(*) AS cnt FROM public.projects p GROUP BY p.user_id) pc ON pc.user_id = au.id
+  ORDER BY au.created_at DESC;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- Global stats
+CREATE OR REPLACE FUNCTION admin_get_stats()
+RETURNS JSON AS $$
+DECLARE result JSON;
+BEGIN
+  IF (SELECT au.email FROM auth.users au WHERE au.id = auth.uid()) != 'sgroleau@me.com' THEN
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+  SELECT json_build_object(
+    'total_users', (SELECT COUNT(*) FROM auth.users),
+    'total_projects', (SELECT COUNT(*) FROM public.projects),
+    'users_by_tier', (SELECT json_object_agg(subscription_tier, cnt) FROM (SELECT subscription_tier, COUNT(*) AS cnt FROM public.user_profiles GROUP BY subscription_tier) t),
+    'users_by_sector', (SELECT json_object_agg(COALESCE(sector, 'N/A'), cnt) FROM (SELECT sector, COUNT(*) AS cnt FROM public.user_profiles GROUP BY sector) t)
+  ) INTO result;
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- Change a user's subscription tier
+CREATE OR REPLACE FUNCTION admin_set_tier(target_user_id UUID, new_tier TEXT)
+RETURNS VOID AS $$
+BEGIN
+  IF (SELECT au.email FROM auth.users au WHERE au.id = auth.uid()) != 'sgroleau@me.com' THEN
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+  UPDATE public.user_profiles SET subscription_tier = new_tier WHERE user_id = target_user_id;
+  UPDATE public.user_profiles_dev SET subscription_tier = new_tier WHERE user_id = target_user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
