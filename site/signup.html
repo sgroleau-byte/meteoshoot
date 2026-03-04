@@ -356,6 +356,10 @@
           if (signUpError) {
             setError(signUpError.message || t('signupError'));
             setSending(false);
+          } else if (data?.user?.identities?.length === 0) {
+            // Email already exists — Supabase returns empty identities
+            setError(t('emailAlreadyExists'));
+            setSending(false);
           } else {
             setSuccess(true);
             setSending(false);
