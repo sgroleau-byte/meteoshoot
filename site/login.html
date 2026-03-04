@@ -505,21 +505,21 @@
             </button>
 
             {/* Forgot password & Signup - single line */}
-            <div style={{ marginTop: '200px', padding: '0 2px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px' }}>
+            <div style={{ marginTop: '200px', padding: '0 2px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', whiteSpace: 'nowrap' }}>
               <button
                 onClick={() => { setView('forgot'); setResetEmail(email); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '14px', color: '#546262', padding: 0, transition: 'color 0.2s' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '12px', color: '#546262', padding: 0, transition: 'color 0.2s', whiteSpace: 'nowrap' }}
                 onMouseEnter={e => e.target.style.color = '#849898'}
                 onMouseLeave={e => e.target.style.color = '#546262'}
               >
                 {t('forgotPassword')}
               </button>
-              <span style={{ color: '#546262', fontSize: '14px' }}>|</span>
-              <span style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '14px', color: '#546262' }}>
+              <span style={{ color: '#546262', fontSize: '12px' }}>|</span>
+              <span style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '12px', color: '#546262', whiteSpace: 'nowrap' }}>
                 {t('noAccount')}{' '}
                 <a
                   href="signup.html"
-                  style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '14px', color: '#849898', textDecoration: 'none', transition: 'color 0.2s' }}
+                  style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '12px', color: '#849898', textDecoration: 'none', transition: 'color 0.2s' }}
                   onMouseEnter={e => e.target.style.color = '#b0c4c4'}
                   onMouseLeave={e => e.target.style.color = '#849898'}
                 >
