@@ -89,15 +89,23 @@ CREATE POLICY "Users can insert own profile dev"
   ON user_profiles_dev FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
--- 7. Auto-create profile on signup
+-- 7. Profile columns for name, organization, sector
+ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS full_name TEXT;
+ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS organization TEXT;
+ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS sector TEXT;
+ALTER TABLE user_profiles_dev ADD COLUMN IF NOT EXISTS full_name TEXT;
+ALTER TABLE user_profiles_dev ADD COLUMN IF NOT EXISTS organization TEXT;
+ALTER TABLE user_profiles_dev ADD COLUMN IF NOT EXISTS sector TEXT;
+
+-- 8. Auto-create profile on signup (with metadata)
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO user_profiles (user_id, subscription_tier, subscription_status)
-  VALUES (NEW.id, 'free', 'active');
+  INSERT INTO user_profiles (user_id, subscription_tier, subscription_status, full_name, organization, sector)
+  VALUES (NEW.id, 'free', 'active', NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'organization', NEW.raw_user_meta_data->>'sector');
 
-  INSERT INTO user_profiles_dev (user_id, subscription_tier, subscription_status)
-  VALUES (NEW.id, 'free', 'active');
+  INSERT INTO user_profiles_dev (user_id, subscription_tier, subscription_status, full_name, organization, sector)
+  VALUES (NEW.id, 'free', 'active', NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'organization', NEW.raw_user_meta_data->>'sector');
 
   RETURN NEW;
 END;
@@ -109,6 +117,6 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 
--- 8. Add lang column to preferences tables
+-- 9. Add lang column to preferences tables
 ALTER TABLE preferences ADD COLUMN IF NOT EXISTS lang TEXT DEFAULT 'fr';
 ALTER TABLE preferences_dev ADD COLUMN IF NOT EXISTS lang TEXT DEFAULT 'fr';

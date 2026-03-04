@@ -157,6 +157,12 @@ var TRANSLATIONS = {
     addressNotFound: 'Adresse non trouvée',
     account: 'MON COMPTE',
 
+    // Signup profile
+    fullName: 'Nom',
+    organization: 'Organisation',
+    sector: 'Secteur',
+    sectorOptions: ['Photographe', 'Vidéaste', 'Photo+Vidéo', 'Pilote drone', 'Réalisateur', 'Équipe marketing', 'Créateur de contenu', 'Directeur artistique', 'Événementiel', 'Autre'],
+
     // Errors
     errorPrefix: 'Erreur:',
     fileLimitExceeded: 'Limite de {limit} MB par projet dépassée',
@@ -306,6 +312,12 @@ var TRANSLATIONS = {
     addressSavedShort: 'Address saved!',
     addressNotFound: 'Address not found',
     account: 'MY ACCOUNT',
+
+    // Signup profile
+    fullName: 'Name',
+    organization: 'Organization',
+    sector: 'Sector',
+    sectorOptions: ['Photographer', 'Videographer', 'Photo+Video', 'Drone pilot', 'Director', 'Marketing team', 'Content creator', 'Art director', 'Events', 'Other'],
 
     // Errors
     errorPrefix: 'Error:',

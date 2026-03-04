@@ -268,9 +268,11 @@
     // ===== SIGNUP SCREEN =====
     const SignupScreen = () => {
       const { t } = useLang();
+      const [fullName, setFullName] = useState('');
+      const [organization, setOrganization] = useState('');
+      const [sector, setSector] = useState('');
       const [email, setEmail] = useState('');
       const [password, setPassword] = useState('');
-      const [confirmPassword, setConfirmPassword] = useState('');
       const [sending, setSending] = useState(false);
       const [error, setError] = useState('');
       const [success, setSuccess] = useState(false);
@@ -290,19 +292,13 @@
       }, []);
 
       const handleSubmit = async () => {
-        if (!email || !password || !confirmPassword) return;
+        if (!email || !password) return;
 
         setError('');
 
         // Validate password length
         if (password.length < 6) {
           setError(t('passwordTooShort'));
-          return;
-        }
-
-        // Validate passwords match
-        if (password !== confirmPassword) {
-          setError(t('passwordMismatch'));
           return;
         }
 
@@ -313,7 +309,12 @@
             email,
             password,
             options: {
-              emailRedirectTo: window.location.origin + '/index.html'
+              emailRedirectTo: window.location.origin + '/index.html',
+              data: {
+                full_name: fullName || null,
+                organization: organization || null,
+                sector: sector || null
+              }
             }
           });
 
@@ -461,6 +462,47 @@
 
             {/* Form */}
             <div style={{ width: isMob ? '300px' : '360px', position: 'relative', zIndex: 10 }}>
+              {/* Name */}
+              <GlassInput>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={e => setFullName(e.target.value)}
+                  placeholder={t('fullName')}
+                  autoComplete="name"
+                  style={inputStyle}
+                  className="login-input"
+                />
+              </GlassInput>
+
+              {/* Organization */}
+              <GlassInput>
+                <input
+                  type="text"
+                  value={organization}
+                  onChange={e => setOrganization(e.target.value)}
+                  placeholder={t('organization')}
+                  autoComplete="organization"
+                  style={inputStyle}
+                  className="login-input"
+                />
+              </GlassInput>
+
+              {/* Sector dropdown */}
+              <GlassInput>
+                <select
+                  value={sector}
+                  onChange={e => setSector(e.target.value)}
+                  style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', cursor: 'pointer', color: sector ? '#ffffff' : 'rgba(255,255,255,0.5)' }}
+                  className="login-input"
+                >
+                  <option value="" style={{ background: '#1e2224', color: 'rgba(255,255,255,0.5)' }}>{t('sector')}</option>
+                  {t('sectorOptions').map(opt => (
+                    <option key={opt} value={opt} style={{ background: '#1e2224', color: '#ffffff' }}>{opt}</option>
+                  ))}
+                </select>
+              </GlassInput>
+
               {/* Email */}
               <GlassInput>
                 <input
@@ -475,26 +517,13 @@
               </GlassInput>
 
               {/* Password */}
-              <GlassInput>
+              <GlassInput mb="16px">
                 <input
                   type="password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  placeholder={t('password')}
-                  autoComplete="new-password"
-                  style={inputStyle}
-                  className="login-input"
-                />
-              </GlassInput>
-
-              {/* Confirm Password */}
-              <GlassInput mb="16px">
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={e => setConfirmPassword(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                  placeholder={t('confirmPassword')}
+                  placeholder={t('password')}
                   autoComplete="new-password"
                   style={inputStyle}
                   className="login-input"
@@ -517,7 +546,7 @@
               {/* Submit button */}
               <button
                 onClick={handleSubmit}
-                disabled={sending || !email || !password || !confirmPassword}
+                disabled={sending || !email || !password}
                 className="login-btn"
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
