@@ -236,6 +236,15 @@
   // ===== SUPABASE =====
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+  // ===== REDIRECT HELPER =====
+  const getRedirectUrl = () => {
+    const params = new URLSearchParams(window.location.search);
+    const redirect = params.get('redirect');
+    // Only allow same-origin relative paths for safety
+    if (redirect && redirect.startsWith('/')) return redirect;
+    return '/index.html';
+  };
+
   // ===== i18n CONTEXT =====
   const LangContext = createContext();
 
@@ -291,7 +300,7 @@
     useEffect(() => {
       supabaseClient.auth.getSession().then(({ data: { session } }) => {
         if (session) {
-          window.location.href = '/index.html';
+          window.location.href = getRedirectUrl();
         }
       });
     }, []);
@@ -306,7 +315,7 @@
           setError(true);
           setSending(false);
         } else {
-          window.location.href = '/index.html';
+          window.location.href = getRedirectUrl();
         }
       } catch (e) {
         setError(true);
