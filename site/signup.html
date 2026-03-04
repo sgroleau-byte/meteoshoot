@@ -354,7 +354,7 @@
           });
 
           if (signUpError) {
-            setError(t('signupError'));
+            setError(signUpError.message || t('signupError'));
             setSending(false);
           } else {
             setSuccess(true);
