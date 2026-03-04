@@ -301,7 +301,7 @@
 
     // ===== SIGNUP SCREEN =====
     const SignupScreen = () => {
-      const { t } = useLang();
+      const { t, lang } = useLang();
       const [fullName, setFullName] = useState('');
       const [organization, setOrganization] = useState('');
       const [sector, setSector] = useState('');
@@ -348,7 +348,8 @@
               data: {
                 full_name: fullName || null,
                 organization: organization || null,
-                sector: sector || null
+                sector: sector || null,
+                lang: lang
               }
             }
           });
