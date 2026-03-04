@@ -825,6 +825,9 @@
 
       const signOut = async () => {
         await supabase.auth.signOut();
+        localStorage.removeItem('sp-projects');
+        localStorage.removeItem('sp-prefs');
+        localStorage.removeItem('sp-migrated-to-supabase');
         setUser(null);
       };
 
@@ -1215,6 +1218,18 @@
       // On login: load from Supabase or migrate localStorage
       useEffect(() => {
         if (!user) return;
+
+        // Clear localStorage if a different user logged in
+        const prevUserId = localStorage.getItem('sp-user-id');
+        if (prevUserId && prevUserId !== user.id) {
+          localStorage.removeItem('sp-projects');
+          localStorage.removeItem('sp-prefs');
+          localStorage.removeItem('sp-migrated-to-supabase');
+          setProjects([]);
+          setPrefsState({homeAddress:'',homeLat:null,homeLng:null,prepTime:60});
+        }
+        localStorage.setItem('sp-user-id', user.id);
+
         const syncData = async () => {
           try {
             // Load projects from Supabase
