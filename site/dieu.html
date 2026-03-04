@@ -47,28 +47,28 @@
 
     .stat-card {
       background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
-      padding: 20px; text-align: center; flex: 1; min-width: 120px;
+      padding: 24px; text-align: center; flex: 1; min-width: 140px;
     }
     .stat-number {
-      font-family: 'Bebas Neue', sans-serif; font-weight: 300; font-size: 42px;
+      font-family: 'Bebas Neue', sans-serif; font-weight: 300; font-size: 54px;
       color: rgba(255,255,255,0.8); letter-spacing: 0.02em; line-height: 1;
     }
     .stat-label {
-      font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 13px;
-      color: rgba(255,255,255,0.3); letter-spacing: 0.08em; margin-top: 6px;
+      font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 16px;
+      color: rgba(255,255,255,0.3); letter-spacing: 0.08em; margin-top: 8px;
     }
 
     .user-row {
-      border-bottom: 1px solid rgba(255,255,255,0.04); padding: 12px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04); padding: 14px 0;
       display: grid; grid-template-columns: 1.5fr 1fr 1fr 0.8fr 0.6fr 0.8fr;
-      align-items: center; gap: 12px; font-size: 13px;
+      align-items: center; gap: 12px; font-size: 15px;
     }
     .user-row:hover { background: rgba(255,255,255,0.02); }
 
     .user-header {
-      border-bottom: 1px solid rgba(255,255,255,0.08); padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.08); padding: 10px 0;
       display: grid; grid-template-columns: 1.5fr 1fr 1fr 0.8fr 0.6fr 0.8fr;
-      gap: 12px; font-size: 11px; letter-spacing: 0.08em;
+      gap: 12px; font-size: 14px; letter-spacing: 0.08em;
       font-family: 'Bebas Neue', sans-serif; font-weight: 400;
       color: rgba(255,255,255,0.3);
     }
@@ -79,7 +79,7 @@
 
     select.tier-select {
       background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-      color: rgba(255,255,255,0.7); font-size: 12px; padding: 4px 8px;
+      color: rgba(255,255,255,0.7); font-size: 14px; padding: 6px 10px;
       font-family: 'Montserrat', sans-serif; cursor: pointer; outline: none;
       appearance: none; -webkit-appearance: none;
     }
@@ -104,23 +104,10 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, createContext, useContext } = React;
+    const { useState, useEffect } = React;
 
     const ADMIN_EMAIL = 'sgroleau@me.com';
     const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-    // ===== i18n =====
-    const LangContext = createContext();
-    const useLang = () => useContext(LangContext);
-    const LangProvider = ({ children }) => {
-      const [lang, setLang] = useState(getDefaultLang());
-      const switchLang = (l) => { setLang(l); localStorage.setItem('sp-lang', l); };
-      const t = (key) => {
-        const tr = TRANSLATIONS[lang];
-        return (tr && tr[key] !== undefined) ? tr[key] : (TRANSLATIONS.fr[key] || key);
-      };
-      return <LangContext.Provider value={{ lang, switchLang, t }}>{children}</LangContext.Provider>;
-    };
 
     // ===== TIER COLORS =====
     const tierColors = { free: '#666', shooter: '#7dd3c6', god: '#E07A2B' };
@@ -135,7 +122,7 @@
     );
 
     // ===== STATS PANEL =====
-    const StatsPanel = ({ stats, t }) => {
+    const StatsPanel = ({ stats }) => {
       if (!stats) return null;
       const tiers = stats.users_by_tier || {};
       const sectors = stats.users_by_sector || {};
@@ -144,13 +131,13 @@
       return (
         <div style={{ marginBottom: '40px' }}>
           <div style={{
-            fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '16px',
+            fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '20px',
             color: 'rgba(255,255,255,0.3)', letterSpacing: '0.1em', marginBottom: '16px'
-          }}>{t('adminStats')}</div>
+          }}>STATISTIQUES</div>
 
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '24px' }}>
-            <StatCard value={stats.total_users || 0} label={t('adminTotalUsers')} />
-            <StatCard value={stats.total_projects || 0} label={t('adminTotalProjects')} />
+            <StatCard value={stats.total_users || 0} label="UTILISATEURS" />
+            <StatCard value={stats.total_projects || 0} label="PROJETS" />
             <StatCard
               value={`${tiers.free || 0} / ${tiers.shooter || 0} / ${tiers.god || 0}`}
               label="FREE / SHOOTER / GOD"
@@ -158,15 +145,15 @@
           </div>
 
           <div style={{
-            fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '13px',
+            fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '16px',
             color: 'rgba(255,255,255,0.3)', letterSpacing: '0.08em', marginBottom: '10px'
-          }}>{t('adminBySector')}</div>
+          }}>PAR SECTEUR</div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {Object.entries(sectors).sort((a, b) => b[1] - a[1]).map(([name, count], i) => (
               <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{
-                  width: '120px', fontSize: '11px', color: 'rgba(255,255,255,0.4)',
+                  width: '140px', fontSize: '13px', color: 'rgba(255,255,255,0.4)',
                   fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300,
                   textAlign: 'right', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
                 }}>{name}</div>
@@ -176,7 +163,7 @@
                     background: sectorColors[i % sectorColors.length]
                   }} />
                 </div>
-                <div style={{ width: '24px', fontSize: '11px', color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>{count}</div>
+                <div style={{ width: '28px', fontSize: '13px', color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>{count}</div>
               </div>
             ))}
           </div>
@@ -185,7 +172,7 @@
     };
 
     // ===== USERS TABLE =====
-    const UsersTable = ({ users, t, onTierChange }) => {
+    const UsersTable = ({ users, onTierChange }) => {
       const formatDate = (d) => {
         if (!d) return '—';
         const date = new Date(d);
@@ -195,9 +182,9 @@
       return (
         <div>
           <div style={{
-            fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '16px',
+            fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '20px',
             color: 'rgba(255,255,255,0.3)', letterSpacing: '0.1em', marginBottom: '12px'
-          }}>{t('adminUsers')} ({users.length})</div>
+          }}>UTILISATEURS ({users.length})</div>
 
           <div className="user-header">
             <div>EMAIL</div>
@@ -213,15 +200,15 @@
               <div style={{ color: 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {u.email}
                 {!u.confirmed_at && (
-                  <span style={{ marginLeft: '6px', fontSize: '9px', color: '#E07A2B', letterSpacing: '0.05em' }}>
-                    ({t('adminPending')})
+                  <span style={{ marginLeft: '6px', fontSize: '11px', color: '#E07A2B', letterSpacing: '0.05em' }}>
+                    (En attente)
                   </span>
                 )}
               </div>
               <div className="hide-mobile" style={{ color: 'rgba(255,255,255,0.4)' }}>
                 {u.full_name || '—'}
               </div>
-              <div className="hide-mobile" style={{ color: 'rgba(255,255,255,0.3)', fontSize: '11px' }}>
+              <div className="hide-mobile" style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px' }}>
                 {u.sector || '—'}
               </div>
               <div>
@@ -235,10 +222,10 @@
                   <option value="god">GOD</option>
                 </select>
               </div>
-              <div style={{ color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', fontSize: '13px' }}>
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace', fontSize: '15px' }}>
                 {u.project_count}
               </div>
-              <div className="hide-mobile" style={{ color: 'rgba(255,255,255,0.25)', fontSize: '11px' }}>
+              <div className="hide-mobile" style={{ color: 'rgba(255,255,255,0.25)', fontSize: '13px' }}>
                 {formatDate(u.created_at)}
               </div>
             </div>
@@ -249,7 +236,6 @@
 
     // ===== ADMIN DASHBOARD =====
     const AdminDashboard = () => {
-      const { t } = useLang();
       const [user, setUser] = useState(null);
       const [loading, setLoading] = useState(true);
       const [users, setUsers] = useState([]);
@@ -294,7 +280,7 @@
           setUsers(prev => prev.map(u =>
             u.user_id === userId ? { ...u, subscription_tier: newTier } : u
           ));
-          setToast(t('adminTierChanged'));
+          setToast('Tier modifié');
           setTimeout(() => setToast(''), 2000);
         }
       };
@@ -309,32 +295,43 @@
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
               <div style={{
-                fontFamily: "'Bebas Neue', sans-serif", fontWeight: 300, fontSize: '28px',
+                fontFamily: "'Bebas Neue', sans-serif", fontWeight: 300, fontSize: '34px',
                 color: 'rgba(255,255,255,0.6)', letterSpacing: '0.1em'
               }}>
-                METEOSHOOT <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span> {t('adminTitle')}
+                METEOSHOOT <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span> ADMIN
               </div>
               <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
                 <button
                   onClick={loadData}
                   style={{
                     background: 'none', border: '1px solid rgba(255,255,255,0.1)',
-                    color: 'rgba(255,255,255,0.4)', padding: '6px 14px', cursor: 'pointer',
-                    fontFamily: "'Avenir', 'Montserrat', sans-serif", fontSize: '12px', letterSpacing: '0.05em'
+                    color: 'rgba(255,255,255,0.4)', padding: '8px 16px', cursor: 'pointer',
+                    fontFamily: "'Avenir', 'Montserrat', sans-serif", fontSize: '14px', letterSpacing: '0.05em'
                   }}
                 >↻ REFRESH</button>
                 <a href="/index.html" style={{
                   color: 'rgba(255,255,255,0.3)', textDecoration: 'none',
-                  fontFamily: "'Avenir', 'Montserrat', sans-serif", fontSize: '12px'
+                  fontFamily: "'Avenir', 'Montserrat', sans-serif", fontSize: '14px'
                 }}>← APP</a>
+                <button
+                  onClick={async () => {
+                    await supabaseClient.auth.signOut();
+                    window.location.href = '/site/login.html';
+                  }}
+                  style={{
+                    background: 'none', border: '1px solid rgba(255,255,255,0.1)',
+                    color: 'rgba(255,255,255,0.4)', padding: '8px 16px', cursor: 'pointer',
+                    fontFamily: "'Avenir', 'Montserrat', sans-serif", fontSize: '14px', letterSpacing: '0.05em'
+                  }}
+                >DÉCONNEXION</button>
               </div>
             </div>
 
             {/* Stats */}
-            <StatsPanel stats={stats} t={t} />
+            <StatsPanel stats={stats} />
 
             {/* Users table */}
-            <UsersTable users={users} t={t} onTierChange={handleTierChange} />
+            <UsersTable users={users} onTierChange={handleTierChange} />
           </div>
 
           {/* Toast */}
@@ -351,14 +348,7 @@
       );
     };
 
-    // ===== APP ROOT =====
-    const App = () => (
-      <LangProvider>
-        <AdminDashboard />
-      </LangProvider>
-    );
-
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    ReactDOM.createRoot(document.getElementById('root')).render(<AdminDashboard />);
   </script>
 </body>
 </html>
