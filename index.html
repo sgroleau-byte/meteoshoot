@@ -844,6 +844,8 @@
         if (TRANSLATIONS[newLang]) {
           setLangState(newLang);
           localStorage.setItem('sp-lang', newLang);
+          // Sync lang to Supabase user metadata (for bilingual email templates)
+          supabase.auth.updateUser({ data: { lang: newLang } });
         }
       };
       const tr = (key) => {
