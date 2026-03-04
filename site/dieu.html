@@ -341,10 +341,17 @@
             if (res.ok) {
               const data = await res.json();
               setRevenue(data);
+            } else {
+              console.error('Revenue fetch failed:', res.status, await res.text());
+              // Show empty revenue panel even if API fails
+              setRevenue({ total_revenue: 0, currency: 'CAD', active_subscriptions: 0, total_orders: 0, total_subscriptions: 0, orders: [] });
             }
+          } else {
+            console.warn('No session for revenue fetch');
           }
         } catch (e) {
           console.error('Revenue fetch error:', e);
+          setRevenue({ total_revenue: 0, currency: 'CAD', active_subscriptions: 0, total_orders: 0, total_subscriptions: 0, orders: [] });
         }
       };
 
