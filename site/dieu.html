@@ -35,7 +35,7 @@
     @font-face { font-family: 'Avenir'; font-weight: 700; src: url('../fonts/Avenir-Medium.ttf') format('truetype'); }
 
     html { overflow-x: hidden; }
-    body { font-family: 'Montserrat', sans-serif; margin: 0; padding: 0; background: #e8e6e1; color: #2C2C2C; }
+    body { font-family: 'Avenir Next', 'Avenir', 'Montserrat', -apple-system, sans-serif; margin: 0; padding: 0; background: #e8e6e1; color: #1a1a1a; }
 
     .tier-badge {
       display: inline-block; padding: 2px 8px; font-size: 11px; letter-spacing: 0.08em;
@@ -51,11 +51,11 @@
     }
     .stat-number {
       font-family: 'Bebas Neue', sans-serif; font-weight: 300; font-size: 54px;
-      color: #2C2C2C; letter-spacing: 0.02em; line-height: 1;
+      color: #1a1a1a; letter-spacing: 0.02em; line-height: 1;
     }
     .stat-label {
       font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 16px;
-      color: #8B9B99; letter-spacing: 0.08em; margin-top: 8px;
+      color: #555; letter-spacing: 0.08em; margin-top: 8px;
     }
 
     .user-row {
@@ -70,7 +70,7 @@
       display: grid; grid-template-columns: 1.5fr 1fr 1fr 0.8fr 0.6fr 0.8fr;
       gap: 12px; font-size: 14px; letter-spacing: 0.08em;
       font-family: 'Bebas Neue', sans-serif; font-weight: 400;
-      color: #8B9B99;
+      color: #555;
     }
 
     .sector-bar {
@@ -79,11 +79,11 @@
 
     select.tier-select {
       background: rgba(255,255,255,0.6); border: 1px solid rgba(0,0,0,0.1);
-      color: #404A48; font-size: 14px; padding: 6px 10px;
-      font-family: 'Montserrat', sans-serif; cursor: pointer; outline: none;
+      color: #1a1a1a; font-size: 14px; padding: 6px 10px;
+      font-family: 'Avenir Next', 'Avenir', 'Montserrat', sans-serif; cursor: pointer; outline: none;
       appearance: none; -webkit-appearance: none;
     }
-    select.tier-select option { background: #fff; color: #2C2C2C; }
+    select.tier-select option { background: #fff; color: #1a1a1a; }
 
     @media (max-width: 768px) {
       .user-row, .user-header {
@@ -132,7 +132,7 @@
         <div style={{ marginBottom: '40px' }}>
           <div style={{
             fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '20px',
-            color: '#8B9B99', letterSpacing: '0.1em', marginBottom: '16px'
+            color: '#555', letterSpacing: '0.1em', marginBottom: '16px'
           }}>STATISTIQUES</div>
 
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '24px' }}>
@@ -146,15 +146,15 @@
 
           <div style={{
             fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '16px',
-            color: '#8B9B99', letterSpacing: '0.08em', marginBottom: '10px'
+            color: '#555', letterSpacing: '0.08em', marginBottom: '10px'
           }}>PAR SECTEUR</div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {Object.entries(sectors).sort((a, b) => b[1] - a[1]).map(([name, count], i) => (
               <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{
-                  width: '140px', fontSize: '13px', color: '#6B7B79',
-                  fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300,
+                  width: '140px', fontSize: '13px', color: '#333',
+                  fontFamily: "'Avenir Next', 'Avenir', 'Montserrat', sans-serif", fontWeight: 300,
                   textAlign: 'right', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
                 }}>{name}</div>
                 <div style={{ flex: 1, background: 'rgba(0,0,0,0.06)', borderRadius: '3px', height: '6px' }}>
@@ -163,10 +163,72 @@
                     background: sectorColors[i % sectorColors.length]
                   }} />
                 </div>
-                <div style={{ width: '28px', fontSize: '13px', color: '#8B9B99', fontFamily: 'monospace' }}>{count}</div>
+                <div style={{ width: '28px', fontSize: '13px', color: '#555', fontFamily: 'monospace' }}>{count}</div>
               </div>
             ))}
           </div>
+        </div>
+      );
+    };
+
+    // ===== REVENUE PANEL =====
+    const RevenuePanel = ({ revenue }) => {
+      if (!revenue) return null;
+
+      const formatMoney = (amount) => {
+        return new Intl.NumberFormat('fr-CA', { style: 'currency', currency: revenue.currency || 'CAD' }).format(amount);
+      };
+      const formatDate = (d) => {
+        if (!d) return '—';
+        const date = new Date(d);
+        return `${date.getDate()} ${TRANSLATIONS.fr.monthAbbrev[date.getMonth()]} ${date.getFullYear()}`;
+      };
+
+      return (
+        <div style={{ marginBottom: '40px' }}>
+          <div style={{
+            fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '20px',
+            color: '#1a1a1a', letterSpacing: '0.1em', marginBottom: '16px'
+          }}>REVENUS</div>
+
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '20px' }}>
+            <StatCard value={formatMoney(revenue.total_revenue)} label="REVENU TOTAL" />
+            <StatCard value={revenue.active_subscriptions || 0} label="ABONNEMENTS ACTIFS" />
+            <StatCard value={revenue.total_orders || 0} label="COMMANDES" />
+          </div>
+
+          {revenue.orders && revenue.orders.length > 0 && (
+            <div>
+              <div style={{
+                fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '16px',
+                color: '#1a1a1a', letterSpacing: '0.08em', marginBottom: '10px'
+              }}>DERNIÈRES COMMANDES</div>
+              <div style={{
+                display: 'grid', gridTemplateColumns: '1.5fr 0.8fr 0.8fr 0.8fr',
+                gap: '12px', fontSize: '14px', padding: '10px 0',
+                borderBottom: '1px solid rgba(0,0,0,0.1)',
+                fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400,
+                color: '#555', letterSpacing: '0.08em'
+              }}>
+                <div>EMAIL</div>
+                <div>MONTANT</div>
+                <div>STATUT</div>
+                <div>DATE</div>
+              </div>
+              {revenue.orders.slice(0, 20).map((o, i) => (
+                <div key={i} style={{
+                  display: 'grid', gridTemplateColumns: '1.5fr 0.8fr 0.8fr 0.8fr',
+                  gap: '12px', fontSize: '15px', padding: '12px 0',
+                  borderBottom: '1px solid rgba(0,0,0,0.06)'
+                }}>
+                  <div style={{ color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.email}</div>
+                  <div style={{ color: '#1a1a1a', fontFamily: 'monospace' }}>{formatMoney(o.total)}</div>
+                  <div style={{ color: o.status === 'paid' ? '#3a9a8a' : '#c4611a', fontSize: '13px' }}>{o.status?.toUpperCase()}</div>
+                  <div style={{ color: '#555', fontSize: '13px' }}>{formatDate(o.created_at)}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       );
     };
@@ -183,7 +245,7 @@
         <div>
           <div style={{
             fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '20px',
-            color: '#8B9B99', letterSpacing: '0.1em', marginBottom: '12px'
+            color: '#555', letterSpacing: '0.1em', marginBottom: '12px'
           }}>UTILISATEURS ({users.length})</div>
 
           <div className="user-header">
@@ -197,7 +259,7 @@
 
           {users.map(u => (
             <div key={u.user_id} className="user-row">
-              <div style={{ color: '#404A48', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {u.email}
                 {!u.confirmed_at && (
                   <span style={{ marginLeft: '6px', fontSize: '11px', color: '#E07A2B', letterSpacing: '0.05em' }}>
@@ -205,10 +267,10 @@
                   </span>
                 )}
               </div>
-              <div className="hide-mobile" style={{ color: '#6B7B79' }}>
+              <div className="hide-mobile" style={{ color: '#333' }}>
                 {u.full_name || '—'}
               </div>
-              <div className="hide-mobile" style={{ color: '#8B9B99', fontSize: '13px' }}>
+              <div className="hide-mobile" style={{ color: '#555', fontSize: '13px' }}>
                 {u.sector || '—'}
               </div>
               <div>
@@ -222,10 +284,10 @@
                   <option value="god">GOD</option>
                 </select>
               </div>
-              <div style={{ color: '#404A48', fontFamily: 'monospace', fontSize: '15px' }}>
+              <div style={{ color: '#1a1a1a', fontFamily: 'monospace', fontSize: '15px' }}>
                 {u.project_count}
               </div>
-              <div className="hide-mobile" style={{ color: '#a0b0ae', fontSize: '13px' }}>
+              <div className="hide-mobile" style={{ color: '#666', fontSize: '13px' }}>
                 {formatDate(u.created_at)}
               </div>
             </div>
@@ -240,6 +302,7 @@
       const [loading, setLoading] = useState(true);
       const [users, setUsers] = useState([]);
       const [stats, setStats] = useState(null);
+      const [revenue, setRevenue] = useState(null);
       const [toast, setToast] = useState('');
 
       useEffect(() => {
@@ -267,6 +330,22 @@
         if (statsRes.data) setStats(statsRes.data);
         if (usersRes.error) console.error('Users error:', usersRes.error);
         if (statsRes.error) console.error('Stats error:', statsRes.error);
+
+        // Load revenue from Edge Function (non-blocking)
+        try {
+          const { data: { session } } = await supabaseClient.auth.getSession();
+          if (session?.access_token) {
+            const res = await fetch(`${SUPABASE_URL}/functions/v1/admin-revenue`, {
+              headers: { Authorization: `Bearer ${session.access_token}` }
+            });
+            if (res.ok) {
+              const data = await res.json();
+              setRevenue(data);
+            }
+          }
+        } catch (e) {
+          console.error('Revenue fetch error:', e);
+        }
       };
 
       const handleTierChange = async (userId, newTier) => {
@@ -296,7 +375,7 @@
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
               <div style={{
                 fontFamily: "'Bebas Neue', sans-serif", fontWeight: 300, fontSize: '34px',
-                color: '#404A48', letterSpacing: '0.1em'
+                color: '#1a1a1a', letterSpacing: '0.1em'
               }}>
                 METEOSHOOT <span style={{ color: '#c0bcb5' }}>—</span> ADMIN
               </div>
@@ -305,13 +384,13 @@
                   onClick={loadData}
                   style={{
                     background: 'none', border: '1px solid rgba(0,0,0,0.12)',
-                    color: '#8B9B99', padding: '8px 16px', cursor: 'pointer',
-                    fontFamily: "'Avenir', 'Montserrat', sans-serif", fontSize: '14px', letterSpacing: '0.05em'
+                    color: '#555', padding: '8px 16px', cursor: 'pointer',
+                    fontFamily: "'Avenir Next', 'Avenir', 'Montserrat', sans-serif", fontSize: '14px', letterSpacing: '0.05em'
                   }}
                 >↻ REFRESH</button>
                 <a href="/index.html" style={{
-                  color: '#8B9B99', textDecoration: 'none',
-                  fontFamily: "'Avenir', 'Montserrat', sans-serif", fontSize: '14px'
+                  color: '#555', textDecoration: 'none',
+                  fontFamily: "'Avenir Next', 'Avenir', 'Montserrat', sans-serif", fontSize: '14px'
                 }}>← APP</a>
                 <button
                   onClick={async () => {
@@ -320,8 +399,8 @@
                   }}
                   style={{
                     background: 'none', border: '1px solid rgba(0,0,0,0.12)',
-                    color: '#8B9B99', padding: '8px 16px', cursor: 'pointer',
-                    fontFamily: "'Avenir', 'Montserrat', sans-serif", fontSize: '14px', letterSpacing: '0.05em'
+                    color: '#555', padding: '8px 16px', cursor: 'pointer',
+                    fontFamily: "'Avenir Next', 'Avenir', 'Montserrat', sans-serif", fontSize: '14px', letterSpacing: '0.05em'
                   }}
                 >DÉCONNEXION</button>
               </div>
@@ -329,6 +408,9 @@
 
             {/* Stats */}
             <StatsPanel stats={stats} />
+
+            {/* Revenue */}
+            <RevenuePanel revenue={revenue} />
 
             {/* Users table */}
             <UsersTable users={users} onTierChange={handleTierChange} />
@@ -340,7 +422,7 @@
               position: 'fixed', bottom: '30px', left: '50%', transform: 'translateX(-50%)',
               background: 'rgba(80,170,155,0.12)', border: '1px solid rgba(80,170,155,0.25)',
               color: '#3a9a8a', padding: '10px 24px', fontSize: '13px',
-              fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300,
+              fontFamily: "'Avenir Next', 'Avenir', 'Montserrat', sans-serif", fontWeight: 300,
               letterSpacing: '0.03em', zIndex: 100
             }}>{toast}</div>
           )}
