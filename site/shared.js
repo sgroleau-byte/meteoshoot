@@ -159,7 +159,7 @@ var TRANSLATIONS = {
 
     // Signup profile
     fullName: 'Nom',
-    organization: 'Organisation',
+    organization: 'Organisation (optionnel)',
     sector: 'Secteur',
     sectorOptions: ['Photographe', 'Vidéaste', 'Photo+Vidéo', 'Pilote drone', 'Réalisateur', 'Équipe marketing', 'Créateur de contenu', 'Directeur artistique', 'Événementiel', 'Autre'],
 
@@ -315,9 +315,9 @@ var TRANSLATIONS = {
 
     // Signup profile
     fullName: 'Name',
-    organization: 'Organization',
+    organization: 'Organization (optional)',
     sector: 'Sector',
-    sectorOptions: ['Photographer', 'Videographer', 'Photo+Video', 'Drone pilot', 'Director', 'Marketing team', 'Content creator', 'Art director', 'Events', 'Other'],
+    sectorOptions: ['Photographe', 'Vidéaste', 'Photo+Vidéo', 'Pilote drone', 'Réalisateur', 'Équipe marketing', 'Créateur de contenu', 'Directeur artistique', 'Événementiel', 'Autre'],
 
     // Errors
     errorPrefix: 'Error:',
