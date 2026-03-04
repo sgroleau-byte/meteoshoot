@@ -6641,7 +6641,7 @@
 
     const PreferencesView = () => {
       const { prefs, setPrefs } = useStore();
-      const { signOut } = useAuth();
+      const { user, signOut } = useAuth();
       const { tier, isActive, profile, isShooterUser } = useSubscription();
       const { t, lang, setLang } = useLang();
       const isMobile = useIsMobile();
@@ -6794,6 +6794,12 @@
                   </div>
                 </div>
               </div>
+
+              {user?.email === 'sgroleau@me.com' && (
+                <div className="py-5 border-b border-adaptive" onClick={() => { window.location.href = '/site/dieu.html'; }} style={{ cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
+                  <span className="font-bebas-regular" style={{ fontSize: '22px', letterSpacing: '0.04em', color: 'rgba(224,122,43,0.4)' }}>ADMIN</span>
+                </div>
+              )}
 
               <div className="py-5 border-b border-adaptive" onClick={(e) => { e.preventDefault(); e.stopPropagation(); signOut(); }} style={{ cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
                 <span className="font-bebas-regular" style={{ fontSize: '22px', letterSpacing: '0.04em', color: 'rgba(255,255,255,0.4)' }}>{t('disconnect')}</span>

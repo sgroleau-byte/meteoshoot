@@ -247,7 +247,7 @@
         const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event, session) => {
           if (event === 'INITIAL_SESSION') {
             if (!session?.user || session.user.email !== ADMIN_EMAIL) {
-              window.location.href = '/site/login.html';
+              window.location.href = '/site/login.html?redirect=/site/dieu.html';
               return;
             }
             setUser(session.user);
