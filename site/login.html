@@ -504,31 +504,28 @@
               <span style={{ color: '#ffffff', fontSize: '21px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif", fontWeight: 300, position: 'relative', top: '2px' }}>{'\u2192'}</span>
             </button>
 
-            {/* Forgot password link */}
-            <div style={{ marginTop: '12px', padding: '0 2px', textAlign: 'right' }}>
+            {/* Forgot password & Signup - single line */}
+            <div style={{ marginTop: '200px', padding: '0 2px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px' }}>
               <button
                 onClick={() => { setView('forgot'); setResetEmail(email); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '13px', color: 'rgba(255,255,255,0.45)', padding: 0, transition: 'color 0.2s' }}
-                onMouseEnter={e => e.target.style.color = 'rgba(255,255,255,0.7)'}
-                onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.45)'}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '14px', color: '#546262', padding: 0, transition: 'color 0.2s' }}
+                onMouseEnter={e => e.target.style.color = '#849898'}
+                onMouseLeave={e => e.target.style.color = '#546262'}
               >
                 {t('forgotPassword')}
               </button>
-            </div>
-
-            {/* Signup link */}
-            <div style={{ marginTop: '24px', padding: '0 2px', textAlign: 'right' }}>
-              <span style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '14px', color: 'rgba(255,255,255,0.5)' }}>
+              <span style={{ color: '#546262', fontSize: '14px' }}>|</span>
+              <span style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '14px', color: '#546262' }}>
                 {t('noAccount')}{' '}
+                <a
+                  href="signup.html"
+                  style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '14px', color: '#849898', textDecoration: 'none', transition: 'color 0.2s' }}
+                  onMouseEnter={e => e.target.style.color = '#b0c4c4'}
+                  onMouseLeave={e => e.target.style.color = '#849898'}
+                >
+                  {t('signup')}
+                </a>
               </span>
-              <a
-                href="signup.html"
-                style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 400, fontSize: '14px', color: 'rgba(255,255,255,0.75)', textDecoration: 'underline', textUnderlineOffset: '3px', transition: 'color 0.2s' }}
-                onMouseEnter={e => e.target.style.color = 'rgba(255,255,255,0.95)'}
-                onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.75)'}
-              >
-                {t('signup')}
-              </a>
             </div>
           </div>
         </div>
