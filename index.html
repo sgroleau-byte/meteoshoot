@@ -1026,11 +1026,7 @@
     // LoginScreen — moved to /site/login.html, this redirects there
     const LoginScreen = () => {
       useEffect(() => { window.location.href = '/site/login.html'; }, []);
-      return (
-        <div style={{ position: 'fixed', inset: 0, background: '#181b1e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <p className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '32px', color: '#8B9B99' }}>MeteoShoot</p>
-        </div>
-      );
+      return <div style={{ position: 'fixed', inset: 0, background: '#181b1e' }}/>;
     };
 
     // ===== CONSTANTS =====
@@ -7296,11 +7292,7 @@
     const AppWithAuth = () => {
       const { user, loading } = useAuth();
       
-      if (loading) return (
-        <div className="min-h-screen flex items-center justify-center" style={{ background: window.innerWidth < 768 ? '#181b1e' : '#181b1e' }}>
-          <p className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '32px', color: '#8B9B99' }}>MeteoShoot</p>
-        </div>
-      );
+      if (loading) return <div style={{ position: 'fixed', inset: 0, background: '#181b1e' }}/>;
       
       if (!user) return <LoginScreen/>;
 
