@@ -164,6 +164,21 @@ var TRANSLATIONS = {
     sector: 'Secteur',
     sectorOptions: ['Photographe / Vidéaste / Drone', 'Réalisateur', 'Équipe marketing', 'Créateur de contenu', 'Directeur artistique', 'Événementiel', 'Autre'],
 
+    // Admin
+    adminTitle: 'ADMIN',
+    adminUsers: 'UTILISATEURS',
+    adminStats: 'STATISTIQUES',
+    adminTotalUsers: 'UTILISATEURS',
+    adminTotalProjects: 'PROJETS',
+    adminTierDistribution: 'TIERS',
+    adminBySector: 'PAR SECTEUR',
+    adminChangeTier: 'Changer le tier',
+    adminUnauthorized: 'Accès non autorisé',
+    adminConfirmed: 'Confirmé',
+    adminPending: 'En attente',
+    adminNoUsers: 'Aucun utilisateur',
+    adminTierChanged: 'Tier modifié',
+
     // Errors
     errorPrefix: 'Erreur:',
     fileLimitExceeded: 'Limite de {limit} MB par projet dépassée',
@@ -320,6 +335,21 @@ var TRANSLATIONS = {
     organization: 'Organization (optional)',
     sector: 'Sector',
     sectorOptions: ['Photographe / Vidéaste / Drone', 'Réalisateur', 'Équipe marketing', 'Créateur de contenu', 'Directeur artistique', 'Événementiel', 'Autre'],
+
+    // Admin
+    adminTitle: 'ADMIN',
+    adminUsers: 'USERS',
+    adminStats: 'STATISTICS',
+    adminTotalUsers: 'USERS',
+    adminTotalProjects: 'PROJECTS',
+    adminTierDistribution: 'TIERS',
+    adminBySector: 'BY SECTOR',
+    adminChangeTier: 'Change tier',
+    adminUnauthorized: 'Unauthorized access',
+    adminConfirmed: 'Confirmed',
+    adminPending: 'Pending',
+    adminNoUsers: 'No users',
+    adminTierChanged: 'Tier changed',
 
     // Errors
     errorPrefix: 'Error:',
