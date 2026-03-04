@@ -589,6 +589,8 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="site/shared.js"></script>
+  <script src="https://app.lemonsqueezy.com/js/lemon.js" defer></script>
 
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback, createContext, useContext } = React;
@@ -829,106 +831,204 @@
       return <AuthContext.Provider value={{ user, loading, signIn, signOut }}>{children}</AuthContext.Provider>;
     };
 
-    // Login screen component
-    const LoginScreen = () => {
-      const { signIn } = useAuth();
-      const [email, setEmail] = useState('');
-      const [password, setPassword] = useState('');
-      const [sending, setSending] = useState(false);
-      const [error, setError] = useState(false);
+    // ===== LANGUAGE CONTEXT =====
+    const LangContext = createContext();
+    const useLang = () => useContext(LangContext);
 
-      const handleSubmit = async () => {
-        if (!email || !password) return;
-        setSending(true);
-        setError(false);
-        try {
-          const { error: err } = await signIn(email, password);
-          if (err) { setError(true); setSending(false); }
-        } catch (e) {
-          setError(true); setSending(false);
+    const LangProvider = ({ children }) => {
+      const [lang, setLangState] = useState(getDefaultLang());
+      const setLang = (newLang) => {
+        if (TRANSLATIONS[newLang]) {
+          setLangState(newLang);
+          localStorage.setItem('sp-lang', newLang);
+        }
+      };
+      const tr = (key) => {
+        const dict = TRANSLATIONS[lang];
+        return (dict && dict[key] !== undefined) ? dict[key] : (TRANSLATIONS.fr[key] || key);
+      };
+      return <LangContext.Provider value={{ lang, setLang, t: tr }}>{children}</LangContext.Provider>;
+    };
+
+    // ===== SUBSCRIPTION =====
+    const TBL_USER_PROFILES = isDev ? 'user_profiles_dev' : 'user_profiles';
+
+    const TIER_LIMITS = {
+      free: { maxProjects: 3 },
+      shooter: { maxProjects: Infinity },
+      god: { maxProjects: Infinity }
+    };
+
+    const SubscriptionContext = createContext();
+    const useSubscription = () => useContext(SubscriptionContext);
+
+    const SubscriptionProvider = ({ children }) => {
+      const { user } = useAuth();
+      const [profile, setProfile] = useState(null);
+      const [subLoading, setSubLoading] = useState(true);
+
+      useEffect(() => {
+        if (!user) { setProfile(null); setSubLoading(false); return; }
+
+        const loadProfile = async () => {
+          const { data, error } = await supabase
+            .from(TBL_USER_PROFILES)
+            .select('*')
+            .eq('user_id', user.id)
+            .single();
+
+          if (error && error.code === 'PGRST116') {
+            // No profile found — create one (fallback for users created before trigger)
+            const { data: newProfile } = await supabase
+              .from(TBL_USER_PROFILES)
+              .insert({ user_id: user.id, subscription_tier: 'free', subscription_status: 'active' })
+              .select()
+              .single();
+            setProfile(newProfile);
+          } else if (data) {
+            setProfile(data);
+          }
+          setSubLoading(false);
+        };
+
+        loadProfile();
+
+        // Realtime subscription for profile changes (webhook updates tier)
+        const channel = supabase.channel('profile-changes')
+          .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: TBL_USER_PROFILES,
+            filter: `user_id=eq.${user.id}`
+          }, (payload) => {
+            setProfile(payload.new);
+          })
+          .subscribe();
+
+        return () => { supabase.removeChannel(channel); };
+      }, [user]);
+
+      const tier = profile?.subscription_tier || 'free';
+      const limits = TIER_LIMITS[tier];
+      const isActive = profile?.subscription_status === 'active' || profile?.subscription_status === 'trialing';
+
+      const canCreateProject = (currentCount) => {
+        return currentCount < limits.maxProjects;
+      };
+
+      const getProjectLimit = () => limits.maxProjects;
+      const isShooterUser = () => tier === 'shooter' || tier === 'god';
+
+      return (
+        <SubscriptionContext.Provider value={{
+          profile, subLoading, tier, isActive,
+          canCreateProject, getProjectLimit, isShooterUser, limits
+        }}>
+          {children}
+        </SubscriptionContext.Provider>
+      );
+    };
+
+    // ===== UPGRADE MODAL =====
+    const UpgradeModal = ({ isOpen, onClose }) => {
+      const { user } = useAuth();
+      const { tier } = useSubscription();
+      const { t } = useLang();
+      const isMobile = useIsMobile();
+
+      const openCheckout = () => {
+        if (typeof window.createLemonSqueezy === 'function') window.createLemonSqueezy();
+        if (window.LemonSqueezy && window.LemonSqueezy.Url) {
+          window.LemonSqueezy.Url.Open(
+            LEMON_CHECKOUT_URL + '?checkout[custom][user_id]=' + user.id + '&checkout[email]=' + encodeURIComponent(user.email) + '&embed=1'
+          );
+        } else {
+          window.open(LEMON_CHECKOUT_URL + '?checkout[custom][user_id]=' + user.id + '&checkout[email]=' + encodeURIComponent(user.email), '_blank');
         }
       };
 
-      const isMob = window.innerWidth < 768;
+      if (!isOpen) return null;
+
+      const cardStyle = { flex: 1, border: '1px solid rgba(255,255,255,0.12)', padding: '28px 24px', position: 'relative' };
+      const titleStyle = { fontFamily: "'Bebas Neue', sans-serif", fontWeight: 700, letterSpacing: '0.04em' };
+      const taglineStyle = { fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '14px', color: 'rgba(255,255,255,0.35)', fontStyle: 'italic', marginTop: '4px', letterSpacing: '0.02em' };
+      const featureStyle = { color: 'rgba(255,255,255,0.5)', fontSize: '14px', marginBottom: '8px', fontFamily: "'Montserrat', sans-serif", fontWeight: 300 };
 
       return (
-        <div style={{ position: 'fixed', inset: 0, background: isMob ? '#181b1e' : '#181b1e', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-          {/* Halo glow — same as splash */}
-          <div style={{
-            position: 'absolute', top: isMob ? 'calc(46% - 80px)' : 'calc(46% - 150px)', left: isMob ? 'calc(50% - 100px)' : 'calc(50% - 200px)', transform: 'translate(-50%, -50%) translateZ(0)',
-            width: isMob ? '900px' : '1800px', height: isMob ? '900px' : '1800px', borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(170,215,208,0.4) 0%, rgba(150,200,195,0.08) 30%, transparent 55%)',
-            filter: 'blur(60px)', pointerEvents: 'none', zIndex: 1,
-            animation: 'splashHaloOrg 20s ease-in-out infinite'
-          }}/>
-          {/* Logo + Form wrapper — left-aligned together */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-            {/* Logo + flare — exact same as splash */}
-            <div className="splash-logo-area" style={{ opacity: 1, transform: 'translateZ(0) scale(1)', animation: 'none', marginBottom: '25px' }}>
-              <img className="splash-flare" src="imgProjet/splash-o.png" alt="" style={{ opacity: 1, animation: 'splashFlareOrg 12s ease-in-out infinite' }} />
-              <img className="splash-logo-img" src="imgProjet/splash-typoMeteoshoot.png" alt="meteoshoot" />
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }} onClick={onClose}>
+          <div onClick={e => e.stopPropagation()} style={{ maxWidth: '860px', width: '100%' }}>
+            <h2 style={{ ...titleStyle, fontSize: '32px', color: '#ffffff', textAlign: 'center', marginBottom: '36px' }}>{t('choosePlan')}</h2>
+
+            <div style={{ display: 'flex', gap: '16px', flexDirection: isMobile ? 'column' : 'row' }}>
+              {/* GRATUIT */}
+              <div style={{ ...cardStyle, borderColor: tier === 'free' ? '#7dd3c6' : 'rgba(255,255,255,0.12)' }}>
+                <div style={{ ...titleStyle, fontSize: '22px', color: '#8B9B99' }}>{t('freePlan')}</div>
+                <div style={taglineStyle}>{t('freeTagline')}</div>
+                <div style={{ ...titleStyle, fontSize: '44px', color: '#ffffff', margin: '16px 0 4px' }}>0$</div>
+                <div style={{ margin: '16px 0 20px' }}>
+                  <div style={featureStyle}>{t('maxProjectsFree')}</div>
+                  <div style={featureStyle}>{t('basicWeather')}</div>
+                  <div style={featureStyle}>{t('storagePerProject')}</div>
+                </div>
+                {tier === 'free' && <div style={{ ...titleStyle, fontSize: '15px', color: '#7dd3c6' }}>{t('currentPlan')}</div>}
+              </div>
+
+              {/* SHOOTER */}
+              <div style={{ ...cardStyle, borderColor: tier === 'shooter' ? '#E07A2B' : '#E07A2B', boxShadow: '0 0 30px rgba(224,122,43,0.1)' }}>
+                <div style={{ ...titleStyle, fontSize: '22px', color: '#E07A2B' }}>{t('shooterPlan')}</div>
+                <div style={taglineStyle}>{t('shooterTagline')}</div>
+                <div style={{ ...titleStyle, fontSize: '44px', color: '#ffffff', margin: '16px 0 4px' }}>---</div>
+                <div style={{ margin: '16px 0 20px' }}>
+                  <div style={{ ...featureStyle, color: 'rgba(255,255,255,0.7)' }}>{t('unlimitedProjects')}</div>
+                  <div style={{ ...featureStyle, color: 'rgba(255,255,255,0.7)' }}>{t('allFeatures')}</div>
+                  <div style={{ ...featureStyle, color: 'rgba(255,255,255,0.7)' }}>{t('continuousUpdates')}</div>
+                </div>
+                {tier === 'shooter' ? (
+                  <div style={{ ...titleStyle, fontSize: '15px', color: '#E07A2B' }}>{t('currentPlan')}</div>
+                ) : (
+                  <button onClick={openCheckout} style={{
+                    background: '#E07A2B', color: '#ffffff', border: 'none',
+                    padding: '12px 24px', cursor: 'pointer', width: '100%',
+                    fontFamily: "'Bebas Neue', sans-serif", fontWeight: 700, fontSize: '16px',
+                    letterSpacing: '0.04em'
+                  }}>{t('upgradeToShooter')}</button>
+                )}
+              </div>
+
+              {/* GOD */}
+              <div style={{ ...cardStyle, opacity: 0.35, borderColor: 'rgba(255,255,255,0.06)' }}>
+                <div style={{ ...titleStyle, fontSize: '22px', color: '#8B9B99' }}>{t('godPlan')}</div>
+                <div style={taglineStyle}>{t('godTagline')}</div>
+                <div style={{ ...titleStyle, fontSize: '44px', color: '#ffffff', margin: '16px 0 4px' }}>---</div>
+                <div style={{ margin: '16px 0 20px' }}>
+                  <div style={featureStyle}>{t('shooterPlus')}</div>
+                  <div style={featureStyle}>{t('premiumWeather')}</div>
+                  <div style={featureStyle}>{t('advancedFeatures')}</div>
+                </div>
+                <div style={{ ...titleStyle, fontSize: '15px', color: 'rgba(255,255,255,0.3)' }}>{t('comingSoon')}</div>
+              </div>
             </div>
-            {/* Form */}
-            <div style={{ width: isMob ? '300px' : '360px', position: 'relative', zIndex: 10 }}>
-            <div style={{
-              position: 'relative', overflow: 'hidden',
-              backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-              border: 'none',
-              borderRadius: '0', padding: '2px', marginBottom: '13px'
-            }}>
-              <div style={{ position: 'absolute', top: '-200px', left: '-600px', width: '800px', height: '800px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0.08) 40%, transparent 70%)', pointerEvents: 'none' }} />
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="Email"
-                autoComplete="email"
-                style={{ background: 'transparent', border: 'none', outline: 'none', color: '#ffffff', fontSize: '21px', width: '100%', padding: '6px 14px', fontFamily: "'Avenir', sans-serif", fontWeight: 300, boxSizing: 'border-box', position: 'relative', zIndex: 1 }}
-                className="login-input"
-              />
-            </div>
-            <div style={{
-              position: 'relative', overflow: 'hidden',
-              backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-              border: 'none',
-              borderRadius: '0', padding: '2px', marginBottom: '16px'
-            }}>
-              <div style={{ position: 'absolute', top: '-200px', left: '-600px', width: '800px', height: '800px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0.08) 40%, transparent 70%)', pointerEvents: 'none' }} />
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                placeholder="Mot de passe"
-                autoComplete="current-password"
-                style={{ background: 'transparent', border: 'none', outline: 'none', color: '#ffffff', fontSize: '21px', width: '100%', padding: '6px 14px', fontFamily: "'Avenir', sans-serif", fontWeight: 300, boxSizing: 'border-box', position: 'relative', zIndex: 1 }}
-                className="login-input"
-              />
-            </div>
-            {error && <div style={{ fontFamily: "'Avenir', sans-serif", fontWeight: 300, fontSize: '14px', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap', padding: '0 14px', marginBottom: '8px' }}>Les nuages passent, les mauvais mots de passe restent.</div>}
-            <button
-              onClick={handleSubmit}
-              disabled={sending || !email || !password}
-              className="login-btn"
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px',
-                width: '100%', padding: '4px 2px',
-                opacity: 1,
-                transition: 'opacity 0.2s, text-shadow 0.3s'
-              }}
-            >
-              <span style={{ fontFamily: "'Avenir', sans-serif", fontWeight: 300, fontSize: '21px', color: '#ffffff', letterSpacing: '0.02em' }}>
-                {sending ? 'connexion...' : 'connexion'}
-              </span>
-              <span style={{ color: '#ffffff', fontSize: '21px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif", fontWeight: 300, position: 'relative', top: '2px' }}>→</span>
-            </button>
+
+            <div style={{ textAlign: 'center', marginTop: '24px' }}>
+              <a href="site/account.html" style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px', fontFamily: "'Montserrat', sans-serif", textDecoration: 'none' }}>{t('account')}</a>
             </div>
           </div>
-          {/* Version */}
-          <div style={{ position: 'absolute', bottom: '40px', left: '50%', transform: 'translateX(-50%)', zIndex: 2, textAlign: 'center' }}>
-            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.2)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>{window.isDev ? 'DEV' : ''}</div>
-          </div>
+        </div>
+      );
+    };
+
+    // Login — redirect to /site/login.html (login screen moved to separate page)
+    const LoginRedirect = () => {
+      useEffect(() => { window.location.href = '/site/login.html'; }, []);
+      return null;
+    };
+
+    // LoginScreen — moved to /site/login.html, this redirects there
+    const LoginScreen = () => {
+      useEffect(() => { window.location.href = '/site/login.html'; }, []);
+      return (
+        <div style={{ position: 'fixed', inset: 0, background: '#181b1e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <p className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '32px', color: '#8B9B99' }}>MeteoShoot</p>
         </div>
       );
     };
@@ -1104,6 +1204,7 @@
     
     const StoreProvider = ({ children }) => {
       const { user } = useAuth();
+      const { canCreateProject, getProjectLimit } = useSubscription();
       const [projects, setProjects] = useState(() => JSON.parse(localStorage.getItem('sp-projects') || '[]'));
       const [prefs, setPrefsState] = useState(() => JSON.parse(localStorage.getItem('sp-prefs') || '{"homeAddress":"","homeLat":null,"homeLng":null,"prepTime":60}'));
       const [view, setView] = useState('todo');
@@ -1239,6 +1340,11 @@
       };
 
       const addProject = (data) => {
+        // Check project limit for subscription tier
+        const activeCount = projects.filter(p => p.status !== ProjectStatus.DONE).length;
+        if (!canCreateProject(activeCount)) {
+          return { error: 'limit_reached', limit: getProjectLimit() };
+        }
         const proj = { id: generateId(), name: data.name || 'Nouveau', address: data.address || '', lat: data.lat, lng: data.lng, mandates: data.mandates || [], orientation: data.orientation || [], deliveryDate: data.deliveryDate || null, isContest: data.isContest || false, status: ProjectStatus.TODO, notes: '', links: [], buildings: [], travelTime: data.travelTime || null, departureAddress: data.departureAddress || null, departureLat: data.departureLat || null, departureLng: data.departureLng || null, createdAt: new Date().toISOString(), shotAt: null };
         setProjects(p => {
           const newList = [proj, ...p];
@@ -1543,6 +1649,7 @@
     let activeWeatherRowDismiss = null;
 
     const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9 }) => {
+      const { t } = useLang();
       const [hoveredIdx, setHoveredIdx] = useState(null);
       const [mouseX, setMouseX] = useState(0);
       const [cellCenterX, setCellCenterX] = useState(0);
@@ -1669,7 +1776,7 @@
               >
                 {isSunny && <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%) translateY(95%) scaleX(0.6) scaleY(1.4)', width: '60px', height: '60px', pointerEvents: 'none', zIndex: 0, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,226,107,0.3) 0%, rgba(255,226,107,0.1) 40%, transparent 70%)', animation: 'sunglowPulse 6s ease-in-out infinite' }}/>}
                 <span className={`font-bebas-bold text-sm leading-none ${isGood ? '' : 'line-through'}`} style={{ color: isGood ? '#8B9B99' : '#404A48' }}>
-                  {isToday(day.date) ? 'CE JOUR' : getDayAbbrev(day.date)}
+                  {isToday(day.date) ? t('thisDay') : getDayAbbrev(day.date)}
                 </span>
                 <span className="font-bebas-bold text-xs leading-none" style={{ letterSpacing: '0.04em', color: isGood ? '#8B9B99' : '#404A48' }}>{getDayMonth(day.date)}</span>
                 <WeatherIcon type={icon} className={`w-8 h-8 ${!isGood ? 'opacity-50' : ''}`}/>
@@ -1699,10 +1806,10 @@
             >
               <div className="absolute -top-2 w-0 h-0" style={{ left: `calc(50% + ${cellCenterX - displayX}px)`, transform: 'translateX(-50%)', borderLeft: '8px solid transparent', borderRight: '8px solid transparent', borderBottom: '8px solid var(--text-muted)' }}/>
               <div className="flex gap-2">
-                <DayPeriodIcon label="LEVER" icon="sunrise" day={hoveredDay} hourly={hourly} sunriseHour={hoveredDay.sunrise ? new Date(hoveredDay.sunrise).getHours() : 6} sunsetHour={hoveredDay.sunset ? new Date(hoveredDay.sunset).getHours() : 20}/>
-                <DayPeriodIcon label="AM" day={hoveredDay} hourly={hourly} sunriseHour={hoveredDay.sunrise ? new Date(hoveredDay.sunrise).getHours() : 6} sunsetHour={hoveredDay.sunset ? new Date(hoveredDay.sunset).getHours() : 20}/>
-                <DayPeriodIcon label="PM" day={hoveredDay} hourly={hourly} sunriseHour={hoveredDay.sunrise ? new Date(hoveredDay.sunrise).getHours() : 6} sunsetHour={hoveredDay.sunset ? new Date(hoveredDay.sunset).getHours() : 20}/>
-                <DayPeriodIcon label="COUCHER" icon="sunset" day={hoveredDay} hourly={hourly} sunriseHour={hoveredDay.sunrise ? new Date(hoveredDay.sunrise).getHours() : 6} sunsetHour={hoveredDay.sunset ? new Date(hoveredDay.sunset).getHours() : 20}/>
+                <DayPeriodIcon label={t('sunrise')} period="sunrise" icon="sunrise" day={hoveredDay} hourly={hourly} sunriseHour={hoveredDay.sunrise ? new Date(hoveredDay.sunrise).getHours() : 6} sunsetHour={hoveredDay.sunset ? new Date(hoveredDay.sunset).getHours() : 20}/>
+                <DayPeriodIcon label={t('am')} period="am" day={hoveredDay} hourly={hourly} sunriseHour={hoveredDay.sunrise ? new Date(hoveredDay.sunrise).getHours() : 6} sunsetHour={hoveredDay.sunset ? new Date(hoveredDay.sunset).getHours() : 20}/>
+                <DayPeriodIcon label={t('pm')} period="pm" day={hoveredDay} hourly={hourly} sunriseHour={hoveredDay.sunrise ? new Date(hoveredDay.sunrise).getHours() : 6} sunsetHour={hoveredDay.sunset ? new Date(hoveredDay.sunset).getHours() : 20}/>
+                <DayPeriodIcon label={t('sunset')} period="sunset" icon="sunset" day={hoveredDay} hourly={hourly} sunriseHour={hoveredDay.sunrise ? new Date(hoveredDay.sunrise).getHours() : 6} sunsetHour={hoveredDay.sunset ? new Date(hoveredDay.sunset).getHours() : 20}/>
               </div>
             </div>,
             document.body
@@ -1711,7 +1818,7 @@
       );
     };
     
-    const DayPeriodIcon = ({ label, icon, day, hourly, sunriseHour, sunsetHour }) => {
+    const DayPeriodIcon = ({ label, period, icon, day, hourly, sunriseHour, sunsetHour }) => {
       const getIconFromCloudAndPrecip = (cloudcover, dominantIcon) => {
         if (dominantIcon === 'thunderstorm') return 'thunderstorm';
         if (dominantIcon === 'snow') return 'snow';
@@ -1728,16 +1835,16 @@
       
       // Calculer les heures de début/fin selon la période
       let startHour, endHour;
-      if (label === 'LEVER') {
+      if (period === 'sunrise') {
         startHour = sunriseHour - 1;
         endHour = sunriseHour + 1;
-      } else if (label === 'AM') {
+      } else if (period === 'am') {
         startHour = 8;
         endHour = 11;
-      } else if (label === 'PM') {
+      } else if (period === 'pm') {
         startHour = 13;
         endHour = 16;
-      } else if (label === 'COUCHER') {
+      } else if (period === 'sunset') {
         startHour = sunsetHour - 1;
         endHour = sunsetHour + 1;
       }
@@ -1798,6 +1905,7 @@
     };
 
     const HourlyWeather = ({ hourly, sunrise, sunset }) => {
+      const { t } = useLang();
       if (!hourly?.length) return <div className="flex gap-3 py-4">{[...Array(12)].map((_,i) => <div key={i} className="flex flex-col items-center gap-2 min-w-[44px]"><div className="w-6 h-3 bg-cream-dark rounded animate-pulse"/><div className="w-6 h-6 bg-cream-dark rounded-full animate-pulse"/><div className="w-6 h-3 bg-cream-dark rounded animate-pulse"/></div>)}</div>;
       const sunriseH = sunrise ? new Date(sunrise).getHours() : null;
       const sunsetH = sunset ? new Date(sunset).getHours() : null;
@@ -1840,7 +1948,7 @@
                   </span>
                   <WeatherIcon type={icon} className={`w-5 h-5 ${isNight ? 'opacity-60' : ''}`}/>
                   <span className={`text-sm font-medium ${h.temp <= 0 ? 'text-blue-500' : h.temp >= 25 ? 'text-red-500' : 'text-charcoal'}`} style={{ marginTop: '3px' }}>{h.temp}°</span>
-                  <span className="text-[10px] text-charcoal-muted">{h.wind} <span className="text-[8px]">KM/H</span></span>
+                  <span className="text-[10px] text-charcoal-muted">{h.wind} <span className="text-[8px]">{t('kmh')}</span></span>
                 </div>
               );
             })}
@@ -1852,6 +1960,7 @@
 
     const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, openActionsId, setOpenActionsId }) => {
       const { advanceProject, deleteProject, prefs } = useStore();
+      const { t } = useLang();
       const [weather, setWeather] = useState(null);
       const [confirmDelete, setConfirmDelete] = useState(false);
       const [confirmReady, setConfirmReady] = useState(false);
@@ -2098,7 +2207,7 @@
                   style={{ display: 'flex', overflowX: actionsOpen ? 'hidden' : 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', marginTop: '6px' }}
                 >
                   <div style={{ flexShrink: 0 }} onClick={() => { if (!actionsOpen) onSelect(project); }}>
-                    {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} onDayClick={() => { if (!actionsOpen) onSelect(project); }}/> : <p className="text-charcoal-muted text-sm italic py-2">Météo non disponible</p>}
+                    {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} onDayClick={() => { if (!actionsOpen) onSelect(project); }}/> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
                   </div>
                 </div>
               </div>
@@ -2110,8 +2219,8 @@
             }}>
               {/* Red/pink glow - moves with swipe */}
               <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
-              {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmDone) { setActionsOpen(false); advanceProject(project.id); setConfirmDone(false); } else { setConfirmDone(true); setConfirmDelete(false); setTimeout(() => setConfirmDone(false), 3000); } }}>{confirmDone ? 'EN ÉDITION ?' : 'EN ÉDITION'}</button>}
-              {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>SUPPRIMER ?</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '-3px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
+              {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmDone) { setActionsOpen(false); advanceProject(project.id); setConfirmDone(false); } else { setConfirmDone(true); setConfirmDelete(false); setTimeout(() => setConfirmDone(false), 3000); } }}>{confirmDone ? t('moveToEditingConfirm') : t('moveToEditing')}</button>}
+              {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>{t('deleteConfirm')}</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '-3px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
             </div>
           </div>
         );
@@ -2135,7 +2244,7 @@
           <div className="card-info-flare" style={{ left: '-350px', top: '-50px' }}></div>
           <div className="flex items-center gap-0">
             <div className="min-w-0" style={{ minWidth: '432px', overflow: "visible" }}>
-              {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} onDayClick={() => onSelect(project)}/> : <p className="text-charcoal-muted text-sm italic py-2 cursor-pointer" onClick={() => onSelect(project)}>Météo non disponible</p>}
+              {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} onDayClick={() => onSelect(project)}/> : <p className="text-charcoal-muted text-sm italic py-2 cursor-pointer" onClick={() => onSelect(project)}>{t('weatherUnavailable')}</p>}
             </div>
             <div onMouseEnter={() => { if (activeWeatherRowDismiss) { activeWeatherRowDismiss(); activeWeatherRowDismiss = null; } }} onClick={() => onSelect(project)} className="info-dodge cursor-pointer flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
               <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '75px' }}>
@@ -2147,7 +2256,7 @@
                 })}
               </div>
               <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive" style={{ minWidth: '85px' }}>
-                <span style={{ color: colorInactive }}>SOLEIL</span>
+                <span style={{ color: colorInactive }}>{t('sun')}</span>
                 <span style={{ color: (project.orientation?.includes('AM') && sun) ? colorActive : colorInactive }}>
                   AM {sun ? formatTime(sun.sunrise) : '—'}
                 </span>
@@ -2156,26 +2265,26 @@
                 </span>
               </div>
               <div className="flex flex-col justify-center pl-2 ml-6 border-l border-adaptive" style={{ minWidth: '80px' }}>
-                <span style={{ color: colorInactive }}>TRAJET</span>
+                <span style={{ color: colorInactive }}>{t('travel')}</span>
                 <span style={{ color: project.travelTime?.durationSeconds ? colorActive : colorInactive }}>{project.travelTime?.durationSeconds ? formatDuration(project.travelTime.durationSeconds) : '—'}</span>
                 {project.travelTime?.distanceMeters > 0 ? <span style={{ color: colorCharcoal, letterSpacing: '0.1em', marginTop: '-5px' }} className="text-lg">{Math.round(project.travelTime.distanceMeters / 1000)} KM</span> : <span style={{ color: 'transparent' }}>&nbsp;</span>}
               </div>
               <div className="flex flex-col justify-center pl-2 ml-6 border-l border-adaptive" style={{ minWidth: '75px' }}>
-                <span style={{ color: colorInactive }}>RÉVEIL</span>
+                <span style={{ color: colorInactive }}>{t('wake')}</span>
                 <span style={{ color: (project.orientation?.includes('AM') && wakeUp) ? colorActive : colorInactive }}>{project.orientation?.includes('AM') && wakeUp ? formatTime(wakeUp).replace(':','H') : '—'}</span>
                 <span style={{ color: 'transparent' }}>&nbsp;</span>
               </div>
               <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive" style={{ minWidth: '120px' }}>
-                <span style={{ color: colorInactive }}>CRÉÉ</span>
+                <span style={{ color: colorInactive }}>{t('created')}</span>
                 <span style={{ color: colorActive }}>{formatDateShort(project.createdAt)}</span>
-                <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
+                <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? t('day') : t('days')}</span>
               </div>
             </div>
           </div>
         </div>
         <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
-          <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? 'EN ÉDITION ?' : 'EN ÉDITION'}</button>
-          {confirmDelete ? <button onClick={handleDelete} className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '16px', cursor: confirmReady ? 'pointer' : 'default', letterSpacing: '0.03em', transition: 'color 0.3s', textShadow: confirmReady ? '0 0 12px rgba(255,59,48,0.4)' : 'none', padding: '6px 2px' }}>SUPPRIMER ?</button> : <button onClick={handleDelete} className="p-2 trash-btn text-red-500" title="Supprimer"><TrashIcon/></button>}
+          <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? t('moveToEditingConfirm') : t('moveToEditing')}</button>
+          {confirmDelete ? <button onClick={handleDelete} className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '16px', cursor: confirmReady ? 'pointer' : 'default', letterSpacing: '0.03em', transition: 'color 0.3s', textShadow: confirmReady ? '0 0 12px rgba(255,59,48,0.4)' : 'none', padding: '6px 2px' }}>{t('deleteConfirm')}</button> : <button onClick={handleDelete} className="p-2 trash-btn text-red-500" title={t('delete')}><TrashIcon/></button>}
         </div>
         </div>
       );
@@ -2183,6 +2292,7 @@
 
     const RetouchingCard = ({ project, onSelect, index = 0, openActionsId, setOpenActionsId }) => {
       const { advanceProject, revertProject, deleteProject, updateProject, prefs } = useStore();
+      const { t } = useLang();
       const [confirmDelete, setConfirmDelete] = useState(false);
       const [confirmReady, setConfirmReady] = useState(false);
       const [confirmDone, setConfirmDone] = useState(false);
@@ -2401,10 +2511,10 @@
                   <div style={{ height: '1px', background: 'linear-gradient(to right, rgba(255,255,255,0.15), rgba(255,255,255,0))', margin: '4px 0 0 -11px' }}/>
                   {/* Info line — CRÉÉ X JOURS ÉDITION X JOURS */}
                   <div className="uppercase" style={{ letterSpacing: '0.04em', display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '6px', fontSize: '16px', lineHeight: '1.3', padding: '4px 0 2px 0', color: '#fff' }}>
-                    <span className="font-bebas-book">CRÉÉ</span>
-                    <span className="font-bebas-regular">{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
-                    <span className="font-bebas-book" style={{ marginLeft: '12px' }}>ÉDITION</span>
-                    <span className="font-bebas-regular">{days !== null ? `${days} ${days <= 1 ? 'JOUR' : 'JOURS'}` : '- - -'}</span>
+                    <span className="font-bebas-book">{t('created')}</span>
+                    <span className="font-bebas-regular">{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? t('day') : t('days')}</span>
+                    <span className="font-bebas-book" style={{ marginLeft: '12px' }}>{t('edited')}</span>
+                    <span className="font-bebas-regular">{days !== null ? `${days} ${days <= 1 ? t('day') : t('days')}` : '- - -'}</span>
                   </div>
                 </div>
               </div>
@@ -2416,9 +2526,9 @@
             }}>
               {/* Red/pink glow */}
               <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '280px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
-              {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmRevert) { setActionsOpen(false); revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setConfirmDone(false); setConfirmDelete(false); setTimeout(() => setConfirmRevert(false), 3000); } }}>{confirmRevert ? 'REMETTRE ?' : 'REMETTRE'}</button>}
-              {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmDone) { setActionsOpen(false); advanceProject(project.id); setConfirmDone(false); } else { setConfirmDone(true); setConfirmRevert(false); setConfirmDelete(false); setTimeout(() => setConfirmDone(false), 3000); } }}>{confirmDone ? 'ARCHIVER ?' : 'ARCHIVER'}</button>}
-              {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>SUPPRIMER ?</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '-3px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
+              {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmRevert) { setActionsOpen(false); revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setConfirmDone(false); setConfirmDelete(false); setTimeout(() => setConfirmRevert(false), 3000); } }}>{confirmRevert ? t('revertConfirm') : t('revert')}</button>}
+              {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmDone) { setActionsOpen(false); advanceProject(project.id); setConfirmDone(false); } else { setConfirmDone(true); setConfirmRevert(false); setConfirmDelete(false); setTimeout(() => setConfirmDone(false), 3000); } }}>{confirmDone ? t('archiveConfirm') : t('archive')}</button>}
+              {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>{t('deleteConfirm')}</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '-3px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
             </div>
           </div>
         );
@@ -2448,29 +2558,29 @@
             </div>
             <div className="flex items-stretch flex-shrink-0 font-bebas-bold uppercase" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
               <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setPickerPos({ top: r.bottom + 4, left: r.left }); originalDateRef.current = project.createdAt; setEditingCreatedDate(p => !p); setEditingShotDate(false); }}>
-                <span style={{ color: colorInactive }}>CRÉÉ</span>
+                <span style={{ color: colorInactive }}>{t('created')}</span>
                 <span style={{ color: colorActive, textDecoration: editingCreatedDate ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }}>{formatDateShort(project.createdAt)}</span>
-                <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
+                <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? t('day') : t('days')}</span>
               </div>
               <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive" style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setPickerPos({ top: r.bottom + 4, left: r.left }); originalDateRef.current = project.shotAt; setEditingShotDate(p => !p); setEditingCreatedDate(false); }}>
-                <span style={{ color: colorInactive }}>ÉDITION</span>
+                <span style={{ color: colorInactive }}>{t('edited')}</span>
                 <span style={{ color: colorActive, textDecoration: editingShotDate ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }}>{project.shotAt ? formatDateShort(project.shotAt) : '- - -'}</span>
-                <span style={{ color: colorCharcoal }}>{days !== null ? `${days} ${days <= 1 ? 'JOUR' : 'JOURS'}` : ''}</span>
+                <span style={{ color: colorCharcoal }}>{days !== null ? `${days} ${days <= 1 ? t('day') : t('days')}` : ''}</span>
               </div>
             </div>
           </div>
         </div>
         <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
-          <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? 'ANNULER ÉDITION ?' : 'ANNULER ÉDITION'}</button>
-          <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? 'ARCHIVER ?' : 'ARCHIVER'}</button>
-          {confirmDelete ? <button onClick={handleDelete} className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '16px', cursor: confirmReady ? 'pointer' : 'default', letterSpacing: '0.03em', transition: 'color 0.3s', textShadow: confirmReady ? '0 0 12px rgba(255,59,48,0.4)' : 'none', padding: '6px 2px' }}>SUPPRIMER ?</button> : <button onClick={handleDelete} className="p-2 trash-btn text-red-500" title="Supprimer"><TrashIcon/></button>}
+          <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? t('cancelEditingConfirm') : t('cancelEditing')}</button>
+          <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? t('archiveConfirm') : t('archive')}</button>
+          {confirmDelete ? <button onClick={handleDelete} className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '16px', cursor: confirmReady ? 'pointer' : 'default', letterSpacing: '0.03em', transition: 'color 0.3s', textShadow: confirmReady ? '0 0 12px rgba(255,59,48,0.4)' : 'none', padding: '6px 2px' }}>{t('deleteConfirm')}</button> : <button onClick={handleDelete} className="p-2 trash-btn text-red-500" title={t('delete')}><TrashIcon/></button>}
         </div>
         {(editingCreatedDate || editingShotDate) && ReactDOM.createPortal(
           <React.Fragment>
             <div onClick={() => { if (editingCreatedDate && originalDateRef.current) updateProject(project.id, { createdAt: originalDateRef.current }); if (editingShotDate && originalDateRef.current) updateProject(project.id, { shotAt: originalDateRef.current }); setEditingCreatedDate(false); setEditingShotDate(false); }} style={{ position: 'fixed', inset: 0, zIndex: 9998 }}/>
             <div style={{ position: 'fixed', top: pickerPos.top, left: pickerPos.left, zIndex: 9999 }}>
-              {editingCreatedDate && <DateWheelPicker dropDown title="DATE CRÉÉ" date={new Date(project.createdAt)} onChange={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onCancel={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onClose={() => setEditingCreatedDate(false)} />}
-              {editingShotDate && project.shotAt && <DateWheelPicker dropDown title="DATE ÉDITION" date={new Date(project.shotAt)} onChange={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onCancel={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onClose={() => setEditingShotDate(false)} />}
+              {editingCreatedDate && <DateWheelPicker dropDown title={t('createdDate')} date={new Date(project.createdAt)} onChange={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onCancel={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onClose={() => setEditingCreatedDate(false)} />}
+              {editingShotDate && project.shotAt && <DateWheelPicker dropDown title={t('editedDate')} date={new Date(project.shotAt)} onChange={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onCancel={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onClose={() => setEditingShotDate(false)} />}
             </div>
           </React.Fragment>,
           document.body
@@ -2481,6 +2591,7 @@
 
     const DoneCard = ({ project }) => {
       const { revertProject, deleteProject, prefs } = useStore();
+      const { t } = useLang();
       const [confirmRevert, setConfirmRevert] = useState(false);
       const [confirmDelete, setConfirmDelete] = useState(false);
       const colorCharcoal = '#8B9B99';
@@ -2566,10 +2677,10 @@
                   <div style={{ height: '1px', background: 'linear-gradient(to right, rgba(255,255,255,0.15), rgba(255,255,255,0))', margin: '4px 0 0 -11px' }}/>
                   {/* Info line — CRÉÉ X JOURS ÉDITION X JOURS */}
                   <div className="uppercase" style={{ letterSpacing: '0.04em', display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '6px', fontSize: '16px', lineHeight: '1.3', padding: '4px 0 2px 0', color: '#fff' }}>
-                    <span className="font-bebas-book">CRÉÉ</span>
-                    <span className="font-bebas-regular">{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
-                    {project.shotAt && <><span className="font-bebas-book" style={{ marginLeft: '12px' }}>ÉDITION</span>
-                    <span className="font-bebas-regular">{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? 'JOUR' : 'JOURS'}</span></>}
+                    <span className="font-bebas-book">{t('created')}</span>
+                    <span className="font-bebas-regular">{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? t('day') : t('days')}</span>
+                    {project.shotAt && <><span className="font-bebas-book" style={{ marginLeft: '12px' }}>{t('edited')}</span>
+                    <span className="font-bebas-regular">{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? t('day') : t('days')}</span></>}
                   </div>
                 </div>
               </div>
@@ -2582,8 +2693,8 @@
             }}>
               {/* Red/pink glow */}
               <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '280px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
-              {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmRevert) { setActionsOpen2(false); revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setConfirmDelete(false); setTimeout(() => setConfirmRevert(false), 3000); } }}>{confirmRevert ? 'RÉACTIVER ?' : 'RÉACTIVER'}</button>}
-              {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>SUPPRIMER ?</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '-3px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
+              {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmRevert) { setActionsOpen2(false); revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setConfirmDelete(false); setTimeout(() => setConfirmRevert(false), 3000); } }}>{confirmRevert ? t('reactivateConfirm') : t('reactivate')}</button>}
+              {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>{t('deleteConfirm')}</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '-3px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
             </div>
           </div>
         );
@@ -2608,21 +2719,21 @@
                 })}
               </div>
               <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
-                <span style={{ color: colorInactive }}>CRÉÉ</span>
+                <span style={{ color: colorInactive }}>{t('created')}</span>
                 <span style={{ color: colorCharcoal }}>{formatDateShort(project.createdAt)}</span>
-                <span style={{ color: colorInactive }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
+                <span style={{ color: colorInactive }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? t('day') : t('days')}</span>
               </div>
               {project.shotAt && <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
-                <span style={{ color: colorInactive }}>ÉDITION</span>
+                <span style={{ color: colorInactive }}>{t('edited')}</span>
                 <span style={{ color: colorCharcoal }}>{formatDateShort(project.shotAt)}</span>
-                <span style={{ color: colorInactive }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
+                <span style={{ color: colorInactive }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? t('day') : t('days')}</span>
               </div>}
             </div>
           </div>
         </div>
         <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
-          <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? 'RÉACTIVER ?' : 'RÉACTIVER'}</button>
-          <button onClick={handleDelete} className={`p-2 trash-btn text-red-500`} title="Supprimer"><TrashIcon/></button>
+          <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? t('reactivateConfirm') : t('reactivate')}</button>
+          <button onClick={handleDelete} className={`p-2 trash-btn text-red-500`} title={t('delete')}><TrashIcon/></button>
         </div>
         </div>
       );
@@ -2725,6 +2836,7 @@
     };
     
     const DateWheelPicker = ({ date, onChange, onClose, onCancel, title, dropDown }) => {
+      const { t } = useLang();
       const [selDay, setSelDay] = useState(date.getDate());
       const [selMonth, setSelMonth] = useState(date.getMonth());
       const [selYear, setSelYear] = useState(date.getFullYear());
@@ -2746,8 +2858,8 @@
       const handleCancel = () => { if (onCancel) onCancel(originalDate.current); onClose(); };
       
       const leftBtn = onCancel
-        ? { label: 'ANNULER', action: handleCancel, color: 'rgba(255,255,255,0.4)' }
-        : { label: "AUJOURD'HUI", action: resetToday, color: '#7dd3c6' };
+        ? { label: t('cancel'), action: handleCancel, color: 'rgba(255,255,255,0.4)' }
+        : { label: t('today'), action: resetToday, color: '#7dd3c6' };
       
       const posStyle = dropDown
         ? { position: 'relative', width: '100%', maxWidth: '350px', zIndex: 20, background: 'rgba(20,24,27,0.95)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderRadius: '16px', padding: '12px 0 18px' }
@@ -2757,12 +2869,12 @@
         <div style={posStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px 8px' }}>
             <button onClick={leftBtn.action} className="font-bebas-bold" style={{ background: 'none', border: 'none', color: leftBtn.color, fontSize: '20px', cursor: 'pointer', letterSpacing: '0.05em' }}>{leftBtn.label}</button>
-            <span className="font-bebas-bold" style={{ fontSize: '16px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.05em' }}>{title || 'DATE SOLEIL'}</span>
+            <span className="font-bebas-bold" style={{ fontSize: '16px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.05em' }}>{title || t('sunDate')}</span>
             <button onClick={onClose} className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FAF9F7', fontSize: '20px', cursor: 'pointer', letterSpacing: '0.05em', textShadow: '0 0 12px rgba(255,255,255,0.4), 0 0 25px rgba(255,255,255,0.15)' }}>OK</button>
           </div>
           <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', position: 'relative' }}>
             <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '300px', height: itemH, background: 'rgba(255,255,255,0.08)', borderRadius: '10px', pointerEvents: 'none' }}/>
-            <WheelColumn items={MONTHS_FR.map((_, i) => i)} selected={selMonth} onSelect={setSelMonth} width="100px" renderItem={(i) => MONTHS_FR[i]} />
+            <WheelColumn items={MONTHS_FR.map((_, i) => i)} selected={selMonth} onSelect={setSelMonth} width="100px" renderItem={(i) => t('monthAbbrev')[i]} />
             <WheelColumn items={days} selected={selDay} onSelect={setSelDay} width="60px" />
             <WheelColumn items={years} selected={selYear} onSelect={setSelYear} width="80px" />
           </div>
@@ -2773,6 +2885,7 @@
     const ProjectDetail = ({ projectId, onClose }) => {
       const { projects, updateProject, advanceProject, revertProject, deleteProject, prefs } = useStore();
       const { user } = useAuth();
+      const { t } = useLang();
       const project = projects.find(p => p.id === projectId);
       const [weather, setWeather] = useState(null);
       const [confirm, setConfirm] = useState(false);
@@ -4532,7 +4645,7 @@
                               <WeatherIcon type={icon} className={`w-10 h-10 ${isNight ? 'opacity-50' : ''}`}/>
                               <span className="font-bebas-bold text-base leading-none text-charcoal" style={{ letterSpacing: '0.04em', marginTop: '4px' }}>{h.cloudcover != null ? `${h.cloudcover}%` : '--'}</span>
                               <span className="font-bebas-bold text-base leading-none text-charcoal-muted" style={{ letterSpacing: '0.04em', marginTop: '4px' }}>{h.temp}°</span>
-                              <span className="font-bebas-bold text-sm leading-none text-charcoal-muted mt-1">{h.wind} <span className="text-xs">KM/H</span></span>
+                              <span className="font-bebas-bold text-sm leading-none text-charcoal-muted mt-1">{h.wind} <span className="text-xs">{t('kmh')}</span></span>
                               {h.precip > 0 && <span className="font-bebas-bold text-sm leading-none mt-1" style={{ letterSpacing: '0.04em', color: '#7dd3c6' }}>{h.precip < 1 ? h.precip.toFixed(1) : Math.round(h.precip)} <span className="text-xs">MM</span></span>}
                             </div>
                           );
@@ -4581,7 +4694,7 @@
                     })}
                   </div>
                   <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
-                    <span style={{ color: colorInactive }}>SOLEIL</span>
+                    <span style={{ color: colorInactive }}>{t('sun')}</span>
                     <span style={{ color: project.orientation?.includes('AM') ? colorActive : colorInactive }}>
                       AM {sun ? formatTime(sun.sunrise) : '—'}
                     </span>
@@ -4590,36 +4703,36 @@
                     </span>
                   </div>
                   <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
-                    <span style={{ color: colorInactive }}>TRAJET</span>
+                    <span style={{ color: colorInactive }}>{t('travel')}</span>
                     <span style={{ color: project.travelTime?.durationSeconds ? colorActive : colorInactive }}>{project.travelTime?.durationSeconds ? formatDuration(project.travelTime.durationSeconds) : '—'}</span>
                     {project.travelTime?.distanceMeters > 0 ? <span style={{ color: colorCharcoal, letterSpacing: "0.1em", marginTop: "-3px", fontSize: "inherit" }}>{Math.round(project.travelTime.distanceMeters / 1000)} KM</span> : <span style={{ color: 'transparent' }}>&nbsp;</span>}
                   </div>
                   <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
-                    <span style={{ color: colorInactive }}>RÉVEIL</span>
+                    <span style={{ color: colorInactive }}>{t('wake')}</span>
                     <span style={{ color: (project.orientation?.includes('AM') && wakeUp) ? colorActive : colorInactive }}>{project.orientation?.includes('AM') && wakeUp ? formatTime(wakeUp).replace(':','H') : '—'}</span>
                     <span style={{ color: 'transparent' }}>&nbsp;</span>
                   </div>
                   <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
-                    <span style={{ color: colorInactive }}>CRÉÉ</span>
+                    <span style={{ color: colorInactive }}>{t('created')}</span>
                     <span style={{ color: colorActive }}>{formatDateShort(project.createdAt)}</span>
-                    <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
+                    <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? t('day') : t('days')}</span>
                   </div>
                   {project.shotAt && <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
-                    <span style={{ color: colorInactive }}>ÉDITION</span>
+                    <span style={{ color: colorInactive }}>{t('edited')}</span>
                     <span style={{ color: colorActive }}>{formatDateShort(project.shotAt)}</span>
-                    <span style={{ color: colorCharcoal }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
+                    <span style={{ color: colorCharcoal }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? t('day') : t('days')}</span>
                   </div>}
                 </div>
                 <div className="border-b border-adaptive" style={{ marginTop: '12px', marginLeft: '-16px', marginRight: '-16px' }}/>
                 <div style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', marginTop: '12px', marginLeft: '-16px', marginRight: '-16px', paddingLeft: '16px', paddingRight: '16px' }}>
-                  {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10}/> : <p className="text-charcoal-muted text-sm italic py-2">Météo non disponible</p>}
+                  {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10}/> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
                 </div>
               </div>
             ) : (
               /* ===== DESKTOP: original horizontal ===== */
               <div className="flex items-center gap-0" style={{ width: '100%' }}>
                 <div className="min-w-0">
-                  {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10}/> : <p className="text-charcoal-muted text-sm italic py-2">Météo non disponible</p>}
+                  {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10}/> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
                 </div>
                 <div className="info-dodge flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
                   <div className="flex flex-col justify-center pl-2 border-l border-adaptive">
@@ -4628,7 +4741,7 @@
                     })}
                   </div>
                   <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
-                    <span style={{ color: colorInactive }}>SOLEIL</span>
+                    <span style={{ color: colorInactive }}>{t('sun')}</span>
                     <span style={{ color: project.orientation?.includes('AM') ? colorActive : colorInactive }}>
                       AM {sun ? formatTime(sun.sunrise) : '--:--'}
                     </span>
@@ -4637,28 +4750,28 @@
                     </span>
                   </div>
                   <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
-                    <span style={{ color: colorInactive }}>TRAJET</span>
+                    <span style={{ color: colorInactive }}>{t('travel')}</span>
                     <span style={{ color: project.travelTime?.durationSeconds ? colorActive : colorInactive }}>{project.travelTime?.durationSeconds ? formatDuration(project.travelTime.durationSeconds) : '—'}</span>
                     {project.travelTime?.distanceMeters > 0 ? <span style={{ color: colorCharcoal, letterSpacing: '0.1em', marginTop: '-5px' }} className="text-lg">{Math.round(project.travelTime.distanceMeters / 1000)} KM</span> : <span style={{ color: 'transparent' }}>&nbsp;</span>}
                   </div>
                   <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
-                    <span style={{ color: colorInactive }}>RÉVEIL</span>
+                    <span style={{ color: colorInactive }}>{t('wake')}</span>
                     <span style={{ color: (project.orientation?.includes('AM') && wakeUp) ? colorActive : colorInactive }}>{project.orientation?.includes('AM') && wakeUp ? formatTime(wakeUp).replace(':','H') : '—'}</span>
                     <span style={{ color: 'transparent' }}>&nbsp;</span>
                   </div>
                   <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive">
-                    <span style={{ color: colorInactive }}>CRÉÉ</span>
+                    <span style={{ color: colorInactive }}>{t('created')}</span>
                     <span style={{ color: colorActive, cursor: 'pointer', textDecoration: editingCreatedDate ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setDetailPickerPos({ top: r.bottom + 4, left: r.left }); originalDateRef.current = project.createdAt; setEditingCreatedDate(p => !p); setEditingShotDate(false); }}>
                       {formatDateShort(project.createdAt)}
                     </span>
-                    <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
+                    <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? t('day') : t('days')}</span>
                   </div>
                   {project.shotAt && <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive">
-                    <span style={{ color: colorInactive }}>ÉDITION</span>
+                    <span style={{ color: colorInactive }}>{t('edited')}</span>
                     <span style={{ color: colorActive, cursor: 'pointer', textDecoration: editingShotDate ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setDetailPickerPos({ top: r.bottom + 4, left: r.left }); originalDateRef.current = project.shotAt; setEditingShotDate(p => !p); setEditingCreatedDate(false); }}>
                       {formatDateShort(project.shotAt)}
                     </span>
-                    <span style={{ color: colorCharcoal }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? 'JOUR' : 'JOURS'}</span>
+                    <span style={{ color: colorCharcoal }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? t('day') : t('days')}</span>
                   </div>}
                 </div>
               </div>
@@ -4667,8 +4780,8 @@
               <React.Fragment>
                 <div onClick={() => { if (editingCreatedDate && originalDateRef.current) updateProject(project.id, { createdAt: originalDateRef.current }); if (editingShotDate && originalDateRef.current) updateProject(project.id, { shotAt: originalDateRef.current }); setEditingCreatedDate(false); setEditingShotDate(false); }} style={{ position: 'fixed', inset: 0, zIndex: 9998 }}/>
                 <div style={{ position: 'fixed', top: detailPickerPos.top, left: detailPickerPos.left, zIndex: 9999 }}>
-                  {editingCreatedDate && <DateWheelPicker dropDown title="DATE CRÉÉ" date={new Date(project.createdAt)} onChange={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onCancel={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onClose={() => setEditingCreatedDate(false)} />}
-                  {editingShotDate && project.shotAt && <DateWheelPicker dropDown title="DATE ÉDITION" date={new Date(project.shotAt)} onChange={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onCancel={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onClose={() => setEditingShotDate(false)} />}
+                  {editingCreatedDate && <DateWheelPicker dropDown title={t('createdDate')} date={new Date(project.createdAt)} onChange={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onCancel={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onClose={() => setEditingCreatedDate(false)} />}
+                  {editingShotDate && project.shotAt && <DateWheelPicker dropDown title={t('editedDate')} date={new Date(project.shotAt)} onChange={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onCancel={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onClose={() => setEditingShotDate(false)} />}
                 </div>
               </React.Fragment>,
               document.body
@@ -4678,7 +4791,7 @@
           {/* Météo horaire — redesigned */}
           {(!isMobile || (project?.lat && project?.lng)) && <div className={`${isMobile ? 'pl-4 pr-0' : 'px-8 md:px-12'} border-b border-adaptive`}>
             <div className="pt-3 pb-1">
-              <span className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>MÉTÉO HORAIRE</span>
+              <span className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('hourlyWeather')}</span>
             </div>
             {renderHourlyWeather()}
           </div>}
@@ -4691,16 +4804,16 @@
               <div style={isMobile ? {} : { width: '700px', flexShrink: 0 }} className={`${isMobile ? 'w-full' : ''} space-y-5`}>
                 {/* Address inputs with box style like modal */}
                 <div>
-                  <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>ADRESSE DU PROJET</label>
+                  <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('projectAddress')}</label>
                   <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input key={project.address || ''} ref={addressInputRef} type="text" defaultValue={project.address || ''} placeholder="Entrer l'adresse..." className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1, fontFamily: "'Avenir', sans-serif", fontWeight: 300 }}/>
+                    <input key={project.address || ''} ref={addressInputRef} type="text" defaultValue={project.address || ''} placeholder={t('enterAddress')} className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1, fontFamily: "'Avenir', sans-serif", fontWeight: 300 }}/>
                     {project.address && <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(project.address)}`} target="_blank" rel="noopener noreferrer" onClick={(e) => { e.preventDefault(); e.stopPropagation(); const tmp = document.createElement('a'); tmp.href = e.currentTarget.href; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); }} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Itinéraire"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>}
                   </div>
                 </div>
                 <div>
-                  <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>ADRESSE DE DÉPART</label>
+                  <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('departureAddress')}</label>
                   <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input ref={departureInputRef} type="text" defaultValue={project.departureAddress || prefs.homeAddress || ''} placeholder="Hôtel, B&B..." className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1, fontFamily: "'Avenir', sans-serif", fontWeight: 300 }}
+                    <input ref={departureInputRef} type="text" defaultValue={project.departureAddress || prefs.homeAddress || ''} placeholder={t('departureHint')} className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1, fontFamily: "'Avenir', sans-serif", fontWeight: 300 }}
                       onBlur={(e) => {
                         const val = e.target.value.trim();
                         if (!val || val === prefs.homeAddress) {
@@ -4726,7 +4839,7 @@
                 </div>
                 
                 <div>
-                  <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>NOTES</label>
+                  <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('notes')}</label>
                   {/* Mini toolbar */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginTop: '4px', marginBottom: '0px' }}>
                     <button onClick={() => { const el = document.getElementById('notes-editor-' + project.id); if (el) { el.focus(); document.execCommand('bold', false, null); } }} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '4px', color: 'rgba(255,255,255,0.6)', width: '30px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', fontFamily: 'inherit' }} title="Gras (⌘B)">B</button>
@@ -4783,7 +4896,7 @@
                       }}
                       className="w-full bg-transparent text-charcoal"
                       style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', minHeight: '120px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: '1.5', cursor: 'text', fontFamily: "'Avenir', sans-serif", fontWeight: 300 }}
-                      data-placeholder="Notes..."
+                      data-placeholder={t('notesPlaceholder')}
                     />
                   </div>
                 </div>
@@ -5033,7 +5146,7 @@
                               fontSize: `${dateSize}px`, color: '#ffffff', letterSpacing: '0.04em',
                               lineHeight: '1'
                             }}>
-                              {MONTHS_FR[sunDate.getMonth()]} {sunDate.getDate()}
+                              {t('monthAbbrev')[sunDate.getMonth()]} {sunDate.getDate()}
                             </span>
                           </div>
                           {/* Terrain shadow alert — text top-left + red band on filet */}
@@ -5125,7 +5238,7 @@
                           boxShadow: '0 4px 16px rgba(0,0,0,0.4)'
                         }}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                          <span className="font-bebas-book" style={{ fontSize: '13px', color: '#ffffff', letterSpacing: '0.08em', lineHeight: '1', paddingTop: '2px' }}>METTRE À JOUR</span>
+                          <span className="font-bebas-book" style={{ fontSize: '13px', color: '#ffffff', letterSpacing: '0.08em', lineHeight: '1', paddingTop: '2px' }}>{t('updateLocation')}</span>
                         </button>
                       </div>
                     )}
@@ -5135,7 +5248,7 @@
                       <div style={{ position: 'absolute', top: `${Math.round(88 * 0.75) + 14}px`, left: '12px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         {buildings.map((b, i) => (
                           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span className="font-bebas-book" style={{ fontSize: '12px', color: '#fff', letterSpacing: '0.1em', lineHeight: '1' }}>FORME {i + 1}</span>
+                            <span className="font-bebas-book" style={{ fontSize: '12px', color: '#fff', letterSpacing: '0.1em', lineHeight: '1' }}>{t('shape')} {i + 1}</span>
                             <button onClick={(e) => { e.stopPropagation(); deleteBuilding(i); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0', display: 'flex', alignItems: 'center' }}>
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                             </button>
@@ -5163,7 +5276,7 @@
                             }}>
                               <div onClick={() => { setEditingBuilding(i); setBuildingHeight(String(b.height)); setBuildingName(b.name); }} style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', padding: '2px 6px 2px 0' }}>
                                 <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: color, flexShrink: 0 }}/>
-                                <span className="font-bebas-bold" style={{ letterSpacing: '0.06em', fontSize: '17px', color: '#fff', lineHeight: '1', padding: '3px 0 0 0' }}>FORME {i + 1}</span>
+                                <span className="font-bebas-bold" style={{ letterSpacing: '0.06em', fontSize: '17px', color: '#fff', lineHeight: '1', padding: '3px 0 0 0' }}>{t('shape')} {i + 1}</span>
                               </div>
                               <div style={{ position: 'relative' }}>
                                 {(hoveredBuilding === i || isDragging) && (<>
@@ -5338,7 +5451,7 @@
                   </>
                 ) : (
                   <div style={{ width: '100%', flex: 1, minHeight: '500px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span className="text-charcoal-muted font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '18px' }}>AUCUNE ADRESSE</span>
+                    <span className="text-charcoal-muted font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '18px' }}>{t('noAddress')}</span>
                   </div>
                 )}
               </div>
@@ -5347,7 +5460,7 @@
 
           {/* Fichiers */}
           <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} mt-6`} style={{ maxWidth: isMobile ? '100%' : '700px' }}>
-            <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>FICHIERS</label>
+            <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('files')}</label>
             {projectFiles.length > 0 && <span className="font-bebas-light" style={{ fontSize: '14px', color: '#404A48', letterSpacing: '0.04em', marginLeft: '12px' }}>{totalFilesMB.toFixed(1)} / {MAX_PROJECT_FILES_MB} MB</span>}
 
             {/* Upload zone — desktop only, before files */}
@@ -5439,12 +5552,12 @@
                 <button onClick={handleDone} className="font-bebas-bold text-xl" style={{ letterSpacing: '0.04em', background: 'none', border: 'none', cursor: 'pointer', color: confirmDone ? '#d83152' : '#8B9B99', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }}
                   onMouseEnter={e => { if (!confirmDone) { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }}}
                   onMouseLeave={e => { if (!confirmDone) { e.target.style.color = '#8B9B99'; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; }}}
-                >{confirmDone ? 'PASSER EN ÉDITION ?' : 'PASSER EN ÉDITION'}</button>
+                >{confirmDone ? t('moveToEditingConfirm') : t('moveToEditing')}</button>
               )}
               <button onClick={handleDelete} className="font-bebas-bold text-xl" style={{ letterSpacing: '0.04em', background: 'none', border: 'none', cursor: 'pointer', color: confirm ? '#d83152' : '#8B9B99', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirm ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }}
                 onMouseEnter={e => { if (!confirm) { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }}}
                 onMouseLeave={e => { if (!confirm) { e.target.style.color = '#8B9B99'; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; }}}
-              >{confirm ? 'SUPPRIMER ?' : 'SUPPRIMER'}</button>
+              >{confirm ? t('deleteConfirm') : t('delete')}</button>
             </div>
             {!isMobile && <span className="ml-auto"/>}
           </div>
@@ -5454,10 +5567,12 @@
 
     const NewProjectModal = ({ isOpen, onClose, onCreated, origin, onOpen }) => {
       const { addProject, prefs } = useStore();
+      const { t } = useLang();
       const [form, setForm] = useState({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false });
       const [loading, setLoading] = useState(false);
       const [justCreated, setJustCreated] = useState(null);
       const [animated, setAnimated] = useState(false);
+      const [showUpgradeModal, setShowUpgradeModal] = useState(false);
       const [winSize, setWinSize] = useState({ w: window.innerWidth, h: window.innerHeight });
       const addressInputRef = React.useRef(null);
       const nameInputRef = React.useRef(null);
@@ -5515,8 +5630,12 @@
         if (data.lat && data.lng && prefs.homeLat && prefs.homeLng) {
           try { const travel = await getTravelTime(prefs.homeLat, prefs.homeLng, data.lat, data.lng); data.travelTime = travel; data.departureAddress = prefs.homeAddress; data.departureLat = prefs.homeLat; data.departureLng = prefs.homeLng; } catch (err) { console.warn('Travel time error:', err); }
         }
-        addProject(data);
+        const result = addProject(data);
         setLoading(false);
+        if (result && result.error === 'limit_reached') {
+          setShowUpgradeModal(true);
+          return;
+        }
         handleClose();
       };
 
@@ -5558,12 +5677,12 @@
                   transition: 'opacity 0.3s ease 0.15s, transform 0.3s ease 0.15s'
                 }}>
                   <div className="mb-5">
-                    <label className="newproj-label font-bebas-book">NOM DU PROJET</label>
-                    <input ref={nameInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet" style={{ background: 'transparent', position: 'relative', zIndex: 2, border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
+                    <label className="newproj-label font-bebas-book">{t('projectName')}</label>
+                    <input ref={nameInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder={t('projectNamePlaceholder')} style={{ background: 'transparent', position: 'relative', zIndex: 2, border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
                   </div>
                   <div className="mb-5">
-                    <label className="newproj-label font-bebas-book">ADRESSE DU PROJET</label>
-                    <input ref={addressInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder="Entrer l'adresse..." style={{ background: 'transparent', position: 'relative', zIndex: 2, border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
+                    <label className="newproj-label font-bebas-book">{t('projectAddress')}</label>
+                    <input ref={addressInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder={t('enterAddress')} style={{ background: 'transparent', position: 'relative', zIndex: 2, border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
                   </div>
                   <div className="mb-5">
                     <label className="newproj-label font-bebas-book">MANDAT</label>
@@ -5582,9 +5701,9 @@
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
-                    <button onClick={handleSubmit} disabled={loading || !form.name.trim()} className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '18px', color: !form.name.trim() ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.6)', background: 'none', border: 'none', cursor: 'pointer' }}>{loading ? 'CRÉATION...' : 'AJOUTER'}</button>
+                    <button onClick={handleSubmit} disabled={loading || !form.name.trim()} className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '18px', color: !form.name.trim() ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.6)', background: 'none', border: 'none', cursor: 'pointer' }}>{loading ? 'CRÉATION...' : t('added')}</button>
                     <div style={{ width: '1px', height: '18px', background: 'rgba(255,255,255,0.15)' }}/>
-                    <button onClick={handleClose} className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '18px', color: 'rgba(255,255,255,0.6)', background: 'none', border: 'none', cursor: 'pointer' }}>ANNULER</button>
+                    <button onClick={handleClose} className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '18px', color: 'rgba(255,255,255,0.6)', background: 'none', border: 'none', cursor: 'pointer' }}>{t('cancel')}</button>
                   </div>
                 </div>
               </div>
@@ -5635,12 +5754,12 @@
 
               <div className={`newproj-panel ${animated ? 'open' : ''}`} style={{ left: panelX, top: panelY, width: panelW, padding: '28px 32px' }} onClick={e => e.stopPropagation()}>
                 <div className="mb-5">
-                  <label className="newproj-label font-bebas-book">NOM DU PROJET</label>
-                  <input ref={nameInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Client — Nom du projet"/>
+                  <label className="newproj-label font-bebas-book">{t('projectName')}</label>
+                  <input ref={nameInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder={t('projectNamePlaceholder')}/>
                 </div>
                 <div className="mb-5">
-                  <label className="newproj-label font-bebas-book">ADRESSE DU PROJET</label>
-                  <input ref={addressInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder="Entrer l'adresse..."/>
+                  <label className="newproj-label font-bebas-book">{t('projectAddress')}</label>
+                  <input ref={addressInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder={t('enterAddress')}/>
                 </div>
                 <div className="mb-5">
                   <label className="newproj-label font-bebas-book">MANDAT</label>
@@ -5662,10 +5781,10 @@
 
               <div className={`newproj-actions ${animated ? 'open' : ''}`} style={{ left: panelX, top: panelY + panelH + 14 }}>
                 <div className="flex items-end">
-                  <button onClick={handleSubmit} disabled={loading || !form.name.trim()} className="font-bebas-bold">{loading ? 'CRÉATION...' : 'AJOUTER'}</button>
+                  <button onClick={handleSubmit} disabled={loading || !form.name.trim()} className="font-bebas-bold">{loading ? 'CRÉATION...' : t('added')}</button>
                   <div style={{ width: '1px', background: 'rgba(255,255,255,0.15)', alignSelf: 'stretch', marginLeft: '20px', marginRight: '20px', marginTop: '-9px' }}/>
-                  <button onClick={handleClose} className="font-bebas-bold">ANNULER</button>
-                  {justCreated && <span className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '14px', color: 'rgba(255,255,255,0.4)', marginLeft: '16px' }}>✓ {justCreated} AJOUTÉ</span>}
+                  <button onClick={handleClose} className="font-bebas-bold">{t('cancel')}</button>
+                  {justCreated && <span className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '14px', color: 'rgba(255,255,255,0.4)', marginLeft: '16px' }}>✓ {justCreated} {t('added')}</span>}
                 </div>
               </div>
             </React.Fragment>
@@ -5677,13 +5796,14 @@
 
     const Header = ({ onChangeView, onAddProject }) => {
       const { view, prefs, setPrefs } = useStore();
+      const { t } = useLang();
       const isMobile = useIsMobile();
       const [hovered, setHovered] = useState(false);
       const [hoveredItem, setHoveredItem] = useState(null);
       const navItems = [
-        { id: 'todo', label: 'PROJETS', icon: '☀︎' }, 
-        { id: 'retouching', label: 'EDITION', icon: '✎' }, 
-        { id: 'preferences', label: 'PREFS', icon: '⚙' }
+        { id: 'todo', label: t('projects'), icon: '☀︎' },
+        { id: 'retouching', label: t('editing'), icon: '✎' },
+        { id: 'preferences', label: t('preferences'), icon: '⚙' }
       ];
 
       // Scroll-driven glow position along pill border
@@ -5916,6 +6036,7 @@
 
     // ===== GEO WEATHER CARD (mobile) =====
     const GeoWeatherCard = () => {
+      const { t } = useLang();
       const [geoData, setGeoData] = useState(null);
       const [status, setStatus] = useState(() => localStorage.getItem('geo-permission') === 'granted' ? 'loading' : 'prompt');
 
@@ -5979,9 +6100,9 @@
 
       if (status === 'prompt') return (
         <div style={{ margin: '0 12px', marginBottom: '15px', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', overflow: 'hidden', padding: '24px 28px', textAlign: 'center' }}>
-          <div className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>MÉTÉO DE VOTRE POSITION ACTUELLE</div>
-          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>Votre navigateur vous demandera l'autorisation d'accéder à votre position.</div>
-          <button onClick={requestGeo} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: '20px', color: '#FAF9F7', fontSize: '16px', padding: '8px 24px', cursor: 'pointer', textShadow: '0 0 12px rgba(255,255,255,0.3)' }}>ACTIVER LA LOCALISATION</button>
+          <div className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>{t('currentLocationWeather')}</div>
+          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>{t('browserLocationPermission')}</div>
+          <button onClick={requestGeo} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: '20px', color: '#FAF9F7', fontSize: '16px', padding: '8px 24px', cursor: 'pointer', textShadow: '0 0 12px rgba(255,255,255,0.3)' }}>{t('enableLocation')}</button>
         </div>
       );
       if (status === 'loading') return (
@@ -5991,9 +6112,9 @@
       );
       if (status === 'denied') return (
         <div style={{ margin: '0 12px', marginBottom: '15px', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', overflow: 'hidden', padding: '24px 28px', textAlign: 'center' }}>
-          <div className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>LOCALISATION REFUSÉE</div>
-          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>Pour réactiver, allez dans Réglages &gt; Safari &gt; Localisation, ou dans les réglages de votre navigateur.</div>
-          <button onClick={() => { localStorage.removeItem('geo-permission'); requestGeo(); }} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: '20px', color: 'rgba(255,255,255,0.5)', fontSize: '14px', padding: '6px 20px', cursor: 'pointer' }}>RÉESSAYER</button>
+          <div className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>{t('locationDenied')}</div>
+          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>{t('locationHelp')}</div>
+          <button onClick={() => { localStorage.removeItem('geo-permission'); requestGeo(); }} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: '20px', color: 'rgba(255,255,255,0.5)', fontSize: '14px', padding: '6px 20px', cursor: 'pointer' }}>{t('retry')}</button>
         </div>
       );
       if (status === 'error' || !geoData) return null;
@@ -6004,7 +6125,7 @@
           {/* Top row: date + city */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '2px', gap: '12px', paddingLeft: '0', textAlign: 'center' }}>
             <div className="font-bebas-bold" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap', width: '100%', textAlign: 'center' }}>
-              AUJOURD'HUI {dateStr} / {geoData.cityName}
+              {t('today')} {dateStr} / {geoData.cityName}
             </div>
           </div>
           {/* Main content — centered */}
@@ -6013,11 +6134,11 @@
             <div style={{ flex: '0 0 auto' }}>
               <div style={{ display: 'flex', gap: '28px', alignItems: 'flex-end' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-bold" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.05em', marginBottom: '2px' }}>LEVER</div>
+                  <div className="font-bebas-bold" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.05em', marginBottom: '2px' }}>{t('sunrise')}</div>
                   <div className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '25px', color: '#ffffff', lineHeight: '1' }}>{fmtSun(geoData.sunrise)}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-bold" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.05em', marginBottom: '2px' }}>COUCHER</div>
+                  <div className="font-bebas-bold" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.05em', marginBottom: '2px' }}>{t('sunset')}</div>
                   <div className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '25px', color: '#ffffff', lineHeight: '1' }}>{fmtSun(geoData.sunset)}</div>
                 </div>
               </div>
@@ -6056,8 +6177,11 @@
 
     const TodoView = ({ onSelect, onAddProject, addingProject, plusRef }) => {
       const { projects, reorderProjects } = useStore();
+      const { tier, getProjectLimit, canCreateProject } = useSubscription();
+      const { t } = useLang();
       const todoProjects = projects.filter(p => p.status === ProjectStatus.TODO);
       const [openActionsId, setOpenActionsId] = useState(null);
+      const [showUpgradeFromTodo, setShowUpgradeFromTodo] = useState(false);
       const dragRef = useRef(null);
       const listRef = useRef(null);
       
@@ -6417,6 +6541,25 @@
       return (
         <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px', ...(isMobile ? { minHeight: '100vh', touchAction: 'pan-y', overflowX: 'clip' } : {}) }}>
           {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>PROJETS</h1>}
+          {(() => {
+            const limit = getProjectLimit();
+            const isLimited = limit !== Infinity;
+            const activeCount = projects.filter(p => p.status !== ProjectStatus.DONE).length;
+            if (!isLimited) return null;
+            return (
+              <div style={{ padding: isMobile ? '0 24px 8px' : '0 16px 8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span className="font-bebas-light" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.06em' }}>
+                  {activeCount}/{limit} {t('projectsCount')}
+                </span>
+                {activeCount >= limit && (
+                  <span onClick={() => setShowUpgradeFromTodo(true)} className="font-bebas-regular" style={{ fontSize: '14px', color: '#E07A2B', cursor: 'pointer', letterSpacing: '0.04em' }}>
+                    {t('upgradeToShooter')}
+                  </span>
+                )}
+              </div>
+            );
+          })()}
+          <UpgradeModal isOpen={showUpgradeFromTodo} onClose={() => setShowUpgradeFromTodo(false)} />
           {!isMobile && <div className="px-4 md:px-6">
             <div ref={plusRef} style={{ width: '68px', height: '88px', marginLeft: '-6px' }}/>
           </div>}
@@ -6465,17 +6608,18 @@
 
     const RetouchingView = ({ onSelect }) => {
       const { projects } = useStore();
+      const { t } = useLang();
       const isMobile = useIsMobile();
       const [openActionsId, setOpenActionsId] = useState(null);
       const retouching = projects.filter(p => p.status === ProjectStatus.RETOUCHING);
       const done = projects.filter(p => p.status === ProjectStatus.DONE);
       return (
         <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px', ...(isMobile ? { minHeight: '100vh', touchAction: 'pan-y', overflowX: 'clip' } : {}) }}>
-          {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>ÉDITION</h1>}
-          {retouching.length === 0 ? <div className="text-center py-16"><p className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '24px' }}>Aucun projet en édition</p></div>
+          {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>{t('editing')}</h1>}
+          {retouching.length === 0 ? <div className="text-center py-16"><p className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '24px' }}>{t('noProjectsEditing')}</p></div>
           : <div style={{ paddingBottom: '80px' }}>{retouching.map((p, i) => <RetouchingCard key={p.id} project={p} onSelect={onSelect} index={i} openActionsId={openActionsId} setOpenActionsId={setOpenActionsId}/>)}</div>}
           {done.length > 0 && <>
-            <div className={isMobile ? 'px-6' : 'px-4'} style={{ paddingTop: '16px', paddingBottom: '16px', marginTop: '32px', }}><h2 className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '28px', color: '#8B9B99' }}>ARCHIVÉ</h2></div>
+            <div className={isMobile ? 'px-6' : 'px-4'} style={{ paddingTop: '16px', paddingBottom: '16px', marginTop: '32px', }}><h2 className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '28px', color: '#8B9B99' }}>{t('archived')}</h2></div>
             <div style={{ paddingBottom: '80px' }}>{done.map(p => <DoneCard key={p.id} project={p}/>)}</div>
           </>}
         </div>
@@ -6485,7 +6629,10 @@
     const PreferencesView = () => {
       const { prefs, setPrefs } = useStore();
       const { signOut } = useAuth();
+      const { tier, isActive, profile, isShooterUser } = useSubscription();
+      const { t, lang, setLang } = useLang();
       const isMobile = useIsMobile();
+      const [showUpgradePref, setShowUpgradePref] = useState(false);
       const [prepTime, setPrepTime] = useState(prefs.prepTime || 60);
       const [msg, setMsg] = useState(null);
       const [saving, setSaving] = useState(false);
@@ -6510,7 +6657,7 @@
                 homeLat: place.geometry.location.lat(), 
                 homeLng: place.geometry.location.lng() 
               });
-              setMsg({ type: 'success', text: 'Adresse de départ sauvegardée!' });
+              setMsg({ type: 'success', text: t('addressSaved') });
               setSaving(false);
             }
           });
@@ -6530,27 +6677,27 @@
             homeLng: result.lng 
           });
           homeInputRef.current.value = result.formattedAddress;
-          setMsg({ type: 'success', text: 'Adresse sauvegardée!' });
+          setMsg({ type: 'success', text: t('addressSavedShort') });
         } catch (e) { 
-          setMsg({ type: 'error', text: 'Adresse non trouvée' }); 
+          setMsg({ type: 'error', text: t('addressNotFound') });
         }
         setSaving(false);
       };
 
       return (
         <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px' }}>
-          {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>PRÉFÉRENCES</h1>}
+          {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>{t('preferences')}</h1>}
           <div className={isMobile ? 'px-4' : 'pl-8 md:pl-12'}>
             {msg && <div className={`mb-6 p-3 rounded ${msg.type === "success" ? "bg-transparent" : "bg-red-50 text-red-700"}`} style={msg.type === "success" ? { color: "#7dd3c6" } : {}}>{msg.text}</div>}
             <div>
               <div className="py-5 border-b border-adaptive">
-                <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>ADRESSE DE DÉPART PAR DÉFAUT (TRAJET)</label>
+                <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>{t('homeAddressLabel')}</label>
                 <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '8px', maxWidth: '600px' }}>
-                  <input 
+                  <input
                     ref={homeInputRef}
-                    type="text" 
-                    defaultValue={prefs.homeAddress || ''} 
-                    placeholder="Commencez à taper votre adresse..." 
+                    type="text"
+                    defaultValue={prefs.homeAddress || ''}
+                    placeholder={t('homeAddressPlaceholder')} 
                     className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)' }}
                   />
                 </div>
@@ -6558,30 +6705,75 @@
               </div>
 
               <div className="py-5 border-b border-adaptive">
-                <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>TEMPS DE PRÉPARATION (RÉVEIL)</label>
+                <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>{t('prepTimeLabel')}</label>
                 <div className="flex items-center gap-3" style={{ marginTop: '8px' }}>
                   <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', display: 'inline-block' }}>
                     <input type="number" value={prepTime} onChange={e => { const val = e.target.value; setPrepTime(val); const num = parseInt(val); if (!isNaN(num)) setPrefs({ prepTime: num }); }} onBlur={e => { const num = parseInt(e.target.value); if (isNaN(num) || num < 0) { setPrepTime(60); setPrefs({ prepTime: 60 }); } }} min="0" max="180" className="bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', width: '40px' }}/>
                   </div>
-                  <span className="font-bebas-light text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '19px' }}>MINUTES</span>
+                  <span className="font-bebas-light text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '19px' }}>{t('minutes')}</span>
                 </div>
               </div>
 
               <div className="py-5 border-b border-adaptive">
-                <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>SERVICE MÉTÉO</label>
+                <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>{t('plan')}</label>
+                <div style={{ marginTop: '8px', maxWidth: '600px' }}>
+                  <div className="flex items-center gap-3">
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: tier === 'shooter' ? '#E07A2B' : '#7dd3c6', boxShadow: tier === 'shooter' ? '0 0 6px rgba(224,122,43,0.5)' : '0 0 6px rgba(125,211,198,0.5)', flexShrink: 0 }}/>
+                    <span className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '18px', color: 'rgba(255,255,255,0.7)' }}>
+                      {tier === 'free' ? t('freePlan') : tier === 'shooter' ? t('shooterPlan') : t('godPlan')}
+                      {' — '}
+                      {isActive ? t('active') : (profile?.subscription_status || '').toUpperCase()}
+                    </span>
+                  </div>
+                  {tier === 'free' && (
+                    <button onClick={() => setShowUpgradePref(true)} style={{
+                      marginTop: '12px', background: 'none', border: '1px solid #E07A2B',
+                      color: '#E07A2B', padding: '8px 20px', cursor: 'pointer',
+                      fontFamily: "'Bebas Neue', sans-serif", fontWeight: 700, fontSize: '16px',
+                      letterSpacing: '0.04em'
+                    }}>{t('upgradeToShooter')}</button>
+                  )}
+                  <a href="site/account.html" style={{
+                    display: 'inline-block', marginTop: '12px', marginLeft: tier === 'free' ? '16px' : '0',
+                    color: 'rgba(255,255,255,0.35)', fontSize: '14px',
+                    fontFamily: "'Bebas Neue', sans-serif", fontWeight: 300,
+                    letterSpacing: '0.04em', textDecoration: 'none'
+                  }}>{t('account')}</a>
+                </div>
+              </div>
+
+              <div className="py-5 border-b border-adaptive">
+                <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>{t('language')}</label>
+                <div className="flex items-center gap-4" style={{ marginTop: '8px' }}>
+                  <span onClick={() => setLang('fr')} style={{
+                    fontFamily: "'Bebas Neue', sans-serif", fontWeight: lang === 'fr' ? 700 : 300,
+                    fontSize: '18px', letterSpacing: '0.04em', cursor: 'pointer',
+                    color: lang === 'fr' ? '#ffffff' : 'rgba(255,255,255,0.3)'
+                  }}>FR</span>
+                  <span style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+                  <span onClick={() => setLang('en')} style={{
+                    fontFamily: "'Bebas Neue', sans-serif", fontWeight: lang === 'en' ? 700 : 300,
+                    fontSize: '18px', letterSpacing: '0.04em', cursor: 'pointer',
+                    color: lang === 'en' ? '#ffffff' : 'rgba(255,255,255,0.3)'
+                  }}>EN</span>
+                </div>
+              </div>
+
+              <div className="py-5 border-b border-adaptive">
+                <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>{t('weatherService')}</label>
                 <div style={{ marginTop: '8px', maxWidth: '600px' }}>
                   <div className="flex items-center gap-3">
                     <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#7dd3c6', boxShadow: '0 0 6px rgba(125,211,198,0.5)', flexShrink: 0 }}/>
                     <span className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '18px', color: 'rgba(255,255,255,0.7)' }}>OPEN-METEO — GEM CANADA (ENV. CANADA)</span>
                   </div>
                   <div style={{ marginTop: '16px' }}>
-                    <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '16px', letterSpacing: '0.04em' }}>CLÉ API — SERVICE PREMIUM</label>
+                    <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '16px', letterSpacing: '0.04em' }}>{t('apiKeyLabel')}</label>
                     <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '4px' }}>
                       <input 
                         type="text" 
                         value={prefs.weatherApiKey || ''}
                         onChange={e => setPrefs({ weatherApiKey: e.target.value })}
-                        placeholder="Bientôt disponible..." 
+                        placeholder={t('apiKeyPlaceholder')}
                         disabled
                         className="w-full bg-transparent" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}
                       />
@@ -6591,7 +6783,7 @@
               </div>
 
               <div className="py-5 border-b border-adaptive" onClick={(e) => { e.preventDefault(); e.stopPropagation(); signOut(); }} style={{ cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
-                <span className="font-bebas-regular" style={{ fontSize: '22px', letterSpacing: '0.04em', color: 'rgba(255,255,255,0.4)' }}>DÉCONNEXION</span>
+                <span className="font-bebas-regular" style={{ fontSize: '22px', letterSpacing: '0.04em', color: 'rgba(255,255,255,0.4)' }}>{t('disconnect')}</span>
               </div>
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
@@ -6602,6 +6794,7 @@
               </div>
             </div>
           </div>
+          <UpgradeModal isOpen={showUpgradePref} onClose={() => setShowUpgradePref(false)} />
         </div>
       );
     };
@@ -6609,8 +6802,10 @@
     // === Mobile New Project Screen (slides in from right) ===
     const MobileNewProjectScreen = ({ isOpen, onClose, onCreated }) => {
       const { addProject, prefs } = useStore();
+      const { t } = useLang();
       const [form, setForm] = useState({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false });
       const [loading, setLoading] = useState(false);
+      const [showUpgradeModal, setShowUpgradeModal] = useState(false);
       const addressInputRef = React.useRef(null);
       const nameInputRef = React.useRef(null);
       const autocompleteRef = React.useRef(null);
@@ -6654,8 +6849,12 @@
         if (data.lat && data.lng && prefs.homeLat && prefs.homeLng) {
           try { const travel = await getTravelTime(prefs.homeLat, prefs.homeLng, data.lat, data.lng); data.travelTime = travel; data.departureAddress = prefs.homeAddress; data.departureLat = prefs.homeLat; data.departureLng = prefs.homeLng; } catch (err) { console.warn('Travel time error:', err); }
         }
-        addProject(data);
+        const result = addProject(data);
         setLoading(false);
+        if (result && result.error === 'limit_reached') {
+          setShowUpgradeModal(true);
+          return;
+        }
         onCreated();
       };
 
@@ -6685,16 +6884,16 @@
             <span className="font-bebas-book" style={{ fontSize: '18px', letterSpacing: '0.05em' }}>RETOUR</span>
           </button>
 
-          <h2 className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '28px', color: 'rgba(255,255,255,0.85)', marginBottom: '32px' }}>NOUVEAU PROJET</h2>
+          <h2 className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '28px', color: 'rgba(255,255,255,0.85)', marginBottom: '32px' }}>{t('newProject')}</h2>
 
           <div style={{ marginBottom: '24px' }}>
-            <label className="newproj-label font-bebas-book">NOM DU PROJET</label>
-            <input ref={nameInputRef} type="search" autoComplete="one-time-code" autoCorrect="off" autoCapitalize="characters" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" name="projectname_notafield" enterKeyHint="done" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => { if (e.key === 'Enter') { e.target.blur(); handleSubmit(); } }} placeholder="Client — Nom du projet" style={inputStyle}/>
+            <label className="newproj-label font-bebas-book">{t('projectName')}</label>
+            <input ref={nameInputRef} type="search" autoComplete="one-time-code" autoCorrect="off" autoCapitalize="characters" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" name="projectname_notafield" enterKeyHint="done" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => { if (e.key === 'Enter') { e.target.blur(); handleSubmit(); } }} placeholder={t('projectNamePlaceholder')} style={inputStyle}/>
           </div>
 
           <div style={{ marginBottom: '24px' }}>
-            <label className="newproj-label font-bebas-book">ADRESSE DU PROJET</label>
-            <input ref={addressInputRef} type="search" autoComplete="one-time-code" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" name="projectaddr_notafield" enterKeyHint="done" defaultValue={form.address} placeholder="Entrer l'adresse..." style={inputStyle}/>
+            <label className="newproj-label font-bebas-book">{t('projectAddress')}</label>
+            <input ref={addressInputRef} type="search" autoComplete="one-time-code" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" name="projectaddr_notafield" enterKeyHint="done" defaultValue={form.address} placeholder={t('enterAddress')} style={inputStyle}/>
           </div>
 
           <div style={{ marginBottom: '24px' }}>
@@ -6722,21 +6921,23 @@
               fontSize: '20px', cursor: 'pointer', letterSpacing: '0.05em',
               textShadow: form.name.trim() ? '0 0 12px rgba(255,255,255,0.3)' : 'none',
               transition: 'color 0.2s, text-shadow 0.2s'
-            }}>{loading ? 'CRÉATION...' : 'AJOUTER'}</button>
+            }}>{loading ? 'CRÉATION...' : t('added')}</button>
             <button onClick={onClose} className="font-bebas-bold" style={{
               background: 'none', border: 'none', padding: '8px 0',
               color: '#FAF9F7', fontSize: '20px', cursor: 'pointer', letterSpacing: '0.05em'
-            }}>ANNULER</button>
+            }}>{t('cancel')}</button>
           </div>
+          <UpgradeModal isOpen={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />
         </div>
       );
     };
 
     const UndoToast = ({ onUndo, projectName }) => {
+      const { t } = useLang();
       const [visible, setVisible] = useState(true);
       useEffect(() => {
-        const t = setTimeout(() => setVisible(false), 5000);
-        return () => clearTimeout(t);
+        const timer = setTimeout(() => setVisible(false), 5000);
+        return () => clearTimeout(timer);
       }, []);
       if (!visible) return null;
       return (
@@ -6748,8 +6949,8 @@
           border: '1px solid rgba(255,255,255,0.1)',
           animation: 'fadeIn 0.3s ease'
         }}>
-          <span className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '16px', color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>PROJET SUPPRIMÉ</span>
-          <button onClick={onUndo} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: 'none', color: '#FAF9F7', fontSize: '16px', cursor: 'pointer', textShadow: '0 0 12px rgba(255,255,255,0.4)', padding: '0' }}>ANNULER</button>
+          <span className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '16px', color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>{t('projectDeleted')}</span>
+          <button onClick={onUndo} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: 'none', color: '#FAF9F7', fontSize: '16px', cursor: 'pointer', textShadow: '0 0 12px rgba(255,255,255,0.4)', padding: '0' }}>{t('undo')}</button>
           <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>{/iPhone|iPad|Android/i.test(navigator.userAgent) ? '' : '⌘Z'}</span>
         </div>
       );
@@ -6757,6 +6958,7 @@
 
     const App = () => {
       const { view, setView, selectedId, setSelectedId, prefs, lastDeleted, undoDelete } = useStore();
+      const { t } = useLang();
       const [showNew, setShowNew] = useState(false);
       const plusRef = React.useRef(null);
       const [plusRect, setPlusRect] = useState(null);
@@ -7054,8 +7256,8 @@
             zIndex: 38, pointerEvents: 'none'
           }}/>}
           {/* Page titles — rendered at App level ABOVE blur */}
-          {!isMobile && displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>DÉTAILS PROJET</h1>}
-          {!isMobile && !displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{view === 'todo' ? 'PROJETS' : view === 'retouching' ? 'ÉDITION' : 'PRÉFÉRENCES'}</h1>}
+          {!isMobile && displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{t('projectDetailsTitle')}</h1>}
+          {!isMobile && !displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{view === 'todo' ? t('projects') : view === 'retouching' ? t('editing') : t('preferences')}</h1>}
           {!(isMobile && showNew) && <Header onChangeView={changeView} onAddProject={() => { const f = document.getElementById('persistentFlare'); if (f) { f.style.display = 'none'; f.style.animation = 'none'; } setShowNew(true); }}/>}
           <div style={{ 
             display: isMobile && showNew ? 'none' : 'block'
@@ -7101,11 +7303,11 @@
       );
       
       if (!user) return <LoginScreen/>;
-      
-      return <StoreProvider><App/></StoreProvider>;
+
+      return <SubscriptionProvider><StoreProvider><App/></StoreProvider></SubscriptionProvider>;
     };
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<AuthProvider><AppWithAuth/></AuthProvider>);
+    ReactDOM.createRoot(document.getElementById('root')).render(<AuthProvider><LangProvider><AppWithAuth/></LangProvider></AuthProvider>);
   </script>
   <script>
     // Force title after everything loads

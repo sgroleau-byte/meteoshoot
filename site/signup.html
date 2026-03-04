@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#181b1e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MeteoShoot">
+  <title>MeteoShoot | Signup</title>
+  <script>var isDev = !location.hostname.match(/^(meteoshoot\.vercel\.app|meteoshoot\.com|www\.meteoshoot\.com)$/);</script>
+  <script>if (isDev) document.title = "DEV | MeteoShoot Signup";</script>
+  <link rel="preload" href="../imgProjet/splash-o.png" as="image">
+  <link rel="preload" href="../imgProjet/splash-typoMeteoshoot.png" as="image">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            orange: { DEFAULT: '#E07A2B', light: '#ffe26b', dark: '#C4611A' },
+            cream: { DEFAULT: 'var(--bg-primary)', dark: 'var(--bg-secondary)' },
+            charcoal: { DEFAULT: 'var(--text-primary)', light: 'var(--text-secondary)', muted: 'var(--text-muted)' },
+            red: { 500: '#f4143d' },
+            blue: { 500: '#7dd3c6' },
+          },
+          fontFamily: { bebas: ['Bebas Neue', 'sans-serif'], avenir: ['Montserrat', 'sans-serif'] },
+        }
+      }
+    }
+  </script>
+  <style>
+    @font-face {
+      font-family: 'Bebas Neue';
+      font-weight: 100;
+      src: url('../fonts/BebasNeue Thin.ttf') format('truetype');
+    }
+    @font-face {
+      font-family: 'Bebas Neue';
+      font-weight: 300;
+      src: url('../fonts/BebasNeue Light.ttf') format('truetype');
+    }
+    @font-face {
+      font-family: 'Bebas Neue';
+      font-weight: 400;
+      src: url('../fonts/BebasNeue Regular.ttf') format('truetype');
+    }
+    @font-face {
+      font-family: 'Bebas Neue';
+      font-weight: 500;
+      src: url('../fonts/BebasNeue Book.ttf') format('truetype');
+    }
+    @font-face {
+      font-family: 'Bebas Neue';
+      font-weight: 700;
+      src: url('../fonts/BebasNeue Bold.ttf') format('truetype');
+    }
+    @font-face {
+      font-family: 'Avenir';
+      font-weight: 300;
+      src: url('../fonts/Avenir-Light.ttf') format('truetype');
+    }
+    @font-face {
+      font-family: 'Avenir';
+      font-weight: 400;
+      src: url('../fonts/Avenir-Book.ttf') format('truetype');
+    }
+    @font-face {
+      font-family: 'Avenir';
+      font-weight: 700;
+      src: url('../fonts/Avenir-Medium.ttf') format('truetype');
+    }
+
+    :root {
+      --bg-primary: #FAF9F7;
+      --bg-secondary: #F0EDE8;
+      --bg-input: #FFFFFF;
+      --text-primary: #2C2C2C;
+      --text-secondary: #404A48;
+      --text-muted: #8B9B99;
+      --border-color: #E0DDD8;
+    }
+    body.dark-mode {
+      --bg-primary: #181b1e;
+      --bg-secondary: #1A1A1A;
+      --bg-input: #3A3A3A;
+      --text-primary: #FAF9F7;
+      --text-secondary: #E0E0E0;
+      --text-muted: #8B9B99;
+      --border-color: #404A48;
+      --red-brand: #d83152;
+    }
+
+    html { overflow: hidden; }
+    body { font-family: 'Montserrat', sans-serif; margin: 0; padding: 0; }
+
+    /* Splash logo animations */
+    .splash-logo-area {
+      position: relative;
+      z-index: 6;
+    }
+    .splash-logo-img {
+      width: clamp(224px, 44vw, 464px);
+      height: auto;
+      opacity: 0.8;
+      display: block;
+    }
+    .splash-flare {
+      position: absolute;
+      top: 50%;
+      left: 80%;
+      transform: translate(calc(-50% + 50px), -50%);
+      width: 88%;
+      max-width: 440px;
+      height: auto;
+      mix-blend-mode: color-dodge;
+      pointer-events: none;
+      opacity: 1;
+      animation: splashFlareOrg 12s ease-in-out infinite;
+      will-change: transform;
+    }
+
+    @keyframes splashFlareOrg {
+      0%   { transform: translate(calc(-50% + 50px), -50%) scale(1, 1) rotate(0deg); }
+      15%  { transform: translate(calc(-50% + 52px), -51%) scale(1.04, 0.97) rotate(1.5deg); }
+      30%  { transform: translate(calc(-50% + 47px), -49%) scale(0.97, 1.03) rotate(-1deg); }
+      50%  { transform: translate(calc(-50% + 53px), -52%) scale(1.03, 0.96) rotate(2deg); }
+      70%  { transform: translate(calc(-50% + 48px), -50%) scale(0.98, 1.04) rotate(-1.5deg); }
+      85%  { transform: translate(calc(-50% + 51px), -51%) scale(1.02, 0.98) rotate(0.5deg); }
+      100% { transform: translate(calc(-50% + 50px), -50%) scale(1, 1) rotate(0deg); }
+    }
+
+    @keyframes splashHaloOrg {
+      0%   { left: calc(50% - 200px); top: calc(46% - 150px); transform: translate(-50%, -50%) translateZ(0) scale(1, 1) rotate(0deg); }
+      15%  { left: calc(50% - 155px); top: calc(44% - 150px); transform: translate(-50%, -51%) translateZ(0) scale(1.06, 0.94) rotate(2deg); }
+      30%  { left: calc(50% - 100px); top: calc(42% - 150px); transform: translate(-50%, -49%) translateZ(0) scale(0.95, 1.05) rotate(-1.5deg); }
+      50%  { left: calc(50% - 40px);  top: calc(40% - 150px); transform: translate(-50%, -52%) translateZ(0) scale(1.04, 0.93) rotate(1deg); }
+      65%  { left: calc(50% - 80px);  top: calc(42% - 150px); transform: translate(-50%, -50%) translateZ(0) scale(0.96, 1.04) rotate(-2deg); }
+      80%  { left: calc(50% - 140px); top: calc(44% - 150px); transform: translate(-50%, -51%) translateZ(0) scale(1.03, 0.97) rotate(1.5deg); }
+      100% { left: calc(50% - 200px); top: calc(46% - 150px); transform: translate(-50%, -50%) translateZ(0) scale(1, 1) rotate(0deg); }
+    }
+
+    @keyframes fadeInUp {
+      0% { opacity: 0; transform: translateY(16px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Login input placeholder styling */
+    .login-input::placeholder { color: #ffffff !important; opacity: 1 !important; }
+    .login-input::-webkit-input-placeholder { color: #ffffff !important; opacity: 1 !important; }
+
+    /* Autofill styling */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus,
+    input:-webkit-autofill:active {
+      -webkit-box-shadow: 0 0 0 30px #1e2224 inset !important;
+      -webkit-text-fill-color: rgba(255,255,255,0.85) !important;
+      transition: background-color 5000s ease-in-out 0s;
+    }
+
+    /* Button hover glow */
+    .login-btn span { transition: text-shadow 0.3s ease; }
+    .login-btn:hover span { text-shadow: 0 0 12px rgba(170,215,208,0.5), 0 0 24px rgba(170,215,208,0.2); }
+
+    /* Lang toggle */
+    .lang-toggle {
+      position: fixed;
+      bottom: max(16px, env(safe-area-inset-bottom, 16px));
+      left: 16px;
+      z-index: 50;
+      display: flex;
+      gap: 2px;
+      font-family: 'Montserrat', sans-serif;
+      font-weight: 500;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+    }
+    .lang-toggle button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px 6px;
+      color: rgba(255,255,255,0.25);
+      transition: color 0.2s ease;
+    }
+    .lang-toggle button.active {
+      color: rgba(255,255,255,0.6);
+    }
+    .lang-toggle button:hover {
+      color: rgba(255,255,255,0.5);
+    }
+
+    @media (max-width: 768px) {
+      .splash-logo-img { width: clamp(200px, 60vw, 300px); }
+    }
+    @media (max-height: 500px) and (orientation: landscape) {
+      .splash-logo-img { width: clamp(200px, 40vw, 350px); }
+    }
+  </style>
+</head>
+<body class="dark-mode">
+
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="shared.js"></script>
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, createContext, useContext } = React;
+
+    // ===== SUPABASE =====
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // ===== i18n CONTEXT =====
+    const LangContext = createContext();
+    const useLang = () => useContext(LangContext);
+
+    const LangProvider = ({ children }) => {
+      const [lang, setLang] = useState(getDefaultLang());
+
+      const switchLang = (l) => {
+        setLang(l);
+        localStorage.setItem('sp-lang', l);
+      };
+
+      const t = (key) => {
+        const tr = TRANSLATIONS[lang];
+        return (tr && tr[key] !== undefined) ? tr[key] : (TRANSLATIONS.fr[key] || key);
+      };
+
+      return (
+        <LangContext.Provider value={{ lang, switchLang, t }}>
+          {children}
+        </LangContext.Provider>
+      );
+    };
+
+    // ===== LANG TOGGLE =====
+    const LangToggle = () => {
+      const { lang, switchLang } = useLang();
+      return (
+        <div className="lang-toggle">
+          <button
+            className={lang === 'fr' ? 'active' : ''}
+            onClick={() => switchLang('fr')}
+          >FR</button>
+          <button
+            className={lang === 'en' ? 'active' : ''}
+            onClick={() => switchLang('en')}
+          >EN</button>
+        </div>
+      );
+    };
+
+    // ===== EMAIL ICON SVG =====
+    const EmailIcon = () => (
+      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="rgba(170,215,208,0.6)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="4" width="20" height="16" rx="2"/>
+        <polyline points="22,4 12,13 2,4"/>
+      </svg>
+    );
+
+    // ===== SIGNUP SCREEN =====
+    const SignupScreen = () => {
+      const { t } = useLang();
+      const [email, setEmail] = useState('');
+      const [password, setPassword] = useState('');
+      const [confirmPassword, setConfirmPassword] = useState('');
+      const [sending, setSending] = useState(false);
+      const [error, setError] = useState('');
+      const [success, setSuccess] = useState(false);
+      const [checkingAuth, setCheckingAuth] = useState(true);
+
+      const isMob = window.innerWidth < 768;
+
+      // Check if already authenticated -> redirect
+      useEffect(() => {
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            window.location.href = '/index.html';
+          } else {
+            setCheckingAuth(false);
+          }
+        });
+      }, []);
+
+      const handleSubmit = async () => {
+        if (!email || !password || !confirmPassword) return;
+
+        setError('');
+
+        // Validate password length
+        if (password.length < 6) {
+          setError(t('passwordTooShort'));
+          return;
+        }
+
+        // Validate passwords match
+        if (password !== confirmPassword) {
+          setError(t('passwordMismatch'));
+          return;
+        }
+
+        setSending(true);
+
+        try {
+          const { data, error: signUpError } = await supabaseClient.auth.signUp({
+            email,
+            password,
+            options: {
+              emailRedirectTo: window.location.origin + '/index.html'
+            }
+          });
+
+          if (signUpError) {
+            setError(t('signupError'));
+            setSending(false);
+          } else {
+            setSuccess(true);
+            setSending(false);
+          }
+        } catch (e) {
+          setError(t('signupError'));
+          setSending(false);
+        }
+      };
+
+      // Show nothing while checking auth
+      if (checkingAuth) {
+        return <div style={{ position: 'fixed', inset: 0, background: '#181b1e' }} />;
+      }
+
+      // Glassmorphic input wrapper component
+      const GlassInput = ({ children, mb }) => (
+        <div style={{
+          position: 'relative', overflow: 'hidden',
+          backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+          border: 'none',
+          borderRadius: '0', padding: '2px', marginBottom: mb || '13px'
+        }}>
+          <div style={{
+            position: 'absolute', top: '-200px', left: '-600px',
+            width: '800px', height: '800px', borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0.08) 40%, transparent 70%)',
+            pointerEvents: 'none'
+          }} />
+          {children}
+        </div>
+      );
+
+      const inputStyle = {
+        background: 'transparent', border: 'none', outline: 'none',
+        color: '#ffffff', fontSize: '21px', width: '100%',
+        padding: '6px 14px', fontFamily: "'Avenir', 'Montserrat', sans-serif",
+        fontWeight: 300, boxSizing: 'border-box', position: 'relative', zIndex: 1
+      };
+
+      // ===== SUCCESS / CONFIRMATION SCREEN =====
+      if (success) {
+        return (
+          <div style={{
+            position: 'fixed', inset: 0, background: '#181b1e',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            overflow: 'hidden'
+          }}>
+            {/* Halo glow */}
+            <div style={{
+              position: 'absolute',
+              top: isMob ? 'calc(46% - 80px)' : 'calc(46% - 150px)',
+              left: isMob ? 'calc(50% - 100px)' : 'calc(50% - 200px)',
+              transform: 'translate(-50%, -50%) translateZ(0)',
+              width: isMob ? '900px' : '1800px',
+              height: isMob ? '900px' : '1800px',
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(170,215,208,0.4) 0%, rgba(150,200,195,0.08) 30%, transparent 55%)',
+              filter: 'blur(60px)', pointerEvents: 'none', zIndex: 1,
+              animation: 'splashHaloOrg 20s ease-in-out infinite'
+            }} />
+
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              position: 'relative', zIndex: 10,
+              animation: 'fadeInUp 0.6s ease-out forwards'
+            }}>
+              <EmailIcon />
+              <div style={{
+                fontFamily: "'Avenir', 'Montserrat', sans-serif",
+                fontWeight: 300, fontSize: '14px',
+                color: 'rgba(255,255,255,0.6)',
+                marginTop: '20px', textAlign: 'center',
+                maxWidth: '300px', lineHeight: '1.6',
+                letterSpacing: '0.02em'
+              }}>
+                {t('emailSent')}
+              </div>
+              <div style={{
+                fontFamily: "'Avenir', 'Montserrat', sans-serif",
+                fontWeight: 300, fontSize: '14px',
+                color: 'rgba(255,255,255,0.4)',
+                marginTop: '10px', textAlign: 'center',
+                maxWidth: '300px', lineHeight: '1.6',
+                letterSpacing: '0.02em'
+              }}>
+                {t('checkEmail')}
+              </div>
+              <a
+                href="login.html"
+                style={{
+                  fontFamily: "'Avenir', 'Montserrat', sans-serif",
+                  fontWeight: 300, fontSize: '14px',
+                  color: 'rgba(170,215,208,0.5)',
+                  marginTop: '30px', textDecoration: 'none',
+                  letterSpacing: '0.02em',
+                  transition: 'color 0.2s ease'
+                }}
+                onMouseEnter={e => e.target.style.color = 'rgba(170,215,208,0.8)'}
+                onMouseLeave={e => e.target.style.color = 'rgba(170,215,208,0.5)'}
+              >
+                {t('backToLogin')}
+              </a>
+            </div>
+
+            <LangToggle />
+          </div>
+        );
+      }
+
+      // ===== SIGNUP FORM =====
+      return (
+        <div style={{
+          position: 'fixed', inset: 0, background: '#181b1e',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          overflow: 'hidden'
+        }}>
+          {/* Halo glow -- same as splash */}
+          <div style={{
+            position: 'absolute',
+            top: isMob ? 'calc(46% - 80px)' : 'calc(46% - 150px)',
+            left: isMob ? 'calc(50% - 100px)' : 'calc(50% - 200px)',
+            transform: 'translate(-50%, -50%) translateZ(0)',
+            width: isMob ? '900px' : '1800px',
+            height: isMob ? '900px' : '1800px',
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(170,215,208,0.4) 0%, rgba(150,200,195,0.08) 30%, transparent 55%)',
+            filter: 'blur(60px)', pointerEvents: 'none', zIndex: 1,
+            animation: 'splashHaloOrg 20s ease-in-out infinite'
+          }} />
+
+          {/* Logo + Form wrapper -- left-aligned together */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+            {/* Logo + flare -- exact same as splash */}
+            <div className="splash-logo-area" style={{ marginBottom: '25px' }}>
+              <img className="splash-flare" src="../imgProjet/splash-o.png" alt="" />
+              <img className="splash-logo-img" src="../imgProjet/splash-typoMeteoshoot.png" alt="meteoshoot" />
+            </div>
+
+            {/* Form */}
+            <div style={{ width: isMob ? '300px' : '360px', position: 'relative', zIndex: 10 }}>
+              {/* Email */}
+              <GlassInput>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder={t('email')}
+                  autoComplete="email"
+                  style={inputStyle}
+                  className="login-input"
+                />
+              </GlassInput>
+
+              {/* Password */}
+              <GlassInput>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder={t('password')}
+                  autoComplete="new-password"
+                  style={inputStyle}
+                  className="login-input"
+                />
+              </GlassInput>
+
+              {/* Confirm Password */}
+              <GlassInput mb="16px">
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                  placeholder={t('confirmPassword')}
+                  autoComplete="new-password"
+                  style={inputStyle}
+                  className="login-input"
+                />
+              </GlassInput>
+
+              {/* Error message */}
+              {error && (
+                <div style={{
+                  fontFamily: "'Avenir', 'Montserrat', sans-serif",
+                  fontWeight: 300, fontSize: '14px',
+                  color: 'rgba(255,255,255,0.4)',
+                  whiteSpace: 'nowrap',
+                  padding: '0 14px', marginBottom: '8px'
+                }}>
+                  {error}
+                </div>
+              )}
+
+              {/* Submit button */}
+              <button
+                onClick={handleSubmit}
+                disabled={sending || !email || !password || !confirmPassword}
+                className="login-btn"
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px',
+                  width: '100%', padding: '4px 2px',
+                  opacity: 1,
+                  transition: 'opacity 0.2s, text-shadow 0.3s'
+                }}
+              >
+                <span style={{
+                  fontFamily: "'Avenir', 'Montserrat', sans-serif",
+                  fontWeight: 300, fontSize: '21px',
+                  color: '#ffffff', letterSpacing: '0.02em'
+                }}>
+                  {sending ? t('creatingAccount') : t('createAccount')}
+                </span>
+                <span style={{
+                  color: '#ffffff', fontSize: '21px',
+                  fontFamily: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif",
+                  fontWeight: 300, position: 'relative', top: '2px'
+                }}>&#8594;</span>
+              </button>
+
+              {/* Link to login */}
+              <div style={{
+                marginTop: '20px', padding: '0 2px',
+                display: 'flex', alignItems: 'center', gap: '6px'
+              }}>
+                <span style={{
+                  fontFamily: "'Avenir', 'Montserrat', sans-serif",
+                  fontWeight: 300, fontSize: '14px',
+                  color: 'rgba(255,255,255,0.3)',
+                  letterSpacing: '0.02em'
+                }}>
+                  {t('hasAccount')}
+                </span>
+                <a
+                  href="login.html"
+                  style={{
+                    fontFamily: "'Avenir', 'Montserrat', sans-serif",
+                    fontWeight: 300, fontSize: '14px',
+                    color: 'rgba(255,255,255,0.5)',
+                    textDecoration: 'none',
+                    letterSpacing: '0.02em',
+                    transition: 'color 0.2s ease'
+                  }}
+                  onMouseEnter={e => e.target.style.color = 'rgba(255,255,255,0.8)'}
+                  onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.5)'}
+                >
+                  {t('login')}
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* Version badge */}
+          <div style={{
+            position: 'absolute', bottom: '40px', left: '50%',
+            transform: 'translateX(-50%)', zIndex: 2, textAlign: 'center'
+          }}>
+            <div style={{
+              fontSize: '12px', color: 'rgba(255,255,255,0.2)',
+              fontFamily: 'monospace', letterSpacing: '0.05em'
+            }}>
+              {window.isDev ? 'DEV' : ''}
+            </div>
+          </div>
+
+          <LangToggle />
+        </div>
+      );
+    };
+
+    // ===== APP ROOT =====
+    const App = () => (
+      <LangProvider>
+        <SignupScreen />
+      </LangProvider>
+    );
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
