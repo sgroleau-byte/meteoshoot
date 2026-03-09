@@ -8,6 +8,12 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MeteoShoot">
   <script>var isDev = !location.hostname.match(/^(meteoshoot\.vercel\.app|meteoshoot\.com|www\.meteoshoot\.com)$/);</script>
+  <link rel="apple-touch-icon" href="../icon-180.png">
+  <script>
+    if (isDev) {
+      document.querySelector('link[rel="apple-touch-icon"]').href = '../icon-180-DevRose.png';
+    }
+  </script>
   <title>MeteoShoot | Login</title>
   <script>if (isDev) document.title = "DEV | MeteoShoot Login";</script>
   <link rel="preload" href="../imgProjet/splash-o.png" as="image">
@@ -90,7 +96,8 @@
       --red-brand: #d83152;
     }
 
-    body { font-family: 'Montserrat', sans-serif; margin: 0; padding: 0; }
+    html { background: #181b1e; }
+    body { font-family: 'Montserrat', sans-serif; margin: 0; padding: 0; background: #181b1e; }
 
     /* ── Splash Logo Area ── */
     .splash-logo-area {
@@ -110,7 +117,7 @@
       position: absolute;
       top: 50%;
       left: 80%;
-      transform: translate(calc(-50% + 50px), -50%);
+      transform: translate(-50%, -50%);
       width: 88%;
       max-width: 440px;
       height: auto;
@@ -147,17 +154,17 @@
 
     /* ── Keyframes ── */
     @keyframes splashFlareReveal {
-      0% { opacity: 0; transform: translate(calc(-50% + 50px), -50%) scale(0.8); }
-      100% { opacity: 1; transform: translate(calc(-50% + 50px), -50%) scale(1); }
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+      100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
     }
     @keyframes splashFlareOrg {
-      0%   { transform: translate(calc(-50% + 50px), -50%) scale(1, 1) rotate(0deg); }
-      15%  { transform: translate(calc(-50% + 52px), -51%) scale(1.04, 0.97) rotate(1.5deg); }
-      30%  { transform: translate(calc(-50% + 47px), -49%) scale(0.97, 1.03) rotate(-1deg); }
-      50%  { transform: translate(calc(-50% + 53px), -52%) scale(1.03, 0.96) rotate(2deg); }
-      70%  { transform: translate(calc(-50% + 48px), -50%) scale(0.98, 1.04) rotate(-1.5deg); }
-      85%  { transform: translate(calc(-50% + 51px), -51%) scale(1.02, 0.98) rotate(0.5deg); }
-      100% { transform: translate(calc(-50% + 50px), -50%) scale(1, 1) rotate(0deg); }
+      0%   { transform: translate(-50%, -50%) scale(1, 1) rotate(0deg); }
+      15%  { transform: translate(calc(-50% + 2px), -51%) scale(1.04, 0.97) rotate(1.5deg); }
+      30%  { transform: translate(calc(-50% - 3px), -49%) scale(0.97, 1.03) rotate(-1deg); }
+      50%  { transform: translate(calc(-50% + 3px), -52%) scale(1.03, 0.96) rotate(2deg); }
+      70%  { transform: translate(calc(-50% - 2px), -50%) scale(0.98, 1.04) rotate(-1.5deg); }
+      85%  { transform: translate(calc(-50% + 1px), -51%) scale(1.02, 0.98) rotate(0.5deg); }
+      100% { transform: translate(-50%, -50%) scale(1, 1) rotate(0deg); }
     }
     @keyframes splashHaloOrg {
       0%   { left: calc(50% - 200px); top: calc(46% - 150px); transform: translate(-50%, -50%) translateZ(0) scale(1, 1) rotate(0deg); }
@@ -187,12 +194,10 @@
 
     /* ── Language Toggle ── */
     .lang-toggle {
-      position: fixed;
-      bottom: 20px;
-      left: 20px;
-      z-index: 100;
       display: flex;
+      justify-content: flex-end;
       gap: 4px;
+      margin-top: 0;
       font-family: 'Montserrat', sans-serif;
       font-size: 11px;
       font-weight: 400;
@@ -288,11 +293,21 @@
     const [password, setPassword] = useState('');
     const [sending, setSending] = useState(false);
     const [error, setError] = useState(false);
-    const [view, setView] = useState('login'); // 'login' | 'forgot'
+    const [view, setView] = useState('login'); // 'login' | 'forgot' | 'signup' | 'signupSuccess'
     const [resetEmail, setResetEmail] = useState('');
     const [resetSending, setResetSending] = useState(false);
     const [resetSent, setResetSent] = useState(false);
     const [resetError, setResetError] = useState(false);
+
+    // Signup state
+    const [signupFullName, setSignupFullName] = useState('');
+    const [signupOrg, setSignupOrg] = useState('');
+    const [signupSector, setSignupSector] = useState('');
+    const [signupEmail, setSignupEmail] = useState('');
+    const [signupPassword, setSignupPassword] = useState('');
+    const [signupShowPw, setSignupShowPw] = useState(false);
+    const [signupSending, setSignupSending] = useState(false);
+    const [signupError, setSignupError] = useState('');
 
     const isMob = useIsMobile();
 
@@ -342,6 +357,131 @@
       }
       setResetSending(false);
     };
+
+    const handleSignup = async () => {
+      if (!signupEmail || !signupPassword) return;
+      setSignupError('');
+      if (signupPassword.length < 6) { setSignupError(t('passwordTooShort')); return; }
+      setSignupSending(true);
+      try {
+        const { data, error: signUpError } = await supabaseClient.auth.signUp({
+          email: signupEmail,
+          password: signupPassword,
+          options: {
+            emailRedirectTo: window.location.origin + '/index.html',
+            data: { full_name: signupFullName || null, organization: signupOrg || null, sector: signupSector || null, lang }
+          }
+        });
+        if (signUpError) { setSignupError(signUpError.message || t('signupError')); }
+        else if (data?.user?.identities?.length === 0) { setSignupError(t('emailAlreadyExists')); }
+        else { setView('signupSuccess'); }
+      } catch (e) { setSignupError(t('signupError')); }
+      setSignupSending(false);
+    };
+
+    const GlassInput = ({ children, label, mb }) => (
+      <div style={{ marginBottom: mb || '13px' }}>
+        {label && <div style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '11px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px', paddingLeft: '14px' }}>{label}</div>}
+        <div style={{ position: 'relative', overflow: 'hidden', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: 'none', borderRadius: '0', padding: '2px' }}>
+          <div style={{ position: 'absolute', top: '-200px', left: '-600px', width: '800px', height: '800px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0.08) 40%, transparent 70%)', pointerEvents: 'none' }} />
+          {children}
+        </div>
+      </div>
+    );
+
+    const glassInputStyle = { background: 'transparent', border: 'none', outline: 'none', color: '#ffffff', fontSize: '21px', width: '100%', padding: '6px 14px', fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, boxSizing: 'border-box', position: 'relative', zIndex: 1 };
+
+    // ===== SIGNUP SUCCESS VIEW =====
+    if (view === 'signupSuccess') {
+      return (
+        <div style={{ position: 'fixed', inset: 0, background: '#181b1e', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+          <div className="splash-halo-el" style={{
+            position: 'absolute', top: isMob ? 'calc(46% - 80px)' : 'calc(46% - 150px)', left: isMob ? 'calc(50% - 100px)' : 'calc(50% - 200px)', transform: 'translate(-50%, -50%) translateZ(0)',
+            width: isMob ? '900px' : '1800px', height: isMob ? '900px' : '1800px', borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(170,215,208,0.4) 0%, rgba(150,200,195,0.08) 30%, transparent 55%)',
+            filter: 'blur(60px)', pointerEvents: 'none', zIndex: 1, animation: 'splashHaloOrg 20s ease-in-out infinite'
+          }}/>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', zIndex: 10 }}>
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="rgba(170,215,208,0.6)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="22,4 12,13 2,4"/></svg>
+            <div style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '14px', color: 'rgba(255,255,255,0.6)', marginTop: '20px', textAlign: 'center', maxWidth: '300px', lineHeight: '1.6' }}>{t('emailSent')}</div>
+            <div style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '14px', color: 'rgba(255,255,255,0.4)', marginTop: '10px', textAlign: 'center', maxWidth: '300px', lineHeight: '1.6' }}>{t('checkEmail')}</div>
+            <button
+              onClick={() => setView('login')}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '14px', color: 'rgba(170,215,208,0.5)', marginTop: '30px', transition: 'color 0.2s' }}
+              onMouseEnter={e => e.target.style.color = 'rgba(170,215,208,0.8)'}
+              onMouseLeave={e => e.target.style.color = 'rgba(170,215,208,0.5)'}
+            >{t('backToLogin')}</button>
+          </div>
+        </div>
+      );
+    }
+
+    // ===== SIGNUP VIEW =====
+    if (view === 'signup') {
+      return (
+        <div style={{ position: 'fixed', inset: 0, background: '#181b1e', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+          <div className="splash-halo-el" style={{
+            position: 'absolute', top: isMob ? 'calc(46% - 80px)' : 'calc(46% - 150px)', left: isMob ? 'calc(50% - 100px)' : 'calc(50% - 200px)', transform: 'translate(-50%, -50%) translateZ(0)',
+            width: isMob ? '900px' : '1800px', height: isMob ? '900px' : '1800px', borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(170,215,208,0.4) 0%, rgba(150,200,195,0.08) 30%, transparent 55%)',
+            filter: 'blur(60px)', pointerEvents: 'none', zIndex: 1, animation: 'splashHaloOrg 20s ease-in-out infinite'
+          }}/>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+            <div className="splash-logo-area" style={{ marginBottom: '25px' }}>
+              <img className="splash-flare" src="../imgProjet/splash-o.png" alt="" />
+              <img className="splash-logo-img" src="../imgProjet/splash-typoMeteoshoot.png" alt="meteoshoot" />
+            </div>
+            <div style={{ width: isMob ? '300px' : '360px', position: 'relative', zIndex: 10 }}>
+              <GlassInput label={t('fullName')}>
+                <input type="text" value={signupFullName} onChange={e => setSignupFullName(e.target.value)} autoComplete="name" style={glassInputStyle} className="login-input" />
+              </GlassInput>
+              <GlassInput label={t('organization')}>
+                <input type="text" value={signupOrg} onChange={e => setSignupOrg(e.target.value)} autoComplete="organization" style={glassInputStyle} className="login-input" />
+              </GlassInput>
+              <GlassInput label={t('sector')}>
+                <select value={signupSector} onChange={e => setSignupSector(e.target.value)} style={{ ...glassInputStyle, appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', cursor: 'pointer', color: signupSector ? '#ffffff' : 'rgba(255,255,255,0.5)' }} className="login-input">
+                  <option value="" style={{ background: '#1e2224', color: 'rgba(255,255,255,0.5)' }}>{'\u2014'}</option>
+                  {t('sectorOptions').map(opt => <option key={opt} value={opt} style={{ background: '#1e2224', color: '#ffffff' }}>{opt}</option>)}
+                </select>
+              </GlassInput>
+              <GlassInput label={t('email')}>
+                <input type="email" value={signupEmail} onChange={e => setSignupEmail(e.target.value)} autoComplete="email" style={glassInputStyle} className="login-input" />
+              </GlassInput>
+              <GlassInput label={t('password')} mb="16px">
+                <div style={{ position: 'relative' }}>
+                  <input type={signupShowPw ? 'text' : 'password'} value={signupPassword} onChange={e => setSignupPassword(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSignup()} autoComplete="new-password" style={{ ...glassInputStyle, paddingRight: '44px' }} className="login-input" />
+                  <button type="button" onClick={() => setSignupShowPw(!signupShowPw)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px', zIndex: 2 }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={signupShowPw ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.25)'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      {signupShowPw ? <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></> : <><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></>}
+                    </svg>
+                  </button>
+                </div>
+              </GlassInput>
+              {signupError && <div style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '14px', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap', padding: '0 14px', marginBottom: '8px' }}>{signupError}</div>}
+              <button onClick={handleSignup} disabled={signupSending || !signupEmail || !signupPassword} className="login-btn" style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px', width: '100%', padding: '4px 2px', opacity: 1, transition: 'opacity 0.2s, text-shadow 0.3s' }}>
+                <span style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '21px', color: '#ffffff', letterSpacing: '0.02em' }}>{signupSending ? t('creatingAccount') : t('createAccount')}</span>
+                <span style={{ color: '#ffffff', fontSize: '21px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif", fontWeight: 300, position: 'relative', top: '2px' }}>{'\u2192'}</span>
+              </button>
+            </div>
+          </div>
+          {/* Bottom links */}
+          <div style={{ marginTop: '20px', width: isMob ? '300px' : '360px', zIndex: 10, textAlign: 'right' }}>
+            <button
+              onClick={() => setView('login')}
+              style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '12px', color: 'rgba(255,255,255,0.4)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', textDecorationThickness: '0.5px', textUnderlineOffset: '6px', transition: 'color 0.2s', display: 'block', marginLeft: 'auto', padding: 0 }}
+              onMouseEnter={e => e.target.style.color = 'rgba(255,255,255,0.6)'}
+              onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.4)'}
+            >{t('hasAccount')}</button>
+            <div style={{ textAlign: 'right', marginTop: '24px' }}>
+              <LanguageToggle />
+            </div>
+          </div>
+          <div style={{ position: 'absolute', bottom: '0px', left: '50%', transform: 'translateX(-50%)', zIndex: 2, textAlign: 'center' }}>
+            <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.175)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>{window.isDev ? 'DEV ' : ''}v633.33</div>
+          </div>
+        </div>
+      );
+    }
 
     if (view === 'forgot') {
       return (
@@ -405,21 +545,21 @@
                   transition: 'opacity 0.2s, text-shadow 0.3s'
                 }}
               >
-                <span style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '21px', color: '#ffffff', letterSpacing: '0.02em' }}>
+                <span style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '17px', color: '#ffffff', letterSpacing: '0.02em' }}>
                   {resetSending ? '...' : t('resetPassword')}
                 </span>
-                <span style={{ color: '#ffffff', fontSize: '21px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif", fontWeight: 300, position: 'relative', top: '2px' }}>{'\u2192'}</span>
+                <span style={{ color: '#ffffff', fontSize: '17px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif", fontWeight: 300, position: 'relative', top: '2px' }}>{'\u2192'}</span>
               </button>
 
               {/* Back to login */}
-              <div style={{ marginTop: '20px', padding: '0 2px' }}>
+              <div style={{ marginTop: '20px', padding: '0 2px', textAlign: 'right' }}>
                 <button
                   onClick={() => { setView('login'); setResetSent(false); setResetError(false); }}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '13px', color: 'rgba(255,255,255,0.3)', padding: 0, transition: 'color 0.2s' }}
                   onMouseEnter={e => e.target.style.color = 'rgba(255,255,255,0.5)'}
                   onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.3)'}
                 >
-                  {t('backToLogin')}
+                  {'\u2190'} {t('backToLogin')}
                 </button>
               </div>
             </div>
@@ -433,7 +573,7 @@
     }
 
     return (
-      <div style={{ position: 'fixed', inset: 0, background: '#181b1e', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+      <div style={{ position: 'fixed', inset: 0, background: '#181b1e', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingTop: '100px', overflow: 'hidden' }}>
         {/* Halo glow -- same as splash */}
         <div className="splash-halo-el" style={{
           position: 'absolute', top: isMob ? 'calc(46% - 80px)' : 'calc(46% - 150px)', left: isMob ? 'calc(50% - 100px)' : 'calc(50% - 200px)', transform: 'translate(-50%, -50%) translateZ(0)',
@@ -513,34 +653,33 @@
               <span style={{ color: '#ffffff', fontSize: '21px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif", fontWeight: 300, position: 'relative', top: '2px' }}>{'\u2192'}</span>
             </button>
 
-            {/* Forgot password & Signup - single line */}
-            <div style={{ marginTop: '200px', padding: '0 2px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', whiteSpace: 'nowrap' }}>
-              <button
-                onClick={() => { setView('forgot'); setResetEmail(email); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '12px', color: '#546262', padding: 0, transition: 'color 0.2s', whiteSpace: 'nowrap' }}
-                onMouseEnter={e => e.target.style.color = '#849898'}
-                onMouseLeave={e => e.target.style.color = '#546262'}
-              >
-                {t('forgotPassword')}
-              </button>
-              <span style={{ color: '#546262', fontSize: '12px' }}>|</span>
-              <span style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '12px', color: '#546262', whiteSpace: 'nowrap' }}>
-                {t('noAccount')}{' '}
-                <a
-                  href="signup.html"
-                  style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '12px', color: '#849898', textDecoration: 'none', transition: 'color 0.2s' }}
-                  onMouseEnter={e => e.target.style.color = '#b0c4c4'}
-                  onMouseLeave={e => e.target.style.color = '#849898'}
-                >
-                  {t('signup')}
-                </a>
-              </span>
-            </div>
           </div>
         </div>
-        {/* Dev indicator */}
-        <div style={{ position: 'absolute', bottom: '40px', left: '50%', transform: 'translateX(-50%)', zIndex: 2, textAlign: 'center' }}>
-          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.2)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>{window.isDev ? 'DEV' : ''}</div>
+        {/* Bottom links section - aligned left with connexion button */}
+        <div style={{ marginTop: '112px', width: isMob ? '300px' : '360px', zIndex: 10, textAlign: 'right' }}>
+          <button
+            onClick={() => { setView('forgot'); setResetEmail(email); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '12px', color: 'rgba(255,255,255,0.25)', padding: 0, transition: 'color 0.2s', textDecoration: 'underline', textDecorationThickness: '0.5px', textUnderlineOffset: '6px', display: 'block', marginLeft: 'auto' }}
+            onMouseEnter={e => e.target.style.color = 'rgba(255,255,255,0.5)'}
+            onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.25)'}
+          >
+            {t('forgotPassword')}
+          </button>
+          <button
+            onClick={() => setView('signup')}
+            style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '12px', color: 'rgba(255,255,255,0.4)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', textDecorationThickness: '0.5px', textUnderlineOffset: '6px', transition: 'color 0.2s', display: 'block', textAlign: 'right', marginTop: '8px', padding: 0, marginLeft: 'auto' }}
+            onMouseEnter={e => e.target.style.color = 'rgba(255,255,255,0.6)'}
+            onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.4)'}
+          >
+            {lang === 'fr' ? 'Créer un nouveau compte?' : 'Create a new account?'}
+          </button>
+          <div style={{ textAlign: 'right', marginTop: '24px' }}>
+            <LanguageToggle />
+          </div>
+        </div>
+        {/* DEV + version at very bottom */}
+        <div style={{ position: 'absolute', bottom: '0px', left: '50%', transform: 'translateX(-50%)', zIndex: 2, textAlign: 'center' }}>
+          <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.175)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>{window.isDev ? 'DEV ' : ''}v633.33</div>
         </div>
       </div>
     );
@@ -573,7 +712,6 @@
     return (
       <LangProvider>
         <LoginScreen />
-        <LanguageToggle />
       </LangProvider>
     );
   };
