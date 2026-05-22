@@ -1030,7 +1030,10 @@
 
     // LoginScreen — moved to /site/login.html, this redirects there
     const LoginScreen = () => {
-      useEffect(() => { window.location.href = '/site/login.html'; }, []);
+      useEffect(() => {
+        const here = window.location.pathname + window.location.search;
+        window.location.href = (here && here !== '/') ? '/site/login.html?redirect=' + encodeURIComponent(here) : '/site/login.html';
+      }, []);
       return <div style={{ position: 'fixed', inset: 0, background: '#181b1e' }}/>;
     };
 
@@ -5679,8 +5682,15 @@
       // Animate open + reset form
       useEffect(() => {
         if (isOpen && !prevOpen.current) {
-          setForm({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false });
-          if (addressInputRef.current) addressInputRef.current.value = '';
+          if (pendingPrefill) {
+            const pf = pendingPrefill;
+            pendingPrefill = null;
+            setForm({ name: pf.name || '', address: pf.address || '', lat: null, lng: null, mandates: pf.mandates || [], orientation: [], isContest: false });
+            if (addressInputRef.current) addressInputRef.current.value = pf.address || '';
+          } else {
+            setForm({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false });
+            if (addressInputRef.current) addressInputRef.current.value = '';
+          }
           autocompleteRef.current = null;
           requestAnimationFrame(() => requestAnimationFrame(() => setAnimated(true)));
           setTimeout(() => nameInputRef.current?.focus(), 500);
@@ -6910,8 +6920,15 @@
       // Reset form when opening
       useEffect(() => {
         if (isOpen && !prevOpen.current) {
-          setForm({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false });
-          if (addressInputRef.current) addressInputRef.current.value = '';
+          if (pendingPrefill) {
+            const pf = pendingPrefill;
+            pendingPrefill = null;
+            setForm({ name: pf.name || '', address: pf.address || '', lat: null, lng: null, mandates: pf.mandates || [], orientation: [], isContest: false });
+            if (addressInputRef.current) addressInputRef.current.value = pf.address || '';
+          } else {
+            setForm({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false });
+            if (addressInputRef.current) addressInputRef.current.value = '';
+          }
           autocompleteRef.current = null;
           setTimeout(() => nameInputRef.current?.focus(), 500);
         }
@@ -7052,6 +7069,8 @@
       );
     };
 
+    let pendingPrefill = null;
+
     const App = () => {
       const { view, setView, selectedId, setSelectedId, prefs, lastDeleted, undoDelete } = useStore();
       const { t } = useLang();
@@ -7062,6 +7081,28 @@
       const [glowReady, setGlowReady] = useState(false);
       useEffect(() => { const t = setTimeout(() => setGlowReady(true), 800); return () => clearTimeout(t); }, []);
       const [displayedProjectId, setDisplayedProjectId] = useState(null);
+
+      // Pré-remplissage depuis un lien externe (ex: BudgetShoot) : ?prefill=<JSON>
+      useEffect(() => {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const raw = params.get('prefill');
+          if (!raw) return;
+          const data = JSON.parse(raw);
+          if (data && (data.name || data.address || (data.mandates && data.mandates.length))) {
+            pendingPrefill = {
+              name: data.name || '',
+              address: data.address || '',
+              mandates: Array.isArray(data.mandates) ? data.mandates : []
+            };
+            setView('todo');
+            setShowNew(true);
+          }
+          params.delete('prefill');
+          const qs = params.toString();
+          window.history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
+        } catch (err) { console.warn('Prefill error:', err); }
+      }, []);
 
       // Cmd+Z undo delete (desktop) + shake-to-undo (mobile)
       useEffect(() => {
