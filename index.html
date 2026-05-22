@@ -478,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.08</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.09</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -5523,7 +5523,7 @@
                       }}>
                         <span className="font-bebas-bold" style={{ fontSize: '14px', color: '#7dd3c6', letterSpacing: '0.04em' }}>
                           {drawingVertices.length === 0 ? 'CLIQUER POUR PLACER LE PREMIER POINT' : 
-                           drawingVertices.length < 3 ? `${drawingVertices.length} POINT${drawingVertices.length > 1 ? 'S' : ''} — CONTINUEZ` :
+                           drawingVertices.length < 3 ? `${drawingVertices.length} POINT${drawingVertices.length > 1 ? 'S' : ''} | CONTINUEZ` :
                            `${drawingVertices.length} POINTS`}
                         </span>
                         {drawingVertices.length >= 3 && (
@@ -6811,7 +6811,7 @@
                     <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: tier === 'shooter' ? '#E07A2B' : '#7dd3c6', boxShadow: tier === 'shooter' ? '0 0 6px rgba(224,122,43,0.5)' : '0 0 6px rgba(125,211,198,0.5)', flexShrink: 0 }}/>
                     <span className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '18px', color: 'rgba(255,255,255,0.7)' }}>
                       {tier === 'free' ? t('freePlan') : tier === 'shooter' ? t('shooterPlan') : t('godPlan')}
-                      {' — '}
+                      {' | '}
                       {isActive ? t('active') : (profile?.subscription_status || '').toUpperCase()}
                     </span>
                   </div>
@@ -6884,7 +6884,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.08</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.09</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
