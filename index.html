@@ -478,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.05</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.06</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -1148,10 +1148,87 @@
 
     // ===== WEATHER API =====
     const fetchWeather = async (lat, lng) => {
-      const url = `https://api.open-meteo.com/v1/gem?latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode,windspeed_10m,cloudcover,precipitation&daily=weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=America/Toronto&forecast_days=10`;
-      const res = await fetch(url);
-      const data = await res.json();
-      
+      // Deux modeles fusionnes: ICON (meilleure qualite du couvert, portee ~7,5 j) pour
+      // les jours qu'il couvre, GFS (portee 16 j) pour completer jusqu'a 10 jours. La sortie
+      // garde exactement la meme forme qu'une reponse Open-Meteo unique: ni l'affichage ni le
+      // parsing plus bas ne changent.
+      const qs = `latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode,windspeed_10m,cloudcover,precipitation&daily=weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=America/Toronto&forecast_days=10`;
+      const fetchModel = async (endpoint) => {
+        try {
+          const r = await fetch(`https://api.open-meteo.com/v1/${endpoint}?${qs}`);
+          if (!r.ok) return null;
+          return await r.json();
+        } catch (e) {
+          return null;
+        }
+      };
+      const [icon, gfs] = await Promise.all([fetchModel('dwd-icon'), fetchModel('gfs')]);
+
+      const HOURLY_KEYS = ['temperature_2m', 'weathercode', 'windspeed_10m', 'cloudcover', 'precipitation'];
+      const DAILY_KEYS = ['weathercode', 'temperature_2m_max', 'temperature_2m_min', 'sunrise', 'sunset'];
+      const dateOf = (t) => String(t).slice(0, 10);
+
+      const gfsOk = !!(gfs && gfs.hourly && gfs.daily && gfs.daily.time);
+      // Dernier jour reellement couvert par ICON (jour complet = temperature max non nulle).
+      // Calcule depuis la reponse, jamais code en dur: la portee d'ICON varie selon le run.
+      let lastIconDate = null;
+      if (icon && icon.daily && icon.daily.time) {
+        icon.daily.time.forEach((d, i) => {
+          if (icon.daily.temperature_2m_max[i] != null) {
+            const ds = dateOf(d);
+            if (lastIconDate === null || ds > lastIconDate) lastIconDate = ds;
+          }
+        });
+      }
+      const iconOk = !!(icon && icon.hourly && icon.daily && lastIconDate !== null);
+      if (!gfsOk && !iconOk) throw new Error('Meteo indisponible (ICON et GFS injoignables)');
+
+      // Index par horodatage (horaire) et par date (journalier) pour une jointure sans trou
+      // ni doublon, meme si les grilles different d'un modele a l'autre.
+      const indexBy = (resp, part, asDate) => {
+        const m = {};
+        if (resp && resp[part] && resp[part].time) {
+          resp[part].time.forEach((t, i) => { m[asDate ? dateOf(t) : t] = i; });
+        }
+        return m;
+      };
+      const iconHourIdx = indexBy(icon, 'hourly', false);
+      const iconDayIdx = indexBy(icon, 'daily', true);
+      const gfsHourIdx = indexBy(gfs, 'hourly', false);
+      const gfsDayIdx = indexBy(gfs, 'daily', true);
+
+      // Colonne vertebrale: GFS (10 jours) si dispo, sinon les jours ICON disponibles
+      // (si GFS tombe, l'app fonctionne quand meme avec les jours d'ICON).
+      const hourlyTimes = gfsOk ? gfs.hourly.time : icon.hourly.time.filter((t) => dateOf(t) <= lastIconDate);
+      const dailyTimes = gfsOk ? gfs.daily.time : icon.daily.time.filter((t) => dateOf(t) <= lastIconDate);
+
+      const data = { hourly: { time: [] }, daily: { time: [] } };
+      HOURLY_KEYS.forEach((k) => { data.hourly[k] = []; });
+      DAILY_KEYS.forEach((k) => { data.daily[k] = []; });
+
+      hourlyTimes.forEach((t) => {
+        const useIcon = iconOk && dateOf(t) <= lastIconDate && (t in iconHourIdx);
+        const src = useIcon ? icon : gfs;
+        const si = useIcon ? iconHourIdx[t] : gfsHourIdx[t];
+        data.hourly.time.push(t);
+        HOURLY_KEYS.forEach((k) => {
+          const arr = src && src.hourly ? src.hourly[k] : null;
+          data.hourly[k].push(arr && si != null ? (arr[si] ?? null) : null);
+        });
+      });
+
+      dailyTimes.forEach((t) => {
+        const ds = dateOf(t);
+        const useIcon = iconOk && ds <= lastIconDate && (ds in iconDayIdx);
+        const src = useIcon ? icon : gfs;
+        const si = useIcon ? iconDayIdx[ds] : gfsDayIdx[ds];
+        data.daily.time.push(t);
+        DAILY_KEYS.forEach((k) => {
+          const arr = src && src.daily ? src.daily[k] : null;
+          data.daily[k].push(arr && si != null ? (arr[si] ?? null) : null);
+        });
+      });
+
       // Calculer stats journalières depuis les données horaires (6h-18h)
       const getDailyStats = (dateStr) => {
         const dayStart = new Date(dateStr + 'T06:00:00');
@@ -6807,7 +6884,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.05</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.06</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
