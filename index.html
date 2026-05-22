@@ -1582,7 +1582,7 @@
         });
       };
 
-      return <StoreContext.Provider value={{ projects, prefs, view, selectedId, setView, setSelectedId, addProject, updateProject, deleteProject, advanceProject, revertProject, reorderProjects, setPrefs, lastDeleted, undoDelete }}>{children}</StoreContext.Provider>;
+      return <StoreContext.Provider value={{ projects, synced, prefs, view, selectedId, setView, setSelectedId, addProject, updateProject, deleteProject, advanceProject, revertProject, reorderProjects, setPrefs, lastDeleted, undoDelete }}>{children}</StoreContext.Provider>;
     };
 
     // ===== ICONS =====
@@ -5682,15 +5682,8 @@
       // Animate open + reset form
       useEffect(() => {
         if (isOpen && !prevOpen.current) {
-          if (pendingPrefill) {
-            const pf = pendingPrefill;
-            pendingPrefill = null;
-            setForm({ name: pf.name || '', address: pf.address || '', lat: null, lng: null, mandates: pf.mandates || [], orientation: [], isContest: false });
-            if (addressInputRef.current) addressInputRef.current.value = pf.address || '';
-          } else {
-            setForm({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false });
-            if (addressInputRef.current) addressInputRef.current.value = '';
-          }
+          setForm({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false });
+          if (addressInputRef.current) addressInputRef.current.value = '';
           autocompleteRef.current = null;
           requestAnimationFrame(() => requestAnimationFrame(() => setAnimated(true)));
           setTimeout(() => nameInputRef.current?.focus(), 500);
@@ -6920,15 +6913,8 @@
       // Reset form when opening
       useEffect(() => {
         if (isOpen && !prevOpen.current) {
-          if (pendingPrefill) {
-            const pf = pendingPrefill;
-            pendingPrefill = null;
-            setForm({ name: pf.name || '', address: pf.address || '', lat: null, lng: null, mandates: pf.mandates || [], orientation: [], isContest: false });
-            if (addressInputRef.current) addressInputRef.current.value = pf.address || '';
-          } else {
-            setForm({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false });
-            if (addressInputRef.current) addressInputRef.current.value = '';
-          }
+          setForm({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false });
+          if (addressInputRef.current) addressInputRef.current.value = '';
           autocompleteRef.current = null;
           setTimeout(() => nameInputRef.current?.focus(), 500);
         }
@@ -7069,10 +7055,8 @@
       );
     };
 
-    let pendingPrefill = null;
-
     const App = () => {
-      const { view, setView, selectedId, setSelectedId, prefs, lastDeleted, undoDelete } = useStore();
+      const { view, setView, selectedId, setSelectedId, prefs, lastDeleted, undoDelete, addProject, synced } = useStore();
       const { t } = useLang();
       const [showNew, setShowNew] = useState(false);
       const plusRef = React.useRef(null);
@@ -7082,27 +7066,43 @@
       useEffect(() => { const t = setTimeout(() => setGlowReady(true), 800); return () => clearTimeout(t); }, []);
       const [displayedProjectId, setDisplayedProjectId] = useState(null);
 
-      // Pré-remplissage depuis un lien externe (ex: BudgetShoot) : ?prefill=<JSON>
+      // Ajout direct depuis un lien externe (ex: BudgetShoot) : ?prefill=<JSON>
+      // Attend que la liste soit chargée (synced) pour ne pas se faire écraser.
+      const externalAddDone = React.useRef(false);
       useEffect(() => {
+        if (!synced || externalAddDone.current) return;
+        externalAddDone.current = true;
+        let parsed;
         try {
           const params = new URLSearchParams(window.location.search);
           const raw = params.get('prefill');
           if (!raw) return;
-          const data = JSON.parse(raw);
-          if (data && (data.name || data.address || (data.mandates && data.mandates.length))) {
-            pendingPrefill = {
-              name: data.name || '',
-              address: data.address || '',
-              mandates: Array.isArray(data.mandates) ? data.mandates : []
-            };
-            setView('todo');
-            setShowNew(true);
-          }
           params.delete('prefill');
           const qs = params.toString();
           window.history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
-        } catch (err) { console.warn('Prefill error:', err); }
-      }, []);
+          parsed = JSON.parse(raw);
+        } catch (err) { console.warn('Ajout externe: lecture impossible', err); return; }
+        if (!parsed || !(parsed.name || parsed.address)) return;
+        setView('todo');
+        (async () => {
+          const data = {
+            name: parsed.name || '',
+            address: parsed.address || '',
+            mandates: Array.isArray(parsed.mandates) ? parsed.mandates : [],
+            orientation: [], isContest: false, lat: null, lng: null
+          };
+          if (data.address) {
+            try { const r = await geocodeAddress(data.address); data.lat = r.lat; data.lng = r.lng; data.address = r.formattedAddress; } catch (e) { console.warn('Géocodage:', e); }
+          }
+          if (data.lat && data.lng && prefs.homeLat && prefs.homeLng) {
+            try { const travel = await getTravelTime(prefs.homeLat, prefs.homeLng, data.lat, data.lng); data.travelTime = travel; data.departureAddress = prefs.homeAddress; data.departureLat = prefs.homeLat; data.departureLng = prefs.homeLng; } catch (e) { console.warn('Trajet:', e); }
+          }
+          const result = addProject(data);
+          if (result && result.error === 'limit_reached') {
+            window.alert('Limite de projets atteinte sur ton forfait MétéoShoot.');
+          }
+        })();
+      }, [synced]);
 
       // Cmd+Z undo delete (desktop) + shake-to-undo (mobile)
       useEffect(() => {
