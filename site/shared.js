@@ -112,6 +112,9 @@ var TRANSLATIONS = {
 
     // Weather
     weatherUnavailable: 'Météo non disponible',
+    weatherApiDown: 'Service météo Open-Meteo temporairement indisponible. Les prévisions reviendront sous peu.',
+    weatherNetworkDown: 'Vérifie ta connexion internet.',
+    weatherStaleFrom: 'Données de',
     hourlyWeather: 'MÉTÉO HORAIRE',
     currentLocationWeather: 'MÉTÉO DE VOTRE POSITION ACTUELLE',
     browserLocationPermission: "Votre navigateur vous demandera l'autorisation d'accéder à votre position.",
@@ -284,6 +287,9 @@ var TRANSLATIONS = {
 
     // Weather
     weatherUnavailable: 'Weather unavailable',
+    weatherApiDown: 'Open-Meteo weather service is temporarily unavailable. Forecasts will return shortly.',
+    weatherNetworkDown: 'Check your internet connection.',
+    weatherStaleFrom: 'Data from',
     hourlyWeather: 'HOURLY WEATHER',
     currentLocationWeather: 'WEATHER FOR YOUR CURRENT LOCATION',
     browserLocationPermission: 'Your browser will ask for permission to access your location.',
