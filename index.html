@@ -478,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.14</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.15</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -6929,44 +6929,13 @@
                 </div>
               );
             }
-            // Mobile: banniere pleine largeur sous le titre PROJETS, meme typo mais taille
-            // adaptee a l'ecran etroit.
+            // Mobile: l'IIFE rend seulement le placeholder du + et GeoWeatherCard.
+            // La banniere mobile est rendue plus bas, juste avant le premier projet,
+            // pour qu'elle se sente "attachee" a la liste et non a la carte GPS.
             return (
               <React.Fragment>
                 <div ref={plusRef} style={{ width: 0, height: 0 }}/>
                 <GeoWeatherCard/>
-                {showBanner && (
-                  <div role="status" aria-live="polite" style={{
-                    margin: '0 24px 12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                  }}>
-                    <svg width="31" height="28" viewBox="0 0 32 28" fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true" style={{ flexShrink: 0 }}>
-                      <path d="M 4 24.26 L 15 4.74 Q 16 3 17 4.74 L 28 24.26 Q 29 26 27 26 L 5 26 Q 3 26 4 24.26 Z"/>
-                      <line x1="16" y1="11" x2="16" y2="17"/>
-                      <circle cx="16" cy="21.5" r="1.1" fill="#ffffff" stroke="none"/>
-                    </svg>
-                    <div className="font-bebas-regular" style={{
-                      fontSize: '9.1pt',
-                      letterSpacing: '0.14em',
-                      color: '#404a48',
-                      textTransform: 'uppercase',
-                      lineHeight: 1.25,
-                    }}>
-                      <div>
-                        {bannerError === 'network'
-                          ? 'Connexion internet inaccessible'
-                          : 'API météo temporairement inaccessible'}
-                      </div>
-                      {sinceLabel && (
-                        <div>
-                          Dernière mise à jour il y a <span style={{ color: '#ffffff' }}>{sinceLabel}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
               </React.Fragment>
             );
           })()}
@@ -7006,7 +6975,41 @@
               <span className="font-bebas-book" style={{ fontSize: '180px', color: '#FFFFFF', lineHeight: 1, textShadow: '0 0 30px rgba(255,255,255,0.15)' }}>+</span>
             </div>
           ))
-          : <div ref={el => { const f = document.getElementById('persistentFlare'); if (f) { f.style.opacity = '0'; f.style.animation = 'none'; } return listRef.current = el; }} style={{ paddingTop: '16px', paddingBottom: '80px' }}>{todoProjects.map((p, i) => <ProjectCard key={p.id} project={p} index={i} onSelect={onSelect} onMouseDownDrag={isMobile ? undefined : handleMouseDownDrag} openActionsId={openActionsId} setOpenActionsId={setOpenActionsId}/>)}</div>}
+          : <div ref={el => { const f = document.getElementById('persistentFlare'); if (f) { f.style.opacity = '0'; f.style.animation = 'none'; } return listRef.current = el; }} style={{ paddingTop: '16px', paddingBottom: '80px' }}>
+              {isMobile && bannerError && (
+                <div role="status" aria-live="polite" style={{
+                  margin: '0 24px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                }}>
+                  <svg width="31" height="28" viewBox="0 0 32 28" fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+                    <path d="M 4 24.26 L 15 4.74 Q 16 3 17 4.74 L 28 24.26 Q 29 26 27 26 L 5 26 Q 3 26 4 24.26 Z"/>
+                    <line x1="16" y1="11" x2="16" y2="17"/>
+                    <circle cx="16" cy="21.5" r="1.1" fill="#ffffff" stroke="none"/>
+                  </svg>
+                  <div className="font-bebas-regular" style={{
+                    fontSize: '9.1pt',
+                    letterSpacing: '0.14em',
+                    color: '#404a48',
+                    textTransform: 'uppercase',
+                    lineHeight: 1.25,
+                  }}>
+                    <div>
+                      {bannerError === 'network'
+                        ? 'Connexion internet inaccessible'
+                        : 'API météo temporairement inaccessible'}
+                    </div>
+                    {lastCachedAt && (
+                      <div>
+                        Dernière mise à jour il y a <span style={{ color: '#ffffff' }}>{formatTimeSince(lastCachedAt, now)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {todoProjects.map((p, i) => <ProjectCard key={p.id} project={p} index={i} onSelect={onSelect} onMouseDownDrag={isMobile ? undefined : handleMouseDownDrag} openActionsId={openActionsId} setOpenActionsId={setOpenActionsId}/>)}
+            </div>}
         </div>
       );
     };
@@ -7242,7 +7245,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.14</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.15</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
