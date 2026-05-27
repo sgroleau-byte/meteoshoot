@@ -478,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.27</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.28</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -5329,8 +5329,13 @@
                       }
                       
                       const thumbLeft = `${((sunHourDisplay - sliderMin) / sliderRange) * 100}%`;
-                      const srLeft = '20%';
-                      const ssLeft = '80%';
+                      // Sunrise/sunset positions derived from real srTime/ssTime
+                      // (instead of hardcoded 20%/80% which only approximated
+                      // the actual position in the slider range — ~16.67% / 83.33%).
+                      const srPct = ((srTime - sliderMin) / sliderRange) * 100;
+                      const ssPct = ((ssTime - sliderMin) / sliderRange) * 100;
+                      const srLeft = `${srPct}%`;
+                      const ssLeft = `${ssPct}%`;
                       
                       return (
                         <>
@@ -5479,10 +5484,10 @@
                                 OMBRE TERRAIN POSSIBLE
                               </span>
                             </div>}
-                            {/* Red band(s) on filet line — clamped between sunrise (20%) and sunset (80%) */}
+                            {/* Red band(s) on filet line — clamped between sunrise and sunset */}
                             {shadowSegments.map((seg, i) => {
-                              const clampStart = Math.max(seg.startPct, 20);
-                              const clampEnd = Math.min(seg.endPct, 80);
+                              const clampStart = Math.max(seg.startPct, srPct);
+                              const clampEnd = Math.min(seg.endPct, ssPct);
                               if (clampEnd <= clampStart) return null;
                               return <div key={i} style={{
                                 position: 'absolute',
@@ -7283,7 +7288,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.27</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.28</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
