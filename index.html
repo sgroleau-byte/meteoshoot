@@ -478,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.28</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.29</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -5248,9 +5248,12 @@
                       const ssTime = st?.sunset ? st.sunset.getHours() + st.sunset.getMinutes()/60 : 18;
                       sunTimesSnapRef.current = { sr: srTime, ss: ssTime };
                       
-                      // Dynamic slider range: sunrise at 20%, sunset at 80%
-                      const sliderRange = (ssTime - srTime) / (4/6);
-                      const sliderMin = srTime - (1/6) * sliderRange;
+                      // Dynamic slider range: sunrise at 20%, sunset at 80%.
+                      // sliderRange = (ssTime - srTime) / 0.6 makes the day
+                      // span 60% of the slider; sliderMin offsets so srTime
+                      // falls exactly at 20% (and ssTime at 80%).
+                      const sliderRange = (ssTime - srTime) / 0.6;
+                      const sliderMin = srTime - 0.2 * sliderRange;
                       const sliderMax = sliderMin + sliderRange;
 
                       // Pre-compute terrain shadow segments across sunrise→sunset
@@ -5329,13 +5332,11 @@
                       }
                       
                       const thumbLeft = `${((sunHourDisplay - sliderMin) / sliderRange) * 100}%`;
-                      // Sunrise/sunset positions derived from real srTime/ssTime
-                      // (instead of hardcoded 20%/80% which only approximated
-                      // the actual position in the slider range — ~16.67% / 83.33%).
-                      const srPct = ((srTime - sliderMin) / sliderRange) * 100;
-                      const ssPct = ((ssTime - sliderMin) / sliderRange) * 100;
-                      const srLeft = `${srPct}%`;
-                      const ssLeft = `${ssPct}%`;
+                      // Lines stay at fixed 20% / 80% — the slider range
+                      // computed above already maps srTime exactly to 20% and
+                      // ssTime to 80%.
+                      const srLeft = '20%';
+                      const ssLeft = '80%';
                       
                       return (
                         <>
@@ -5484,10 +5485,10 @@
                                 OMBRE TERRAIN POSSIBLE
                               </span>
                             </div>}
-                            {/* Red band(s) on filet line — clamped between sunrise and sunset */}
+                            {/* Red band(s) on filet line — clamped between sunrise (20%) and sunset (80%) */}
                             {shadowSegments.map((seg, i) => {
-                              const clampStart = Math.max(seg.startPct, srPct);
-                              const clampEnd = Math.min(seg.endPct, ssPct);
+                              const clampStart = Math.max(seg.startPct, 20);
+                              const clampEnd = Math.min(seg.endPct, 80);
                               if (clampEnd <= clampStart) return null;
                               return <div key={i} style={{
                                 position: 'absolute',
@@ -7288,7 +7289,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.28</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.29</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
