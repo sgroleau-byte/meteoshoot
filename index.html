@@ -478,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.21</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.22</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3531,6 +3531,7 @@
       const [buildingName, setBuildingName] = useState('');
       const buildingPolygonsRef = React.useRef([]);
       const shadowPolygonsRef = React.useRef([]);
+      const shadowOverlayRef = React.useRef(null);
       const wallPolygonsRef = React.useRef([]);
       const roofPolygonsRef = React.useRef([]);
       const drawingPolygonRef = React.useRef(null);
@@ -3758,66 +3759,124 @@
         const sunAlt = sunPos.altitude;
         const sunAz = sunPos.azimuth;
 
-        // Winding helpers — Google Maps convention: outer path must be CW
-        // (clockwise) to be filled, inner paths must be CCW (counter-clockwise)
-        // to carve holes. We use the shoelace formula on (lng, lat) where
-        // sum > 0 corresponds to CW and sum < 0 to CCW.
-        const signedArea = (poly) => {
-          let s = 0;
-          for (let i = 0; i < poly.length; i++) {
-            const j = (i + 1) % poly.length;
-            s += (poly[j].lng - poly[i].lng) * (poly[j].lat + poly[i].lat);
-          }
-          return s;
-        };
-        const ensureCW = (poly) => signedArea(poly) < 0 ? [...poly].reverse() : poly;
-        const ensureCCW = (poly) => signedArea(poly) > 0 ? [...poly].reverse() : poly;
-        // Building footprints as holes (CCW) — computed once per render
-        const buildingHoles = buildings
-          .filter(b => b.polygon.length >= 3)
-          .map(b => ensureCCW(b.polygon));
+        // === First pass: collect shadow shapes for canvas overlay ===
+        // We render shadows on a canvas using composite-out so the building
+        // footprints carve holes out of the shadow layer (inverted mask).
+        const shadowsData = [];
+        const buildingsData = buildings.filter(b => b.polygon.length >= 3).map(b => b.polygon);
 
+        if (sunAlt > -0.05) {
+          const altDeg = sunAlt * 180 / Math.PI;
+          const shadowOpacity = altDeg >= 5 ? 1 : altDeg <= -3 ? 0 : (altDeg + 3) / 8;
+          if (shadowOpacity > 0) {
+            buildings.forEach((bldg) => {
+              const n = bldg.polygon.length;
+              if (n < 3) return;
+              const shadowLen = Math.min(bldg.height / Math.tan(Math.max(sunAlt, 0.01)), 2000);
+              const sunBearingFromNorth = (sunAz * 180 / Math.PI + 180) % 360;
+              const shadowBearing = (sunBearingFromNorth + 180) % 360;
+              const shadowBearingRad = shadowBearing * Math.PI / 180;
+              const dLat = (shadowLen * Math.cos(shadowBearingRad)) / 111320;
+              const dLng = (shadowLen * Math.sin(shadowBearingRad)) / (111320 * Math.cos(eLat * Math.PI / 180));
+              const projVerts = bldg.polygon.map(v => ({ lat: v.lat + dLat, lng: v.lng + dLng }));
+              shadowsData.push({ path: projVerts, opacity: 0.3 * shadowOpacity });
+              for (let i = 0; i < n; i++) {
+                const j = (i + 1) % n;
+                shadowsData.push({
+                  path: [bldg.polygon[i], bldg.polygon[j], projVerts[j], projVerts[i]],
+                  opacity: 0.25 * shadowOpacity
+                });
+              }
+            });
+          }
+        }
+
+        // Create canvas overlay (lazy, first render only)
+        if (!shadowOverlayRef.current && window.google && google.maps.OverlayView) {
+          class ShadowCanvas extends google.maps.OverlayView {
+            constructor() { super(); this.canvas = null; this.shadows = []; this.buildings = []; }
+            onAdd() {
+              this.canvas = document.createElement('canvas');
+              this.canvas.style.cssText = 'position:absolute;pointer-events:none;';
+              this.getPanes().overlayLayer.appendChild(this.canvas);
+            }
+            draw() {
+              const projection = this.getProjection();
+              if (!projection || !this.canvas) return;
+              const m = this.getMap();
+              const bounds = m && m.getBounds();
+              if (!bounds) return;
+              const ne = bounds.getNorthEast();
+              const sw = bounds.getSouthWest();
+              const nePx = projection.fromLatLngToDivPixel(ne);
+              const swPx = projection.fromLatLngToDivPixel(sw);
+              const left = Math.min(nePx.x, swPx.x);
+              const right = Math.max(nePx.x, swPx.x);
+              const top = Math.min(nePx.y, swPx.y);
+              const bottom = Math.max(nePx.y, swPx.y);
+              const buffer = 600;
+              const cLeft = Math.floor(left - buffer);
+              const cTop = Math.floor(top - buffer);
+              const cW = Math.ceil(right - left) + 2 * buffer;
+              const cH = Math.ceil(bottom - top) + 2 * buffer;
+              if (this.canvas.width !== cW || this.canvas.height !== cH) {
+                this.canvas.width = cW;
+                this.canvas.height = cH;
+              }
+              this.canvas.style.left = cLeft + 'px';
+              this.canvas.style.top = cTop + 'px';
+              const ctx = this.canvas.getContext('2d');
+              ctx.clearRect(0, 0, cW, cH);
+              const toPx = (ll) => {
+                const dp = projection.fromLatLngToDivPixel(new google.maps.LatLng(ll.lat, ll.lng));
+                return { x: dp.x - cLeft, y: dp.y - cTop };
+              };
+              const tracePath = (path) => {
+                ctx.beginPath();
+                path.forEach((p, i) => {
+                  const x = toPx(p);
+                  if (i === 0) ctx.moveTo(x.x, x.y);
+                  else ctx.lineTo(x.x, x.y);
+                });
+                ctx.closePath();
+              };
+              // Paint shadows
+              ctx.globalCompositeOperation = 'source-over';
+              for (const s of this.shadows) {
+                ctx.fillStyle = 'rgba(0,0,0,' + s.opacity + ')';
+                tracePath(s.path);
+                ctx.fill();
+              }
+              // Carve building footprints out of shadows (inverted mask)
+              ctx.globalCompositeOperation = 'destination-out';
+              ctx.fillStyle = 'rgba(0,0,0,1)';
+              for (const b of this.buildings) {
+                tracePath(b);
+                ctx.fill();
+              }
+            }
+            setData(shadows, buildings) {
+              this.shadows = shadows;
+              this.buildings = buildings;
+              if (this.getProjection()) this.draw();
+            }
+            onRemove() {
+              if (this.canvas && this.canvas.parentNode) this.canvas.parentNode.removeChild(this.canvas);
+              this.canvas = null;
+            }
+          }
+          shadowOverlayRef.current = new ShadowCanvas();
+          shadowOverlayRef.current.setMap(map);
+        }
+        if (shadowOverlayRef.current) {
+          shadowOverlayRef.current.setData(shadowsData, buildingsData);
+        }
+
+        // === Second pass: building polygons (no shadow logic, handled by overlay) ===
         buildings.forEach((bldg, idx) => {
           const isSelected = editingBuilding === idx;
           const n = bldg.polygon.length;
           if (n < 3) return;
-
-          // Draw shadow — fade smoothly near sunrise/sunset
-          if (sunAlt > -0.05) {
-            // Opacity fades: full at alt>5°, fading 0°-5°, gone below -3°
-            const altDeg = sunAlt * 180 / Math.PI;
-            const shadowOpacity = altDeg >= 5 ? 1 : altDeg <= -3 ? 0 : (altDeg + 3) / 8;
-            if (shadowOpacity > 0) {
-            const shadowLen = Math.min(bldg.height / Math.tan(Math.max(sunAlt, 0.01)), 2000);
-            const sunBearingFromNorth = (sunAz * 180 / Math.PI + 180) % 360;
-            const shadowBearing = (sunBearingFromNorth + 180) % 360;
-            const shadowBearingRad = shadowBearing * Math.PI / 180;
-            const dLat = (shadowLen * Math.cos(shadowBearingRad)) / 111320;
-            const dLng = (shadowLen * Math.sin(shadowBearingRad)) / (111320 * Math.cos(eLat * Math.PI / 180));
-
-            const projVerts = bldg.polygon.map(v => ({ lat: v.lat + dLat, lng: v.lng + dLng }));
-
-            // Projected footprint — outer CW, building holes CCW
-            const shadowFoot = new google.maps.Polygon({
-              paths: [ensureCW(projVerts), ...buildingHoles],
-              strokeWeight: 0, strokeOpacity: 0,
-              fillColor: '#000000', fillOpacity: 0.3 * shadowOpacity, map, zIndex: 18, clickable: false
-            });
-            shadowPolygonsRef.current.push(shadowFoot);
-
-            // Wall quads connecting footprint to projection — same winding rules
-            for (let i = 0; i < n; i++) {
-              const j = (i + 1) % n;
-              const quadVerts = [bldg.polygon[i], bldg.polygon[j], projVerts[j], projVerts[i]];
-              const quad = new google.maps.Polygon({
-                paths: [ensureCW(quadVerts), ...buildingHoles],
-                strokeWeight: 0, strokeOpacity: 0,
-                fillColor: '#000000', fillOpacity: 0.25 * shadowOpacity, map, zIndex: 18, clickable: false
-              });
-              shadowPolygonsRef.current.push(quad);
-            }
-            }
-          }
 
           // Draw building footprint — per-shape color
           const shapeColor = BUILDING_COLORS[idx % BUILDING_COLORS.length];
@@ -7280,7 +7339,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.21</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.22</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
