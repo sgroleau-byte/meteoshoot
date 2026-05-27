@@ -478,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.20</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.21</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3758,6 +3758,24 @@
         const sunAlt = sunPos.altitude;
         const sunAz = sunPos.azimuth;
 
+        // Winding helpers — Google Maps convention: outer path must be CW
+        // (clockwise) to be filled, inner paths must be CCW (counter-clockwise)
+        // to carve holes. We use the shoelace formula on (lng, lat) where
+        // sum > 0 corresponds to CW and sum < 0 to CCW.
+        const signedArea = (poly) => {
+          let s = 0;
+          for (let i = 0; i < poly.length; i++) {
+            const j = (i + 1) % poly.length;
+            s += (poly[j].lng - poly[i].lng) * (poly[j].lat + poly[i].lat);
+          }
+          return s;
+        };
+        const ensureCW = (poly) => signedArea(poly) < 0 ? [...poly].reverse() : poly;
+        const ensureCCW = (poly) => signedArea(poly) > 0 ? [...poly].reverse() : poly;
+        // Building footprints as holes (CCW) — computed once per render
+        const buildingHoles = buildings
+          .filter(b => b.polygon.length >= 3)
+          .map(b => ensureCCW(b.polygon));
 
         buildings.forEach((bldg, idx) => {
           const isSelected = editingBuilding === idx;
@@ -3779,18 +3797,20 @@
 
             const projVerts = bldg.polygon.map(v => ({ lat: v.lat + dLat, lng: v.lng + dLng }));
 
-            // Projected footprint
+            // Projected footprint — outer CW, building holes CCW
             const shadowFoot = new google.maps.Polygon({
-              paths: projVerts, strokeWeight: 0, strokeOpacity: 0,
+              paths: [ensureCW(projVerts), ...buildingHoles],
+              strokeWeight: 0, strokeOpacity: 0,
               fillColor: '#000000', fillOpacity: 0.3 * shadowOpacity, map, zIndex: 18, clickable: false
             });
             shadowPolygonsRef.current.push(shadowFoot);
 
-            // Wall quads connecting footprint to projection
+            // Wall quads connecting footprint to projection — same winding rules
             for (let i = 0; i < n; i++) {
               const j = (i + 1) % n;
+              const quadVerts = [bldg.polygon[i], bldg.polygon[j], projVerts[j], projVerts[i]];
               const quad = new google.maps.Polygon({
-                paths: [bldg.polygon[i], bldg.polygon[j], projVerts[j], projVerts[i]],
+                paths: [ensureCW(quadVerts), ...buildingHoles],
                 strokeWeight: 0, strokeOpacity: 0,
                 fillColor: '#000000', fillOpacity: 0.25 * shadowOpacity, map, zIndex: 18, clickable: false
               });
@@ -7260,7 +7280,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.20</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.21</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
