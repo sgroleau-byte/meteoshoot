@@ -478,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.18</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.19</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3758,6 +3758,21 @@
         const sunAlt = sunPos.altitude;
         const sunAz = sunPos.azimuth;
 
+        // Signed area helper to determine polygon winding direction.
+        // Used to ensure building footprints are wound OPPOSITE to the outer
+        // shadow path, so Google Maps renders them as holes (carves the
+        // building footprints out of the shadows — keeps shadows from
+        // appearing on top of the buildings themselves).
+        const signedArea = (poly) => {
+          let s = 0;
+          for (let i = 0; i < poly.length; i++) {
+            const j = (i + 1) % poly.length;
+            s += (poly[j].lng - poly[i].lng) * (poly[j].lat + poly[i].lat);
+          }
+          return s;
+        };
+        const makeHole = (outer, inner) =>
+          Math.sign(signedArea(outer)) === Math.sign(signedArea(inner)) ? [...inner].reverse() : inner;
 
         buildings.forEach((bldg, idx) => {
           const isSelected = editingBuilding === idx;
@@ -3780,8 +3795,9 @@
             const projVerts = bldg.polygon.map(v => ({ lat: v.lat + dLat, lng: v.lng + dLng }));
 
             // Projected footprint — with holes for all building footprints
+            const shadowFootHoles = buildings.filter(b => b.polygon.length >= 3).map(b => makeHole(projVerts, b.polygon));
             const shadowFoot = new google.maps.Polygon({
-              paths: projVerts, strokeWeight: 0, strokeOpacity: 0,
+              paths: [projVerts, ...shadowFootHoles], strokeWeight: 0, strokeOpacity: 0,
               fillColor: '#000000', fillOpacity: 0.3 * shadowOpacity, map, zIndex: 18, clickable: false
             });
             shadowPolygonsRef.current.push(shadowFoot);
@@ -3789,8 +3805,10 @@
             // Wall quads connecting footprint to projection — with holes
             for (let i = 0; i < n; i++) {
               const j = (i + 1) % n;
+              const quadVerts = [bldg.polygon[i], bldg.polygon[j], projVerts[j], projVerts[i]];
+              const quadHoles = buildings.filter(b => b.polygon.length >= 3).map(b => makeHole(quadVerts, b.polygon));
               const quad = new google.maps.Polygon({
-                paths: [bldg.polygon[i], bldg.polygon[j], projVerts[j], projVerts[i]],
+                paths: [quadVerts, ...quadHoles],
                 strokeWeight: 0, strokeOpacity: 0,
                 fillColor: '#000000', fillOpacity: 0.25 * shadowOpacity, map, zIndex: 18, clickable: false
               });
@@ -7260,7 +7278,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.18</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.19</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
