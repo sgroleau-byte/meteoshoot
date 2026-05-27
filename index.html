@@ -478,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.26</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.27</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -6193,12 +6193,26 @@
             left: sRect.left - cRect.left,
             width: sRect.width,
           });
+        };
+
+        // ResizeObserver catches any later size change (font swap, window
+        // resize, etc.) and re-measures without React re-render storms.
+        const ro = new ResizeObserver(measure);
+        Object.values(navSpanRefs.current).forEach(s => { if (s) ro.observe(s); });
+
+        // Only enable the smooth transition AFTER fonts are settled. Without
+        // this guard, the first paint uses the fallback font (wider than
+        // Bebas), the second paint after font-swap is correct, and the
+        // transition between the two is visible as a "snap" of the underline
+        // bar on every reload.
+        document.fonts.ready.then(() => {
+          measure();
           if (!barInitialized.current) {
             requestAnimationFrame(() => { barInitialized.current = true; });
           }
-        };
-        measure();
-        document.fonts.ready.then(() => measure());
+        });
+
+        return () => ro.disconnect();
       }, [view, isMobile]);
 
       if (isMobile) {
@@ -7269,7 +7283,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.26</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.27</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
