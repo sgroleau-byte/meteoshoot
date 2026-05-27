@@ -478,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.24</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.25</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -4282,6 +4282,58 @@
           }
         });
 
+        // Live mutation of sun overlays during drag — direct ref mutation, no
+        // setState/re-render. The yellow line + sun dot + current time line are
+        // recalculated to start at the new map center (which is the viewport
+        // center). Net effect: lines appear visually fixed to the viewport,
+        // just like the white center pin and the canvas-drawn sr/ss lines.
+        let dragRafId = null;
+        const dragListener = map.addListener('drag', () => {
+          if (dragRafId !== null) return;
+          dragRafId = requestAnimationFrame(() => {
+            dragRafId = null;
+            const c = map.getCenter();
+            const centerLat = c.lat();
+            const centerLng = c.lng();
+            const bounds = map.getBounds();
+            if (!bounds) return;
+            const latSpan = Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat());
+            const lngSpan = Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng());
+            const R = Math.min(latSpan, lngSpan) * 0.38 * (isMobile ? 0.74 : 1);
+            const zoom = map.getZoom();
+            const circleRadiusPx = 17;
+            const metersPerPx = 156543.03392 * Math.cos(centerLat * Math.PI / 180) / Math.pow(2, zoom);
+            const offsetDeg = (circleRadiusPx * metersPerPx) / 111320;
+            const cosLat = Math.cos(centerLat * Math.PI / 180);
+            const pathForBearing = (bearing) => {
+              const bRad = bearing * Math.PI / 180;
+              const startLat = centerLat + offsetDeg * Math.cos(bRad);
+              const startLng = centerLng + offsetDeg * Math.sin(bRad) / cosLat;
+              const endLat = centerLat + R * Math.cos(bRad);
+              const endLng = centerLng + R * Math.sin(bRad) / cosLat;
+              return { path: [{ lat: startLat, lng: startLng }, { lat: endLat, lng: endLng }], endLat, endLng };
+            };
+            // Yellow line at current sunHour + its glow + sun/moon dot
+            if (sunBearingRef.current) {
+              const { path, endLat, endLng } = pathForBearing(sunBearingRef.current.bearing);
+              if (sunPosLineRef.current) sunPosLineRef.current.setPath(path);
+              if (sunPosLineRef._glowLine) sunPosLineRef._glowLine.setPath(path);
+              if (sunPosMarkerRef.current) {
+                sunPosMarkerRef.current.lat = endLat;
+                sunPosMarkerRef.current.lng = endLng;
+                sunPosMarkerRef.current.draw();
+              }
+            }
+            // White line for current real-world time
+            if (currentTimeLineRef.current && window.SunCalc) {
+              const now = new Date();
+              const sunPosNow = SunCalc.getPosition(now, centerLat, centerLng);
+              const bearingNow = (sunPosNow.azimuth * 180 / Math.PI + 180) % 360;
+              currentTimeLineRef.current.setPath(pathForBearing(bearingNow).path);
+            }
+          });
+        });
+
         // Sun lines are drawn by the sunDate/adjustedPos effect
 
         return () => {
@@ -4299,6 +4351,8 @@
           wallPolygonsRef.current.forEach(p => p.setMap(null)); wallPolygonsRef.current = [];
           roofPolygonsRef.current.forEach(p => p.setMap(null)); roofPolygonsRef.current = [];
           google.maps.event.removeListener(panListener);
+          google.maps.event.removeListener(dragListener);
+          if (dragRafId !== null) cancelAnimationFrame(dragRafId);
         };
       }, [project?.lat, project?.lng]);
 
@@ -7339,7 +7393,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.24</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.25</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
