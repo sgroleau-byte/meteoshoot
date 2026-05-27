@@ -478,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.25</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.26</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3468,6 +3468,9 @@
       const sunPosLineRef = React.useRef(null);
       const shadowLineRef = React.useRef(null);
       const sunPosMarkerRef = React.useRef(null);
+      const sunDotContainerRef = React.useRef(null);
+      const sunDotHaloRef = React.useRef(null);
+      const sunDotInnerRef = React.useRef(null);
       const sunTimePillsRef = React.useRef([]);
       const sunBearingRef = React.useRef(null);
       const nightOverlayRef = React.useRef(null);
@@ -4282,59 +4285,10 @@
           }
         });
 
-        // Live mutation of sun overlays during drag — direct ref mutation, no
-        // setState/re-render. The yellow line + sun dot + current time line are
-        // recalculated to start at the new map center (which is the viewport
-        // center). Net effect: lines appear visually fixed to the viewport,
-        // just like the white center pin and the canvas-drawn sr/ss lines.
-        let dragRafId = null;
-        const dragListener = map.addListener('drag', () => {
-          if (dragRafId !== null) return;
-          dragRafId = requestAnimationFrame(() => {
-            dragRafId = null;
-            const c = map.getCenter();
-            const centerLat = c.lat();
-            const centerLng = c.lng();
-            const bounds = map.getBounds();
-            if (!bounds) return;
-            const latSpan = Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat());
-            const lngSpan = Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng());
-            const R = Math.min(latSpan, lngSpan) * 0.38 * (isMobile ? 0.74 : 1);
-            const zoom = map.getZoom();
-            const circleRadiusPx = 17;
-            const metersPerPx = 156543.03392 * Math.cos(centerLat * Math.PI / 180) / Math.pow(2, zoom);
-            const offsetDeg = (circleRadiusPx * metersPerPx) / 111320;
-            const cosLat = Math.cos(centerLat * Math.PI / 180);
-            const pathForBearing = (bearing) => {
-              const bRad = bearing * Math.PI / 180;
-              const startLat = centerLat + offsetDeg * Math.cos(bRad);
-              const startLng = centerLng + offsetDeg * Math.sin(bRad) / cosLat;
-              const endLat = centerLat + R * Math.cos(bRad);
-              const endLng = centerLng + R * Math.sin(bRad) / cosLat;
-              return { path: [{ lat: startLat, lng: startLng }, { lat: endLat, lng: endLng }], endLat, endLng };
-            };
-            // Yellow line at current sunHour + its glow + sun/moon dot
-            if (sunBearingRef.current) {
-              const { path, endLat, endLng } = pathForBearing(sunBearingRef.current.bearing);
-              if (sunPosLineRef.current) sunPosLineRef.current.setPath(path);
-              if (sunPosLineRef._glowLine) sunPosLineRef._glowLine.setPath(path);
-              if (sunPosMarkerRef.current) {
-                sunPosMarkerRef.current.lat = endLat;
-                sunPosMarkerRef.current.lng = endLng;
-                sunPosMarkerRef.current.draw();
-              }
-            }
-            // White line for current real-world time
-            if (currentTimeLineRef.current && window.SunCalc) {
-              const now = new Date();
-              const sunPosNow = SunCalc.getPosition(now, centerLat, centerLng);
-              const bearingNow = (sunPosNow.azimuth * 180 / Math.PI + 180) % 360;
-              currentTimeLineRef.current.setPath(pathForBearing(bearingNow).path);
-            }
-          });
-        });
-
-        // Sun lines are drawn by the sunDate/adjustedPos effect
+        // Sun lines are drawn by the sunDate/adjustedPos effect.
+        // No drag/zoom listener needed: yellow line, glow, current time line
+        // and sun/moon dot are all drawn on the flareCanvas / as fixed-viewport
+        // divs, so they remain visually pinned during map movement.
 
         return () => {
           // When skipping (drag-reposition), don't clean up anything — everything persists
@@ -4351,8 +4305,6 @@
           wallPolygonsRef.current.forEach(p => p.setMap(null)); wallPolygonsRef.current = [];
           roofPolygonsRef.current.forEach(p => p.setMap(null)); roofPolygonsRef.current = [];
           google.maps.event.removeListener(panListener);
-          google.maps.event.removeListener(dragListener);
-          if (dragRafId !== null) cancelAnimationFrame(dragRafId);
         };
       }, [project?.lat, project?.lng]);
 
@@ -4495,35 +4447,34 @@
       }, [elevGridLat, elevGridLng]);
 
       // Separate effect for sun position line (slider) — lightweight update
+      // All dynamic sun elements (yellow line, glow, current time line, sun/moon
+      // dot) are drawn either on the flareCanvas or as fixed-viewport divs,
+      // mutated DIRECTLY via refs (no setState, no Google Maps Polyline). They
+      // stay visually pinned to the viewport center pin during map drag/zoom.
       useEffect(() => {
         const map = mapInstanceRef.current;
         if (!map || !project?.lat || !project?.lng || !window.SunCalc) return;
         const eLat = adjustedPos?.lat ?? project.lat;
         const eLng = adjustedPos?.lng ?? project.lng;
-        
-        // Remove previous position line only (keep marker for smooth update)
-        if (sunPosLineRef.current) { sunPosLineRef.current.setMap(null); sunPosLineRef.current = null; }
-        if (shadowLineRef.current) { shadowLineRef.current.setMap(null); shadowLineRef.current = null; }
-        if (sunPosMarkerRef.current) { sunPosMarkerRef.current.setMap(null); }
-        
+
+        // Hide the sun/moon dot div while we recompute (will re-show below if needed)
+        if (sunDotContainerRef.current) sunDotContainerRef.current.style.display = 'none';
+
         if (!showSunLines || drawingMode) {
           if (flareCanvasRef.current) { const fc = flareCanvasRef.current.getContext('2d'); fc && fc.clearRect(0, 0, flareCanvasRef.current.width, flareCanvasRef.current.height); }
           return;
         }
-        
+
         const sunTimes = SunCalc.getTimes(sunDate, eLat, eLng);
         const srTime = sunTimes.sunrise ? sunTimes.sunrise.getHours() + sunTimes.sunrise.getMinutes()/60 : 6;
         const ssTime = sunTimes.sunset ? sunTimes.sunset.getHours() + sunTimes.sunset.getMinutes()/60 : 18;
-        
+
         const simDate = new Date(sunDate);
         simDate.setHours(Math.floor(sunHour), Math.round((sunHour % 1) * 60), 0);
         const sunPos = SunCalc.getPosition(simDate, eLat, eLng);
         const bearing = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
         sunBearingRef.current = { bearing, eLat, eLng };
-        const bounds = map.getBounds(); const R = bounds ? Math.min(Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat()), Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng())) * 0.38 * (isMobile ? 0.74 : 1) : 0.003;
-        const lat2 = eLat + R * Math.cos(bearing * Math.PI / 180);
-        const lng2 = eLng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(eLat * Math.PI / 180);
-        
+
         const isDay = sunHour >= srTime && sunHour <= ssTime;
         const isGoldenBefore = sunHour >= (srTime - 1) && sunHour < srTime;
         const isGoldenAfter = sunHour > ssTime && sunHour <= (ssTime + 1);
@@ -4532,186 +4483,18 @@
         const isMoonMode = sunHour > ssTime || sunHour < srTime;
         const lineColor = isMoonMode ? '#c8d8f0' : '#ffe26b';
         const lineOpacity = isMoonMode ? 0.7 : (isGoldenBefore || isGoldenAfter) ? 0.8 : 1;
-        
+
         // Terrain shadow check
         const sunAltDeg = sunPos.altitude * 180 / Math.PI;
         const inTerrainShadow = isTerrainShadow(terrainProfileRef.current, bearing, sunAltDeg);
         setTerrainShadow(inTerrainShadow);
-        
-        // Offset start from circle edge
-        const cRadPx = 17;
-        const mPerPx = 156543.03392 * Math.cos(eLat * Math.PI / 180) / Math.pow(2, mapZoom);
-        const offDeg = (cRadPx * mPerPx) / 111320;
-        const bRad2 = bearing * Math.PI / 180;
-        const startLat = eLat + offDeg * Math.cos(bRad2);
-        const startLng = eLng + offDeg * Math.sin(bRad2) / Math.cos(eLat * Math.PI / 180);
-        
-        // Glow line behind the solid line
-        if (!isMoonMode) {
-          const glowLine = new google.maps.Polyline({
-            path: [{ lat: startLat, lng: startLng }, { lat: lat2, lng: lng2 }],
-            strokeColor: '#ffe26b', strokeOpacity: isMobile ? 0.017 : 0.15, strokeWeight: 36, map
-          });
-          if (!sunPosLineRef._glowLine) sunPosLineRef._glowLine = null;
-          if (sunPosLineRef._glowLine) sunPosLineRef._glowLine.setMap(null);
-          sunPosLineRef._glowLine = glowLine;
-        } else {
-          // Subtle bluish moon glow
-          const glowLine = new google.maps.Polyline({
-            path: [{ lat: startLat, lng: startLng }, { lat: lat2, lng: lng2 }],
-            strokeColor: '#c8d8f0', strokeOpacity: isMobile ? 0.05 : 0.1, strokeWeight: 24, map
-          });
-          if (sunPosLineRef._glowLine) sunPosLineRef._glowLine.setMap(null);
-          sunPosLineRef._glowLine = glowLine;
-        }
-        
-        sunPosLineRef.current = new google.maps.Polyline({
-          path: [{ lat: startLat, lng: startLng }, { lat: lat2, lng: lng2 }],
-          strokeColor: lineColor, strokeOpacity: lineOpacity, strokeWeight: 3,
-          zIndex: 100, map
-        });
 
-        // Shadow pie wedge is drawn in the sun lines effect above
-
-        // Sun/Moon dot — custom overlay with motion blur
-        if (sunPosMarkerRef.current) {
-          sunPosMarkerRef.current.moveTo(lat2, lng2);
-          sunPosMarkerRef.current.setNight(isMoonMode);
-          if (!sunPosMarkerRef.current.getMap()) sunPosMarkerRef.current.setMap(map);
-        } else {
-          class SunDotOverlay extends google.maps.OverlayView {
-            constructor(lat, lng, moonMode) {
-              super();
-              this.lat = lat;
-              this.lng = lng;
-              this.div = null;
-              this._isNight = false;
-              this._initMoon = moonMode;
-            }
-            onAdd() {
-              // Wrapper for halo + moon
-              this.container = document.createElement('div');
-              this.container.style.position = 'absolute';
-              this.container.style.pointerEvents = 'none';
-              this.container.style.zIndex = '20';
-              
-              // Halo div (behind moon)
-              this.halo = document.createElement('div');
-              this.halo.style.position = 'absolute';
-              this.halo.style.borderRadius = '50%';
-              this.halo.style.display = 'none';
-              this.container.appendChild(this.halo);
-              
-              // Moon/sun div
-              this.div = document.createElement('div');
-              this.div.style.position = 'absolute';
-              this.div.style.width = '18px';
-              this.div.style.height = '18px';
-              this.div.style.borderRadius = '50%';
-              this.div.style.background = 'radial-gradient(circle, #ffe26b 50%, rgba(255,226,107,0.3) 100%)';
-              this.div.style.border = '2px solid rgba(255,255,255,0.6)';
-              this.div.style.boxShadow = '0 0 6px 2px rgba(255,226,107,0.9), 0 0 14px 4px rgba(255,226,107,0.5), 0 0 3px 1px rgba(255,255,255,0.8)';
-              this.div.style.transition = 'filter 0.15s ease-out, background 0.3s ease, box-shadow 0.3s ease, width 0.3s ease, height 0.3s ease';
-              this.div.style.pointerEvents = 'none';
-              this.container.appendChild(this.div);
-              
-              this.getPanes().overlayMouseTarget.appendChild(this.container);
-              // Apply initial moon mode
-              if (this._initMoon) {
-                this._isNight = true;
-                this.div.style.width = '24px';
-                this.div.style.height = '24px';
-                this.div.style.background = 'radial-gradient(circle at 35% 30%, #faf6ee 0%, #f0e8d8 20%, #ddd5c5 45%, #c8bfaf 70%, #b5ad9d 100%)';
-                this.div.style.boxShadow = '0 0 6px 2px rgba(245,240,225,0.7), inset -4px -3px 6px rgba(0,0,0,0.2), inset 2px 2px 4px rgba(255,255,255,0.35), inset -1px 1px 2px rgba(0,0,0,0.1)';
-                this.div.style.border = '1px solid rgba(255,255,255,0.4)';
-                this.halo.style.display = 'block';
-                this.halo.style.background = 'radial-gradient(circle, rgba(230,225,210,0.25) 0%, rgba(210,205,190,0.12) 35%, rgba(190,185,170,0.04) 60%, transparent 75%)';
-              }
-            }
-            draw() {
-              const proj = this.getProjection();
-              if (!proj || !this.container) return;
-              const pos = proj.fromLatLngToDivPixel(new google.maps.LatLng(this.lat, this.lng));
-              if (this._isNight) {
-                // Moon: 24px, halo: 70px
-                const moonSz = 24, haloSz = 70;
-                this.container.style.left = (pos.x - haloSz/2) + 'px';
-                this.container.style.top = (pos.y - haloSz/2) + 'px';
-                this.container.style.width = haloSz + 'px';
-                this.container.style.height = haloSz + 'px';
-                this.halo.style.left = '0px'; this.halo.style.top = '0px';
-                this.halo.style.width = haloSz + 'px'; this.halo.style.height = haloSz + 'px';
-                this.div.style.left = ((haloSz - moonSz)/2) + 'px';
-                this.div.style.top = ((haloSz - moonSz)/2) + 'px';
-              } else {
-                const sz = 18;
-                this.container.style.left = (pos.x - sz/2) + 'px';
-                this.container.style.top = (pos.y - sz/2) + 'px';
-                this.container.style.width = sz + 'px';
-                this.container.style.height = sz + 'px';
-                this.div.style.left = '0px'; this.div.style.top = '0px';
-              }
-            }
-            setNight(n) {
-              if (this._isNight === n || !this.div) return;
-              this._isNight = n;
-              if (n) {
-                this.div.style.width = '24px';
-                this.div.style.height = '24px';
-                this.div.style.background = 'radial-gradient(circle at 35% 30%, #faf6ee 0%, #f0e8d8 20%, #ddd5c5 45%, #c8bfaf 70%, #b5ad9d 100%)';
-                this.div.style.boxShadow = '0 0 6px 2px rgba(245,240,225,0.7), inset -4px -3px 6px rgba(0,0,0,0.2), inset 2px 2px 4px rgba(255,255,255,0.35), inset -1px 1px 2px rgba(0,0,0,0.1)';
-                this.div.style.border = '1px solid rgba(255,255,255,0.4)';
-                // Halo glow
-                this.halo.style.display = 'block';
-                this.halo.style.background = 'radial-gradient(circle, rgba(230,225,210,0.25) 0%, rgba(210,205,190,0.12) 35%, rgba(190,185,170,0.04) 60%, transparent 75%)';
-              } else {
-                this.div.style.width = '18px';
-                this.div.style.height = '18px';
-                this.div.style.background = 'radial-gradient(circle, #ffe26b 50%, rgba(255,226,107,0.3) 100%)';
-                this.div.style.boxShadow = '0 0 6px 2px rgba(255,226,107,0.9), 0 0 14px 4px rgba(255,226,107,0.5), 0 0 3px 1px rgba(255,255,255,0.8)';
-                this.div.style.border = '2px solid rgba(255,255,255,0.6)';
-                this.halo.style.display = 'none';
-              }
-              this.draw();
-            }
-            moveTo(lat, lng) {
-              const proj = this.getProjection();
-              if (proj && this.div) {
-                const oldPos = proj.fromLatLngToDivPixel(new google.maps.LatLng(this.lat, this.lng));
-                this.lat = lat;
-                this.lng = lng;
-                this.draw();
-                const newPos = proj.fromLatLngToDivPixel(new google.maps.LatLng(lat, lng));
-                const dx = newPos.x - oldPos.x;
-                const dy = newPos.y - oldPos.y;
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                if (dist > 1) {
-                  const blurAmt = Math.min(dist * 0.4, 6);
-                  this.div.style.transition = 'none';
-                  this.div.style.filter = `blur(${blurAmt}px)`;
-                  requestAnimationFrame(() => {
-                    this.div.style.transition = 'filter 0.2s ease-out';
-                    this.div.style.filter = 'blur(0px)';
-                  });
-                }
-              } else {
-                this.lat = lat;
-                this.lng = lng;
-              }
-            }
-            onRemove() { if (this.container) { this.container.parentNode.removeChild(this.container); this.container = null; this.div = null; this.halo = null; } }
-          }
-          sunPosMarkerRef.current = new SunDotOverlay(lat2, lng2, isMoonMode);
-          sunPosMarkerRef.current.setMap(map);
-        }
-        
         // Lens flare + shadow wedge — project to screen
         const overlay = nightOverlayRef.current;
         if (overlay && overlay.getProjection() && flareCanvasRef.current) {
           const proj = overlay.getProjection();
-          const sunPx = proj.fromLatLngToContainerPixel(new google.maps.LatLng(lat2, lng2));
           const centerPx = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat, eLng));
-          if (sunPx && centerPx) {
+          if (centerPx) {
             const container = mapContainerRef.current;
             const w = container ? container.offsetWidth : 400;
             const h = container ? container.offsetHeight : 400;
@@ -4722,6 +4505,27 @@
             // Clean up previous time pills
             sunTimePillsRef.current.forEach(el => el.remove());
             sunTimePillsRef.current = [];
+
+            // Compute line length in pixels — used by sr/ss white lines AND by
+            // the yellow sun line + current time line + sun/moon dot below.
+            // Same formula as before, sorti du block sr/ss pour partage.
+            const rDeg = (() => {
+              const b = map.getBounds();
+              if (!b) return 0.003;
+              const latS = Math.abs(b.getNorthEast().lat() - b.getSouthWest().lat());
+              const lngS = Math.abs(b.getNorthEast().lng() - b.getSouthWest().lng());
+              return Math.min(latS, lngS) * 0.38 * (isMobile ? 0.74 : 1);
+            })();
+            const endPtR = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat + rDeg, eLng));
+            const wLinePx = Math.abs(endPtR.y - centerPx.y);
+            const circOff = 17;
+
+            // Sun position at current sunHour, in screen-space pixels
+            const sunScrAngle = ((sunPos.azimuth * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
+            const sunPx = {
+              x: centerPx.x + Math.cos(sunScrAngle) * wLinePx,
+              y: centerPx.y + Math.sin(sunScrAngle) * wLinePx
+            };
 
             // Sunrise & Sunset line halos — drawn first (behind white lines)
             if (sunTimes.sunrise && sunTimes.sunset) {
@@ -4862,22 +4666,12 @@
             }
             
             // White sr/ss lines — on top of shadow + halos
+            // (uses wLinePx + circOff already computed at top of block)
             if (sunTimes.sunrise && sunTimes.sunset) {
               const srAzW = SunCalc.getPosition(sunTimes.sunrise, eLat, eLng).azimuth;
               const ssAzW = SunCalc.getPosition(sunTimes.sunset, eLat, eLng).azimuth;
               const srScrW = ((srAzW * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
               const ssScrW = ((ssAzW * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
-              const rDegW = (() => {
-                const b = map.getBounds();
-                if (!b) return 0.003;
-                const latS = Math.abs(b.getNorthEast().lat() - b.getSouthWest().lat());
-                const lngS = Math.abs(b.getNorthEast().lng() - b.getSouthWest().lng());
-                return Math.min(latS, lngS) * 0.38 * (isMobile ? 0.74 : 1);
-              })();
-              const endPtW = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat + rDegW, eLng));
-              const centerPtW = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat, eLng));
-              const wLinePx = Math.abs(endPtW.y - centerPtW.y);
-              const circOff = 17;
               const drawCanvasLine = (scrAngle) => {
                 ctx.save();
                 ctx.beginPath();
@@ -4910,7 +4704,119 @@
               if (sunTimes.sunrise) drawTimePill(srScrW, formatHM(sunTimes.sunrise), -3, -4);
               if (sunTimes.sunset) drawTimePill(ssScrW, formatHM(sunTimes.sunset), 2, -3);
             }
-            
+
+            // === Dynamic sun overlays — drawn on the SAME canvas, fixed to viewport ===
+            // Yellow line glow (or moon glow)
+            ctx.save();
+            ctx.lineCap = 'round';
+            if (!isMoonMode) {
+              ctx.strokeStyle = '#ffe26b';
+              ctx.globalAlpha = isMobile ? 0.017 : 0.15;
+              ctx.lineWidth = 36;
+            } else {
+              ctx.strokeStyle = '#c8d8f0';
+              ctx.globalAlpha = isMobile ? 0.05 : 0.1;
+              ctx.lineWidth = 24;
+            }
+            ctx.beginPath();
+            ctx.moveTo(centerPx.x + Math.cos(sunScrAngle) * circOff, centerPx.y + Math.sin(sunScrAngle) * circOff);
+            ctx.lineTo(sunPx.x, sunPx.y);
+            ctx.stroke();
+            ctx.restore();
+
+            // Yellow line (or blue at night) — main sun position line at current sunHour
+            ctx.save();
+            ctx.strokeStyle = lineColor;
+            ctx.globalAlpha = lineOpacity;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(centerPx.x + Math.cos(sunScrAngle) * circOff, centerPx.y + Math.sin(sunScrAngle) * circOff);
+            ctx.lineTo(sunPx.x, sunPx.y);
+            ctx.stroke();
+            ctx.restore();
+
+            // White line for current real-world time (only if sun is up or twilight)
+            {
+              const now = new Date();
+              const nowH = now.getHours() + now.getMinutes()/60;
+              if (nowH >= (srTime - 1) && nowH <= (ssTime + 1)) {
+                const sunPosNow = SunCalc.getPosition(now, eLat, eLng);
+                const nowScrAngle = ((sunPosNow.azimuth * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
+                ctx.save();
+                ctx.strokeStyle = '#ffffff';
+                ctx.globalAlpha = 0.35;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(centerPx.x + Math.cos(nowScrAngle) * circOff, centerPx.y + Math.sin(nowScrAngle) * circOff);
+                ctx.lineTo(centerPx.x + Math.cos(nowScrAngle) * wLinePx, centerPx.y + Math.sin(nowScrAngle) * wLinePx);
+                ctx.stroke();
+                ctx.restore();
+              }
+            }
+
+            // === Sun/Moon dot — positioned in pixels, fixed to viewport ===
+            // Mutates refs.current.style directly, no React re-render.
+            if (sunDotContainerRef.current && sunDotInnerRef.current && sunDotHaloRef.current) {
+              const dotContainer = sunDotContainerRef.current;
+              const dotInner = sunDotInnerRef.current;
+              const dotHalo = sunDotHaloRef.current;
+              const moonSz = 24, sunSz = 18, haloSz = 70;
+              const totalSz = isMoonMode ? haloSz : sunSz;
+              const innerOffset = isMoonMode ? (haloSz - moonSz) / 2 : 0;
+              const innerSz = isMoonMode ? moonSz : sunSz;
+              const newLeft = sunPx.x - totalSz / 2;
+              const newTop = sunPx.y - totalSz / 2;
+              const prevLeft = parseFloat(dotContainer.style.left);
+              const prevTop = parseFloat(dotContainer.style.top);
+              dotContainer.style.display = 'block';
+              dotContainer.style.left = newLeft + 'px';
+              dotContainer.style.top = newTop + 'px';
+              dotContainer.style.width = totalSz + 'px';
+              dotContainer.style.height = totalSz + 'px';
+              if (isMoonMode) {
+                dotHalo.style.display = 'block';
+                dotHalo.style.left = '0px';
+                dotHalo.style.top = '0px';
+                dotHalo.style.width = haloSz + 'px';
+                dotHalo.style.height = haloSz + 'px';
+                dotHalo.style.background = 'radial-gradient(circle, rgba(230,225,210,0.25) 0%, rgba(210,205,190,0.12) 35%, rgba(190,185,170,0.04) 60%, transparent 75%)';
+                dotInner.style.width = innerSz + 'px';
+                dotInner.style.height = innerSz + 'px';
+                dotInner.style.left = innerOffset + 'px';
+                dotInner.style.top = innerOffset + 'px';
+                dotInner.style.background = 'radial-gradient(circle at 35% 30%, #faf6ee 0%, #f0e8d8 20%, #ddd5c5 45%, #c8bfaf 70%, #b5ad9d 100%)';
+                dotInner.style.boxShadow = '0 0 6px 2px rgba(245,240,225,0.7), inset -4px -3px 6px rgba(0,0,0,0.2), inset 2px 2px 4px rgba(255,255,255,0.35), inset -1px 1px 2px rgba(0,0,0,0.1)';
+                dotInner.style.border = '1px solid rgba(255,255,255,0.4)';
+              } else {
+                dotHalo.style.display = 'none';
+                dotInner.style.width = innerSz + 'px';
+                dotInner.style.height = innerSz + 'px';
+                dotInner.style.left = '0px';
+                dotInner.style.top = '0px';
+                dotInner.style.background = 'radial-gradient(circle, #ffe26b 50%, rgba(255,226,107,0.3) 100%)';
+                dotInner.style.boxShadow = '0 0 6px 2px rgba(255,226,107,0.9), 0 0 14px 4px rgba(255,226,107,0.5), 0 0 3px 1px rgba(255,255,255,0.8)';
+                dotInner.style.border = '2px solid rgba(255,255,255,0.6)';
+              }
+              // Motion blur — applied instantly, cleared instantly by JS.
+              // No CSS transition: the blur tracks the dot position frame by
+              // frame (visible while moving, gone at rest), no lag, no smear.
+              if (!isNaN(prevLeft) && !isNaN(prevTop)) {
+                const dx = newLeft - prevLeft;
+                const dy = newTop - prevTop;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > 1) {
+                  dotInner.style.filter = 'blur(' + Math.min(dist * 0.4, 6) + 'px)';
+                  requestAnimationFrame(() => {
+                    if (sunDotInnerRef.current) sunDotInnerRef.current.style.filter = 'blur(0px)';
+                  });
+                } else {
+                  dotInner.style.filter = 'blur(0px)';
+                }
+              } else {
+                dotInner.style.filter = 'blur(0px)';
+              }
+            }
+
             // Lens flare
             drawLensFlare(sunPx.x, sunPx.y, w, h, sunPos.altitude);
           }
@@ -4922,44 +4828,9 @@
         if (nightOverlayRef.current) nightOverlayRef.current.setNight(nightOpacity);
       }, [nightOpacity]);
 
-      // Cloud layer (OpenWeatherMap)
-      // Always show current time line on map
+      // Current time white line is now drawn on the flareCanvas in the
+      // sun-position-line effect above (fixed to viewport, no Google Maps Polyline).
       const currentTimeLineRef = React.useRef(null);
-      useEffect(() => {
-        const map = mapInstanceRef.current;
-        if (!map || !project?.lat || !project?.lng || !window.SunCalc) return;
-        const eLat = adjustedPos?.lat ?? project.lat;
-        const eLng = adjustedPos?.lng ?? project.lng;
-        
-        if (currentTimeLineRef.current) { currentTimeLineRef.current.setMap(null); currentTimeLineRef.current = null; }
-        
-        if (!showSunLines || drawingMode) return;
-        
-        const now = new Date();
-        const sunTimes = SunCalc.getTimes(now, eLat, eLng);
-        const nowH = now.getHours() + now.getMinutes()/60;
-        const srTime = sunTimes.sunrise ? sunTimes.sunrise.getHours() + sunTimes.sunrise.getMinutes()/60 : 6;
-        const ssTime = sunTimes.sunset ? sunTimes.sunset.getHours() + sunTimes.sunset.getMinutes()/60 : 18;
-        
-        if (nowH >= (srTime - 1) && nowH <= (ssTime + 1)) {
-          const sunPos = SunCalc.getPosition(now, eLat, eLng);
-          const bearing = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
-          const bounds = map.getBounds(); const R = bounds ? Math.min(Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat()), Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng())) * 0.38 * (isMobile ? 0.74 : 1) : 0.003;
-          const lat2 = eLat + R * Math.cos(bearing * Math.PI / 180);
-          const lng2 = eLng + R * Math.sin(bearing * Math.PI / 180) / Math.cos(eLat * Math.PI / 180);
-          
-          const cRPx2 = 17;
-          const mPPx2 = 156543.03392 * Math.cos(eLat * Math.PI / 180) / Math.pow(2, mapZoom);
-          const offD2 = (cRPx2 * mPPx2) / 111320;
-          const bR2 = bearing * Math.PI / 180;
-          const sLat2 = eLat + offD2 * Math.cos(bR2);
-          const sLng2 = eLng + offD2 * Math.sin(bR2) / Math.cos(eLat * Math.PI / 180);
-          currentTimeLineRef.current = new google.maps.Polyline({
-            path: [{ lat: sLat2, lng: sLng2 }, { lat: lat2, lng: lng2 }],
-            strokeColor: '#ffffff', strokeOpacity: 0.35, strokeWeight: 3, map
-          });
-        }
-      }, [project?.lat, project?.lng, mapType, mapZoom, adjustedPos, showSunLines, drawingMode]);
 
       if (!project) return null;
       const sun = weather?.daily?.[0];
@@ -5656,6 +5527,11 @@
                     {/* Fixed center pin */}
                     <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 5, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                       <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'transparent', border: '4px solid #ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.5)' }}/>
+                    </div>
+                    {/* Sun/Moon dot — fixed to viewport, mutated via refs (no React re-render) */}
+                    <div ref={sunDotContainerRef} style={{ position: 'absolute', pointerEvents: 'none', zIndex: 4, display: 'none' }}>
+                      <div ref={sunDotHaloRef} style={{ position: 'absolute', borderRadius: '50%', display: 'none' }}/>
+                      <div ref={sunDotInnerRef} style={{ position: 'absolute', borderRadius: '50%' }}/>
                     </div>
                     {/* Update address button — visible only when map has been dragged */}
                     {adjustedPos && (
@@ -7393,7 +7269,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.25</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.26</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
