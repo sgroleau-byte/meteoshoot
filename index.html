@@ -478,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.15</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.16</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -5808,13 +5808,24 @@
                   const isPdf = f.mime_type === 'application/pdf' || f.filename.toLowerCase().endsWith('.pdf');
                   const ext = f.filename.split('.').pop().toUpperCase();
                   const sizeMB = (f.size_bytes / (1024 * 1024)).toFixed(1);
+                  const url = fileUrls[f.id];
                   return (
-                    <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer', transition: 'background 0.15s' }}
-                      onClick={() => { const url = fileUrls[f.id]; if (url) { if (isMobile) { setPreviewFile(f); } else { const tmp = document.createElement('a'); tmp.href = url; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); } } }}
+                    <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer', transition: 'background 0.15s' }}
+                      onClick={() => { if (url) { if (isMobile) { setPreviewFile(f); } else { const tmp = document.createElement('a'); tmp.href = url; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); } } }}
                       onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
                     >
-                      <span style={{ fontSize: '10px', fontWeight: 600, color: isPdf ? '#e8967a' : '#7dd3c6', background: isPdf ? 'rgba(232,150,122,0.12)' : 'rgba(125,211,198,0.1)', padding: '2px 6px', borderRadius: '3px', letterSpacing: '0.03em', flexShrink: 0 }}>{ext}</span>
+                      {isPdf ? (
+                        <div style={{ width: '44px', height: '44px', borderRadius: '4px', background: 'rgba(232,150,122,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <span className="font-bebas-bold" style={{ fontSize: '12px', color: '#e8967a', letterSpacing: '0.04em', position: 'relative', top: '1px' }}>PDF</span>
+                        </div>
+                      ) : url ? (
+                        <img src={url} alt={f.filename} style={{ width: '44px', height: '44px', borderRadius: '4px', objectFit: 'cover', background: 'rgba(255,255,255,0.04)', flexShrink: 0 }}/>
+                      ) : (
+                        <div style={{ width: '44px', height: '44px', borderRadius: '4px', background: 'rgba(125,211,198,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <span className="font-bebas-bold" style={{ fontSize: '11px', color: '#7dd3c6', letterSpacing: '0.04em', position: 'relative', top: '1px' }}>{ext}</span>
+                        </div>
+                      )}
                       <span style={{ fontSize: '14px', color: '#c8d0ce', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.filename}</span>
                       <span style={{ fontSize: '11px', color: '#556462', flexShrink: 0 }}>{sizeMB} MB</span>
                       {!isMobile && (
@@ -7245,7 +7256,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.15</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.16</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
