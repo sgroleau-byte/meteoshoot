@@ -28,7 +28,7 @@
       });
       document.getElementById('manifest-link').href = URL.createObjectURL(new Blob([devManifest], {type: 'application/json'}));
       document.getElementById('touch-icon-link').href = 'icon-180-DevRose.png';
-      document.getElementById('themeColor').setAttribute('content', window.innerWidth < 768 ? '#181b1e' : '#181b1e');
+      document.getElementById('themeColor').setAttribute('content', '#181b1e');
     } else {
       document.getElementById('manifest-link').href = 'manifest.json';
       document.getElementById('touch-icon-link').href = 'icon-180.png';
@@ -136,7 +136,6 @@
     body.dark-mode .night-bg { background-color: rgba(0,0,0,0.2); }
     body.dark-mode .from-cream { --tw-gradient-from: var(--bg-primary); }
     body { font-family: 'Montserrat', sans-serif; }
-    .font-bebas-bold { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.02em; }
     .font-bebas-thin { font-family: 'Bebas Neue', sans-serif; font-weight: 100; letter-spacing: 0.02em; }
     .font-bebas-light { font-family: 'Bebas Neue', sans-serif; font-weight: 300; letter-spacing: 0.02em; }
     .font-bebas-regular { font-family: 'Bebas Neue', sans-serif; font-weight: 400; letter-spacing: 0.02em; }
@@ -467,7 +466,7 @@
 <body class="bg-cream min-h-screen">
 <script>
   // Apply dark mode
-  document.body.classList.add('dark-mode'); document.body.style.backgroundColor = window.innerWidth < 768 ? '#181b1e' : '#181b1e';
+  document.body.classList.add('dark-mode'); document.body.style.backgroundColor = '#181b1e';
 </script>
 
 <!-- ── Splash Screen ── -->
@@ -479,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.35</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.36</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -504,7 +503,7 @@
       document.body.appendChild(flare);
     }
     splash.classList.add('splash-hidden');
-    document.getElementById('themeColor').setAttribute('content', window.innerWidth < 768 ? '#181b1e' : '#181b1e');
+    document.getElementById('themeColor').setAttribute('content', '#181b1e');
     setTimeout(function() { splash.remove(); }, 900);
   }, 2500);
 </script>
@@ -519,9 +518,6 @@
     el.classList.add('dragging');
     el.style.scrollBehavior = 'auto';
 
-    const setBlur = () => {};
-    const clearBlur = () => {};
-
     const onMove = (ev) => {
       const dx = ev.pageX - startX;
       if (Math.abs(dx) > 3) moved = true;
@@ -530,7 +526,6 @@
       if (dt > 0) velocity = (ev.pageX - lastX) / dt;
       lastX = ev.pageX; lastT = now;
       el.scrollLeft = scrollLeft - dx;
-      setBlur(velocity * 16);
     };
 
     const onUp = () => {
@@ -542,13 +537,12 @@
       const maxScroll = el.scrollWidth - el.clientWidth;
 
       const glide = () => {
-        if (Math.abs(v) < 0.5) { clearBlur(); doBounce(); return; }
+        if (Math.abs(v) < 0.5) { doBounce(); return; }
         const before = el.scrollLeft;
         el.scrollLeft -= v;
         const after = el.scrollLeft;
-        if (before === after && Math.abs(v) > 2) { clearBlur(); doBounce(); return; }
+        if (before === after && Math.abs(v) > 2) { doBounce(); return; }
         v *= decel;
-        setBlur(v);
         rafId = requestAnimationFrame(glide);
       };
 
@@ -571,7 +565,6 @@
       glide();
       const stopMomentum = () => {
         if (rafId) cancelAnimationFrame(rafId);
-        clearBlur();
         el.removeEventListener('mousedown', stopMomentum);
       };
       el.addEventListener('mousedown', stopMomentum, { once: true });
@@ -772,7 +765,6 @@
         const ts = Date.now();
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
         const storagePath = `${userId}/${projectId}/${ts}_${safeName}`;
-        console.log('Storage upload path:', storagePath, 'type:', file.type, 'size:', file.size);
         const { error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(storagePath, file, { contentType: file.type });
         if (upErr) { console.error('Storage upload error:', upErr); throw upErr; }
         const { error: dbErr } = await supabase.from(TBL_FILES).insert({
@@ -1090,7 +1082,7 @@
 
     const geocodeAddress = (address) => {
       const cacheKey = address.trim().toLowerCase();
-      if (_geocodeCache[cacheKey]) { console.log('[CACHE HIT] geocode:', cacheKey); return Promise.resolve(_geocodeCache[cacheKey]); }
+      if (_geocodeCache[cacheKey]) { return Promise.resolve(_geocodeCache[cacheKey]); }
       return new Promise((resolve, reject) => {
         const geocoder = new google.maps.Geocoder();
         geocoder.geocode({ address, region: 'ca' }, (results, status) => {
@@ -1108,7 +1100,7 @@
 
     const reverseGeocode = (lat, lng) => {
       const cacheKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
-      if (_reverseGeocodeCache[cacheKey]) { console.log('[CACHE HIT] reverse geocode:', cacheKey); return Promise.resolve(_reverseGeocodeCache[cacheKey]); }
+      if (_reverseGeocodeCache[cacheKey]) { return Promise.resolve(_reverseGeocodeCache[cacheKey]); }
       return new Promise((resolve) => {
         const geocoder = new google.maps.Geocoder();
         geocoder.geocode({ location: { lat, lng } }, (results, status) => {
@@ -1122,7 +1114,7 @@
 
     const getTravelTime = (originLat, originLng, destLat, destLng) => {
       const cacheKey = `${originLat.toFixed(3)},${originLng.toFixed(3)}→${destLat.toFixed(3)},${destLng.toFixed(3)}`;
-      if (_travelTimeCache[cacheKey]) { console.log('[CACHE HIT] travel time:', cacheKey); return Promise.resolve(_travelTimeCache[cacheKey]); }
+      if (_travelTimeCache[cacheKey]) { return Promise.resolve(_travelTimeCache[cacheKey]); }
       return new Promise((resolve, reject) => {
         const service = new google.maps.DistanceMatrixService();
         service.getDistanceMatrix({
@@ -1453,7 +1445,6 @@
               })));
             } else if (hasLocalData && !alreadyMigrated) {
               // First login with localStorage data → migrate to Supabase
-              console.log('Migrating', projects.length, 'projects to Supabase...');
               for (let i = 0; i < projects.length; i++) {
                 const p = projects[i];
                 await supabase.from(TBL_PROJECTS).upsert({
@@ -1469,7 +1460,6 @@
                 });
               }
               localStorage.setItem('sp-migrated-to-supabase', 'true');
-              console.log('Migration complete!');
             }
 
             if (dbPrefs) {
@@ -3938,7 +3928,6 @@
       const handleFileUpload = async (fileList) => {
         if (!user || !project) { console.error('No user or project'); return; }
         const files = Array.from(fileList);
-        console.log('Files dropped:', files.map(f => f.name + ' ' + f.type + ' ' + f.size));
         const allowedExt = ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.pdf'];
         const valid = files.filter(f => {
           const ext = '.' + f.name.split('.').pop().toLowerCase();
@@ -3952,13 +3941,10 @@
         try {
           for (let i = 0; i < valid.length; i++) {
             const f = valid[i];
-            console.log('Uploading:', f.name);
             await fileHelpers.upload(project.id, user.id, f);
-            console.log('Uploaded:', f.name);
             setUploadProgress(Math.round(((i + 1) / valid.length) * 100));
           }
           const updated = await fileHelpers.list(project.id);
-          console.log('Files after upload:', updated.length);
           setProjectFiles(updated);
           const pairs = await Promise.all(updated.map(async f => {
             const url = fileUrls[f.id] || await fileHelpers.getUrl(f.storage_path);
@@ -6370,7 +6356,7 @@
                   cityName = best.long_name;
                   if (prov) cityName += ', ' + prov.short_name;
                 }
-              } catch(e) { console.log('Reverse geocode failed', e); }
+              } catch(e) { console.warn('Reverse geocode failed', e); }
               const weatherResult = await fetchWeather(lat, lng);
               const weather = weatherResult.data;
               const today = weather?.daily?.[0];
@@ -7254,7 +7240,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.35</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.36</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7813,7 +7799,7 @@
               overflowX: 'hidden',
               overflowY: 'auto',
               zIndex: 10,
-              background: isMobile ? '#181b1e' : '#181b1e'
+              background: '#181b1e'
             }}>
               <ProjectDetail projectId={displayedProjectId} onClose={closeProject}/>
             </div>}
