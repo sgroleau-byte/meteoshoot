@@ -479,7 +479,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.34</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.35</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -1023,12 +1023,6 @@
       );
     };
 
-    // Login — redirect to /site/login.html (login screen moved to separate page)
-    const LoginRedirect = () => {
-      useEffect(() => { window.location.href = '/site/login.html'; }, []);
-      return null;
-    };
-
     // LoginScreen — moved to /site/login.html, this redirects there
     const LoginScreen = () => {
       useEffect(() => {
@@ -1058,11 +1052,8 @@
     const getDayAbbrev = (d) => ['DIM.','LUN.','MAR.','MER.','JEU.','VEN.','SAM.'][(typeof d === 'string' ? new Date(d + 'T00:00:00') : d).getDay()];
     const getDayMonth = (d) => { const date = typeof d === 'string' ? new Date(d + 'T00:00:00') : d; return `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}`; };
     const isToday = (d) => (typeof d === 'string' ? new Date(d + 'T00:00:00') : d).toDateString() === new Date().toDateString();
-    const isWeekend = (d) => [0,6].includes(new Date(d).getDay());
     const formatTime = (iso) => { if (!iso) return '--:--'; const d = new Date(iso); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
     const formatDuration = (s) => { if (!s) return '—'; return `${String(Math.floor(s/3600)).padStart(2,'0')}H${String(Math.floor((s%3600)/60)).padStart(2,'0')}`; };
-    // Format compact "07H12" pour le badge meteo en cache (HH H MM).
-    const formatHourLabel = (ts) => { const d = new Date(ts); return `${String(d.getHours()).padStart(2,'0')}H${String(d.getMinutes()).padStart(2,'0')}`; };
     // Format duree relative "3H45" pour la banniere "derniere mise a jour il y a XX".
     // Floor sur la minute, pas d'arrondi: on prefere "0H59" plutot que "1H00" si on n'a pas tout a fait passe l'heure.
     const formatTimeSince = (ts, now = Date.now()) => {
@@ -1820,20 +1811,10 @@
         'cloudy': <svg className={className} viewBox="0 0 32 32" fill="none" stroke="#808080" strokeWidth="1.5">
           <path d="M8 18c0-4 3-7 7-7s7 3 7 7c2 0 4 2 4 4s-2 4-4 4H8c-3 0-5-2.5-5-5s2-5 5-5z"/>
         </svg>,
-        // Pluie légère
-        'rain-light': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="1.5">
-          <path d="M8 14c0-4 3-6 6-6s6 2 6 6c2 0 3 1.5 3 3s-1 3-3 3H8c-2.5 0-4-2-4-4s1.5-4 4-4z" stroke="#9CA3AF"/>
-          <line x1="11" y1="22" x2="9" y2="26" stroke="#7dd3c6" strokeWidth="1"/><line x1="17" y1="22" x2="15" y2="26" stroke="#7dd3c6" strokeWidth="1"/>
-        </svg>,
         // Pluie forte
         'rain': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="1.5">
           <path d="M8 12c0-4 3-6 6-6s6 2 6 6c2 0 3 1.5 3 3s-1 3-3 3H8c-2.5 0-4-2-4-4s1.5-4 4-4z" stroke="#6B7280"/>
           <line x1="9" y1="20" x2="6" y2="26" stroke="#7dd3c6" strokeWidth="2"/><line x1="15" y1="20" x2="12" y2="26" stroke="#7dd3c6" strokeWidth="2"/><line x1="21" y1="20" x2="18" y2="26" stroke="#7dd3c6" strokeWidth="2"/>
-        </svg>,
-        // Neige légère
-        'snow-light': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="1.5">
-          <path d="M8 14c0-4 3-6 6-6s6 2 6 6c2 0 3 1.5 3 3s-1 3-3 3H8c-2.5 0-4-2-4-4s1.5-4 4-4z" stroke="#9CA3AF"/>
-          <circle cx="10" cy="25" r="1" stroke="#7dd3c6"/><circle cx="17" cy="26" r="1" stroke="#7dd3c6"/>
         </svg>,
         // Neige forte
         'snow': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="1.5">
@@ -1886,32 +1867,7 @@
     };
 
     const StarIcon = () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="#ffe26b"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>;
-    const SunriseIcon = ({ className = "w-6 h-6" }) => <svg className={className} viewBox="0 0 32 32" fill="none">
-      {/* Rayons filled */}
-      <rect x="14.5" y="2" width="3" height="5" rx="1.5" fill="#ffe26b"/>
-      <rect x="5.5" y="6.5" width="2.5" height="5" rx="1.25" fill="#ffe26b" transform="rotate(-45 6.75 9)"/>
-      <rect x="24" y="6.5" width="2.5" height="5" rx="1.25" fill="#ffe26b" transform="rotate(45 25.25 9)"/>
-      <rect x="2" y="14" width="5" height="3" rx="1.5" fill="#ffe26b"/>
-      <rect x="25" y="14" width="5" height="3" rx="1.5" fill="#ffe26b"/>
-      {/* Demi-soleil */}
-      <path d="M6 20 A10 10 0 0 1 26 20" fill="#ffe26b"/>
-      {/* Vagues/horizon */}
-      <path d="M0 22 Q4 19 8 22 T16 22 T24 22 T32 22 L32 25 Q28 22 24 25 T16 25 T8 25 T0 25 Z" fill="#F7B84B"/>
-      <path d="M0 27 Q4 25 8 27 T16 27 T24 27 T32 27 L32 30 Q28 28 24 30 T16 30 T8 30 T0 30 Z" fill="#FCD28D"/>
-    </svg>;
-    const SunsetIcon = ({ className = "w-6 h-6" }) => <svg className={className} viewBox="0 0 32 32" fill="none">
-      {/* Demi-soleil */}
-      <path d="M4 18 A12 12 0 0 1 28 18" fill="#E65C00"/>
-      {/* Nuages/horizon stylisé */}
-      <path d="M0 18 Q4 15 8 18 Q10 20 13 18 Q15 16 18 18 Q21 20 24 18 Q28 15 32 18 L32 24 Q28 21 24 24 T16 24 T8 24 T0 24 Z" fill="#D84A00"/>
-      <path d="M0 26 Q4 24 8 26 T16 26 T24 26 T32 26 L32 30 Q28 28 24 30 T16 30 T8 30 T0 30 Z" fill="#C43E00"/>
-    </svg>;
-    const PlusIcon = () => <svg className="w-6 h-6" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" fill="none"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
-    const CheckIcon = () => <svg className="w-5 h-5" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" fill="none"><polyline points="20,6 9,17 4,12"/></svg>;
     const TrashIcon = () => <svg className="w-5 h-5" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" fill="none"><polyline points="3,6 5,6 21,6"/><path d="M19,6V20A2,2,0,0,1,17,22H7A2,2,0,0,1,5,20V6M8,6V4A2,2,0,0,1,10,2H14A2,2,0,0,1,16,4V6"/></svg>;
-    const CloseIcon = () => <svg className="w-6 h-6" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
-    const MenuIcon = () => <svg className="w-6 h-6" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" fill="none"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>;
-    const UndoIcon = () => <svg className="w-5 h-5" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" fill="none"><path d="M3 10h10a5 5 0 0 1 5 5v2"/><polyline points="3,10 7,6"/><polyline points="3,10 7,14"/></svg>;
 
     // ===== COMPONENTS =====
 
@@ -2543,7 +2499,7 @@
             <div className="min-w-0" style={{ minWidth: '432px', overflow: "visible" }}>
               {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} onDayClick={() => onSelect(project)}/> : <p className="text-charcoal-muted text-sm italic py-2 cursor-pointer" onClick={() => onSelect(project)}>{t('weatherUnavailable')}</p>}
             </div>
-            <div onMouseEnter={() => { if (activeWeatherRowDismiss) { activeWeatherRowDismiss(); activeWeatherRowDismiss = null; } }} onClick={() => onSelect(project)} className="info-dodge cursor-pointer flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
+            <div onMouseEnter={() => { if (activeWeatherRowDismiss) { activeWeatherRowDismiss(); activeWeatherRowDismiss = null; } }} onClick={() => onSelect(project)} className="cursor-pointer flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
               <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '75px' }}>
                 {Object.values(MandateType).map(m => {
                   const active = project.mandates?.includes(m);
@@ -2843,7 +2799,7 @@
                 {project.name} {project.isContest && <StarIcon/>}
               </h3>
             </div>
-            <div onClick={() => onSelect(project)} className="info-dodge cursor-pointer flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
+            <div onClick={() => onSelect(project)} className="cursor-pointer flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
               <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '75px' }}>
                 {Object.values(MandateType).map(m => {
                   const active = project.mandates?.includes(m);
@@ -3006,7 +2962,7 @@
                 {project.name} {project.isContest && <StarIcon/>}
               </h3>
             </div>
-            <div className="info-dodge flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
+            <div className="flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
               <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '75px' }}>
                 {Object.values(MandateType).map(m => {
                   const active = project.mandates?.includes(m);
@@ -5050,7 +5006,7 @@
                 <div className="min-w-0">
                   {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10}/> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
                 </div>
-                <div className="info-dodge flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
+                <div className="flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
                   <div className="flex flex-col justify-center pl-2 border-l border-adaptive">
                     {Object.values(MandateType).filter(m => project.mandates?.includes(m)).map(m => {
                       return <React.Fragment key={m}>{renderMandate(m, colorActive)}</React.Fragment>;
@@ -7298,7 +7254,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.34</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.35</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
