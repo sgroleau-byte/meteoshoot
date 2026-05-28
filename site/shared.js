@@ -370,10 +370,3 @@ function getDefaultLang() {
   var nav = (navigator.language || navigator.userLanguage || 'fr').toLowerCase();
   return nav.startsWith('fr') ? 'fr' : 'en';
 }
-
-// t() helper for use outside React (or in simple scripts)
-function t(key, lang) {
-  var l = lang || getDefaultLang();
-  var tr = TRANSLATIONS[l];
-  return (tr && tr[key] !== undefined) ? tr[key] : (TRANSLATIONS.fr[key] || key);
-}

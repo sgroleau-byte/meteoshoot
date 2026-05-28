@@ -123,7 +123,6 @@
 
     /* ── Login Input Styles ── */
     .login-input::placeholder { color: #ffffff !important; opacity: 1 !important; }
-    .login-input::-webkit-input-placeholder { color: #ffffff !important; opacity: 1 !important; }
     .login-btn span { transition: text-shadow 0.3s ease; }
     .login-btn:hover span { text-shadow: 0 0 12px rgba(170,215,208,0.5), 0 0 24px rgba(170,215,208,0.2); }
 
@@ -146,10 +145,6 @@
     }
 
     /* ── Keyframes ── */
-    @keyframes splashFlareReveal {
-      0% { opacity: 0; transform: translate(calc(-50% + 50px), -50%) scale(0.8); }
-      100% { opacity: 1; transform: translate(calc(-50% + 50px), -50%) scale(1); }
-    }
     @keyframes splashFlareOrg {
       0%   { transform: translate(calc(-50% + 50px), -50%) scale(1, 1) rotate(0deg); }
       15%  { transform: translate(calc(-50% + 52px), -51%) scale(1.04, 0.97) rotate(1.5deg); }
