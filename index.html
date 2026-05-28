@@ -312,6 +312,7 @@
 
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     body.is-scrolling * { pointer-events: none !important; }
+    body.is-scrolling .detail-scroll, body.is-scrolling .detail-map-keep { pointer-events: auto !important; }
     @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; } }
     .animate-fade-in { animation: fadeIn 0.3s ease-out; }
     .animate-slide-up { animation: slideUp 0.4s ease-out; }
@@ -478,7 +479,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.29</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.30</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -5527,7 +5528,7 @@
                       );
                     })()}
                     {/* Map controls - stacked vertically with subtle border */}
-                    <div ref={mapContainerRef} style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#181b1e', filter: 'saturate(0.50)' }}/>
+                    <div ref={mapContainerRef} className="detail-map-keep" style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#181b1e', filter: 'saturate(0.50)' }}/>
                     <canvas ref={flareCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}/>
                     {nightOpacity > 0 && <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 3, background: `radial-gradient(ellipse at center, transparent 30%, rgba(0,0,15,${0.4 * nightOpacity}) 70%, rgba(0,0,15,${0.7 * nightOpacity}) 100%)`, transition: 'opacity 0.5s ease' }}/>}
                     {/* Fixed center pin */}
@@ -7289,7 +7290,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.29</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.30</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
