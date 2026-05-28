@@ -313,6 +313,8 @@
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     body.is-scrolling * { pointer-events: none !important; }
     body.is-scrolling .detail-scroll, body.is-scrolling .detail-map-keep { pointer-events: auto !important; }
+    .weather-alert-clickable { cursor: pointer; transition: opacity 0.15s ease; }
+    .weather-alert-clickable:hover { opacity: 0.82; }
     @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; } }
     .animate-fade-in { animation: fadeIn 0.3s ease-out; }
     .animate-slide-up { animation: slideUp 0.4s ease-out; }
@@ -479,7 +481,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.32</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.33</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -6938,11 +6940,17 @@
                 <div className="px-4 md:px-6" style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
                   <div ref={plusRef} style={{ width: '68px', height: '88px', marginLeft: '-6px' }}/>
                   {showBanner && (
-                    <div role="status" aria-live="polite" style={{
-                      marginLeft: '378px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '18px',
+                    <div role="status" aria-live="polite"
+                      {...(bannerError !== 'network' ? {
+                        className: 'weather-alert-clickable',
+                        title: 'Voir le statut Open-Meteo',
+                        onClick: () => { const tmp = document.createElement('a'); tmp.href = 'https://status.open-meteo.com/'; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); },
+                      } : {})}
+                      style={{
+                        marginLeft: '378px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '18px',
                     }}>
                       <svg width="38" height="34" viewBox="0 0 32 28" fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true">
                         {/* Triangle avec coins arrondis: chaque sommet est remplace par une
@@ -6969,12 +6977,8 @@
                           </div>
                         )}
                         {bannerError !== 'network' && (
-                          <div style={{ marginTop: '3px' }}>
-                            <a href="https://status.open-meteo.com/" target="_blank" rel="noopener noreferrer"
-                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); const tmp = document.createElement('a'); tmp.href = 'https://status.open-meteo.com/'; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); }}
-                              style={{ color: '#7dd3c6', textDecoration: 'underline', textUnderlineOffset: '3px', cursor: 'pointer' }}>
-                              Voir le statut Open-Meteo
-                            </a>
+                          <div style={{ marginTop: '3px', color: '#7dd3c6', textDecoration: 'underline', textUnderlineOffset: '3px' }}>
+                            Voir le statut Open-Meteo
                           </div>
                         )}
                       </div>
@@ -7031,11 +7035,17 @@
           ))
           : <div ref={el => { const f = document.getElementById('persistentFlare'); if (f) { f.style.opacity = '0'; f.style.animation = 'none'; } return listRef.current = el; }} style={{ paddingTop: '16px', paddingBottom: '80px' }}>
               {isMobile && bannerError && (
-                <div role="status" aria-live="polite" style={{
-                  margin: '0 24px 16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
+                <div role="status" aria-live="polite"
+                  {...(bannerError !== 'network' ? {
+                    className: 'weather-alert-clickable',
+                    title: 'Voir le statut Open-Meteo',
+                    onClick: () => { const tmp = document.createElement('a'); tmp.href = 'https://status.open-meteo.com/'; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); },
+                  } : {})}
+                  style={{
+                    margin: '0 24px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
                 }}>
                   <svg width="31" height="28" viewBox="0 0 32 28" fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true" style={{ flexShrink: 0 }}>
                     <path d="M 4 24.26 L 15 4.74 Q 16 3 17 4.74 L 28 24.26 Q 29 26 27 26 L 5 26 Q 3 26 4 24.26 Z"/>
@@ -7060,12 +7070,8 @@
                       </div>
                     )}
                     {bannerError !== 'network' && (
-                      <div style={{ marginTop: '2px' }}>
-                        <a href="https://status.open-meteo.com/" target="_blank" rel="noopener noreferrer"
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); const tmp = document.createElement('a'); tmp.href = 'https://status.open-meteo.com/'; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); }}
-                          style={{ color: '#7dd3c6', textDecoration: 'underline', textUnderlineOffset: '3px', cursor: 'pointer' }}>
-                          Voir le statut Open-Meteo
-                        </a>
+                      <div style={{ marginTop: '2px', color: '#7dd3c6', textDecoration: 'underline', textUnderlineOffset: '3px' }}>
+                        Voir le statut Open-Meteo
                       </div>
                     )}
                   </div>
@@ -7308,7 +7314,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.32</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.33</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
