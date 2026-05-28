@@ -478,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.36</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.37</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -1867,7 +1867,6 @@
     const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9 }) => {
       const { t } = useLang();
       const [hoveredIdx, setHoveredIdx] = useState(null);
-      const [mouseX, setMouseX] = useState(0);
       const [cellCenterX, setCellCenterX] = useState(0);
       const [displayX, setDisplayX] = useState(0);
       const [visible, setVisible] = useState(false);
@@ -1932,13 +1931,6 @@
         return 'cloudy';
       };
 
-      const handleRowMouseMove = (e) => {
-        if (window.__isDragging) return;
-        if (!rowRef.current) return;
-        const rect = rowRef.current.getBoundingClientRect();
-        setMouseX(e.clientX - rect.left);
-      };
-
       const handleCellEnter = (i, e) => {
         if (window.__isDragging) return;
         // Dismiss any other row's tooltip first
@@ -1974,7 +1966,6 @@
         <div 
           className="relative" 
           ref={rowRef}
-          onMouseMove={isMobile ? undefined : handleRowMouseMove}
           onMouseLeave={isMobile ? undefined : handleRowLeave}
         >
           <div className="flex gap-0 py-0" style={{ overflow: 'visible' }}>
@@ -2179,7 +2170,6 @@
       const { t } = useLang();
       const { reportWeather, clearWeather } = useWeatherStatus();
       const [weather, setWeather] = useState(null);
-      const [weatherMeta, setWeatherMeta] = useState(null); // { fromCache, cachedAt }
       const [confirmDelete, setConfirmDelete] = useState(false);
       const [confirmReady, setConfirmReady] = useState(false);
       const [confirmDone, setConfirmDone] = useState(false);
@@ -2192,7 +2182,6 @@
           if (cancelled) return;
           if (result.data) {
             setWeather(result.data);
-            setWeatherMeta({ fromCache: !!result.fromCache, cachedAt: result.cachedAt || null });
             reportWeather(project.id, {
               state: result.fromCache ? 'stale' : 'ok',
               error: result.error || null,
@@ -2201,7 +2190,6 @@
           } else {
             // Aucune donnee a montrer pour cette carte: on signale l'echec au contexte.
             setWeather(null);
-            setWeatherMeta(null);
             reportWeather(project.id, { state: 'error', error: result.error, status: result.status });
           }
         })();
@@ -3181,7 +3169,6 @@
         return 1;
       }, [sunHour, project?.lat, project?.lng, sunDate]);
       const mapIsNight = nightOpacity >= 1;
-      const [showHelp, setShowHelp] = useState(false);
       const [editingName, setEditingName] = useState(false);
       const addressInputRef = React.useRef(null);
       const autocompleteRef = React.useRef(null);
@@ -6078,7 +6065,6 @@
       const { view, prefs, setPrefs } = useStore();
       const { t } = useLang();
       const isMobile = useIsMobile();
-      const [hovered, setHovered] = useState(false);
       const [hoveredItem, setHoveredItem] = useState(null);
       const navItems = [
         { id: 'todo', label: t('projects'), icon: '☀︎' },
@@ -7038,7 +7024,6 @@
       const [showUpgradePref, setShowUpgradePref] = useState(false);
       const [prepTime, setPrepTime] = useState(prefs.prepTime || 60);
       const [msg, setMsg] = useState(null);
-      const [saving, setSaving] = useState(false);
       const homeInputRef = React.useRef(null);
       const autocompleteRef = React.useRef(null);
 
@@ -7054,14 +7039,12 @@
           autocompleteRef.current.addListener('place_changed', async () => {
             const place = autocompleteRef.current.getPlace();
             if (place.geometry) {
-              setSaving(true);
-              setPrefs({ 
-                homeAddress: place.formatted_address, 
-                homeLat: place.geometry.location.lat(), 
-                homeLng: place.geometry.location.lng() 
+              setPrefs({
+                homeAddress: place.formatted_address,
+                homeLat: place.geometry.location.lat(),
+                homeLng: place.geometry.location.lng()
               });
               setMsg({ type: 'success', text: t('addressSaved') });
-              setSaving(false);
             }
           });
         }
@@ -7071,20 +7054,18 @@
         const address = homeInputRef.current?.value;
         if (!address) return;
         
-        setSaving(true);
         try {
           const result = await geocodeAddress(address);
-          setPrefs({ 
-            homeAddress: result.formattedAddress, 
-            homeLat: result.lat, 
-            homeLng: result.lng 
+          setPrefs({
+            homeAddress: result.formattedAddress,
+            homeLat: result.lat,
+            homeLng: result.lng
           });
           homeInputRef.current.value = result.formattedAddress;
           setMsg({ type: 'success', text: t('addressSavedShort') });
-        } catch (e) { 
+        } catch (e) {
           setMsg({ type: 'error', text: t('addressNotFound') });
         }
-        setSaving(false);
       };
 
       return (
@@ -7240,7 +7221,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.36</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.37</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
