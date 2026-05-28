@@ -479,7 +479,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.30</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.31</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7290,7 +7290,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.30</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.31</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7468,6 +7468,7 @@
       const [glowReady, setGlowReady] = useState(false);
       useEffect(() => { const t = setTimeout(() => setGlowReady(true), 800); return () => clearTimeout(t); }, []);
       const [displayedProjectId, setDisplayedProjectId] = useState(null);
+      const detailScrollRef = React.useRef(null);
 
       // Ajout direct depuis un lien externe (ex: BudgetShoot) : ?prefill=<JSON>
       // Attend que la liste soit chargée (synced) pour ne pas se faire écraser.
@@ -7624,6 +7625,37 @@
         }
         return () => { document.documentElement.style.overflow = ''; document.body.style.overflow = ''; };
       }, [selectedId]);
+
+      // Scroll fluide (amorti) du détail, au survol de la zone autour de la carte (desktop, molette).
+      // La carte garde son zoom molette: son propre handler fait stopPropagation, donc ce
+      // gestionnaire ne se déclenche jamais au-dessus d'elle.
+      useEffect(() => {
+        if (isMobile || !displayedProjectId) return;
+        const el = detailScrollRef.current;
+        if (!el) return;
+        let target = el.scrollTop;
+        let raf = null;
+        const ease = 0.18;
+        const tick = () => {
+          const diff = target - el.scrollTop;
+          if (Math.abs(diff) < 0.5) { el.scrollTop = target; raf = null; return; }
+          el.scrollTop += diff * ease;
+          raf = requestAnimationFrame(tick);
+        };
+        const onWheel = (e) => {
+          if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // laisse les bandes horizontales
+          let dy = e.deltaY;
+          if (e.deltaMode === 1) dy *= 16;            // lignes -> pixels approx
+          else if (e.deltaMode === 2) dy *= el.clientHeight; // pages
+          e.preventDefault();
+          const max = el.scrollHeight - el.clientHeight;
+          if (raf === null) target = el.scrollTop;    // resync au début d'un nouveau geste
+          target = Math.max(0, Math.min(max, target + dy));
+          if (raf === null) raf = requestAnimationFrame(tick);
+        };
+        el.addEventListener('wheel', onWheel, { passive: false });
+        return () => { el.removeEventListener('wheel', onWheel); if (raf) cancelAnimationFrame(raf); };
+      }, [displayedProjectId, isMobile]);
 
       // Track plus button position
       useEffect(() => {
@@ -7812,7 +7844,7 @@
               {view === 'retouching' && <RetouchingView onSelect={openProject}/>}
               {view === 'preferences' && <PreferencesView/>}
             </div>
-            {displayedProjectId && <div className="detail-scroll" style={{
+            {displayedProjectId && <div ref={detailScrollRef} className="detail-scroll" style={{
               position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
               overflowX: 'hidden',
               overflowY: 'auto',
