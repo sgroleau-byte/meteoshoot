@@ -16,4 +16,4 @@ Weather-based shooting planner for photographers and videographers.
 
 ## Version
 
-Current: v246
+Current: v633.37
