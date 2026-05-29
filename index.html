@@ -478,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.37</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.38</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -1382,6 +1382,25 @@
     const StoreContext = createContext();
     const useStore = () => useContext(StoreContext);
     
+    // Traduction Projet / ligne Supabase (camelCase et snake_case), source unique.
+    // projectFromRow: lecture (db vers app). PROJECT_TO_ROW: correspondance des champs (app vers db).
+    const projectFromRow = (p) => ({
+      id: p.id, name: p.name, address: p.address, lat: p.lat, lng: p.lng,
+      status: p.status, mandates: p.mandates || [], orientation: p.orientation || [],
+      isContest: p.is_contest, notes: p.notes, links: p.links || [],
+      departureAddress: p.departure_address, departureLat: p.departure_lat, departureLng: p.departure_lng,
+      travelTime: p.travel_time, sortOrder: p.sort_order,
+      createdAt: p.created_at, shotAt: p.shot_at, completedAt: p.completed_at,
+      buildings: p.buildings || []
+    });
+    const PROJECT_TO_ROW = {
+      name: 'name', address: 'address', lat: 'lat', lng: 'lng', status: 'status',
+      mandates: 'mandates', orientation: 'orientation', isContest: 'is_contest',
+      notes: 'notes', links: 'links', departureAddress: 'departure_address',
+      departureLat: 'departure_lat', departureLng: 'departure_lng', travelTime: 'travel_time',
+      shotAt: 'shot_at', createdAt: 'created_at', completedAt: 'completed_at', buildings: 'buildings'
+    };
+
     const StoreProvider = ({ children }) => {
       const { user } = useAuth();
       const { canCreateProject, getProjectLimit } = useSubscription();
@@ -1434,15 +1453,7 @@
 
             if (hasDbData) {
               // Supabase has data → use it
-              setProjects(dbProjects.map(p => ({
-                id: p.id, name: p.name, address: p.address, lat: p.lat, lng: p.lng,
-                status: p.status, mandates: p.mandates || [], orientation: p.orientation || [],
-                isContest: p.is_contest, notes: p.notes, links: p.links || [],
-                departureAddress: p.departure_address, departureLat: p.departure_lat, departureLng: p.departure_lng,
-                travelTime: p.travel_time, sortOrder: p.sort_order,
-                createdAt: p.created_at, shotAt: p.shot_at, completedAt: p.completed_at,
-                buildings: p.buildings || []
-              })));
+              setProjects(dbProjects.map(projectFromRow));
             } else if (hasLocalData && !alreadyMigrated) {
               // First login with localStorage data → migrate to Supabase
               for (let i = 0; i < projects.length; i++) {
@@ -1492,15 +1503,7 @@
           .on('postgres_changes', { event: '*', schema: 'public', table: 'projects', filter: `user_id=eq.${user.id}` }, (payload) => {
             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
               const p = payload.new;
-              const mapped = {
-                id: p.id, name: p.name, address: p.address, lat: p.lat, lng: p.lng,
-                status: p.status, mandates: p.mandates || [], orientation: p.orientation || [],
-                isContest: p.is_contest, notes: p.notes, links: p.links || [],
-                departureAddress: p.departure_address, departureLat: p.departure_lat, departureLng: p.departure_lng,
-                travelTime: p.travel_time, sortOrder: p.sort_order,
-                createdAt: p.created_at, shotAt: p.shot_at, completedAt: p.completed_at,
-                buildings: p.buildings || []
-              };
+              const mapped = projectFromRow(p);
               setProjects(prev => {
                 const exists = prev.findIndex(x => x.id === p.id);
                 if (exists >= 0) { const next = [...prev]; next[exists] = mapped; return next; }
@@ -1565,24 +1568,9 @@
         if (user) {
           // Map camelCase to snake_case
           const dbUpd = {};
-          if ('name' in upd) dbUpd.name = upd.name;
-          if ('address' in upd) dbUpd.address = upd.address;
-          if ('lat' in upd) dbUpd.lat = upd.lat;
-          if ('lng' in upd) dbUpd.lng = upd.lng;
-          if ('status' in upd) dbUpd.status = upd.status;
-          if ('mandates' in upd) dbUpd.mandates = upd.mandates;
-          if ('orientation' in upd) dbUpd.orientation = upd.orientation;
-          if ('isContest' in upd) dbUpd.is_contest = upd.isContest;
-          if ('notes' in upd) dbUpd.notes = upd.notes;
-          if ('links' in upd) dbUpd.links = upd.links;
-          if ('departureAddress' in upd) dbUpd.departure_address = upd.departureAddress;
-          if ('departureLat' in upd) dbUpd.departure_lat = upd.departureLat;
-          if ('departureLng' in upd) dbUpd.departure_lng = upd.departureLng;
-          if ('travelTime' in upd) dbUpd.travel_time = upd.travelTime;
-          if ('shotAt' in upd) dbUpd.shot_at = upd.shotAt;
-          if ('createdAt' in upd) dbUpd.created_at = upd.createdAt;
-          if ('completedAt' in upd) dbUpd.completed_at = upd.completedAt;
-          if ('buildings' in upd) dbUpd.buildings = upd.buildings;
+          for (const [camel, snake] of Object.entries(PROJECT_TO_ROW)) {
+            if (camel in upd) dbUpd[snake] = upd[camel];
+          }
           if (Object.keys(dbUpd).length > 0) {
             supabase.from(TBL_PROJECTS).update(dbUpd).eq('id', id)
               .then(({ error }) => { if (error) console.error('Update error:', error); });
@@ -7221,7 +7209,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.37</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.38</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
