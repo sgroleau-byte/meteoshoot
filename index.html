@@ -478,7 +478,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.38</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.39</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -1071,6 +1071,21 @@
       95:'thunderstorm', 96:'thunderstorm', 99:'thunderstorm'  // orages
     };
     const isGoodWeather = (c) => [0,1,2].includes(c);  // 0=dégagé, 1=principalement dégagé, 2=partiellement nuageux
+
+    // Niveau d'icône (soleil le jour, lune la nuit) selon la couverture nuageuse en %. Source unique des 8 seuils.
+    const CLOUD_ICONS_DAY = ['sunny-bright', 'sunny', 'sunny-few-clouds', 'mostly-sunny', 'partly-cloudy', 'mostly-cloudy', 'cloudy-glimpse', 'cloudy'];
+    const CLOUD_ICONS_NIGHT = ['moon-bright', 'moon', 'moon-few-clouds', 'moon-mostly-clear', 'moon-partly-cloudy', 'moon-mostly-cloudy', 'moon-cloudy-glimpse', 'moon-cloudy'];
+    const cloudcoverToIcon = (cc, night = false) => {
+      const set = night ? CLOUD_ICONS_NIGHT : CLOUD_ICONS_DAY;
+      if (cc <= 10) return set[0];
+      if (cc <= 20) return set[1];
+      if (cc <= 30) return set[2];
+      if (cc <= 40) return set[3];
+      if (cc <= 55) return set[4];
+      if (cc <= 70) return set[5];
+      if (cc <= 85) return set[6];
+      return set[7];
+    };
 
     // ===== GOOGLE MAPS API =====
     const GOOGLE_API_KEY = 'AIzaSyCgOyu05taIWv2-LcfHM_B8okQ_D7gks8U';
@@ -1909,14 +1924,7 @@
         }
         
         // Use cloudcover for sun/cloud level (hourly data available)
-        if (cloudcover <= 10) return 'sunny-bright';
-        if (cloudcover <= 20) return 'sunny';
-        if (cloudcover <= 30) return 'sunny-few-clouds';
-        if (cloudcover <= 40) return 'mostly-sunny';
-        if (cloudcover <= 55) return 'partly-cloudy';
-        if (cloudcover <= 70) return 'mostly-cloudy';
-        if (cloudcover <= 85) return 'cloudy-glimpse';
-        return 'cloudy';
+        return cloudcoverToIcon(cloudcover);
       };
 
       const handleCellEnter = (i, e) => {
@@ -2018,14 +2026,7 @@
         if (dominantIcon === 'thunderstorm') return 'thunderstorm';
         if (dominantIcon === 'snow') return 'snow';
         if (dominantIcon === 'rain') return 'rain';
-        if (cloudcover <= 10) return 'sunny-bright';
-        if (cloudcover <= 20) return 'sunny';
-        if (cloudcover <= 30) return 'sunny-few-clouds';
-        if (cloudcover <= 40) return 'mostly-sunny';
-        if (cloudcover <= 55) return 'partly-cloudy';
-        if (cloudcover <= 70) return 'mostly-cloudy';
-        if (cloudcover <= 85) return 'cloudy-glimpse';
-        return 'cloudy';
+        return cloudcoverToIcon(cloudcover);
       };
       
       // Calculer les heures de début/fin selon la période
@@ -2115,16 +2116,7 @@
         if (origIcon === 'snow') return 'snow';
         if (origIcon === 'rain') return 'rain';
         if (cc === null) return origIcon || 'cloudy';
-        if (isNight) {
-          if (cc <= 10) return 'moon-bright'; if (cc <= 20) return 'moon';
-          if (cc <= 30) return 'moon-few-clouds'; if (cc <= 40) return 'moon-mostly-clear';
-          if (cc <= 55) return 'moon-partly-cloudy'; if (cc <= 70) return 'moon-mostly-cloudy';
-          if (cc <= 85) return 'moon-cloudy-glimpse'; return 'moon-cloudy';
-        }
-        if (cc <= 10) return 'sunny-bright'; if (cc <= 20) return 'sunny';
-        if (cc <= 30) return 'sunny-few-clouds'; if (cc <= 40) return 'mostly-sunny';
-        if (cc <= 55) return 'partly-cloudy'; if (cc <= 70) return 'mostly-cloudy';
-        if (cc <= 85) return 'cloudy-glimpse'; return 'cloudy';
+        return cloudcoverToIcon(cc, isNight);
       };
       
       return (
@@ -4773,16 +4765,7 @@
         if (origIcon === 'thunderstorm') return 'thunderstorm';
         if (origIcon === 'snow') return 'snow';
         if (origIcon === 'rain') return 'rain';
-        if (isNight) {
-          if (cc <= 10) return 'moon-bright'; if (cc <= 20) return 'moon';
-          if (cc <= 30) return 'moon-few-clouds'; if (cc <= 40) return 'moon-mostly-clear';
-          if (cc <= 55) return 'moon-partly-cloudy'; if (cc <= 70) return 'moon-mostly-cloudy';
-          if (cc <= 85) return 'moon-cloudy-glimpse'; return 'moon-cloudy';
-        }
-        if (cc <= 10) return 'sunny-bright'; if (cc <= 20) return 'sunny';
-        if (cc <= 30) return 'sunny-few-clouds'; if (cc <= 40) return 'mostly-sunny';
-        if (cc <= 55) return 'partly-cloudy'; if (cc <= 70) return 'mostly-cloudy';
-        if (cc <= 85) return 'cloudy-glimpse'; return 'cloudy';
+        return cloudcoverToIcon(cc, isNight);
       };
 
       // Group hourly by day for separators
@@ -7209,7 +7192,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.38</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.39</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
