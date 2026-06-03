@@ -364,7 +364,11 @@
     .trash-btn { position: relative; transition: filter 0.3s ease; filter: drop-shadow(0 0 0px transparent); }
     .trash-btn:hover { filter: drop-shadow(0 0 8px rgba(216,49,82,0.6)) drop-shadow(0 0 16px rgba(216,49,82,0.3)) brightness(1.4); }
     .newproj-actions button:disabled { opacity: 0.3; cursor: default; }
-    .project-card { 
+    /* Dossiers client: options du menu déroulant (gris au repos, blanc au survol) et en-tête d'accordéon */
+    .folder-option:hover { color: #ffffff !important; }
+    .folder-acc-header { transition: background-color 0.15s ease; }
+    .folder-acc-header:hover { background-color: rgba(255,255,255,0.03); }
+    .project-card {
       transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1), background-color 0.15s ease;
       position: relative;
       user-select: none; -webkit-user-select: none;
@@ -478,7 +482,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.42</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.43</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -1249,7 +1253,24 @@
       return { data: body };
     };
 
+    // Cache mémoire (RAM) des dernières réponses météo fraîches, par (lat,lng). Sert quand un
+    // dossier est refermé puis rouvert peu après: on resserre la donnée sans rappeler l'API.
+    // TTL 30 min. Distinct du cache localStorage 24 h (sp-weather-cache) qui, lui, n'est qu'un
+    // filet "API en panne": ici on court-circuite carrément l'appel réseau tant que c'est frais.
+    const WEATHER_MEM_TTL_MS = 30 * 60 * 1000;
+    const weatherMemCache = new Map(); // key "lat,lng" (3 décimales) -> { data, fetchedAt }
+
     const fetchWeather = async (lat, lng) => {
+      // Hit mémoire frais (< 30 min): on resserre sans toucher au réseau. Ce sont des données
+      // d'un succès récent, donc fraîches (fromCache:false, pas le badge "stale"). Court-circuit
+      // désactivé quand une simulation dev est active, pour ne pas masquer les pannes simulées en QA.
+      const memKey = weatherCacheKey(lat, lng);
+      if (!getWeatherSim()) {
+        const mem = weatherMemCache.get(memKey);
+        if (mem && (Date.now() - mem.fetchedAt) < WEATHER_MEM_TTL_MS) {
+          return { data: mem.data, fromCache: false, cachedAt: mem.fetchedAt };
+        }
+      }
       // Deux modeles fusionnes: ICON (meilleure qualite du couvert, portee ~7,5 j) pour
       // les jours qu'il couvre, GFS (portee 16 j) pour completer jusqu'a 10 jours. La sortie
       // garde exactement la meme forme qu'une reponse Open-Meteo unique: ni l'affichage ni le
@@ -1389,8 +1410,10 @@
         })
       };
       // Conserve la reponse pour servir de filet quand l'API retombera en panne.
+      const fetchedAt = Date.now();
       writeWeatherCache(lat, lng, formatted);
-      return { data: formatted, fromCache: false, cachedAt: Date.now() };
+      weatherMemCache.set(memKey, { data: formatted, fetchedAt }); // resservi < 30 min sans rappeler l'API
+      return { data: formatted, fromCache: false, cachedAt: fetchedAt };
     };
 
     // ===== STORE =====
@@ -1406,14 +1429,16 @@
       departureAddress: p.departure_address, departureLat: p.departure_lat, departureLng: p.departure_lng,
       travelTime: p.travel_time, sortOrder: p.sort_order,
       createdAt: p.created_at, shotAt: p.shot_at, completedAt: p.completed_at,
-      buildings: p.buildings || []
+      buildings: p.buildings || [],
+      clientFolder: p.client_folder ?? null, tag: p.tag ?? null
     });
     const PROJECT_TO_ROW = {
       name: 'name', address: 'address', lat: 'lat', lng: 'lng', status: 'status',
       mandates: 'mandates', orientation: 'orientation', isContest: 'is_contest',
       notes: 'notes', links: 'links', departureAddress: 'departure_address',
       departureLat: 'departure_lat', departureLng: 'departure_lng', travelTime: 'travel_time',
-      shotAt: 'shot_at', createdAt: 'created_at', completedAt: 'completed_at', buildings: 'buildings'
+      shotAt: 'shot_at', createdAt: 'created_at', completedAt: 'completed_at', buildings: 'buildings',
+      clientFolder: 'client_folder', tag: 'tag'
     };
 
     const StoreProvider = ({ children }) => {
@@ -1421,6 +1446,10 @@
       const { canCreateProject, getProjectLimit } = useSubscription();
       const [projects, setProjects] = useState(() => JSON.parse(localStorage.getItem('sp-projects') || '[]'));
       const [prefs, setPrefsState] = useState(() => JSON.parse(localStorage.getItem('sp-prefs') || '{"homeAddress":"","homeLat":null,"homeLng":null,"prepTime":60}'));
+      // État ouvert/fermé des dossiers client, carte { "NOM": true|false }. Vide = aucun état
+      // enregistré (on appliquera alors le défaut "2 premiers ouverts" à l'affichage). Persisté
+      // dans les préférences Supabase (partagé web + PWA) et mis en cache local pour l'offline.
+      const [folderStates, setFolderStatesState] = useState(() => { try { return JSON.parse(localStorage.getItem('sp-folder-states') || '{}'); } catch (e) { return {}; } });
       const [view, setView] = useState('todo');
       const [selectedId, setSelectedId] = useState(null);
       const [synced, setSynced] = useState(false);
@@ -1428,6 +1457,7 @@
       // Cache to localStorage (always, for offline)
       useEffect(() => { localStorage.setItem('sp-projects', JSON.stringify(projects)); }, [projects]);
       useEffect(() => { localStorage.setItem('sp-prefs', JSON.stringify(prefs)); }, [prefs]);
+      useEffect(() => { localStorage.setItem('sp-folder-states', JSON.stringify(folderStates)); }, [folderStates]);
 
       // === SUPABASE SYNC ===
       // On login: load from Supabase or migrate localStorage
@@ -1439,9 +1469,11 @@
         if (prevUserId && prevUserId !== user.id) {
           localStorage.removeItem('sp-projects');
           localStorage.removeItem('sp-prefs');
+          localStorage.removeItem('sp-folder-states');
           localStorage.removeItem('sp-migrated-to-supabase');
           setProjects([]);
           setPrefsState({homeAddress:'',homeLat:null,homeLng:null,prepTime:60});
+          setFolderStatesState({});
         }
         localStorage.setItem('sp-user-id', user.id);
 
@@ -1477,7 +1509,7 @@
                   id: p.id, user_id: user.id, name: p.name, address: p.address,
                   lat: p.lat, lng: p.lng, status: p.status || 'todo',
                   mandates: p.mandates || [], orientation: p.orientation || [],
-                  is_contest: p.isContest || false, notes: p.notes || '',
+                  is_contest: p.isContest || false, client_folder: p.clientFolder ?? null, tag: p.tag ?? null, notes: p.notes || '',
                   links: p.links || [],
                   departure_address: p.departureAddress, departure_lat: p.departureLat, departure_lng: p.departureLng,
                   travel_time: p.travelTime, sort_order: i,
@@ -1493,6 +1525,11 @@
                 homeAddress: dbPrefs.home_address || '', homeLat: dbPrefs.home_lat,
                 homeLng: dbPrefs.home_lng, prepTime: dbPrefs.prep_time || 60
               });
+              // État des dossiers depuis le compte (partagé web + PWA). Absent/null sur les
+              // anciens comptes ou si la migration n'a pas tourné: on garde {} (défaut appliqué à l'affichage).
+              if (dbPrefs.folder_states && typeof dbPrefs.folder_states === 'object') {
+                setFolderStatesState(dbPrefs.folder_states);
+              }
             } else if (prefs.homeLat) {
               // Migrate prefs
               await supabase.from(TBL_PREFS).upsert({
@@ -1547,13 +1584,27 @@
         });
       };
 
+      // Ouvre/ferme un dossier et persiste la carte complète dans les préférences.
+      // L'upsert ne porte que sur folder_states: PostgREST ne touche pas les autres colonnes
+      // (home_address, etc.), donc aucun écrasement des autres préférences.
+      const setFolderState = (name, open) => {
+        setFolderStatesState(prev => {
+          const next = { ...prev, [name]: open };
+          if (user) {
+            supabase.from(TBL_PREFS).upsert({ user_id: user.id, folder_states: next })
+              .then(({ error }) => { if (error) console.error('Folder state save error:', error); });
+          }
+          return next;
+        });
+      };
+
       const addProject = (data) => {
         // Check project limit for subscription tier
         const activeCount = projects.filter(p => p.status !== ProjectStatus.DONE).length;
         if (!canCreateProject(activeCount)) {
           return { error: 'limit_reached', limit: getProjectLimit() };
         }
-        const proj = { id: generateId(), name: data.name || 'Nouveau', address: data.address || '', lat: data.lat, lng: data.lng, mandates: data.mandates || [], orientation: data.orientation || [], deliveryDate: data.deliveryDate || null, isContest: data.isContest || false, status: ProjectStatus.TODO, notes: '', links: [], buildings: [], travelTime: data.travelTime || null, departureAddress: data.departureAddress || null, departureLat: data.departureLat || null, departureLng: data.departureLng || null, createdAt: new Date().toISOString(), shotAt: null };
+        const proj = { id: generateId(), name: data.name || 'Nouveau', address: data.address || '', lat: data.lat, lng: data.lng, mandates: data.mandates || [], orientation: data.orientation || [], deliveryDate: data.deliveryDate || null, isContest: data.isContest || false, clientFolder: (data.clientFolder && data.clientFolder.trim()) || null, status: ProjectStatus.TODO, notes: '', links: [], buildings: [], travelTime: data.travelTime || null, departureAddress: data.departureAddress || null, departureLat: data.departureLat || null, departureLng: data.departureLng || null, createdAt: new Date().toISOString(), shotAt: null };
         setProjects(p => {
           const newList = [proj, ...p];
           // Update all sort_orders in Supabase
@@ -1569,7 +1620,7 @@
             id: proj.id, user_id: user.id, name: proj.name, address: proj.address,
             lat: proj.lat, lng: proj.lng, status: proj.status,
             mandates: proj.mandates, orientation: proj.orientation,
-            is_contest: proj.isContest, notes: '', links: [], buildings: [],
+            is_contest: proj.isContest, client_folder: proj.clientFolder, notes: '', links: [], buildings: [],
             departure_address: proj.departureAddress, departure_lat: proj.departureLat, departure_lng: proj.departureLng,
             travel_time: proj.travelTime, sort_order: 0,
             created_at: proj.createdAt
@@ -1682,7 +1733,52 @@
         });
       };
 
-      return <StoreContext.Provider value={{ projects, synced, prefs, view, selectedId, setView, setSelectedId, addProject, updateProject, deleteProject, advanceProject, revertProject, reorderProjects, setPrefs, lastDeleted, undoDelete }}>{children}</StoreContext.Provider>;
+      // Réordonne les projets TODO selon la séquence d'ids fournie (les projets non-TODO gardent
+      // leur place), puis réécrit sort_order pour tous. Utilisé par le glisser structuré (dossiers,
+      // cartes dans un dossier, cartes seules). Garde-fou: on n'applique que si la séquence couvre
+      // exactement tous les TODO, sinon on ne touche à rien.
+      const applyTodoOrder = (orderedTodoIds) => {
+        setProjects(p => {
+          const todoCount = p.filter(x => x.status === ProjectStatus.TODO).length;
+          const byId = new Map(p.map(x => [x.id, x]));
+          const queue = orderedTodoIds.map(id => byId.get(id)).filter(x => x && x.status === ProjectStatus.TODO);
+          if (queue.length !== todoCount) return p;
+          let qi = 0;
+          const newProjects = p.map(x => x.status === ProjectStatus.TODO ? queue[qi++] : x);
+          if (user) {
+            Promise.all(
+              newProjects.map((proj, i) => supabase.from(TBL_PROJECTS).update({ sort_order: i }).eq('id', proj.id))
+            ).then(results => { const errors = results.filter(r => r.error); if (errors.length) console.error('Reorder save errors:', errors); });
+          }
+          return newProjects;
+        });
+      };
+
+      // Assigne un projet à un dossier (clientFolder) ET applique le nouvel ordre TODO, en une
+      // seule passe. Utilisé quand on dépose une carte sans dossier sur un dossier (glisser).
+      const moveToFolder = (draggedId, folderName, orderedTodoIds) => {
+        const cf = (folderName && folderName.trim()) || null;
+        setProjects(p => {
+          const todoCount = p.filter(x => x.status === ProjectStatus.TODO).length;
+          const updated = p.map(x => x.id === draggedId ? { ...x, clientFolder: cf } : x);
+          const byId = new Map(updated.map(x => [x.id, x]));
+          const queue = orderedTodoIds.map(id => byId.get(id)).filter(x => x && x.status === ProjectStatus.TODO);
+          const ordered = queue.length === todoCount;
+          let next = updated;
+          if (ordered) { let qi = 0; next = updated.map(x => x.status === ProjectStatus.TODO ? queue[qi++] : x); }
+          if (user) {
+            supabase.from(TBL_PROJECTS).update({ client_folder: cf }).eq('id', draggedId)
+              .then(({ error }) => { if (error) console.error('Folder assign error:', error); });
+            if (ordered) {
+              Promise.all(next.map((proj, i) => supabase.from(TBL_PROJECTS).update({ sort_order: i }).eq('id', proj.id)))
+                .then(results => { const errs = results.filter(r => r.error); if (errs.length) console.error('Reorder save errors:', errs); });
+            }
+          }
+          return next;
+        });
+      };
+
+      return <StoreContext.Provider value={{ projects, synced, prefs, view, selectedId, setView, setSelectedId, addProject, updateProject, deleteProject, advanceProject, revertProject, reorderProjects, applyTodoOrder, moveToFolder, setPrefs, lastDeleted, undoDelete, folderStates, setFolderState }}>{children}</StoreContext.Provider>;
     };
 
     // ===== WEATHER STATUS =====
@@ -2919,6 +3015,108 @@
       );
     };
     
+    // ===== Champ DOSSIER (combo réutilisable) =====
+    // Utilisé tel quel par le formulaire d'ajout (value='') et le détail projet
+    // (value=project.clientFolder). Deux modes: sélection (menu déroulant custom des dossiers
+    // existants) et création (saisie texte). Le + bascule vers la création; en création il pivote
+    // en × pour revenir à la sélection. Un dossier n'est qu'une valeur texte portée par un projet:
+    // taper un nom ne crée rien tout de suite, il est matérialisé au CRÉER / à l'updateProject.
+    const useExistingFolders = () => {
+      const { projects } = useStore();
+      return React.useMemo(() => {
+        const seen = new Set(), out = [];
+        for (const p of projects) {
+          const f = (p.clientFolder || '').trim();
+          if (f && !seen.has(f)) { seen.add(f); out.push(f); }
+        }
+        return out; // dans l'ordre de première apparition (≈ ordre d'ajout)
+      }, [projects]);
+    };
+
+    const FolderCombo = ({ value, onChange }) => {
+      const folders = useExistingFolders();
+      const noFolders = folders.length === 0;
+      const [mode, setMode] = useState(() => noFolders ? 'create' : 'select');
+      const [open, setOpen] = useState(false);
+      const [draft, setDraft] = useState('');
+      const [menuRect, setMenuRect] = useState(null);
+      const rootRef = useRef(null);
+      const fieldRef = useRef(null);
+      const inputRef = useRef(null);
+      const isCreate = mode === 'create';
+
+      // Menu en position fixe (portail): on le ferme au clic dehors et au scroll, sinon il
+      // se détacherait du champ.
+      useEffect(() => {
+        if (!open) return;
+        const onDocDown = (e) => {
+          if (rootRef.current && rootRef.current.contains(e.target)) return;
+          const menu = document.getElementById('folder-menu-portal');
+          if (menu && menu.contains(e.target)) return;
+          setOpen(false);
+        };
+        const onScroll = () => setOpen(false);
+        document.addEventListener('mousedown', onDocDown);
+        window.addEventListener('scroll', onScroll, true);
+        return () => { document.removeEventListener('mousedown', onDocDown); window.removeEventListener('scroll', onScroll, true); };
+      }, [open]);
+
+      const openMenu = () => {
+        if (fieldRef.current) {
+          const r = fieldRef.current.getBoundingClientRect();
+          setMenuRect({ top: r.bottom + 2, left: r.left, width: r.width });
+        }
+        setOpen(true);
+      };
+      const toCreate = () => { setOpen(false); setMode('create'); setDraft(''); setTimeout(() => inputRef.current && inputRef.current.focus(), 0); };
+      const toSelect = () => { setMode('select'); setDraft(''); };
+      const commitDraft = () => { const v = draft.trim(); if (v) onChange(v); if (!noFolders) setMode('select'); };
+      const pick = (f) => { onChange(f); setOpen(false); };
+
+      return (
+        <div ref={rootRef} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative', top: '1px', flexShrink: 0 }} aria-hidden="true">
+            <path d="M3 7.2c0-.83.67-1.5 1.5-1.5h4.05l1.8 1.9h8.15c.83 0 1.5.67 1.5 1.5v8.2c0 .83-.67 1.5-1.5 1.5h-15.5c-.83 0-1.5-.67-1.5-1.5V7.2Z"/>
+          </svg>
+          <div ref={fieldRef} style={{ position: 'relative', flex: 1, minWidth: 0, border: '1px solid rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center' }}>
+            {isCreate ? (
+              <input ref={inputRef} type="text" value={draft}
+                autoComplete="off" autoCorrect="off" autoCapitalize="characters" spellCheck="false"
+                data-1p-ignore="true" data-lpignore="true" data-form-type="other"
+                onChange={(e) => setDraft(e.target.value.toUpperCase())}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitDraft(); } else if (e.key === 'Escape' && !noFolders) { toSelect(); } }}
+                onBlur={commitDraft}
+                placeholder="NOM DU DOSSIER"
+                className="font-bebas-book"
+                style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: '#ffffff', padding: '9px 44px 9px 12px', fontSize: '17px', letterSpacing: '0.05em' }}
+              />
+            ) : (
+              <div onClick={openMenu} className="font-bebas-book"
+                style={{ flex: 1, minWidth: 0, cursor: 'pointer', padding: '9px 44px 9px 12px', fontSize: '17px', letterSpacing: '0.05em', color: value ? '#ffffff' : 'rgba(255,255,255,0.3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {value || 'DOSSIER'}
+              </div>
+            )}
+            <button type="button" onClick={isCreate ? toSelect : toCreate}
+              aria-label={isCreate ? 'Choisir un dossier existant' : 'Créer un nouveau dossier'}
+              style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+              <span style={{ display: 'inline-block', fontSize: '24px', lineHeight: 1, fontWeight: 200, color: '#ffffff', transform: isCreate ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s ease', position: 'relative', top: '-1px' }}>+</span>
+            </button>
+          </div>
+          {open && !isCreate && menuRect && ReactDOM.createPortal(
+            <div id="folder-menu-portal" style={{ position: 'fixed', top: menuRect.top, left: menuRect.left, width: menuRect.width, zIndex: 9999, background: 'rgba(20,24,27,0.97)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.15)', maxHeight: '240px', overflowY: 'auto' }}>
+              {value && (
+                <div onClick={() => pick('')} className="font-bebas-book folder-option"
+                  style={{ padding: '9px 12px', fontSize: '15px', letterSpacing: '0.05em', cursor: 'pointer', color: 'rgba(255,255,255,0.3)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>AUCUN</div>
+              )}
+              {folders.map((f) => (
+                <div key={f} onClick={() => pick(f)} className="font-bebas-book folder-option"
+                  style={{ padding: '9px 12px', fontSize: '17px', letterSpacing: '0.05em', cursor: 'pointer', color: f === value ? '#ffffff' : 'rgba(255,255,255,0.45)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f}</div>
+              ))}
+            </div>, document.body)}
+        </div>
+      );
+    };
+
     const DateWheelPicker = ({ date, onChange, onClose, onCancel, title, dropDown }) => {
       const { t } = useLang();
       const [selDay, setSelDay] = useState(date.getDate());
@@ -4926,7 +5124,10 @@
                     {['AM','PM'].map(o => <button key={o} onClick={() => updateProject(project.id, { orientation: project.orientation?.includes(o) ? project.orientation.filter(x => x !== o) : [...(project.orientation||[]), o] })} className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '22px', color: project.orientation?.includes(o) ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)' }}>{o}</button>)}
                   </div>
                 </div>
-                
+                <div className="py-5 border-b border-adaptive">
+                  <FolderCombo key={project.id} value={project.clientFolder || ''} onChange={(v) => updateProject(project.id, { clientFolder: (v && v.trim()) || null })}/>
+                </div>
+
                 <div>
                   <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('notes')}</label>
                   {/* Mini toolbar */}
@@ -5679,7 +5880,7 @@
     const NewProjectModal = ({ isOpen, onClose, onCreated, origin, onOpen }) => {
       const { addProject, prefs } = useStore();
       const { t } = useLang();
-      const [form, setForm] = useState({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false });
+      const [form, setForm] = useState({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false, clientFolder: '' });
       const [loading, setLoading] = useState(false);
       const [justCreated, setJustCreated] = useState(null);
       const [animated, setAnimated] = useState(false);
@@ -5700,7 +5901,7 @@
       // Animate open + reset form
       useEffect(() => {
         if (isOpen && !prevOpen.current) {
-          setForm({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false });
+          setForm({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false, clientFolder: '' });
           if (addressInputRef.current) addressInputRef.current.value = '';
           autocompleteRef.current = null;
           requestAnimationFrame(() => requestAnimationFrame(() => setAnimated(true)));
@@ -5826,7 +6027,7 @@
       // ===== DESKTOP LAYOUT (original) =====
       // Panel: centered on screen
       const panelW = 560;
-      const panelH = 410;
+      const panelH = 485; // +75 pour loger la ligne DOSSIER sous ORIENTATION sans chevaucher CRÉER/ANNULER
       const panelX = (winSize.w - panelW) / 2 + 60;
       const panelY = (winSize.h - panelH) / 2;
 
@@ -5887,6 +6088,9 @@
                       <button key={o} type="button" onClick={() => setForm({...form, orientation: form.orientation.includes(o) ? form.orientation.filter(x => x !== o) : [...form.orientation, o]})} className={`newproj-toggle font-bebas-bold ${form.orientation.includes(o) ? 'active' : ''}`}>{o}</button>
                     ))}
                   </div>
+                </div>
+                <div style={{ marginTop: '22px' }}>
+                  <FolderCombo value={form.clientFolder} onChange={(v) => setForm(f => ({ ...f, clientFolder: v }))}/>
                 </div>
               </div>
 
@@ -6300,16 +6504,283 @@
       );
     };
 
+    // En-tête de dossier (accordéon). Contrôlé: l'état ouvert/fermé vient du parent (folderStates).
+    // Gauche: "{count} / {NOM}" (nombre + séparateur gris, nom blanc condensé majuscule).
+    // Droite: contrôle replier/déplier (+ fermé, − ouvert).
+    const FolderAccordion = ({ name, count, isOpen, onToggle, children }) => {
+      const isMobile = useIsMobile();
+      return (
+        <div data-folder={name} style={{ marginBottom: '4px', background: 'linear-gradient(to right, rgba(139, 155, 153, 0.2) 0, rgba(139, 155, 153, 0) 200px)' }}>
+          <div className="folder-acc-header" onClick={onToggle}
+            style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', padding: isMobile ? '10px 24px 5px' : '9px 16px 4px', borderBottom: '1px solid rgba(255,255,255,0.07)', WebkitUserSelect: 'none', userSelect: 'none' }}>
+            <span className="font-bebas-light" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.32)', letterSpacing: '0.08em', position: 'relative', top: '1px' }}>{count}</span>
+            <span className="font-bebas-light" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.16)', letterSpacing: '0.08em', margin: '0 11px', position: 'relative', top: '1px' }}>/</span>
+            <span className="font-bebas-book" style={{ fontSize: '22px', color: '#ffffff', letterSpacing: '0.06em' }}>{name}</span>
+            <span style={{ flex: 1 }}/>
+            <span aria-hidden="true" style={{ width: '22px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '22px', fontWeight: 200, lineHeight: 1, position: 'relative', top: '-1px' }}>{isOpen ? '−' : '+'}</span>
+          </div>
+          {isOpen && <div style={{ paddingTop: '16px' }}>{children}</div>}
+        </div>
+      );
+    };
+
+    // ===== Glisser-déposer structuré de la liste TODO =====
+    // Un seul système (souris + tactile, via Pointer Events) pour:
+    //  - réordonner une carte à l'intérieur de son dossier (entre les cartes du dossier),
+    //  - réordonner un dossier entier parmi les blocs de premier niveau (en saisissant son en-tête),
+    //  - réordonner une carte sans dossier parmi les blocs de premier niveau,
+    //  - classer une carte sans dossier DANS un dossier (la déposer sur le bloc du dossier),
+    //  - SORTIR une carte de son dossier (la tirer au-dessus de l'en-tête ou sous la dernière
+    //    carte): elle redevient une carte sans dossier, posée au premier niveau à l'endroit visé.
+    // Tactile: appui long (380 ms) pour armer; tout mouvement avant l'armement laisse le scroll/swipe.
+    // Souris: on arme dès 5 px. Visuel sobre: le bloc tiré est atténué + une fine ligne rouge marque la cible.
+    const useFolderDnD = ({ listRef, groupedItems, applyTodoOrder, moveToFolder, setFolderState }) => {
+      const [dropLine, setDropLine] = useState(null);
+      const st = useRef(null);
+
+      const flattenIds = (items) => {
+        const ids = [];
+        items.forEach(it => { if (it.type === 'project') ids.push(it.project.id); else it.projects.forEach(p => ids.push(p.id)); });
+        return ids;
+      };
+      const cloneItems = (items) => items.map(it => it.type === 'folder' ? { ...it, projects: [...it.projects] } : it);
+
+      const onListPointerDown = (e) => {
+        if (e.button != null && e.button !== 0) return;
+        if (e.target.closest('button, a, input, textarea, select, .hour-scroll, #folder-menu-portal')) return;
+        const list = listRef.current; if (!list) return;
+        const cardEl = e.target.closest('[data-drag-card]');
+        const headerEl = e.target.closest('.folder-acc-header');
+        let folderName = '', scope, blockEl, dragType;
+        if (headerEl && !cardEl) {
+          const wrap = headerEl.closest('[data-folder]'); if (!wrap) return;
+          folderName = wrap.dataset.folder; scope = 'top'; blockEl = wrap; dragType = 'folder';
+        } else if (cardEl) {
+          folderName = cardEl.dataset.cardFolder || '';
+          scope = folderName ? 'folder' : 'top'; blockEl = cardEl;
+          dragType = folderName ? 'folder-card' : 'standalone-card';
+        } else return;
+        if (!blockEl) return;
+
+        const isTouch = e.pointerType === 'touch';
+        const startX = e.clientX, startY = e.clientY;
+        let armed = false, timer = null;
+
+        const blocksForScope = () => {
+          if (scope === 'folder') {
+            const wrap = blockEl.closest('[data-folder]');
+            return wrap ? Array.from(wrap.querySelectorAll('[data-drag-card]')) : [];
+          }
+          return Array.from(list.children).filter(ch => ch.matches('[data-folder]') || (ch.matches('[data-drag-card]') && !ch.dataset.cardFolder));
+        };
+        const computeTarget = (y, blocks) => {
+          let idx = blocks.length;
+          for (let i = 0; i < blocks.length; i++) { const r = blocks[i].getBoundingClientRect(); if (y < r.top + r.height / 2) { idx = i; break; } }
+          return idx;
+        };
+        const lineY = (blocks, idx) => {
+          if (!blocks.length) return null;
+          if (idx <= 0) return blocks[0].getBoundingClientRect().top - 5;
+          if (idx >= blocks.length) return blocks[blocks.length - 1].getBoundingClientRect().bottom + 5;
+          return (blocks[idx - 1].getBoundingClientRect().bottom + blocks[idx].getBoundingClientRect().top) / 2;
+        };
+        const clearHighlight = () => {
+          if (st.current && st.current.highlightEl) {
+            st.current.highlightEl.style.boxShadow = '';
+            st.current.highlightEl.style.borderRadius = '';
+            st.current.highlightEl = null;
+          }
+        };
+        const update = (y) => {
+          if (!st.current) return;
+          // Carte sans dossier survolant un dossier => mode "déposer dans le dossier" (assignation).
+          if (st.current.dragType === 'standalone-card') {
+            const over = Array.from(list.querySelectorAll('[data-folder]')).find(w => {
+              const r = w.getBoundingClientRect(); return y >= r.top && y <= r.bottom;
+            });
+            if (over) {
+              if (st.current.highlightEl && st.current.highlightEl !== over) clearHighlight();
+              st.current.highlightEl = over;
+              over.style.boxShadow = 'inset 0 0 0 2px rgba(216,49,82,0.6)';
+              over.style.borderRadius = '2px';
+              const cards = Array.from(over.querySelectorAll('[data-drag-card]'));
+              let ins = cards.length;
+              for (let i = 0; i < cards.length; i++) { const r = cards[i].getBoundingClientRect(); if (y < r.top + r.height / 2) { ins = i; break; } }
+              st.current.drop = { mode: 'folder', folderName: over.dataset.folder, insertIndex: ins, closed: cards.length === 0 };
+              setDropLine(null);
+              return;
+            }
+            clearHighlight();
+          }
+          // Carte de dossier tirée HORS de son dossier (au-dessus de l'en-tête ou sous la dernière
+          // carte) => mode extraction: cible parmi les blocs de premier niveau, ligne rouge au top.
+          // Tant que le pointeur reste dans le dossier, on retombe sur le réordonnancement interne.
+          if (st.current.dragType === 'folder-card' && st.current.folderWrap) {
+            const wr = st.current.folderWrap.getBoundingClientRect();
+            if (y < wr.top || y > wr.bottom) {
+              clearHighlight();
+              const tb = st.current.topBlocks || [];
+              const idx = computeTarget(y, tb);
+              st.current.drop = { mode: 'extract', topIndex: idx };
+              const ly = lineY(tb, idx);
+              const lr = list.getBoundingClientRect();
+              if (ly != null) setDropLine({ top: ly, left: lr.left, width: lr.width });
+              return;
+            }
+          }
+          const blocks = st.current.blocks;
+          st.current.targetIndex = computeTarget(y, blocks);
+          st.current.drop = { mode: st.current.scope === 'folder' ? 'within' : 'top', targetIndex: st.current.targetIndex };
+          const ly = lineY(blocks, st.current.targetIndex);
+          const lr = list.getBoundingClientRect();
+          if (ly != null) setDropLine({ top: ly, left: lr.left, width: lr.width });
+        };
+        const cleanup = () => {
+          document.removeEventListener('pointermove', onMove);
+          document.removeEventListener('pointerup', onUp);
+          document.removeEventListener('pointercancel', onUp);
+          if (timer) { clearTimeout(timer); timer = null; }
+        };
+        const teardown = () => {
+          clearHighlight();
+          if (st.current && st.current.blockEl) st.current.blockEl.style.opacity = '';
+          if (listRef.current) listRef.current.style.touchAction = '';
+          document.body.style.userSelect = '';
+          document.body.style.cursor = '';
+          window.__isDragging = false;
+          setDropLine(null);
+          st.current = null;
+        };
+        const arm = () => {
+          const blocks = blocksForScope();
+          const draggedIndex = blocks.indexOf(blockEl);
+          if (draggedIndex === -1) return;
+          armed = true;
+          // Pour une carte de dossier: on mémorise son dossier d'origine et la liste des blocs de
+          // premier niveau, nécessaires si l'utilisateur la tire hors du dossier (mode extraction).
+          const folderWrap = dragType === 'folder-card' ? blockEl.closest('[data-folder]') : null;
+          const topBlocks = dragType === 'folder-card'
+            ? Array.from(list.children).filter(ch => ch.matches('[data-folder]') || (ch.matches('[data-drag-card]') && !ch.dataset.cardFolder))
+            : null;
+          st.current = { scope, dragType, folderName, blockEl, blocks, draggedIndex, targetIndex: draggedIndex, drop: null, highlightEl: null, folderWrap, topBlocks };
+          window.__isDragging = true;
+          if (typeof activeWeatherRowDismiss !== 'undefined' && activeWeatherRowDismiss) { activeWeatherRowDismiss(); activeWeatherRowDismiss = null; }
+          document.body.style.userSelect = 'none';
+          document.body.style.cursor = 'grabbing';
+          if (isTouch) list.style.touchAction = 'none';
+          blockEl.style.opacity = '0.35';
+          if (isTouch && navigator.vibrate) navigator.vibrate(20);
+          update(startY);
+        };
+        const onMove = (ev) => {
+          const dx = ev.clientX - startX, dy = ev.clientY - startY;
+          if (!armed) {
+            if (isTouch) { if (Math.abs(dx) > 8 || Math.abs(dy) > 8) cleanup(); return; }
+            if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+            arm();
+            if (!armed) { cleanup(); return; }
+          } else {
+            ev.preventDefault();
+            update(ev.clientY);
+          }
+        };
+        const commit = () => {
+          const s = st.current;
+          const drop = s.drop;
+          if (!drop) return;
+          const items = cloneItems(groupedItems);
+          // Déposer une carte sans dossier sur un dossier => l'y classer (clientFolder) + l'y placer.
+          if (drop.mode === 'folder') {
+            const [movedItem] = items.splice(s.draggedIndex, 1);
+            if (!movedItem || movedItem.type !== 'project') return;
+            const fit = items.find(it => it.type === 'folder' && it.name === drop.folderName);
+            if (!fit) return;
+            const at = drop.closed ? fit.projects.length : Math.max(0, Math.min(drop.insertIndex, fit.projects.length));
+            fit.projects.splice(at, 0, movedItem.project);
+            moveToFolder(movedItem.project.id, drop.folderName, flattenIds(items));
+            if (setFolderState) setFolderState(drop.folderName, true); // ouvrir pour montrer le résultat
+            return;
+          }
+          // Sortir une carte de son dossier => clientFolder = null, posée au premier niveau à
+          // l'index visé. Si le dossier se vide, son bloc disparaît au prochain rendu (plus aucun
+          // projet ne le référence) et flattenIds ignore de toute façon les dossiers vides.
+          if (drop.mode === 'extract') {
+            const draggedId = s.blockEl.dataset.dragCard;
+            const fit = items.find(it => it.type === 'folder' && it.name === s.folderName);
+            if (!fit) return;
+            const pIdx = fit.projects.findIndex(p => p.id === draggedId);
+            if (pIdx === -1) return;
+            const [movedProj] = fit.projects.splice(pIdx, 1);
+            const at = Math.max(0, Math.min(drop.topIndex, items.length));
+            items.splice(at, 0, { type: 'project', project: movedProj });
+            moveToFolder(draggedId, null, flattenIds(items));
+            return;
+          }
+          // Réordonnancement (premier niveau ou dans un dossier).
+          let from = s.draggedIndex, to = drop.targetIndex;
+          if (to === from || to === from + 1) return; // même emplacement
+          if (drop.mode === 'top') {
+            const [moved] = items.splice(from, 1);
+            if (to > from) to -= 1;
+            items.splice(to, 0, moved);
+            applyTodoOrder(flattenIds(items));
+          } else {
+            const fit = items.find(it => it.type === 'folder' && it.name === s.folderName);
+            if (!fit) return;
+            const [moved] = fit.projects.splice(from, 1);
+            if (to > from) to -= 1;
+            fit.projects.splice(to, 0, moved);
+            applyTodoOrder(flattenIds(items));
+          }
+        };
+        const onUp = () => {
+          cleanup();
+          if (armed && st.current) {
+            commit();
+            const blocker = (ce) => { ce.stopPropagation(); ce.preventDefault(); };
+            list.addEventListener('click', blocker, { capture: true, once: true });
+            setTimeout(() => { try { list.removeEventListener('click', blocker, { capture: true }); } catch (e) {} }, 80);
+          }
+          teardown();
+        };
+
+        document.addEventListener('pointermove', onMove, { passive: false });
+        document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointercancel', onUp);
+        if (isTouch) timer = setTimeout(arm, 380);
+      };
+
+      return { onListPointerDown, dropLine };
+    };
+
     const TodoView = ({ onSelect, onAddProject, addingProject, plusRef }) => {
-      const { projects, reorderProjects } = useStore();
+      const { projects, reorderProjects, applyTodoOrder, moveToFolder, folderStates, setFolderState } = useStore();
+      const isMobile = useIsMobile();
       const { tier, getProjectLimit, canCreateProject } = useSubscription();
       const { t } = useLang();
       const { bannerError, lastCachedAt } = useWeatherStatus();
       const todoProjects = projects.filter(p => p.status === ProjectStatus.TODO);
+      // Regroupement par dossier client. Parcours dans l'ordre (sort_order): projet sans dossier
+      // => carte seule; projet avec dossier => accordéon à la position de sa 1ère apparition
+      // (ordre des dossiers = ordre d'apparition ≈ ordre d'ajout), les suivants y sont absorbés.
+      const groupedItems = (() => {
+        const items = [], byName = {};
+        let order = 0;
+        for (const p of todoProjects) {
+          const f = (p.clientFolder || '').trim();
+          if (!f) { items.push({ type: 'project', project: p }); continue; }
+          if (byName[f]) { byName[f].projects.push(p); continue; }
+          const it = { type: 'folder', name: f, projects: [p], order: order++ };
+          byName[f] = it; items.push(it);
+        }
+        return items;
+      })();
+      // Ouvert/fermé d'un dossier: état explicite si présent, sinon défaut = 2 premiers ouverts.
+      const isFolderOpen = (it) => (it.name in folderStates) ? !!folderStates[it.name] : (it.order < 2);
       const [openActionsId, setOpenActionsId] = useState(null);
       const [showUpgradeFromTodo, setShowUpgradeFromTodo] = useState(false);
-      const dragRef = useRef(null);
       const listRef = useRef(null);
+      const { onListPointerDown, dropLine } = useFolderDnD({ listRef, groupedItems, applyTodoOrder, moveToFolder, setFolderState });
       // Tick chaque minute pour faire avancer le compteur "il y a 3H45" de la banniere.
       // 60s suffit: la precision affichee est la minute.
       const [now, setNow] = useState(() => Date.now());
@@ -6327,350 +6798,6 @@
         return () => window.removeEventListener('scroll', onScroll);
       }, [isMobile, openActionsId]);
       
-      // Desktop mouse-based drag & drop
-      const handleMouseDownDrag = useCallback((e, id, idx) => {
-        // Only left click, ignore buttons/inputs
-        if (e.button !== 0 || e.target.closest('button, a, input, textarea, .hour-scroll')) return;
-        
-        if (!listRef.current) return;
-        const cards = Array.from(listRef.current.querySelectorAll('.project-card'));
-        if (!cards[idx]) return;
-        
-        const startY = e.clientY;
-        const startX = e.clientX;
-        let dragStarted = false;
-        
-        // Snapshot all card rects
-        const rects = cards.map(c => {
-          const r = c.getBoundingClientRect();
-          const s = window.getComputedStyle(c);
-          return { top: r.top, height: r.height, totalH: r.height + (parseFloat(s.marginBottom) || 0) };
-        });
-        
-        const initDrag = () => {
-          dragStarted = true;
-          window.__isDragging = true;
-          if (activeWeatherRowDismiss) { activeWeatherRowDismiss(); activeWeatherRowDismiss = null; }
-          
-          dragRef.current = {
-            id, startIdx: idx, gapIdx: idx,
-            startY, cards, rects, totalH: rects[idx].totalH
-          };
-          
-          cards[idx].classList.add('is-being-dragged');
-          
-          document.body.style.userSelect = 'none';
-          document.body.style.cursor = 'grabbing';
-        };
-        
-        const onMove = (ev) => {
-          const deltaY = ev.clientY - startY;
-          const deltaX = ev.clientX - startX;
-          
-          // Require 5px movement to start drag
-          if (!dragStarted) {
-            if (Math.abs(deltaY) < 5 && Math.abs(deltaX) < 5) return;
-            initDrag();
-          }
-          
-          const d = dragRef.current;
-          if (!d) return;
-          
-          // Move dragged card to follow mouse
-          d.cards[d.startIdx].style.transform = `translateY(${deltaY}px)`;
-          
-          const mouseY = ev.clientY;
-          let newGap = d.gapIdx;
-          
-          // Step down one at a time: cursor past top ~25% of next non-dragged card
-          while (newGap < d.rects.length - 1) {
-            let next = newGap + 1;
-            if (next === d.startIdx) next++; // skip dragged card slot
-            if (next >= d.rects.length) break;
-            const threshold = d.rects[next].top + d.rects[next].height * 0.25;
-            if (mouseY > threshold) {
-              newGap = next;
-            } else break;
-          }
-          
-          // Step up one at a time: cursor above bottom ~25% of prev non-dragged card
-          while (newGap > 0) {
-            let prev = newGap - 1;
-            if (prev === d.startIdx) prev--; // skip dragged card slot
-            if (prev < 0) break;
-            const threshold = d.rects[prev].top + d.rects[prev].height * 0.75;
-            if (mouseY < threshold) {
-              newGap = prev;
-            } else break;
-          }
-          
-          if (newGap !== d.gapIdx) {
-            d.gapIdx = newGap;
-            // Shift other cards to create gap at new position
-            d.cards.forEach((card, i) => {
-              if (i === d.startIdx) return;
-              let shift = 0;
-              if (d.startIdx < d.gapIdx) {
-                // Dragged down: cards between startIdx+1..gapIdx shift UP
-                if (i > d.startIdx && i <= d.gapIdx) shift = -d.totalH;
-              } else if (d.startIdx > d.gapIdx) {
-                // Dragged up: cards between gapIdx..startIdx-1 shift DOWN
-                if (i >= d.gapIdx && i < d.startIdx) shift = d.totalH;
-              }
-              card.style.transform = shift ? `translateY(${shift}px)` : '';
-            });
-          }
-        };
-        
-        const onUp = () => {
-          document.removeEventListener('mousemove', onMove);
-          document.removeEventListener('mouseup', onUp);
-          
-          if (!dragStarted) return; // Was just a click, not a drag
-          
-          window.__isDragging = false;
-          const d = dragRef.current;
-          if (!d) return;
-          
-          // Block the click event that fires after mouseup
-          const blocker = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
-          listRef.current.addEventListener('click', blocker, { capture: true, once: true });
-          setTimeout(() => listRef.current?.removeEventListener('click', blocker, { capture: true }), 100);
-          
-          // Reorder if position changed
-          if (d.startIdx !== d.gapIdx) {
-            const targetProject = todoProjects[d.gapIdx];
-            if (targetProject) reorderProjects(d.id, targetProject.id);
-          }
-          
-          // Clear all inline styles and classes
-          d.cards.forEach(card => {
-            card.classList.remove('is-being-dragged');
-            card.style.transform = '';
-          });
-          document.body.style.userSelect = '';
-          document.body.style.cursor = '';
-          
-          dragRef.current = null;
-        };
-        
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-      }, [todoProjects, reorderProjects]);
-
-      const isMobile = useIsMobile();
-
-      // === Mobile long press drag-to-reorder (Microsoft To Do style) ===
-      useEffect(() => {
-        if (!isMobile || !listRef.current) return;
-        const list = listRef.current;
-        let longPressTimer = null;
-        let drag = { active: false, id: null, startY: 0, startX: 0, clone: null, origCard: null, cardRects: [], startIdx: 0, currentIdx: 0, scrollAtStart: 0 };
-
-        const getCard = (el) => {
-          while (el && !el.dataset.projectId) el = el.parentElement;
-          return el;
-        };
-
-        const getCardRects = () => {
-          const cards = list.querySelectorAll('[data-project-id]');
-          const scrollY = window.scrollY || window.pageYOffset;
-          return Array.from(cards).map(c => {
-            const r = c.getBoundingClientRect();
-            return {
-              el: c,
-              id: c.dataset.projectId,
-              absTop: r.top + scrollY,
-              rect: r,
-              h: c.offsetHeight
-            };
-          });
-        };
-
-        const animateCards = (currentIdx) => {
-          const cards = drag.cardRects;
-          const startIdx = drag.startIdx;
-          cards.forEach((c, i) => {
-            if (c.id === drag.id) return;
-            let offset = 0;
-            if (startIdx < currentIdx) {
-              if (i > startIdx && i <= currentIdx) offset = -cards[startIdx].h - 12;
-            } else if (startIdx > currentIdx) {
-              if (i >= currentIdx && i < startIdx) offset = cards[startIdx].h + 12;
-            }
-            c.el.style.transition = 'transform 0.25s cubic-bezier(0.25,1,0.5,1)';
-            c.el.style.transform = offset ? `translateY(${offset}px)` : '';
-          });
-        };
-
-        const onTouchStart = (e) => {
-          if (e.touches.length > 1) { clearTimeout(longPressTimer); return; }
-          
-          const card = getCard(e.target);
-          if (!card) return;
-          if (card.dataset.open === 'true') return;
-          
-          const touch = e.touches[0];
-          drag.startX = touch.clientX;
-          drag.startY = touch.clientY;
-          drag.origCard = card;
-          drag.id = card.dataset.projectId;
-          
-          longPressTimer = setTimeout(() => {
-            drag.active = true;
-            drag.cardRects = getCardRects();
-            drag.scrollAtStart = window.scrollY || window.pageYOffset;
-            drag.startIdx = drag.cardRects.findIndex(c => c.id === drag.id);
-            drag.currentIdx = drag.startIdx;
-            
-            if (drag.startIdx === -1) { drag.active = false; return; }
-            
-            if (navigator.vibrate) navigator.vibrate(30);
-            
-            const rect = card.getBoundingClientRect();
-            const clone = card.cloneNode(true);
-            clone.style.cssText = `
-              position: fixed; left: ${rect.left}px; top: ${rect.top}px;
-              width: ${rect.width}px; height: ${rect.height}px;
-              z-index: 99999; pointer-events: none;
-              transform: scale(1.04); 
-              box-shadow: 0 16px 48px rgba(0,0,0,0.45);
-              border-radius: 8px; overflow: hidden;
-              transition: transform 0.2s, box-shadow 0.2s;
-              will-change: top;
-            `;
-            document.body.appendChild(clone);
-            drag.clone = clone;
-            drag.cloneStartTop = rect.top;
-            
-            card.style.opacity = '0';
-            card.style.transition = 'none';
-            
-            document.body.style.overflow = 'hidden';
-            document.body.style.touchAction = 'none';
-          }, 500);
-        };
-
-        const onTouchMove = (e) => {
-          if (e.touches.length > 1) { clearTimeout(longPressTimer); return; }
-          
-          if (!drag.active) {
-            const dx = Math.abs(e.touches[0].clientX - drag.startX);
-            const dy = Math.abs(e.touches[0].clientY - drag.startY);
-            if (dx > 10 || dy > 10) {
-              clearTimeout(longPressTimer);
-            }
-            return;
-          }
-          
-          e.preventDefault();
-          const touch = e.touches[0];
-          const dy = touch.clientY - drag.startY;
-          
-          if (drag.clone) {
-            drag.clone.style.top = `${drag.cloneStartTop + dy}px`;
-          }
-          
-          // Use absolute positions to handle scroll
-          const cards = drag.cardRects;
-          const touchAbsY = touch.clientY + (window.scrollY || window.pageYOffset);
-          
-          // Find position: above all = 0, below all = last index
-          let newIdx = 0;
-          for (let i = 0; i < cards.length; i++) {
-            const midAbsY = cards[i].absTop + cards[i].h / 2;
-            if (touchAbsY > midAbsY) newIdx = i;
-          }
-          // Clamp
-          newIdx = Math.max(0, Math.min(newIdx, cards.length - 1));
-          
-          if (newIdx !== drag.currentIdx) {
-            drag.currentIdx = newIdx;
-            animateCards(newIdx);
-          }
-          
-          if (touch.clientY < 80) {
-            window.scrollBy(0, -6);
-          } else if (touch.clientY > window.innerHeight - 80) {
-            window.scrollBy(0, 6);
-          }
-        };
-
-        const cleanup = (fromIdx, toIdx) => {
-          // Remove clone
-          if (drag.clone && drag.clone.parentNode) {
-            drag.clone.parentNode.removeChild(drag.clone);
-          }
-          
-          // Restore ALL cards opacity + transforms (not just origCard, in case React hasn't re-rendered yet)
-          drag.cardRects.forEach(c => {
-            c.el.style.opacity = '';
-            c.el.style.transition = '';
-            c.el.style.transform = '';
-          });
-          
-          // Also restore origCard specifically
-          if (drag.origCard) {
-            drag.origCard.style.opacity = '';
-            drag.origCard.style.transition = '';
-          }
-          
-          // Reorder if moved
-          if (fromIdx !== toIdx) {
-            const targetId = drag.cardRects[toIdx]?.id;
-            if (targetId && drag.id) {
-              reorderProjects(drag.id, targetId);
-            }
-          }
-          
-          drag.active = false;
-          drag.clone = null;
-          drag.origCard = null;
-          drag.id = null;
-          drag.cardRects = [];
-          document.body.style.overflow = '';
-          document.body.style.touchAction = '';
-        };
-
-        const onTouchEnd = () => {
-          clearTimeout(longPressTimer);
-          
-          if (!drag.active) {
-            drag.active = false;
-            return;
-          }
-          
-          const fromIdx = drag.startIdx;
-          const toIdx = drag.currentIdx;
-          
-          // Animate clone to target position
-          if (drag.clone && drag.cardRects[toIdx]) {
-            const targetRect = drag.cardRects[toIdx].rect;
-            drag.clone.style.transition = 'top 0.25s cubic-bezier(0.25,1,0.5,1), transform 0.25s, box-shadow 0.25s';
-            drag.clone.style.top = `${targetRect.top}px`;
-            drag.clone.style.transform = 'scale(1)';
-            drag.clone.style.boxShadow = '0 0 0 rgba(0,0,0,0)';
-          }
-          
-          setTimeout(() => cleanup(fromIdx, toIdx), 280);
-        };
-
-        list.addEventListener('touchstart', onTouchStart, { passive: true });
-        list.addEventListener('touchmove', onTouchMove, { passive: false });
-        list.addEventListener('touchend', onTouchEnd, { passive: true });
-        list.addEventListener('touchcancel', onTouchEnd, { passive: true });
-        
-        return () => {
-          clearTimeout(longPressTimer);
-          list.removeEventListener('touchstart', onTouchStart);
-          list.removeEventListener('touchmove', onTouchMove);
-          list.removeEventListener('touchend', onTouchEnd);
-          list.removeEventListener('touchcancel', onTouchEnd);
-          document.body.style.overflow = '';
-          document.body.style.touchAction = '';
-          if (drag.clone && drag.clone.parentNode) drag.clone.parentNode.removeChild(drag.clone);
-        };
-      }, [isMobile, todoProjects]);
       
       return (
         <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px', ...(isMobile ? { minHeight: '100vh', touchAction: 'pan-y', overflowX: 'clip' } : {}) }}>
@@ -6796,7 +6923,7 @@
               <span className="font-bebas-book" style={{ fontSize: '180px', color: '#FFFFFF', lineHeight: 1, textShadow: '0 0 30px rgba(255,255,255,0.15)' }}>+</span>
             </div>
           ))
-          : <div ref={el => { const f = document.getElementById('persistentFlare'); if (f) { f.style.opacity = '0'; f.style.animation = 'none'; } return listRef.current = el; }} style={{ paddingTop: '16px', paddingBottom: '80px' }}>
+          : <div ref={el => { const f = document.getElementById('persistentFlare'); if (f) { f.style.opacity = '0'; f.style.animation = 'none'; } return listRef.current = el; }} onPointerDown={onListPointerDown} style={{ paddingTop: '16px', paddingBottom: '80px' }}>
               {isMobile && bannerError && (
                 <div role="status" aria-live="polite"
                   {...(bannerError !== 'network' ? {
@@ -6833,8 +6960,28 @@
                   </div>
                 </div>
               )}
-              {todoProjects.map((p, i) => <ProjectCard key={p.id} project={p} index={i} onSelect={onSelect} onMouseDownDrag={isMobile ? undefined : handleMouseDownDrag} openActionsId={openActionsId} setOpenActionsId={setOpenActionsId}/>)}
+              {(() => {
+                let ci = 0; // index courant des cartes visibles (stagger d'animation)
+                return groupedItems.map((it) => {
+                  if (it.type === 'project') {
+                    const i = ci++;
+                    return <div key={it.project.id} data-drag-card={it.project.id} data-card-folder=""><ProjectCard project={it.project} index={i} onSelect={onSelect} openActionsId={openActionsId} setOpenActionsId={setOpenActionsId}/></div>;
+                  }
+                  const open = isFolderOpen(it);
+                  return (
+                    <FolderAccordion key={'folder:' + it.name} name={it.name} count={it.projects.length} isOpen={open} onToggle={() => setFolderState(it.name, !open)}>
+                      {open && it.projects.map((p) => {
+                        const i = ci++;
+                        return <div key={p.id} data-drag-card={p.id} data-card-folder={it.name}><ProjectCard project={p} index={i} onSelect={onSelect} openActionsId={openActionsId} setOpenActionsId={setOpenActionsId}/></div>;
+                      })}
+                    </FolderAccordion>
+                  );
+                });
+              })()}
             </div>}
+          {dropLine && ReactDOM.createPortal(
+            <div style={{ position: 'fixed', left: dropLine.left, top: dropLine.top - 1, width: dropLine.width, height: 0, borderTop: '2px solid #d83152', zIndex: 9998, pointerEvents: 'none' }}/>,
+            document.body)}
         </div>
       );
     };
@@ -7065,7 +7212,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.42</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.43</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7080,7 +7227,7 @@
     const MobileNewProjectScreen = ({ isOpen, onClose, onCreated }) => {
       const { addProject, prefs } = useStore();
       const { t } = useLang();
-      const [form, setForm] = useState({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false });
+      const [form, setForm] = useState({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false, clientFolder: '' });
       const [loading, setLoading] = useState(false);
       const [showUpgradeModal, setShowUpgradeModal] = useState(false);
       const addressInputRef = React.useRef(null);
@@ -7091,7 +7238,7 @@
       // Reset form when opening
       useEffect(() => {
         if (isOpen && !prevOpen.current) {
-          setForm({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false });
+          setForm({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false, clientFolder: '' });
           if (addressInputRef.current) addressInputRef.current.value = '';
           autocompleteRef.current = null;
           setTimeout(() => nameInputRef.current?.focus(), 500);
@@ -7191,6 +7338,10 @@
             </div>
           </div>
 
+          <div style={{ marginBottom: '32px' }}>
+            <FolderCombo value={form.clientFolder} onChange={(v) => setForm(f => ({ ...f, clientFolder: v }))}/>
+          </div>
+
           <div style={{ display: 'flex', gap: '24px', alignItems: 'center', marginTop: '8px' }}>
             <button onClick={handleSubmit} disabled={loading || !form.name.trim()} className="font-bebas-bold" style={{
               background: 'none', border: 'none', padding: '8px 0',
@@ -7231,6 +7382,37 @@
           <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>{/iPhone|iPad|Android/i.test(navigator.userAgent) ? '' : '⌘Z'}</span>
         </div>
       );
+    };
+
+    // Défilement fluide (amorti) à la molette. Mécanisme unique réutilisé tel quel par le détail
+    // projet ET les vues principales (listing, édition, préférences): mêmes réglages (ease 0.18),
+    // même gestion de la molette. Desktop uniquement (sur mobile on garde l'inertie native).
+    //   listenEl : élément sur lequel on écoute la molette (un conteneur, ou window).
+    //   scrollEl : élément dont on anime scrollTop (le conteneur, ou document.scrollingElement).
+    const attachSmoothWheel = (listenEl, scrollEl) => {
+      if (!listenEl || !scrollEl) return () => {};
+      let target = scrollEl.scrollTop;
+      let raf = null;
+      const ease = 0.18;
+      const tick = () => {
+        const diff = target - scrollEl.scrollTop;
+        if (Math.abs(diff) < 0.5) { scrollEl.scrollTop = target; raf = null; return; }
+        scrollEl.scrollTop += diff * ease;
+        raf = requestAnimationFrame(tick);
+      };
+      const onWheel = (e) => {
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // laisse les bandes horizontales
+        let dy = e.deltaY;
+        if (e.deltaMode === 1) dy *= 16;                 // lignes -> pixels approx
+        else if (e.deltaMode === 2) dy *= scrollEl.clientHeight; // pages
+        e.preventDefault();
+        const max = scrollEl.scrollHeight - scrollEl.clientHeight;
+        if (raf === null) target = scrollEl.scrollTop;   // resync au début d'un nouveau geste
+        target = Math.max(0, Math.min(max, target + dy));
+        if (raf === null) raf = requestAnimationFrame(tick);
+      };
+      listenEl.addEventListener('wheel', onWheel, { passive: false });
+      return () => { listenEl.removeEventListener('wheel', onWheel); if (raf) cancelAnimationFrame(raf); };
     };
 
     const App = () => {
@@ -7408,28 +7590,16 @@
         if (isMobile || !displayedProjectId) return;
         const el = detailScrollRef.current;
         if (!el) return;
-        let target = el.scrollTop;
-        let raf = null;
-        const ease = 0.18;
-        const tick = () => {
-          const diff = target - el.scrollTop;
-          if (Math.abs(diff) < 0.5) { el.scrollTop = target; raf = null; return; }
-          el.scrollTop += diff * ease;
-          raf = requestAnimationFrame(tick);
-        };
-        const onWheel = (e) => {
-          if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // laisse les bandes horizontales
-          let dy = e.deltaY;
-          if (e.deltaMode === 1) dy *= 16;            // lignes -> pixels approx
-          else if (e.deltaMode === 2) dy *= el.clientHeight; // pages
-          e.preventDefault();
-          const max = el.scrollHeight - el.clientHeight;
-          if (raf === null) target = el.scrollTop;    // resync au début d'un nouveau geste
-          target = Math.max(0, Math.min(max, target + dy));
-          if (raf === null) raf = requestAnimationFrame(tick);
-        };
-        el.addEventListener('wheel', onWheel, { passive: false });
-        return () => { el.removeEventListener('wheel', onWheel); if (raf) cancelAnimationFrame(raf); };
+        return attachSmoothWheel(el, el);
+      }, [displayedProjectId, isMobile]);
+
+      // Même défilement fluide pour les vues principales (listing projets, édition, préférences),
+      // qui défilent la fenêtre (html overflow-y:scroll). Desktop uniquement; inactif quand un
+      // détail est ouvert (la fenêtre est alors figée par overflow:hidden). Exactement le même
+      // mécanisme et les mêmes réglages que le détail.
+      useEffect(() => {
+        if (isMobile || displayedProjectId) return;
+        return attachSmoothWheel(window, document.scrollingElement || document.documentElement);
       }, [displayedProjectId, isMobile]);
 
       // Track plus button position

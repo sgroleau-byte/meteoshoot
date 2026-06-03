@@ -218,3 +218,16 @@ BEGIN
   UPDATE public.user_profiles_dev SET subscription_tier = new_tier WHERE user_id = target_user_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- 14. Dossiers client (regroupement des projets) + tag (transversal, créé maintenant
+--     mais PAS encore utilisé dans l'interface), et état ouvert/fermé des dossiers.
+--     Dev EN PREMIER (tester en local), puis prod avant le déploiement.
+ALTER TABLE projects_dev ADD COLUMN IF NOT EXISTS client_folder TEXT;
+ALTER TABLE projects_dev ADD COLUMN IF NOT EXISTS tag           TEXT;
+ALTER TABLE projects     ADD COLUMN IF NOT EXISTS client_folder TEXT;
+ALTER TABLE projects     ADD COLUMN IF NOT EXISTS tag           TEXT;
+
+-- État ouvert/fermé des dossiers, par utilisateur, partagé entre le web et la PWA.
+-- Carte { "NOM DU DOSSIER": true|false } (true = ouvert).
+ALTER TABLE preferences_dev ADD COLUMN IF NOT EXISTS folder_states JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE preferences     ADD COLUMN IF NOT EXISTS folder_states JSONB DEFAULT '{}'::jsonb;
