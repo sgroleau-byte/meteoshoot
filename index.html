@@ -482,7 +482,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.44</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.45</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -1843,54 +1843,55 @@
     };
 
     // ===== ICONS =====
+    // Rayons d'un soleil (8 tiges) autour du centre (cx,cy), rayon r, ecart gap, longueur len
+    const sunRays = (cx, cy, r, gap, len, sw) => [0,45,90,135,180,225,270,315].map((a, i) => {
+      const t = a * Math.PI / 180;
+      const x1 = cx + Math.cos(t) * (r + gap), y1 = cy + Math.sin(t) * (r + gap);
+      const x2 = cx + Math.cos(t) * (r + gap + len), y2 = cy + Math.sin(t) * (r + gap + len);
+      return <line key={i} x1={x1.toFixed(1)} y1={y1.toFixed(1)} x2={x2.toFixed(1)} y2={y2.toFixed(1)} stroke="#ffe26b" strokeWidth={sw} strokeLinecap="round"/>;
+    });
+    // Gros soleil place DERRIERE le nuage : un masque avale la portion cachee, les rayons
+    // depassent tout autour. Affichage volontairement optimiste pour les paliers 21-70%.
+    const SUN_CLOUD_PATH = "M8 18c0-4 3-7 7-7s7 3 7 7c2 0 4 2 4 4s-2 4-4 4H8c-3 0-5-2.5-5-5s2-5 5-5z";
+    let __sbcSeq = 0;
+    const SunBehindCloud = ({ className, sr, gap, len, scx, scy, ccx, ccy, cs, ccolor }) => {
+      const uid = React.useMemo(() => 'sbc' + (__sbcSeq++), []);
+      const tf = `translate(${(ccx - 15 * cs).toFixed(2)} ${(ccy - 18.5 * cs).toFixed(2)}) scale(${cs})`;
+      return <svg className={className} viewBox="0 0 32 32" fill="none">
+        <defs>
+          <mask id={uid} maskUnits="userSpaceOnUse">
+            <rect x="0" y="0" width="32" height="32" fill="#fff"/>
+            <g transform={tf}><path d={SUN_CLOUD_PATH} fill="#000" stroke="#000" strokeWidth="3.4" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/></g>
+          </mask>
+        </defs>
+        <g mask={`url(#${uid})`}>
+          <circle cx={scx} cy={scy} r={sr} stroke="#ffe26b" strokeWidth="1.5"/>
+          {sunRays(scx, scy, sr, gap, len, 1.5)}
+        </g>
+        <g transform={tf}><path d={SUN_CLOUD_PATH} stroke={ccolor} strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/></g>
+      </svg>;
+    };
+
     const WeatherIcon = ({ type, className = "w-6 h-6" }) => {
       const icons = {
-        // Niveau 1: 0-10% - Soleil éclatant (rayons longs)
-        'sunny-bright': <svg className={className} viewBox="0 0 32 32" fill="none" stroke="#ffe26b" strokeWidth="2">
-          <circle cx="16" cy="16" r="5"/>
-          <line x1="16" y1="1" x2="16" y2="7"/><line x1="16" y1="25" x2="16" y2="31"/>
-          <line x1="1" y1="16" x2="7" y2="16"/><line x1="25" y1="16" x2="31" y2="16"/>
-          <line x1="5.4" y1="5.4" x2="9.6" y2="9.6"/><line x1="22.4" y1="22.4" x2="26.6" y2="26.6"/>
-          <line x1="5.4" y1="26.6" x2="9.6" y2="22.4"/><line x1="22.4" y1="9.6" x2="26.6" y2="5.4"/>
+        // Niveau 1: 0-10% - Gros soleil éclatant, rayons longs
+        'sunny-bright': <svg className={className} viewBox="0 0 32 32" fill="none">
+          <circle cx="16" cy="16" r="6" stroke="#ffe26b" strokeWidth="2"/>
+          {sunRays(16, 16, 6, 1.9, 4.2, 2)}
         </svg>,
-        // Niveau 2: 11-20% - Soleil normal
-        'sunny': <svg className={className} viewBox="0 0 32 32" fill="none" stroke="#ffe26b" strokeWidth="1.5">
-          <circle cx="16" cy="16" r="5"/>
-          <line x1="16" y1="3" x2="16" y2="7"/><line x1="16" y1="25" x2="16" y2="29"/>
-          <line x1="3" y1="16" x2="7" y2="16"/><line x1="25" y1="16" x2="29" y2="16"/>
-          <line x1="6.9" y1="6.9" x2="9.8" y2="9.8"/><line x1="22.2" y1="22.2" x2="25.1" y2="25.1"/>
-          <line x1="6.9" y1="25.1" x2="9.8" y2="22.2"/><line x1="22.2" y1="9.8" x2="25.1" y2="6.9"/>
+        // Niveau 2: 11-20% - Gros soleil (même grosseur que les autres)
+        'sunny': <svg className={className} viewBox="0 0 32 32" fill="none">
+          <circle cx="16" cy="16" r="6" stroke="#ffe26b" strokeWidth="1.5"/>
+          {sunRays(16, 16, 6, 1.9, 3.4, 1.5)}
         </svg>,
-        // Niveau 3: 21-30% - Soleil avec mini nuage loin
-        'sunny-few-clouds': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="1.5">
-          <circle cx="14" cy="12" r="5" stroke="#ffe26b"/>
-          <line x1="14" y1="2" x2="14" y2="5" stroke="#ffe26b"/><line x1="5" y1="12" x2="2" y2="12" stroke="#ffe26b"/>
-          <line x1="23" y1="12" x2="26" y2="12" stroke="#ffe26b"/>
-          <line x1="7.5" y1="5.5" x2="9.5" y2="7.5" stroke="#ffe26b"/><line x1="20.5" y1="5.5" x2="18.5" y2="7.5" stroke="#ffe26b"/>
-          <path d="M22 28c0-1.5 1-2.5 2.5-2.5s2.5 1 2.5 2.5c.8 0 1.5.6 1.5 1.4s-.7 1.4-1.5 1.4h-5c-1 0-1.8-.7-1.8-1.6s.8-1.7 1.8-1.7z" stroke="#D1D5DB" strokeWidth="1"/>
-        </svg>,
-        // Niveau 4: 31-40% - Soleil avec petit nuage
-        'mostly-sunny': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="1.5">
-          <circle cx="16" cy="10" r="5" stroke="#ffe26b"/>
-          <line x1="16" y1="1" x2="16" y2="3" stroke="#ffe26b"/><line x1="7" y1="10" x2="4" y2="10" stroke="#ffe26b"/>
-          <line x1="25" y1="10" x2="28" y2="10" stroke="#ffe26b"/>
-          <line x1="9.5" y1="3.5" x2="11.5" y2="5.5" stroke="#ffe26b"/><line x1="22.5" y1="3.5" x2="20.5" y2="5.5" stroke="#ffe26b"/>
-          <path d="M8 26c0-2.5 2-4.5 4.5-4.5 2 0 3.6 1.2 4.2 3 .4-.2.9-.3 1.3-.3 2 0 3.5 1.5 3.5 3.3 0 .1 0 .2 0 .3H8c-1-.5-1.5-1.3-1.5-2.3s.7-2 1.5-2.5z" stroke="#C0C0C0"/>
-        </svg>,
-        // Niveau 5: 41-55% - Soleil moitié caché par nuage
-        'partly-cloudy': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="1.5">
-          <circle cx="22" cy="8" r="5" stroke="#ffe26b"/>
-          <line x1="22" y1="0" x2="22" y2="2" stroke="#ffe26b"/><line x1="30" y1="8" x2="28" y2="8" stroke="#ffe26b"/>
-          <line x1="27" y1="3" x2="25.5" y2="4.5" stroke="#ffe26b"/><line x1="27" y1="13" x2="25.5" y2="11.5" stroke="#ffe26b"/>
-          <path d="M6 22c0-4 3-6 6-6 2.5 0 4.5 1.5 5.5 3.5 1-.5 2-.5 3 0 2 1 3 3 3 5 0 2-2 4-4 4H6c-2.5 0-4-2-4-4s1.5-4 4-4z" stroke="#9CA3AF"/>
-        </svg>,
-        // Niveau 6: 56-70% - Petit soleil qui dépasse d'un gros nuage
-        'mostly-cloudy': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="1.5">
-          <circle cx="25" cy="6" r="3.5" stroke="#ffe26b" strokeWidth="1.2"/>
-          <line x1="25" y1="0" x2="25" y2="1.5" stroke="#ffe26b" strokeWidth="1"/><line x1="30" y1="6" x2="28.5" y2="6" stroke="#ffe26b" strokeWidth="1"/>
-          <line x1="28.5" y1="2.5" x2="27.5" y2="3.5" stroke="#ffe26b" strokeWidth="1"/>
-          <path d="M6 20c0-4 3-7 7-7s7 3 7 7c2 0 4 2 4 4s-2 4-4 4H6c-3 0-5-2.5-5-5s2-5 5-5z" stroke="#9CA3AF"/>
-        </svg>,
+        // Niveau 3: 21-30% - Gros soleil derrière, petit nuage décalé à gauche
+        'sunny-few-clouds': <SunBehindCloud className={className} sr={6} gap={1.7} len={3.6} scx={18} scy={13} ccx={14.5} ccy={24.5} cs={0.5} ccolor="#AEB6B6"/>,
+        // Niveau 4: 31-40% - Gros soleil derrière, nuage moyen
+        'mostly-sunny': <SunBehindCloud className={className} sr={6} gap={1.7} len={3.6} scx={18} scy={13} ccx={14.5} ccy={24.5} cs={0.64} ccolor="#9CA3AF"/>,
+        // Niveau 5: 41-55% - Gros soleil derrière, nuage plus gros
+        'partly-cloudy': <SunBehindCloud className={className} sr={6} gap={1.7} len={3.6} scx={18} scy={13} ccx={14} ccy={24.5} cs={0.8} ccolor="#9CA3AF"/>,
+        // Niveau 6: 56-70% - Soleil avalé par un gros nuage, juste la calotte qui pointe
+        'mostly-cloudy': <SunBehindCloud className={className} sr={4} gap={1.5} len={2.4} scx={18.5} scy={12.5} ccx={14} ccy={18.5} cs={0.95} ccolor="#9CA3AF"/>,
         // Niveau 7: 71-85% - Nuage avec petite lueur de soleil
         'cloudy-glimpse': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="1.5">
           <circle cx="26" cy="5" r="2" stroke="#ffe26b" strokeWidth="1" strokeDasharray="2 1"/>
@@ -7217,7 +7218,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.44</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.45</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
