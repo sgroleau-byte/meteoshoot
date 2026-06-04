@@ -482,7 +482,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.43</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.44</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -6565,6 +6565,8 @@
         const isTouch = e.pointerType === 'touch';
         const startX = e.clientX, startY = e.clientY;
         let armed = false, timer = null;
+        // Empêche la sélection de texte native (surlignage bleu) pendant tout le geste de glisser.
+        const preventSelect = (ev) => ev.preventDefault();
 
         const blocksForScope = () => {
           if (scope === 'folder') {
@@ -6601,7 +6603,7 @@
             if (over) {
               if (st.current.highlightEl && st.current.highlightEl !== over) clearHighlight();
               st.current.highlightEl = over;
-              over.style.boxShadow = 'inset 0 0 0 2px rgba(216,49,82,0.6)';
+              over.style.boxShadow = 'inset 0 0 0 2px rgba(255,255,255,0.6)';
               over.style.borderRadius = '2px';
               const cards = Array.from(over.querySelectorAll('[data-drag-card]'));
               let ins = cards.length;
@@ -6639,6 +6641,7 @@
           document.removeEventListener('pointermove', onMove);
           document.removeEventListener('pointerup', onUp);
           document.removeEventListener('pointercancel', onUp);
+          document.removeEventListener('selectstart', preventSelect);
           if (timer) { clearTimeout(timer); timer = null; }
         };
         const teardown = () => {
@@ -6666,6 +6669,7 @@
           window.__isDragging = true;
           if (typeof activeWeatherRowDismiss !== 'undefined' && activeWeatherRowDismiss) { activeWeatherRowDismiss(); activeWeatherRowDismiss = null; }
           document.body.style.userSelect = 'none';
+          const sel = window.getSelection && window.getSelection(); if (sel) sel.removeAllRanges();
           document.body.style.cursor = 'grabbing';
           if (isTouch) list.style.touchAction = 'none';
           blockEl.style.opacity = '0.35';
@@ -6747,6 +6751,7 @@
         document.addEventListener('pointermove', onMove, { passive: false });
         document.addEventListener('pointerup', onUp);
         document.addEventListener('pointercancel', onUp);
+        document.addEventListener('selectstart', preventSelect);
         if (isTouch) timer = setTimeout(arm, 380);
       };
 
@@ -6923,7 +6928,7 @@
               <span className="font-bebas-book" style={{ fontSize: '180px', color: '#FFFFFF', lineHeight: 1, textShadow: '0 0 30px rgba(255,255,255,0.15)' }}>+</span>
             </div>
           ))
-          : <div ref={el => { const f = document.getElementById('persistentFlare'); if (f) { f.style.opacity = '0'; f.style.animation = 'none'; } return listRef.current = el; }} onPointerDown={onListPointerDown} style={{ paddingTop: '16px', paddingBottom: '80px' }}>
+          : <div ref={el => { const f = document.getElementById('persistentFlare'); if (f) { f.style.opacity = '0'; f.style.animation = 'none'; } return listRef.current = el; }} onPointerDown={onListPointerDown} style={{ paddingTop: '16px', paddingBottom: '80px', userSelect: 'none', WebkitUserSelect: 'none' }}>
               {isMobile && bannerError && (
                 <div role="status" aria-live="polite"
                   {...(bannerError !== 'network' ? {
@@ -6980,7 +6985,7 @@
               })()}
             </div>}
           {dropLine && ReactDOM.createPortal(
-            <div style={{ position: 'fixed', left: dropLine.left, top: dropLine.top - 1, width: dropLine.width, height: 0, borderTop: '2px solid #d83152', zIndex: 9998, pointerEvents: 'none' }}/>,
+            <div style={{ position: 'fixed', left: dropLine.left, top: dropLine.top - 1, width: dropLine.width, height: 0, borderTop: '2px solid #ffffff', zIndex: 9998, pointerEvents: 'none' }}/>,
             document.body)}
         </div>
       );
@@ -7212,7 +7217,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.43</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.44</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
