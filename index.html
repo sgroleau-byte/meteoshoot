@@ -482,7 +482,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.45</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.46</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2065,7 +2065,6 @@
           {sortedDaily.map((day, i) => {
             const icon = getIconFromCloudcover(day.cloudcover, day.icon);
             const hasPrecip = ['rain', 'snow', 'thunderstorm'].includes(day.icon);
-            const isGood = hasPrecip ? false : (day.cloudcover !== null ? day.cloudcover <= 50 : day.isGood);
             const isSunny = hasPrecip ? false : (day.cloudcover !== null ? day.cloudcover <= 20 : ['sunny'].includes(day.icon));
             return (
               <div 
@@ -2075,11 +2074,11 @@
                 onMouseEnter={isMobile ? undefined : (e) => handleCellEnter(i, e)}
               >
                 {isSunny && <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%) translateY(95%) scaleX(0.6) scaleY(1.4)', width: '60px', height: '60px', pointerEvents: 'none', zIndex: 0, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,226,107,0.3) 0%, rgba(255,226,107,0.1) 40%, transparent 70%)', animation: 'sunglowPulse 6s ease-in-out infinite' }}/>}
-                <span className={`font-bebas-bold text-sm leading-none ${isGood ? '' : 'line-through'}`} style={{ color: isGood ? '#8B9B99' : '#404A48' }}>
+                <span className="font-bebas-bold text-sm leading-none" style={{ color: '#8B9B99' }}>
                   {isToday(day.date) ? t('thisDay') : getDayAbbrev(day.date)}
                 </span>
-                <span className="font-bebas-bold text-xs leading-none" style={{ letterSpacing: '0.04em', color: isGood ? '#8B9B99' : '#404A48' }}>{getDayMonth(day.date)}</span>
-                <WeatherIcon type={icon} className={`w-8 h-8 ${!isGood ? 'opacity-50' : ''}`}/>
+                <span className="font-bebas-bold text-xs leading-none" style={{ letterSpacing: '0.04em', color: '#8B9B99' }}>{getDayMonth(day.date)}</span>
+                <WeatherIcon type={icon} className="w-8 h-8"/>
                 <span className="font-bebas-bold text-sm leading-none text-charcoal-muted" style={{ letterSpacing: '0.04em', marginTop: '4px' }}>
                   {day.cloudcover !== null ? `${day.cloudcover}%` : '--'}
                 </span>
@@ -7218,7 +7217,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.45</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.46</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
