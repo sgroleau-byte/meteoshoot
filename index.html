@@ -482,7 +482,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.46</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.47</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3164,6 +3164,54 @@
       );
     };
 
+    // Rend cliquables (tel:) les numéros de téléphone présents dans l'éditeur de notes.
+    // Parcourt les noeuds de texte, enveloppe chaque numéro valide dans un lien <a href="tel:+1...">.
+    // Idempotent: ignore les numéros déjà dans un <a>. Renvoie true si quelque chose a changé.
+    const linkifyPhonesInEditor = (root) => {
+      if (!root) return false;
+      const RE = /(?:\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/g;
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+      const targets = [];
+      let node;
+      while ((node = walker.nextNode())) {
+        if (!node.nodeValue) continue;
+        if (node.parentElement && node.parentElement.closest('a')) continue; // déjà un lien
+        RE.lastIndex = 0;
+        if (RE.test(node.nodeValue)) targets.push(node);
+      }
+      let changedAny = false;
+      targets.forEach((textNode) => {
+        const text = textNode.nodeValue;
+        const frag = document.createDocumentFragment();
+        let last = 0, m, appended = false;
+        RE.lastIndex = 0;
+        while ((m = RE.exec(text))) {
+          const raw = m[0];
+          const before = m.index > 0 ? text[m.index - 1] : '';
+          const after = text[m.index + raw.length] || '';
+          const digits = raw.replace(/\D/g, '');
+          const valid = digits.length === 10 || (digits.length === 11 && digits[0] === '1');
+          // Évite de couper un nombre plus long et exige 10 (ou 11 avec indicatif 1) chiffres.
+          if (/\d/.test(before) || /\d/.test(after) || !valid) continue;
+          if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+          const tel = digits.length === 10 ? '1' + digits : digits;
+          const a = document.createElement('a');
+          a.href = 'tel:+' + tel;
+          a.textContent = raw;
+          a.setAttribute('style', 'color:#60a5fa;text-decoration:underline');
+          frag.appendChild(a);
+          last = m.index + raw.length;
+          appended = true;
+        }
+        if (appended) {
+          if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+          textNode.parentNode.replaceChild(frag, textNode);
+          changedAny = true;
+        }
+      });
+      return changedAny;
+    };
+
     const ProjectDetail = ({ projectId, onClose }) => {
       const { projects, updateProject, advanceProject, revertProject, deleteProject, prefs } = useStore();
       const { user } = useAuth();
@@ -5144,14 +5192,18 @@
                       ref={(el) => {
                         if (el && !el.dataset.init) {
                           let notes = project.notes || '';
+                          let mustSave = false;
                           // Auto-prepend project address label if not already present
                           const addr = project.address;
                           if (addr && !notes.includes(addr)) {
                             const addrBlock = `<b>Adresse du projet:</b><br>${addr}`;
                             notes = notes ? `${addrBlock}<br><br>${notes}` : addrBlock;
-                            updateProject(project.id, { notes });
+                            mustSave = true;
                           }
                           el.innerHTML = notes;
+                          // Rend cliquables les numéros de téléphone déjà saisis.
+                          if (linkifyPhonesInEditor(el)) mustSave = true;
+                          if (mustSave) updateProject(project.id, { notes: el.innerHTML });
                           el.dataset.init = '1';
                         }
                       }}
@@ -5169,6 +5221,12 @@
                         const a = e.target.closest('a');
                         if (a && a.href) {
                           e.preventDefault();
+                          const href = a.getAttribute('href') || a.href;
+                          // Numéro de téléphone ou courriel: ouvrir l'app native (appel / mail).
+                          if (/^(tel:|mailto:)/i.test(href)) {
+                            window.location.href = href;
+                            return;
+                          }
                           const tmp = document.createElement('a');
                           tmp.href = a.href;
                           tmp.target = '_blank';
@@ -5184,8 +5242,15 @@
                           document.execCommand('bold', false, null);
                         }
                       }}
+                      onBlur={(e) => {
+                        // Quand on quitte le champ, rend cliquables les numéros nouvellement saisis.
+                        const el = e.currentTarget;
+                        if (linkifyPhonesInEditor(el)) {
+                          updateProject(project.id, { notes: el.innerHTML === '<br>' ? '' : el.innerHTML });
+                        }
+                      }}
                       className="w-full bg-transparent text-charcoal"
-                      style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', minHeight: '120px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: '1.5', cursor: 'text', fontFamily: "'Avenir', sans-serif", fontWeight: 300 }}
+                      style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', minHeight: '120px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: '1.5', cursor: 'text', fontFamily: "'Avenir', sans-serif", fontWeight: 300, WebkitUserSelect: 'text', userSelect: 'text', WebkitTouchCallout: 'default' }}
                       data-placeholder={t('notesPlaceholder')}
                     />
                   </div>
@@ -7217,7 +7282,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.46</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.47</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
