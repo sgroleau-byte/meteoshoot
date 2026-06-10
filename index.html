@@ -482,7 +482,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.51</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.52</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -1100,18 +1100,23 @@
       if (tot < 50) return null;
       return direct / tot;
     };
-    // Icone "soleil voile": ciel couvert (couverture elevee) mais soleil qui filtre quand meme
-    // a travers une fine couche (cirrus). Pilote par la fraction de lumiere directe, PAS par le %
-    // total de nuages. Retourne null quand le voile ne s'applique pas: ciel deja degage (<= 70%),
-    // donnee de lumiere absente, ou couvert vraiment opaque (presque aucun direct).
-    const VEIL_ICONS = ['sunny-veil-light', 'sunny-veil-medium', 'sunny-veil-dense'];
-    const veilIcon = (cc, sunFraction) => {
-      if (cc == null || cc <= 70) return null;
-      if (sunFraction == null) return null;
-      if (sunFraction >= 0.50) return VEIL_ICONS[0];
-      if (sunFraction >= 0.25) return VEIL_ICONS[1];
-      if (sunFraction >= 0.10) return VEIL_ICONS[2];
-      return null;
+    // Icone "soleil voile": ciel couvert (couverture elevee) mais soleil qui filtre a travers une
+    // fine couche en altitude (cirrus). Pilote par la fraction de lumiere directe, PAS par le %
+    // total. Regle "l'opaque gagne": s'il y a assez de nuages BAS opaques (cloudLow), ce n'est pas
+    // un voile, on garde l'icone habituelle selon le %. Le voile ne sort donc que pour un couvert
+    // en altitude avec peu de nuages bas, et seulement si le soleil filtre vraiment. 5 niveaux.
+    const VEIL_ICONS = ['sunny-veil-1', 'sunny-veil-2', 'sunny-veil-3', 'sunny-veil-4', 'sunny-veil-5'];
+    const VEIL_OPAQUE_LOW = 38; // au-dela, des nuages bas opaques sont presents -> pas de voile
+    const veilIcon = (cc, cloudLow, sunFraction) => {
+      if (cc == null || cc <= 70) return null;                          // pas couvert -> systeme habituel
+      if (cloudLow == null || cloudLow > VEIL_OPAQUE_LOW) return null;  // nuages bas opaques -> opaque gagne
+      if (sunFraction == null) return null;                            // nuit / pas de lumiere
+      if (sunFraction >= 0.60) return VEIL_ICONS[0];
+      if (sunFraction >= 0.45) return VEIL_ICONS[1];
+      if (sunFraction >= 0.32) return VEIL_ICONS[2];
+      if (sunFraction >= 0.20) return VEIL_ICONS[3];
+      if (sunFraction >= 0.10) return VEIL_ICONS[4];
+      return null;                                                      // trop eteint -> couvert opaque normal
     };
 
     // ===== GOOGLE MAPS API =====
@@ -1298,7 +1303,7 @@
       // les jours qu'il couvre, GFS (portee 16 j) pour completer jusqu'a 10 jours. La sortie
       // garde exactement la meme forme qu'une reponse Open-Meteo unique: ni l'affichage ni le
       // parsing plus bas ne changent.
-      const qs = `latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode,windspeed_10m,cloudcover,precipitation,direct_radiation,diffuse_radiation&daily=weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=America/Toronto&forecast_days=10`;
+      const qs = `latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode,windspeed_10m,cloudcover,precipitation,direct_radiation,diffuse_radiation,cloudcover_low,cloudcover_mid,cloudcover_high&daily=weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=America/Toronto&forecast_days=10`;
       const [iconRes, gfsRes] = await Promise.all([
         fetchOpenMeteoModel('dwd-icon', qs),
         fetchOpenMeteoModel('gfs', qs),
@@ -1306,7 +1311,7 @@
       const icon = iconRes.data || null;
       const gfs = gfsRes.data || null;
 
-      const HOURLY_KEYS = ['temperature_2m', 'weathercode', 'windspeed_10m', 'cloudcover', 'precipitation', 'direct_radiation', 'diffuse_radiation'];
+      const HOURLY_KEYS = ['temperature_2m', 'weathercode', 'windspeed_10m', 'cloudcover', 'precipitation', 'direct_radiation', 'diffuse_radiation', 'cloudcover_low', 'cloudcover_mid', 'cloudcover_high'];
       const DAILY_KEYS = ['weathercode', 'temperature_2m_max', 'temperature_2m_min', 'sunrise', 'sunset'];
       const dateOf = (t) => String(t).slice(0, 10);
 
@@ -1394,7 +1399,7 @@
         
         let totalCloud = 0, cloudCount = 0, count = 0, precipCount = 0;
         let hasThunderstorm = false, hasSnow = false, hasRain = false;
-        let sumDirect = 0, sumDiffuse = 0;
+        let sumDirect = 0, sumDiffuse = 0, sumLow = 0, lowCount = 0;
 
         data.hourly.time.forEach((t, i) => {
           const time = new Date(t);
@@ -1406,6 +1411,8 @@
             }
             const dr = data.hourly.direct_radiation?.[i], df = data.hourly.diffuse_radiation?.[i];
             if (dr != null && df != null) { sumDirect += dr; sumDiffuse += df; }
+            const cl = data.hourly.cloudcover_low?.[i];
+            if (cl != null) { sumLow += cl; lowCount++; }
             const wc = data.hourly.weathercode[i];
             if (wc >= 51) { // Any precipitation code
               precipCount++;
@@ -1420,22 +1427,23 @@
         // Fraction de lumiere directe du jour, ponderee par l'intensite (les heures lumineuses
         // pesent plus). Sert a distinguer un voile fin lumineux d'un couvert opaque.
         const sunFraction = (sumDirect + sumDiffuse) >= 50 ? sumDirect / (sumDirect + sumDiffuse) : null;
+        const cloudLow = lowCount > 0 ? Math.round(sumLow / lowCount) : null;
         // Only show precip icon if >= 40% of daytime hours have precipitation
         const precipRatio = count > 0 ? precipCount / count : 0;
         let icon = null;
         if (precipRatio >= 0.4) {
           icon = hasThunderstorm ? 'thunderstorm' : hasSnow ? 'snow' : hasRain ? 'rain' : null;
         }
-        return { cloudcover, icon, sunFraction };
+        return { cloudcover, icon, sunFraction, cloudLow };
       };
       
       const formatted = {
-        hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]) })),
+        hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), cloudLow: data.hourly.cloudcover_low?.[i] ?? null, icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]) })),
         daily: data.daily.time.map((t,i) => {
           const stats = getDailyStats(t);
           // Use hourly-derived icon when available, fallback to daily weathercode
           const icon = stats.icon || (stats.cloudcover !== null ? null : (weatherCodeIcon[data.daily.weathercode[i]] || 'cloudy'));
-          return { date: t, high: Math.round(data.daily.temperature_2m_max[i]), low: Math.round(data.daily.temperature_2m_min[i]), cloudcover: stats.cloudcover, sunFraction: stats.sunFraction, icon, sunrise: data.daily.sunrise[i], sunset: data.daily.sunset[i], isGood: isGoodWeather(data.daily.weathercode[i]) };
+          return { date: t, high: Math.round(data.daily.temperature_2m_max[i]), low: Math.round(data.daily.temperature_2m_min[i]), cloudcover: stats.cloudcover, sunFraction: stats.sunFraction, cloudLow: stats.cloudLow, icon, sunrise: data.daily.sunrise[i], sunset: data.daily.sunset[i], isGood: isGoodWeather(data.daily.weathercode[i]) };
         })
       };
       // Conserve la reponse pour servir de filet quand l'API retombera en panne.
@@ -1873,11 +1881,11 @@
 
     // ===== ICONS =====
     // Rayons d'un soleil (8 tiges) autour du centre (cx,cy), rayon r, ecart gap, longueur len
-    const sunRays = (cx, cy, r, gap, len, sw) => [0,45,90,135,180,225,270,315].map((a, i) => {
+    const sunRays = (cx, cy, r, gap, len, sw, color = '#ffe26b') => [0,45,90,135,180,225,270,315].map((a, i) => {
       const t = a * Math.PI / 180;
       const x1 = cx + Math.cos(t) * (r + gap), y1 = cy + Math.sin(t) * (r + gap);
       const x2 = cx + Math.cos(t) * (r + gap + len), y2 = cy + Math.sin(t) * (r + gap + len);
-      return <line key={i} x1={x1.toFixed(1)} y1={y1.toFixed(1)} x2={x2.toFixed(1)} y2={y2.toFixed(1)} stroke="#ffe26b" strokeWidth={sw} strokeLinecap="round"/>;
+      return <line key={i} x1={x1.toFixed(1)} y1={y1.toFixed(1)} x2={x2.toFixed(1)} y2={y2.toFixed(1)} stroke={color} strokeWidth={sw} strokeLinecap="round"/>;
     });
     // Gros soleil place DERRIERE le nuage : un masque avale la portion cachee, les rayons
     // depassent tout autour. Affichage volontairement optimiste pour les paliers 21-70%.
@@ -1902,27 +1910,31 @@
     };
 
     // Soleil voile: disque translucide + rayons conserves + fins filaments de cirrus par-dessus.
-    // 'light' | 'medium' | 'dense' = voile de plus en plus present (le disque et les rayons
-    // s'estompent, les stries se multiplient). Affiche quand le ciel est couvert mais que le
-    // soleil filtre a travers une fine couche. Memes seuils que veilIcon().
+    // 5 niveaux (1 = voile tres leger, soleil filtre franc; 5 = voile dense, soleil a peine devine).
+    // Plus le niveau monte, plus le jaune se desature, plus les rayons raccourcissent et plus les
+    // filaments sont presents. Volontairement sobre (pas un gros soleil eclatant). Niveau choisi
+    // par veilIcon() selon la lumiere directe.
     const VEIL_STREAKS = {
       top: 'M3.5 10 Q10 8.5 16.5 9.8 T29 9.4',
       up:  'M3.5 14 Q11 12.6 18 13.8 T30 13.2',
+      mid: 'M3 16.2 Q10 15 17 16 T30 15.6',
       lo:  'M3.5 18.5 Q10.5 17 17 18.4 T29.5 18',
       low: 'M5 22.5 Q11 21.2 17 22.2 T28 21.8'
     };
     const VEIL_CFG = {
-      light:  { col: '#ffe26b', rayOp: 1,   strokeOp: 1,    fillOp: 0.22, sc: '#B4BCC2', streaks: [['lo', 0.42], ['low', 0.34]] },
-      medium: { col: '#ffe26b', rayOp: 0.9, strokeOp: 0.85, fillOp: 0.16, sc: '#B4BCC2', streaks: [['top', 0.5], ['lo', 0.62], ['low', 0.5]] },
-      dense:  { col: '#E7D384', rayOp: 0.7, strokeOp: 0.7,  fillOp: 0.12, sc: '#9CA3AF', streaks: [['top', 0.7], ['up', 0.8], ['lo', 0.85], ['low', 0.72]] }
+      1: { col: '#E9D27A', len: 2.8, rayOp: 0.85, strokeOp: 0.9,  fillOp: 0.18, streaks: [['lo', 0.4, '#AEB6B6'], ['low', 0.32, '#AEB6B6']] },
+      2: { col: '#E4CB78', len: 2.5, rayOp: 0.74, strokeOp: 0.82, fillOp: 0.15, streaks: [['top', 0.46, '#AEB6B6'], ['lo', 0.55, '#AEB6B6'], ['low', 0.45, '#AEB6B6']] },
+      3: { col: '#DBCD92', len: 2.2, rayOp: 0.6,  strokeOp: 0.72, fillOp: 0.13, streaks: [['top', 0.58, '#9CA3AF'], ['lo', 0.66, '#9CA3AF'], ['low', 0.55, '#9CA3AF']] },
+      4: { col: '#CFC8A4', len: 1.9, rayOp: 0.46, strokeOp: 0.6,  fillOp: 0.11, streaks: [['top', 0.66, '#9CA3AF'], ['up', 0.74, '#9CA3AF'], ['lo', 0.78, '#9CA3AF'], ['low', 0.64, '#9CA3AF']] },
+      5: { col: '#C3BDAA', len: 1.6, rayOp: 0.34, strokeOp: 0.5,  fillOp: 0.1,  streaks: [['top', 0.76, '#939AA3'], ['up', 0.82, '#939AA3'], ['mid', 0.8, '#939AA3'], ['lo', 0.84, '#939AA3'], ['low', 0.74, '#939AA3']] }
     };
     const SunVeil = ({ className, level }) => {
-      const c = VEIL_CFG[level] || VEIL_CFG.medium;
+      const c = VEIL_CFG[level] || VEIL_CFG[3];
       return <svg className={className} viewBox="0 0 32 32" fill="none">
         <circle cx="16" cy="16" r="6" fill={c.col} fillOpacity={c.fillOp} stroke="none"/>
-        <g opacity={c.rayOp}>{sunRays(16, 16, 6, 1.9, 3.4, 1.5)}</g>
+        <g opacity={c.rayOp}>{sunRays(16, 16, 6, 1.9, c.len, 1.5, c.col)}</g>
         <circle cx="16" cy="16" r="6" fill="none" stroke={c.col} strokeWidth="1.5" opacity={c.strokeOp}/>
-        {c.streaks.map(([k, o], i) => <path key={i} d={VEIL_STREAKS[k]} fill="none" stroke={c.sc} strokeWidth="1.1" strokeLinecap="round" opacity={o}/>)}
+        {c.streaks.map(([k, o, sc], i) => <path key={i} d={VEIL_STREAKS[k]} fill="none" stroke={sc} strokeWidth="1.1" strokeLinecap="round" opacity={o}/>)}
       </svg>;
     };
 
@@ -1955,10 +1967,12 @@
         'cloudy': <svg className={className} viewBox="0 0 32 32" fill="none" stroke="#808080" strokeWidth="1.5">
           <path d="M8 18c0-4 3-7 7-7s7 3 7 7c2 0 4 2 4 4s-2 4-4 4H8c-3 0-5-2.5-5-5s2-5 5-5z"/>
         </svg>,
-        // Soleil voile (ciel couvert mais soleil qui filtre) - 3 niveaux selon la lumiere directe
-        'sunny-veil-light': <SunVeil className={className} level="light"/>,
-        'sunny-veil-medium': <SunVeil className={className} level="medium"/>,
-        'sunny-veil-dense': <SunVeil className={className} level="dense"/>,
+        // Soleil voile (ciel couvert en altitude mais soleil qui filtre) - 5 niveaux selon la lumiere directe
+        'sunny-veil-1': <SunVeil className={className} level={1}/>,
+        'sunny-veil-2': <SunVeil className={className} level={2}/>,
+        'sunny-veil-3': <SunVeil className={className} level={3}/>,
+        'sunny-veil-4': <SunVeil className={className} level={4}/>,
+        'sunny-veil-5': <SunVeil className={className} level={5}/>,
         // Pluie forte
         'rain': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="1.5">
           <path d="M8 12c0-4 3-6 6-6s6 2 6 6c2 0 3 1.5 3 3s-1 3-3 3H8c-2.5 0-4-2-4-4s1.5-4 4-4z" stroke="#6B7280"/>
@@ -2065,7 +2079,7 @@
       const startIndex = todayIndex >= 0 ? todayIndex : 0;
       const sortedDaily = daily.slice(startIndex, startIndex + maxDays);
       
-      const getIconFromCloudcover = (cloudcover, originalIcon, sunFraction = null) => {
+      const getIconFromCloudcover = (cloudcover, originalIcon, sunFraction = null, cloudLow = null) => {
         // Precipitation from hourly data takes priority
         if (originalIcon === 'thunderstorm') return 'thunderstorm';
         if (originalIcon === 'snow') return 'snow';
@@ -2078,8 +2092,9 @@
           return originalIcon || 'cloudy';
         }
 
-        // Couvert mais soleil qui filtre (voile fin): icone soleil voile au lieu du nuage gris.
-        const veil = veilIcon(cloudcover, sunFraction);
+        // Couvert en altitude mais soleil qui filtre (voile): icone soleil voile. La regle interne
+        // de veilIcon laisse l'opaque (nuages bas) reprendre le dessus si besoin.
+        const veil = veilIcon(cloudcover, cloudLow, sunFraction);
         if (veil) return veil;
         // Use cloudcover for sun/cloud level (hourly data available)
         return cloudcoverToIcon(cloudcover);
@@ -2124,7 +2139,7 @@
         >
           <div className="flex gap-0 py-0" style={{ overflow: 'visible' }}>
           {sortedDaily.map((day, i) => {
-            const icon = getIconFromCloudcover(day.cloudcover, day.icon, day.sunFraction);
+            const icon = getIconFromCloudcover(day.cloudcover, day.icon, day.sunFraction, day.cloudLow);
             const hasPrecip = ['rain', 'snow', 'thunderstorm'].includes(day.icon);
             const isSunny = hasPrecip ? false : (day.cloudcover !== null ? day.cloudcover <= 20 : ['sunny'].includes(day.icon));
             return (
@@ -2179,11 +2194,11 @@
     };
     
     const DayPeriodIcon = ({ label, period, icon, day, hourly, sunriseHour, sunsetHour }) => {
-      const getIconFromCloudAndPrecip = (cloudcover, dominantIcon, sunFraction = null) => {
+      const getIconFromCloudAndPrecip = (cloudcover, dominantIcon, sunFraction = null, cloudLow = null) => {
         if (dominantIcon === 'thunderstorm') return 'thunderstorm';
         if (dominantIcon === 'snow') return 'snow';
         if (dominantIcon === 'rain') return 'rain';
-        const veil = veilIcon(cloudcover, sunFraction);
+        const veil = veilIcon(cloudcover, cloudLow, sunFraction);
         if (veil) return veil;
         return cloudcoverToIcon(cloudcover);
       };
@@ -2207,6 +2222,7 @@
       const dayDate = new Date(day.date + 'T00:00:00');
       let avgCloud = null;
       let avgFraction = day.sunFraction ?? null;
+      let avgLow = day.cloudLow ?? null;
       let dominantIcon = null;
       
       if (hourly?.length) {
@@ -2226,6 +2242,8 @@
           }
           const withFrac = periodData.filter(h => h.sunFraction != null);
           if (withFrac.length) avgFraction = withFrac.reduce((a, b) => a + b.sunFraction, 0) / withFrac.length;
+          const withLow = periodData.filter(h => h.cloudLow != null);
+          if (withLow.length) avgLow = Math.round(withLow.reduce((a, b) => a + b.cloudLow, 0) / withLow.length);
           // Find dominant precipitation type
           const precipIcons = periodData.map(h => h.icon).filter(i => ['thunderstorm', 'rain', 'snow'].includes(i));
           if (precipIcons.length > 0) {
@@ -2252,7 +2270,7 @@
           )}
           {avgCloud !== null ? (
             <>
-              <WeatherIcon type={getIconFromCloudAndPrecip(avgCloud, dominantIcon, avgFraction)} className="w-8 h-8"/>
+              <WeatherIcon type={getIconFromCloudAndPrecip(avgCloud, dominantIcon, avgFraction, avgLow)} className="w-8 h-8"/>
               <span className="font-bebas-bold text-sm text-charcoal-muted">{avgCloud}%</span>
             </>
           ) : (
@@ -4946,12 +4964,12 @@
       };
 
       // Hourly weather helper
-      const getIconFromCloudcover = (cc, origIcon, isNight = false, sunFraction = null) => {
+      const getIconFromCloudcover = (cc, origIcon, isNight = false, sunFraction = null, cloudLow = null) => {
         if (origIcon === 'thunderstorm') return 'thunderstorm';
         if (origIcon === 'snow') return 'snow';
         if (origIcon === 'rain') return 'rain';
         if (!isNight) {
-          const veil = veilIcon(cc, sunFraction);
+          const veil = veilIcon(cc, cloudLow, sunFraction);
           if (veil) return veil;
         }
         return cloudcoverToIcon(cc, isNight);
@@ -5023,7 +5041,7 @@
                           const isSunrise = sunriseH === hr;
                           const isSunset = sunsetH === hr;
                           const isNight = sunriseH !== null && sunsetH !== null && (hr < sunriseH || hr >= sunsetH);
-                          const icon = getIconFromCloudcover(h.cloudcover, h.icon, isNight, h.sunFraction);
+                          const icon = getIconFromCloudcover(h.cloudcover, h.icon, isNight, h.sunFraction, h.cloudLow);
                           
                           // Format sunrise/sunset time
                           let timeLabel = `${hr}H`;
@@ -6534,9 +6552,10 @@
               const currentHourly = weather.hourly?.find(h => new Date(h.time).getHours() === nowH);
               const cloudcover = currentHourly?.cloudcover ?? today.cloudcover ?? null;
               const sunFraction = currentHourly?.sunFraction ?? today.sunFraction ?? null;
+              const cloudLow = currentHourly?.cloudLow ?? today.cloudLow ?? null;
               const icon = currentHourly?.icon || today.icon || (cloudcover !== null ? null : 'cloudy');
               const weatherIcon = cloudcover !== null
-                ? (veilIcon(cloudcover, sunFraction) || (cloudcover <= 10 ? 'sunny-bright' : cloudcover <= 20 ? 'sunny' : cloudcover <= 30 ? 'sunny-few-clouds' : cloudcover <= 40 ? 'mostly-sunny' : cloudcover <= 55 ? 'partly-cloudy' : cloudcover <= 70 ? 'mostly-cloudy' : cloudcover <= 85 ? 'cloudy-glimpse' : 'cloudy'))
+                ? (veilIcon(cloudcover, cloudLow, sunFraction) || (cloudcover <= 10 ? 'sunny-bright' : cloudcover <= 20 ? 'sunny' : cloudcover <= 30 ? 'sunny-few-clouds' : cloudcover <= 40 ? 'mostly-sunny' : cloudcover <= 55 ? 'partly-cloudy' : cloudcover <= 70 ? 'mostly-cloudy' : cloudcover <= 85 ? 'cloudy-glimpse' : 'cloudy'))
                 : (icon || 'cloudy');
               setGeoData({ cityName, sunrise: today.sunrise, sunset: today.sunset, high: today.high, low: today.low, cloudcover, weatherIcon, currentTemp: currentHourly?.temp ?? null });
               setStatus('done');
@@ -7353,7 +7372,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.51</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.52</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
