@@ -482,7 +482,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.54</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.55</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -1064,7 +1064,12 @@
       const minutes = totalMinutes % 60;
       return `${hours}H${String(minutes).padStart(2, '0')}`;
     };
-    const calcWakeUp = (sunrise, travel, prep=60) => { if (!sunrise || !travel) return null; return new Date(new Date(sunrise).getTime() - travel*1000 - prep*60*1000).toISOString(); };
+    // Marge pour être SUR PLACE avant le lever du soleil (repérage, installation, marche d'approche).
+    // Le réveil vise donc une arrivée sur place à (lever - cette marge), pas pile au lever.
+    const ON_SITE_LEAD_MIN = 50;
+    // Réveil = lever - marge sur place - trajet - préparation. Ainsi: réveil -> prépa -> trajet -> on arrive
+    // ON_SITE_LEAD_MIN minutes avant le lever.
+    const calcWakeUp = (sunrise, travel, prep=60) => { if (!sunrise || !travel) return null; return new Date(new Date(sunrise).getTime() - ON_SITE_LEAD_MIN*60*1000 - travel*1000 - prep*60*1000).toISOString(); };
     const weatherCodeIcon = { 
       0:'sunny', 1:'sunny', 2:'partly-cloudy', 3:'cloudy',  // 0-1=dégagé, 2=partiellement nuageux, 3=couvert
       45:'cloudy', 48:'cloudy',  // brouillard
@@ -7456,7 +7461,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.54</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.55</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
