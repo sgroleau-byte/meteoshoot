@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.61</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.62</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2289,30 +2289,26 @@
                 <span className="font-bebas-bold text-sm leading-none text-charcoal-muted" style={{ letterSpacing: '0.04em', marginTop: '4px' }}>
                   {day.cloudcover !== null ? `${day.cloudcover}%` : '--'}
                 </span>
-                {shootSlots.length > 0 && (
-                  <div style={{ marginTop: '3px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
-                    {shootSlots.map((slot) => {
-                      const w = slot === 'AM' ? day.am : day.pm;
-                      const pct = w && w.frac != null ? Math.round(w.frac * 100) : null;
-                      const good = w && !w.precip && pct != null && pct >= SHOOT_OPP_MIN;
-                      const col = SUN_DIRECT_COLOR(pct);
-                      return (
-                        <div key={slot} style={{ height: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px', visibility: good ? 'visible' : 'hidden' }}>
-                          <span className="font-bebas-bold" style={{ fontSize: '11px', letterSpacing: '0.04em', lineHeight: 1, color: col }}>{slot}</span>
-                          <svg width="11" height="11" viewBox="0 0 32 32" style={{ position: 'relative', top: '0.5px', flexShrink: 0 }}>
-                            <g stroke={col} strokeWidth="1.7" strokeLinecap="round" opacity="0.9">
-                              <line x1="16" y1="3" x2="16" y2="7"/><line x1="16" y1="25" x2="16" y2="29"/>
-                              <line x1="3" y1="16" x2="7" y2="16"/><line x1="25" y1="16" x2="29" y2="16"/>
-                              <line x1="7" y1="7" x2="9.6" y2="9.6"/><line x1="22.4" y1="22.4" x2="25" y2="25"/>
-                              <line x1="7" y1="25" x2="9.6" y2="22.4"/><line x1="22.4" y1="9.6" x2="25" y2="7"/>
-                            </g>
-                            <circle cx="16" cy="16" r="6.5" fill={col}/>
-                          </svg>
+                {(() => {
+                  // Bande dorée étiquetée: les segments AM | PM du projet. Doré (intensité graduée) si le
+                  // créneau s'annonce beau, éteint sinon. La bande n'apparaît que si au moins un créneau est bon.
+                  const segs = shootSlots.map((slot) => {
+                    const w = slot === 'AM' ? day.am : day.pm;
+                    const pct = w && w.frac != null ? Math.round(w.frac * 100) : null;
+                    const good = w && !w.precip && pct != null && pct >= SHOOT_OPP_MIN;
+                    return { slot, good, col: good ? SUN_DIRECT_COLOR(pct) : null };
+                  });
+                  if (!segs.some((s) => s.good)) return null;
+                  return (
+                    <div style={{ marginTop: '3px', display: 'flex', gap: '2px', width: segs.length > 1 ? '40px' : '24px', borderRadius: '3px', overflow: 'hidden' }}>
+                      {segs.map((s) => (
+                        <div key={s.slot} className="font-bebas-bold" style={{ flex: 1, height: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: s.good ? s.col : 'rgba(255,255,255,0.08)', color: s.good ? '#412402' : 'rgba(255,255,255,0.3)', fontSize: '10px', letterSpacing: '0.02em', lineHeight: 1 }}>
+                          <span style={{ position: 'relative', top: '1px' }}>{s.slot}</span>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
@@ -5239,11 +5235,11 @@
                               </span>
                               <WeatherIcon type={icon} className={`w-10 h-10 ${isNight ? 'opacity-50' : ''}`}/>
                               <span className="font-bebas-bold text-base leading-none text-charcoal" style={{ letterSpacing: '0.04em', marginTop: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                <svg width="12" height="12" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '0.5px' }}><g fill="#8A9794"><circle cx="12" cy="18" r="6"/><circle cx="20" cy="16" r="7"/><rect x="8" y="18" width="15" height="6" rx="3"/></g></svg>
+                                <svg width="12" height="12" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><g fill="#8A9794"><circle cx="12" cy="18" r="6"/><circle cx="20" cy="16" r="7"/><rect x="8" y="18" width="15" height="6" rx="3"/></g></svg>
                                 {h.cloudcover != null ? `${h.cloudcover}%` : '--'}
                               </span>
                               <span className="font-bebas-bold text-base leading-none" style={{ letterSpacing: '0.04em', marginTop: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px', color: sunColor }}>
-                                <svg width="11" height="11" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '0.5px' }}><circle cx="16" cy="16" r="8" fill={sunColor}/></svg>
+                                <svg width="11" height="11" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><circle cx="16" cy="16" r="8" fill={sunColor}/></svg>
                                 {sunPct != null ? `${sunPct}%` : '--'}
                               </span>
                               <span className="font-bebas-bold text-base leading-none text-charcoal-muted" style={{ letterSpacing: '0.04em', marginTop: '4px' }}>{h.temp}°</span>
@@ -7563,7 +7559,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.61</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.62</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
