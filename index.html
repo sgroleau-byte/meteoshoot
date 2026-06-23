@@ -143,6 +143,8 @@
     .font-bebas-bold { font-family: 'Bebas Neue', sans-serif; font-weight: 700; letter-spacing: 0.02em; }
     [data-placeholder]:empty::before { content: attr(data-placeholder); color: rgba(255,255,255,0.3); pointer-events: none; }
     [data-placeholder] a { color: #60a5fa; text-decoration: underline; cursor: pointer; }
+    /* Notes: force le texte collé à rester lisible (blanc), peu importe la couleur de la source. Les liens gardent leur bleu. */
+    [id^="notes-editor-"] *:not(a) { color: inherit !important; background-color: transparent !important; }
     .hour-scroll { scrollbar-width: none; -ms-overflow-style: none; cursor: grab; user-select: none; -webkit-user-select: none; scroll-behavior: smooth; }
     .hour-scroll::-webkit-scrollbar { display: none; }
     .hour-scroll.dragging { cursor: grabbing; user-select: none; scroll-behavior: auto; }
@@ -482,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.58</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.59</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -5400,10 +5402,15 @@
                         updateProject(project.id, { notes: e.currentTarget.innerHTML === '<br>' ? '' : e.currentTarget.innerHTML });
                       }}
                       onPaste={(e) => {
-                        const text = (e.clipboardData || window.clipboardData).getData('text/plain').trim();
+                        // Toujours coller en texte brut: on retire la couleur/le formatage de la source
+                        // pour que le texte reste lisible (blanc) sur le fond foncé.
+                        e.preventDefault();
+                        const raw = (e.clipboardData || window.clipboardData).getData('text/plain');
+                        const text = raw.trim();
                         if (/^https?:\/\/\S+$/.test(text)) {
-                          e.preventDefault();
                           document.execCommand('insertHTML', false, `<a href="${text}" target="_blank" style="color:#60a5fa;text-decoration:underline">${text}</a>&nbsp;`);
+                        } else {
+                          document.execCommand('insertText', false, raw);
                         }
                       }}
                       onClick={(e) => {
@@ -7480,7 +7487,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.58</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.59</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
