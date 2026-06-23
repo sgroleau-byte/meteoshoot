@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.65</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.66</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -6501,8 +6501,9 @@
       const navContainerRef = useRef(null);
       const navSpanRefs = useRef({});
       const [barStyle, setBarStyle] = useState({ left: 0, width: 0 });
+      const [barReady, setBarReady] = useState(false);
       const barInitialized = useRef(false);
-      const prevViewRef = useRef(view);
+      const barRevealed = useRef(false);
 
       useEffect(() => {
         if (isMobile) return;
@@ -6518,21 +6519,26 @@
           });
         };
 
-        // ResizeObserver catches any later size change (font swap, window
-        // resize, etc.) and re-measures without React re-render storms.
-        const ro = new ResizeObserver(measure);
+        // ResizeObserver keeps the bar exactly the width of the active label on
+        // any later change (window resize, zoom, language switch). Gated on
+        // barRevealed so the wider *fallback* font measured during the reload
+        // reflow never moves the bar before the real font is ready.
+        const ro = new ResizeObserver(() => { if (barRevealed.current) measure(); });
         Object.values(navSpanRefs.current).forEach(s => { if (s) ro.observe(s); });
 
-        // Re-measure once fonts are settled so the bar sits under the real
-        // (Bebas) glyph widths, not the wider fallback font.
-        document.fonts.ready.then(measure);
-
-        // The bar slides only on a real navigation. On the initial mount and
-        // the font-swap reflow that follows it, the view hasn't changed, so we
-        // keep the transition disabled: the bar snaps straight under the active
-        // tab instead of animating a visible jump ("snap") on every reload.
-        if (prevViewRef.current !== view) barInitialized.current = true;
-        prevViewRef.current = view;
+        // "Simulate a click" once the real font (Bebas) is loaded and laid out.
+        // A click always lands the bar at the correct label width because by
+        // then the font is ready; we reproduce that on load. Enable the slide
+        // while the bar is still at its origin (frame 1), then measure the active
+        // label and let it animate into place at the exact width (frame 2). The
+        // measurement happens after document.fonts.ready, so it can never lock
+        // onto the wider fallback width.
+        document.fonts.ready.then(() => requestAnimationFrame(() => {
+          barInitialized.current = true;
+          barRevealed.current = true;
+          setBarReady(true);
+          requestAnimationFrame(() => measure());
+        }));
 
         return () => ro.disconnect();
       }, [view, isMobile]);
@@ -6692,7 +6698,8 @@
               height: '3px',
               backgroundColor: view === 'retouching' ? 'rgba(216,175,76,0.5)' : 'rgba(90,107,105,0.5)',
               borderRadius: '1px',
-              transition: barInitialized.current ? 'left 0.35s cubic-bezier(0.4, 0, 0.2, 1), width 0.35s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.35s ease' : 'none',
+              opacity: barReady ? 1 : 0,
+              transition: (barInitialized.current ? 'left 0.35s cubic-bezier(0.4, 0, 0.2, 1), width 0.35s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.35s ease, ' : '') + 'opacity 0.25s ease',
               filter: 'blur(0.3px)',
               boxShadow: view === 'retouching' ? '0 0 6px rgba(216,175,76,0.4)' : '0 0 4px rgba(90,107,105,0.25)',
             }}/>
@@ -7559,7 +7566,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.65</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.66</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
