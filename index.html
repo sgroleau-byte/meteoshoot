@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.60</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.61</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -1130,6 +1130,17 @@
       return null;                                                      // trop eteint -> couvert opaque normal
     };
 
+    // Teinte doree graduee selon le % de soleil direct, calee sur l'echelle des icones de voile.
+    // Sert au % horaire (soleil direct) ET a l'indice d'opportunite AM/PM dans la rangee des jours.
+    const SUN_DIRECT_COLOR = (pct) => pct == null ? '#6f7d7b'
+      : pct >= 60 ? '#E9D27A' : pct >= 45 ? '#E4CB78' : pct >= 32 ? '#DBCD92'
+      : pct >= 20 ? '#CFC8A4' : pct >= 10 ? '#C3BDAA' : '#A7A99C';
+    // Seuil a partir duquel l'indice "belle opportunite" s'allume (en % de soleil direct). Calibrable.
+    const SHOOT_OPP_MIN = 45;
+    // Fenetres de shoot (def. Stephane), en minutes autour du lever / coucher.
+    // AM = 1h avant le lever a 1h30 apres; PM = 1h30 avant le coucher a 1h apres.
+    const SHOOT_WINDOWS = { am: { before: 60, after: 90 }, pm: { before: 90, after: 60 } };
+
     // ===== GOOGLE MAPS API =====
     const GOOGLE_API_KEY = 'AIzaSyCgOyu05taIWv2-LcfHM_B8okQ_D7gks8U';
 
@@ -1430,6 +1441,7 @@
       const data = { hourly: { time: [] }, daily: { time: [] } };
       HOURLY_KEYS.forEach((k) => { data.hourly[k] = []; });
       DAILY_KEYS.forEach((k) => { data.daily[k] = []; });
+      data.daily.model = []; // 'icon' ou 'gfs' par jour: l'indice d'opportunite ne sort que sur ICON.
 
       hourlyTimes.forEach((t) => {
         const useIcon = iconOk && dateOf(t) <= lastIconDate && (t in iconHourIdx);
@@ -1448,6 +1460,7 @@
         const src = useIcon ? icon : gfs;
         const si = useIcon ? iconDayIdx[ds] : gfsDayIdx[ds];
         data.daily.time.push(t);
+        data.daily.model.push(useIcon ? 'icon' : 'gfs');
         DAILY_KEYS.forEach((k) => {
           const arr = src && src.daily ? src.daily[k] : null;
           data.daily[k].push(arr && si != null ? (arr[si] ?? null) : null);
@@ -1499,13 +1512,40 @@
         return { cloudcover, icon, sunFraction, cloudLow };
       };
       
+      // Opportunite de shoot sur une fenetre (autour du lever ou du coucher). Renvoie { frac, cloud, precip }
+      // ou null. frac = soleil direct pondere par l'intensite sur la fenetre (heures sombres ~ ignorees).
+      const shootWindowStats = (centerISO, beforeMin, afterMin) => {
+        if (!centerISO) return null;
+        const c = new Date(centerISO).getTime();
+        const start = c - beforeMin * 60000, end = c + afterMin * 60000;
+        let sumDirect = 0, sumTot = 0, cloudSum = 0, cloudN = 0, precip = false, any = false;
+        for (let i = 0; i < data.hourly.time.length; i++) {
+          const tt = new Date(data.hourly.time[i]).getTime();
+          if (tt < end && tt + 3600000 > start) {  // l'heure [tt, tt+1h] recoupe la fenetre
+            any = true;
+            const dr = data.hourly.direct_radiation?.[i], df = data.hourly.diffuse_radiation?.[i];
+            if (dr != null && df != null) { sumDirect += dr; sumTot += dr + df; }
+            const cc = data.hourly.cloudcover?.[i];
+            if (cc != null) { cloudSum += cc; cloudN++; }
+            const wc = data.hourly.weathercode?.[i];
+            if (wc != null && wc >= 51) precip = true;
+          }
+        }
+        if (!any) return null;
+        return { frac: sumTot >= 50 ? sumDirect / sumTot : null, cloud: cloudN ? Math.round(cloudSum / cloudN) : null, precip };
+      };
+
       const formatted = {
         hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), cloudLow: data.hourly.cloudcover_low?.[i] ?? null, smoke: smokeMap[dateOf(t)] || 0, icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]) })),
         daily: data.daily.time.map((t,i) => {
           const stats = getDailyStats(t);
           // Use hourly-derived icon when available, fallback to daily weathercode
           const icon = stats.icon || (stats.cloudcover !== null ? null : (weatherCodeIcon[data.daily.weathercode[i]] || 'cloudy'));
-          return { date: t, high: Math.round(data.daily.temperature_2m_max[i]), low: Math.round(data.daily.temperature_2m_min[i]), cloudcover: stats.cloudcover, sunFraction: stats.sunFraction, cloudLow: stats.cloudLow, smoke: smokeMap[dateOf(t)] || 0, icon, sunrise: data.daily.sunrise[i], sunset: data.daily.sunset[i], isGood: isGoodWeather(data.daily.weathercode[i]) };
+          // Indice d'opportunite AM/PM: seulement sur les jours couverts par ICON (fiable en horaire).
+          const model = data.daily.model[i];
+          const am = model === 'icon' ? shootWindowStats(data.daily.sunrise[i], SHOOT_WINDOWS.am.before, SHOOT_WINDOWS.am.after) : null;
+          const pm = model === 'icon' ? shootWindowStats(data.daily.sunset[i], SHOOT_WINDOWS.pm.before, SHOOT_WINDOWS.pm.after) : null;
+          return { date: t, high: Math.round(data.daily.temperature_2m_max[i]), low: Math.round(data.daily.temperature_2m_min[i]), cloudcover: stats.cloudcover, sunFraction: stats.sunFraction, cloudLow: stats.cloudLow, smoke: smokeMap[dateOf(t)] || 0, icon, sunrise: data.daily.sunrise[i], sunset: data.daily.sunset[i], isGood: isGoodWeather(data.daily.weathercode[i]), model, am, pm };
         })
       };
       // Conserve la reponse pour servir de filet quand l'API retombera en panne.
@@ -2121,7 +2161,9 @@
     // Global tracker for active weather tooltip
     let activeWeatherRowDismiss = null;
 
-    const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9 }) => {
+    const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9, orientation = [] }) => {
+      // Créneaux de shoot du projet (AM puis PM), pour l'indice d'opportunité sous chaque jour.
+      const shootSlots = ['AM', 'PM'].filter((o) => (orientation || []).includes(o));
       const { t } = useLang();
       const [hoveredIdx, setHoveredIdx] = useState(null);
       const [cellCenterX, setCellCenterX] = useState(0);
@@ -2247,6 +2289,30 @@
                 <span className="font-bebas-bold text-sm leading-none text-charcoal-muted" style={{ letterSpacing: '0.04em', marginTop: '4px' }}>
                   {day.cloudcover !== null ? `${day.cloudcover}%` : '--'}
                 </span>
+                {shootSlots.length > 0 && (
+                  <div style={{ marginTop: '3px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
+                    {shootSlots.map((slot) => {
+                      const w = slot === 'AM' ? day.am : day.pm;
+                      const pct = w && w.frac != null ? Math.round(w.frac * 100) : null;
+                      const good = w && !w.precip && pct != null && pct >= SHOOT_OPP_MIN;
+                      const col = SUN_DIRECT_COLOR(pct);
+                      return (
+                        <div key={slot} style={{ height: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px', visibility: good ? 'visible' : 'hidden' }}>
+                          <span className="font-bebas-bold" style={{ fontSize: '11px', letterSpacing: '0.04em', lineHeight: 1, color: col }}>{slot}</span>
+                          <svg width="11" height="11" viewBox="0 0 32 32" style={{ position: 'relative', top: '0.5px', flexShrink: 0 }}>
+                            <g stroke={col} strokeWidth="1.7" strokeLinecap="round" opacity="0.9">
+                              <line x1="16" y1="3" x2="16" y2="7"/><line x1="16" y1="25" x2="16" y2="29"/>
+                              <line x1="3" y1="16" x2="7" y2="16"/><line x1="25" y1="16" x2="29" y2="16"/>
+                              <line x1="7" y1="7" x2="9.6" y2="9.6"/><line x1="22.4" y1="22.4" x2="25" y2="25"/>
+                              <line x1="7" y1="25" x2="9.6" y2="22.4"/><line x1="22.4" y1="9.6" x2="25" y2="7"/>
+                            </g>
+                            <circle cx="16" cy="16" r="6.5" fill={col}/>
+                          </svg>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -2692,7 +2758,7 @@
                   style={{ display: 'flex', overflowX: actionsOpen ? 'hidden' : 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', marginTop: '6px', opacity: project.onHold ? 0.1 : 1, transition: 'opacity 0.3s' }}
                 >
                   <div style={{ flexShrink: 0 }} onClick={() => { if (!actionsOpen) onSelect(project); }}>
-                    {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} onDayClick={() => { if (!actionsOpen) onSelect(project); }}/> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
+                    {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} orientation={project.orientation} onDayClick={() => { if (!actionsOpen) onSelect(project); }}/> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
                   </div>
                 </div>
                 {project.onHold && (
@@ -2734,7 +2800,7 @@
           <div style={{ position: 'relative' }}>
           <div className="flex items-center gap-0" style={{ opacity: project.onHold ? 0.1 : 1, transition: 'opacity 0.3s' }}>
             <div className="min-w-0" style={{ minWidth: '432px', overflow: "visible" }}>
-              {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} onDayClick={() => onSelect(project)}/> : <p className="text-charcoal-muted text-sm italic py-2 cursor-pointer" onClick={() => onSelect(project)}>{t('weatherUnavailable')}</p>}
+              {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} orientation={project.orientation} onDayClick={() => onSelect(project)}/> : <p className="text-charcoal-muted text-sm italic py-2 cursor-pointer" onClick={() => onSelect(project)}>{t('weatherUnavailable')}</p>}
             </div>
             <div onMouseEnter={() => { if (activeWeatherRowDismiss) { activeWeatherRowDismiss(); activeWeatherRowDismiss = null; } }} onClick={() => onSelect(project)} className="cursor-pointer flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
               <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '75px' }}>
@@ -5261,14 +5327,14 @@
                 </div>
                 <div className="border-b border-adaptive" style={{ marginTop: '12px', marginLeft: '-16px', marginRight: '-16px' }}/>
                 <div style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', marginTop: '12px', marginLeft: '-16px', marginRight: '-16px', paddingLeft: '16px', paddingRight: '16px' }}>
-                  {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10}/> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
+                  {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10} orientation={project.orientation}/> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
                 </div>
               </div>
             ) : (
               /* ===== DESKTOP: original horizontal ===== */
               <div className="flex items-center gap-0" style={{ width: '100%' }}>
                 <div className="min-w-0">
-                  {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10}/> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
+                  {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10} orientation={project.orientation}/> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
                 </div>
                 <div className="flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
                   <div className="flex flex-col justify-center pl-2 border-l border-adaptive">
@@ -7497,7 +7563,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.60</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.61</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
