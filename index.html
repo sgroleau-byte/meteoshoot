@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.64</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.65</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -6502,6 +6502,7 @@
       const navSpanRefs = useRef({});
       const [barStyle, setBarStyle] = useState({ left: 0, width: 0 });
       const barInitialized = useRef(false);
+      const prevViewRef = useRef(view);
 
       useEffect(() => {
         if (isMobile) return;
@@ -6522,17 +6523,16 @@
         const ro = new ResizeObserver(measure);
         Object.values(navSpanRefs.current).forEach(s => { if (s) ro.observe(s); });
 
-        // Only enable the smooth transition AFTER fonts are settled. Without
-        // this guard, the first paint uses the fallback font (wider than
-        // Bebas), the second paint after font-swap is correct, and the
-        // transition between the two is visible as a "snap" of the underline
-        // bar on every reload.
-        document.fonts.ready.then(() => {
-          measure();
-          if (!barInitialized.current) {
-            requestAnimationFrame(() => { barInitialized.current = true; });
-          }
-        });
+        // Re-measure once fonts are settled so the bar sits under the real
+        // (Bebas) glyph widths, not the wider fallback font.
+        document.fonts.ready.then(measure);
+
+        // The bar slides only on a real navigation. On the initial mount and
+        // the font-swap reflow that follows it, the view hasn't changed, so we
+        // keep the transition disabled: the bar snaps straight under the active
+        // tab instead of animating a visible jump ("snap") on every reload.
+        if (prevViewRef.current !== view) barInitialized.current = true;
+        prevViewRef.current = view;
 
         return () => ro.disconnect();
       }, [view, isMobile]);
@@ -7559,7 +7559,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.64</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.65</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
