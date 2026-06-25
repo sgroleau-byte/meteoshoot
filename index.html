@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.66</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.67</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -5222,7 +5222,7 @@
                           }
 
                           return (
-                            <div key={h.time} className={`flex flex-col items-center gap-0 min-w-[48px] px-0 py-1 ${isNight ? 'bg-charcoal/5' : ''}`} style={!isNight && h.smoke ? { background: SMOKE_TINT[h.smoke] } : undefined}>
+                            <div key={h.time} className={`flex flex-col items-center gap-0 min-w-[56px] px-0 py-1 ${isNight ? 'bg-charcoal/5' : ''}`} style={!isNight && h.smoke ? { background: SMOKE_TINT[h.smoke] } : undefined}>
                               {/* Sunrise/sunset chevron above time */}
                               {isSunrise && <svg width="18" height="10" viewBox="0 0 18 10" style={{ marginBottom: '8px' }}><polyline points="1,9 9,2 17,9" fill="none" stroke="#404A48" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                               {isSunset && <svg width="18" height="10" viewBox="0 0 18 10" style={{ marginBottom: '8px' }}><polyline points="1,1 9,8 17,1" fill="none" stroke="#404A48" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
@@ -5234,17 +5234,17 @@
                                 <span className={!(isSunrise || isSunset) ? 'text-charcoal-muted' : ''}>{timeLabel}</span>
                               </span>
                               <WeatherIcon type={icon} className={`w-10 h-10 ${isNight ? 'opacity-50' : ''}`}/>
-                              <span className="font-bebas-bold text-base leading-none text-charcoal" style={{ letterSpacing: '0.04em', marginTop: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                              <span className="font-bebas-bold text-base leading-none text-charcoal" style={{ letterSpacing: '0.04em', marginTop: '7px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                                 <svg width="12" height="12" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><g fill="#8A9794"><circle cx="12" cy="18" r="6"/><circle cx="20" cy="16" r="7"/><rect x="8" y="18" width="15" height="6" rx="3"/></g></svg>
                                 {h.cloudcover != null ? `${h.cloudcover}%` : '--'}
                               </span>
-                              <span className="font-bebas-bold text-base leading-none" style={{ letterSpacing: '0.04em', marginTop: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px', color: sunColor }}>
+                              <span className="font-bebas-bold text-base leading-none" style={{ letterSpacing: '0.04em', marginTop: '7px', display: 'inline-flex', alignItems: 'center', gap: '3px', color: sunColor }}>
                                 <svg width="11" height="11" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><circle cx="16" cy="16" r="8" fill={sunColor}/></svg>
                                 {sunPct != null ? `${sunPct}%` : '--'}
                               </span>
-                              <span className="font-bebas-bold text-base leading-none text-charcoal-muted" style={{ letterSpacing: '0.04em', marginTop: '4px' }}>{h.temp}°</span>
-                              <span className="font-bebas-bold text-sm leading-none text-charcoal-muted mt-1">{h.wind} <span className="text-xs">{t('kmh')}</span></span>
-                              {h.precip > 0 && <span className="font-bebas-bold text-sm leading-none mt-1" style={{ letterSpacing: '0.04em', color: '#7dd3c6' }}>{h.precip < 1 ? h.precip.toFixed(1) : Math.round(h.precip)} <span className="text-xs">MM</span></span>}
+                              <span className="font-bebas-bold text-base leading-none text-charcoal-muted" style={{ letterSpacing: '0.04em', marginTop: '7px' }}>{h.temp}°</span>
+                              <span className="font-bebas-bold text-sm leading-none text-charcoal-muted" style={{ marginTop: '7px' }}>{h.wind} <span className="text-xs">{t('kmh')}</span></span>
+                              {h.precip > 0 && <span className="font-bebas-bold text-sm leading-none" style={{ marginTop: '7px', letterSpacing: '0.04em', color: '#7dd3c6' }}>{h.precip < 1 ? h.precip.toFixed(1) : Math.round(h.precip)} <span className="text-xs">MM</span></span>}
                             </div>
                           );
                         })}
@@ -5266,7 +5266,7 @@
             <button onClick={onClose} className="text-charcoal-muted hover:text-charcoal transition-colors mb-4" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
             </button>
-            <div style={{ marginBottom: isMobile ? '8px' : '-10px' }}>
+            <div style={{ marginBottom: isMobile ? '8px' : '5px' }}>
               <h3 className="font-bebas-book text-charcoal flex items-center gap-2" style={{ letterSpacing: '0.04em', fontSize: isMobile ? '24px' : '35px', lineHeight: '1.1', marginBottom: '0' }}>
                 {editingName ? (
                   <input 
@@ -5323,14 +5323,14 @@
                 </div>
                 <div className="border-b border-adaptive" style={{ marginTop: '12px', marginLeft: '-16px', marginRight: '-16px' }}/>
                 <div style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', marginTop: '12px', marginLeft: '-16px', marginRight: '-16px', paddingLeft: '16px', paddingRight: '16px' }}>
-                  {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10} orientation={project.orientation}/> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
+                  {project.lat && project.lng ? <div style={{ zoom: 1.15 }}><WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10} orientation={project.orientation}/></div> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
                 </div>
               </div>
             ) : (
               /* ===== DESKTOP: original horizontal ===== */
               <div className="flex items-center gap-0" style={{ width: '100%' }}>
                 <div className="min-w-0">
-                  {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10} orientation={project.orientation}/> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
+                  {project.lat && project.lng ? <div style={{ zoom: 1.15 }}><WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10} orientation={project.orientation}/></div> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
                 </div>
                 <div className="flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
                   <div className="flex flex-col justify-center pl-2 border-l border-adaptive">
@@ -7566,7 +7566,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.66</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.67</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
