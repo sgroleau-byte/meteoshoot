@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.67</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.68</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -1136,10 +1136,10 @@
       : pct >= 60 ? '#E9D27A' : pct >= 45 ? '#E4CB78' : pct >= 32 ? '#DBCD92'
       : pct >= 20 ? '#CFC8A4' : pct >= 10 ? '#C3BDAA' : '#A7A99C';
     // Seuil a partir duquel l'indice "belle opportunite" s'allume (en % de soleil direct). Calibrable.
-    const SHOOT_OPP_MIN = 45;
+    const SHOOT_OPP_MIN = 50;
     // Fenetres de shoot (def. Stephane), en minutes autour du lever / coucher.
-    // AM = 1h avant le lever a 1h30 apres; PM = 1h30 avant le coucher a 1h apres.
-    const SHOOT_WINDOWS = { am: { before: 60, after: 90 }, pm: { before: 90, after: 60 } };
+    // AM = 1h avant le lever a 1h apres; PM = 1h30 avant le coucher a 1h apres.
+    const SHOOT_WINDOWS = { am: { before: 60, after: 60 }, pm: { before: 90, after: 60 } };
 
     // ===== GOOGLE MAPS API =====
     const GOOGLE_API_KEY = 'AIzaSyCgOyu05taIWv2-LcfHM_B8okQ_D7gks8U';
@@ -1521,7 +1521,7 @@
         let sumDirect = 0, sumTot = 0, cloudSum = 0, cloudN = 0, precip = false, any = false;
         for (let i = 0; i < data.hourly.time.length; i++) {
           const tt = new Date(data.hourly.time[i]).getTime();
-          if (tt < end && tt + 3600000 > start) {  // l'heure [tt, tt+1h] recoupe la fenetre
+          if (tt - 3600000 < end && tt > start) {  // rayonnement Open-Meteo = moyenne de l'heure precedente [tt-1h, tt]
             any = true;
             const dr = data.hourly.direct_radiation?.[i], df = data.hourly.diffuse_radiation?.[i];
             if (dr != null && df != null) { sumDirect += dr; sumTot += dr + df; }
@@ -7566,7 +7566,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.67</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.68</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
