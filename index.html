@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.86</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.87</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7627,7 +7627,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.86</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.87</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7844,16 +7844,18 @@
     const MONTHS_ABBR = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
     // Sélecteur de date inline (jour / mois abrégé / année), sans calendrier natif.
     const RouteDateSelects = ({ value, onChange }) => {
-      const parts = value ? value.split('-').map(Number) : [];
-      const y = parts[0] || '', m = parts[1] || '', d = parts[2] || '';
-      const commit = (yy, mm, dd) => { if (!yy || !mm || !dd) { onChange(''); return; } onChange(`${yy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`); };
+      const parse = (v) => { const p = v ? v.split('-').map(Number) : []; return { y: p[0] || '', m: p[1] || '', d: p[2] || '' }; };
+      const [st, setSt] = useState(() => parse(value));
+      useEffect(() => { setSt(parse(value)); }, [value]);
+      const { y, m, d } = st;
+      const change = (ny, nm, nd) => { setSt({ y: ny, m: nm, d: nd }); if (ny && nm && nd) onChange(`${ny}-${String(nm).padStart(2, '0')}-${String(nd).padStart(2, '0')}`); };
       const dim = new Date(y || 2026, m || 1, 0).getDate();
       const sel = { background: '#191D1F', border: '1px solid #333A3C', borderRadius: 8, color: '#EDEDE9', padding: '6px 9px', fontSize: 16, fontFamily: 'inherit', cursor: 'pointer' };
       return (
         <span style={{ display: 'inline-flex', gap: 5 }}>
-          <select style={sel} value={d} onChange={e => commit(y, m, Number(e.target.value))}><option value="">jour</option>{Array.from({ length: dim }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}</option>)}</select>
-          <select style={sel} value={m} onChange={e => commit(y, Number(e.target.value), d)}><option value="">mois</option>{MONTHS_ABBR.map((mo, i) => <option key={i} value={i + 1}>{mo}</option>)}</select>
-          <select style={sel} value={y} onChange={e => commit(Number(e.target.value), m, d)}><option value="">année</option>{[2025, 2026, 2027, 2028].map(yr => <option key={yr} value={yr}>{yr}</option>)}</select>
+          <select style={sel} value={d} onChange={e => change(y, m, Number(e.target.value) || '')}><option value="">jour</option>{Array.from({ length: dim }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}</option>)}</select>
+          <select style={sel} value={m} onChange={e => change(y, Number(e.target.value) || '', d)}><option value="">mois</option>{MONTHS_ABBR.map((mo, i) => <option key={i} value={i + 1}>{mo}</option>)}</select>
+          <select style={sel} value={y} onChange={e => change(Number(e.target.value) || '', m, d)}><option value="">année</option>{[2025, 2026, 2027, 2028].map(yr => <option key={yr} value={yr}>{yr}</option>)}</select>
         </span>
       );
     };
@@ -7889,7 +7891,7 @@
                     <span style={{ fontSize: 16, color: '#7D8C8A' }}>Du</span>
                     <RouteDateSelects value={dStart} onChange={v => onUpdate({ dateStart: v })} />
                     <span style={{ fontSize: 16, color: '#7D8C8A' }}>au</span>
-                    <RouteDateSelects value={dEnd} onChange={v => onUpdate({ dateEnd: v })} />
+                    <RouteDateSelects value={dEnd || dStart} onChange={v => onUpdate({ dateEnd: v })} />
                     <button onClick={() => setEditDate(false)} style={{ ...chip, background: '#2A2F32' }}>OK</button>
                   </span>
                 ) : (
