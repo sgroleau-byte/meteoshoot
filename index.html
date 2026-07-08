@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.78</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.79</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7627,7 +7627,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.78</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.79</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7930,10 +7930,24 @@
     ];
 
     // Carte d'un trajet : départ + destinations reliées dans l'ordre (Google Maps sombre)
+    // Gélule (pilule) flottante au-dessus d'un point cliqué sur la carte
+    const makeRoutePill = (map) => {
+      const div = document.createElement('div');
+      div.style.cssText = 'position:absolute;transform:translate(-50%,-150%);background:#EDEDE9;color:#181b1e;font-family:Montserrat,sans-serif;font-weight:700;font-size:15px;letter-spacing:0.01em;padding:5px 13px;border-radius:999px;white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,0.45);pointer-events:none;display:none;';
+      const ov = new google.maps.OverlayView();
+      ov.onAdd = function () { this.getPanes().floatPane.appendChild(div); };
+      ov.draw = function () { if (div.style.display === 'none' || !this.__pos) return; const p = this.getProjection().fromLatLngToDivPixel(this.__pos); if (p) { div.style.left = p.x + 'px'; div.style.top = p.y + 'px'; } };
+      ov.onRemove = function () { if (div.parentNode) div.parentNode.removeChild(div); };
+      ov.showPill = function (latLng, text) { this.__pos = latLng; div.textContent = text; div.style.display = 'block'; this.draw(); };
+      ov.hidePill = function () { div.style.display = 'none'; };
+      ov.setMap(map);
+      return ov;
+    };
+
     const RouteMiniMap = ({ depLat, depLng, destinations, legs, height = 240 }) => {
       const ref = useRef(null);
       const mapRef = useRef(null);
-      const infoRef = useRef(null);
+      const pillRef = useRef(null);
       const dirRef = useRef(null);
       const geo = (destinations || []).filter(d => d.lat != null && d.lng != null);
       const key = JSON.stringify([depLat, depLng, ...geo.map(d => [d.lat, d.lng, d.name])]);
@@ -7949,18 +7963,17 @@
             disableDefaultUI: true, zoomControl: false, gestureHandling: 'cooperative', keyboardShortcuts: false,
             clickableIcons: false, backgroundColor: '#181b1e', styles: RT_MAP_STYLE, mapTypeId: 'roadmap',
           });
-          infoRef.current = new google.maps.InfoWindow();
+          pillRef.current = makeRoutePill(mapRef.current);
+          mapRef.current.addListener('click', () => { if (pillRef.current) pillRef.current.hidePill(); });
           dirRef.current = new google.maps.DirectionsService();
         }
         const map = mapRef.current;
         (map.__ov || []).forEach(o => o.setMap(null));
         const ov = [];
         const showInfo = (latLng, durText, distText) => {
-          if (!infoRef.current) return;
-          const txt = (durText || distText) ? `${durText || ''}${durText && distText ? ' &middot; ' : ''}${distText || ''}` : 'Distance...';
-          infoRef.current.setContent(`<div style="font-family:Montserrat,sans-serif;font-size:13px;font-weight:600;color:#181b1e;padding:1px 3px">${txt}</div>`);
-          infoRef.current.setPosition(latLng);
-          infoRef.current.open(map);
+          if (!pillRef.current) return;
+          const txt = (durText || distText) ? `${durText || ''}${durText && distText ? ' · ' : ''}${distText || ''}` : 'Distance...';
+          pillRef.current.showPill(latLng, txt);
         };
         const addSeg = (path, durText, distText) => {
           const seg = new google.maps.Polyline({ path, map, clickable: true, strokeColor: '#A7B7B4', strokeOpacity: 0.95, strokeWeight: 3.5 });
