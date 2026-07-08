@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.73</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.74</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7627,7 +7627,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.73</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.74</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7961,9 +7961,8 @@
       return <div ref={ref} style={{ height, borderRadius: 12, overflow: 'hidden', border: '1px solid #2A2F32', background: '#15191B' }} />;
     };
 
-    const RouteDetail = ({ route, onBack }) => {
+    const RouteDetail = ({ route, onBack, embedded }) => {
       const { updateRoute, deleteRoute, prefs } = useStore();
-      const isMobile = useIsMobile();
       const [name, setName] = useState(route.name || '');
       const [dests, setDestsLocal] = useState(route.destinations || []);
       const [depAddr, setDepAddr] = useState(route.departureAddress || '');
@@ -8006,11 +8005,13 @@
       const totalKm = Math.round(Object.values(legs).reduce((s, l) => s + (l.distanceMeters || 0), 0) / 1000);
 
       return (
-        <div style={{ maxWidth: 860, margin: '0 auto', paddingLeft: 16, paddingRight: 16, paddingBottom: 90, paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : 100 }}>
-          <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#7D8C8A', cursor: 'pointer', fontSize: 13, padding: '4px 0', marginBottom: 8 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="#7D8C8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            <span className="font-bebas-regular" style={{ letterSpacing: '0.06em' }}>ROUTES</span>
-          </button>
+        <div>
+          {!embedded && (
+            <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#7D8C8A', cursor: 'pointer', fontSize: 13, padding: '4px 0', marginBottom: 8 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="#7D8C8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <span className="font-bebas-regular" style={{ letterSpacing: '0.06em' }}>ROUTES</span>
+            </button>
+          )}
 
           <input className="font-bebas-regular" style={{ background: 'transparent', border: 'none', color: '#EDEDE9', fontSize: 27, letterSpacing: '0.04em', width: '100%', outline: 'none', padding: 0, marginBottom: 4 }}
             value={name} onChange={e => setName(e.target.value)} onBlur={() => { if (name !== route.name) updateRoute(route.id, { name }); }} placeholder="NOM DE LA ROUTE" />
@@ -8055,47 +8056,68 @@
       );
     };
 
+    const RT_PANEL = { background: '#1B1F21', border: '1px solid #2A2F32', borderRadius: 16 };
+
     const RouteView = () => {
       const { routes, addRoute, prefs } = useStore();
       const isMobile = useIsMobile();
       const [openId, setOpenId] = useState(null);
       const active = routes.filter(r => !r.archived);
-      const current = routes.find(r => r.id === openId);
-      if (current) return <RouteDetail key={current.id} route={current} onBack={() => setOpenId(null)} />;
+      // Desktop: si rien de sélectionné, on ouvre la première route (jamais de panneau vide).
+      const effectiveId = openId || (!isMobile && active[0] ? active[0].id : null);
+      const current = routes.find(r => r.id === effectiveId);
 
       const create = () => {
         const id = addRoute({ useHome: true, departureAddress: prefs.homeAddress, departureLat: prefs.homeLat, departureLng: prefs.homeLng, destinations: [] });
         setOpenId(id);
       };
 
-      return (
-        <div style={{ maxWidth: 860, margin: '0 auto', paddingLeft: 16, paddingRight: 16, paddingBottom: 90, paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : 100 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+      const listPanel = (
+        <div style={{ ...RT_PANEL, padding: isMobile ? 14 : 16, ...(isMobile ? {} : { width: 320, flexShrink: 0, position: 'sticky', top: 100 }) }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <span className="font-bebas-regular" style={{ fontSize: 30, color: '#EDEDE9', letterSpacing: '0.04em' }}>ROUTES</span>
             <button onClick={create} style={{ width: 30, height: 30, borderRadius: '50%', background: '#2A2F32', color: '#EDEDE9', border: 'none', fontSize: 22, lineHeight: 0.7, cursor: 'pointer' }}>+</button>
           </div>
-
           {active.length === 0 ? (
-            <div style={{ ...RT_CARD, textAlign: 'center', color: '#7D8C8A', fontSize: 13, padding: 32 }}>
-              Aucune route pour l'instant. Crée une route pour planifier un déplacement, avec destinations, distances et météo à chaque arrêt.
-            </div>
+            <div style={{ color: '#7D8C8A', fontSize: 13, padding: '20px 4px', textAlign: 'center' }}>Aucune route. Touche « + » pour en créer une.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {active.map(r => {
                 const ds = r.destinations || [];
                 const dated = ds.flatMap(d => [d.dateStart || d.date, d.dateEnd]).filter(Boolean).sort();
+                const sel = r.id === effectiveId;
                 return (
-                  <button key={r.id} onClick={() => setOpenId(r.id)} style={{ ...RT_CARD, width: '100%', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span>
-                      <span className="font-bebas-regular" style={{ display: 'block', fontSize: 19, color: '#EDEDE9', letterSpacing: '0.03em' }}>{r.name || 'ROUTE SANS NOM'}</span>
-                      <span style={{ fontSize: 11, color: '#7D8C8A' }}>{ds.length} destination{ds.length > 1 ? 's' : ''}{dated.length > 0 ? ` · ${rtFmtDateFR(dated[0])}${dated.length > 1 ? ' au ' + rtFmtDateFR(dated[dated.length - 1]) : ''}` : ''}</span>
-                    </span>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="#5A6B69" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <button key={r.id} onClick={() => setOpenId(r.id)} style={{ background: '#23282A', border: `1px solid ${sel ? '#4A5453' : '#2E3437'}`, borderRadius: 12, padding: 12, width: '100%', textAlign: 'left', cursor: 'pointer' }}>
+                    <span className="font-bebas-regular" style={{ display: 'block', fontSize: 19, color: '#EDEDE9', letterSpacing: '0.03em' }}>{r.name || 'ROUTE SANS NOM'}</span>
+                    <span style={{ fontSize: 11, color: '#7D8C8A' }}>{ds.length} destination{ds.length > 1 ? 's' : ''}{dated.length > 0 ? ` · ${rtFmtDateFR(dated[0])}${dated.length > 1 ? ' au ' + rtFmtDateFR(dated[dated.length - 1]) : ''}` : ''}</span>
                   </button>
                 );
               })}
             </div>
           )}
+        </div>
+      );
+
+      // iPhone : une colonne — liste, puis détail plein écran avec retour.
+      if (isMobile) {
+        return (
+          <div style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 90, paddingTop: 'calc(16px + env(safe-area-inset-top))' }}>
+            {openId && current
+              ? <div style={{ ...RT_PANEL, padding: 14 }}><RouteDetail key={current.id} route={current} onBack={() => setOpenId(null)} /></div>
+              : listPanel}
+          </div>
+        );
+      }
+
+      // Desktop : deux panneaux — routes à gauche, détail à droite.
+      return (
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', maxWidth: 1240, margin: '0 auto', paddingLeft: 16, paddingRight: 16, paddingBottom: 90, paddingTop: 100 }}>
+          {listPanel}
+          <div style={{ ...RT_PANEL, flex: 1, minWidth: 0, padding: 18 }}>
+            {current
+              ? <RouteDetail key={current.id} route={current} embedded onBack={() => setOpenId(null)} />
+              : <div style={{ color: '#7D8C8A', fontSize: 14, textAlign: 'center', padding: '60px 20px' }}>Sélectionne une route à gauche, ou crée-en une avec « + ».</div>}
+          </div>
         </div>
       );
     };
