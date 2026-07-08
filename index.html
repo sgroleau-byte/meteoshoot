@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.83</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.84</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7627,7 +7627,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.83</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.84</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7859,7 +7859,7 @@
       const addBtn = { fontSize: 16, color: '#7D8C8A', background: 'none', border: '1px dashed #3A4143', borderRadius: 20, padding: '5px 14px', cursor: 'pointer' };
 
       return (
-        <div style={{ ...RT_CARD, marginBottom: 10 }}>
+        <div style={{ ...RT_CARD, marginBottom: 20 }}>
           <div style={{ display: 'flex', gap: 10 }}>
             <div style={{ flex: '0 0 auto', width: 33, height: 33, borderRadius: '50%', background: '#2A2F32', color: '#EDEDE9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, marginTop: 2 }}>{index + 1}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -8190,7 +8190,7 @@
           {active.length === 0 ? (
             <div style={{ color: '#7D8C8A', fontSize: 13, padding: '20px 4px', textAlign: 'center' }}>Aucune route. Touche « + » pour en créer une.</div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               {active.map(r => {
                 const ds = r.destinations || [];
                 const dated = ds.flatMap(d => [d.dateStart || d.date, d.dateEnd]).filter(Boolean).sort();
