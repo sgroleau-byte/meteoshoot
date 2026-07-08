@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.74</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.75</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7627,7 +7627,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.74</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.75</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7843,10 +7843,8 @@
 
     const RouteDestinationCard = ({ dest, index, leg, onUpdate, onRemove, onMove, canUp, canDown }) => {
       const [weather, setWeather] = useState(null);
-      const addrRef = useRef(null);
-      const acRef = useRef(null);
-      const onUpdateRef = useRef(onUpdate);
-      useEffect(() => { onUpdateRef.current = onUpdate; });
+      const [editDate, setEditDate] = useState(false);
+      const [editNote, setEditNote] = useState(false);
       useEffect(() => {
         if (dest.lat == null || dest.lng == null) { setWeather(null); return; }
         let alive = true;
@@ -7854,50 +7852,50 @@
         return () => { alive = false; };
       }, [dest.lat, dest.lng]);
 
-      // Autocomplétion Google Places (même réglage que l'adresse d'un projet)
-      useEffect(() => {
-        if (!addrRef.current || acRef.current || !window.google) return;
-        acRef.current = new google.maps.places.Autocomplete(addrRef.current, {
-          types: ['address'], componentRestrictions: { country: 'ca' }, fields: ['formatted_address', 'geometry']
-        });
-        acRef.current.addListener('place_changed', () => {
-          const place = acRef.current.getPlace();
-          if (place && place.geometry) {
-            if (addrRef.current) addrRef.current.value = place.formatted_address;
-            onUpdateRef.current({ address: place.formatted_address, lat: place.geometry.location.lat(), lng: place.geometry.location.lng() });
-          }
-        });
-      }, []);
-
-      const geocode = async () => {
-        const a = (addrRef.current?.value || '').trim();
-        if (a === (dest.address || '')) return;
-        if (!a) { onUpdate({ address: '', lat: null, lng: null }); return; }
-        onUpdate({ address: a });
-        try { const r = await geocodeAddress(a); if (addrRef.current) addrRef.current.value = r.formattedAddress; onUpdate({ address: r.formattedAddress, lat: r.lat, lng: r.lng }); } catch (e) { console.warn('Géocodage destination:', e); }
-      };
+      const dStart = dest.dateStart || dest.date || '';
+      const dEnd = dest.dateEnd || '';
+      const dateLabel = dStart ? (dEnd && dEnd !== dStart ? `${rtFmtDateFR(dStart)} au ${rtFmtDateFR(dEnd)}` : rtFmtDateFR(dStart)) : '';
+      const chip = { fontSize: 11.5, color: '#C9D2D0', background: '#191D1F', border: '1px solid #333A3C', borderRadius: 20, padding: '3px 11px', cursor: 'pointer' };
+      const addBtn = { fontSize: 11, color: '#7D8C8A', background: 'none', border: '1px dashed #3A4143', borderRadius: 20, padding: '3px 10px', cursor: 'pointer' };
 
       return (
         <div style={{ ...RT_CARD, marginBottom: 10 }}>
           <div style={{ display: 'flex', gap: 10 }}>
             <div style={{ flex: '0 0 auto', width: 23, height: 23, borderRadius: '50%', background: '#2A2F32', color: '#EDEDE9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, marginTop: 2 }}>{index + 1}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <input className="font-bebas-regular" style={{ ...RT_FIELD, fontSize: 19, letterSpacing: '0.03em', marginBottom: 6, background: 'transparent', border: 'none', padding: '2px 0' }} value={dest.name || ''} onChange={e => onUpdate({ name: e.target.value })} placeholder="NOM DE LA DESTINATION" />
-              <input ref={addrRef} defaultValue={dest.address || ''} style={{ ...RT_FIELD, marginBottom: 6 }} onBlur={geocode} placeholder="Adresse..." />
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-                <span style={{ fontSize: 11, color: '#7D8C8A' }}>Du</span>
-                <input type="date" style={{ ...RT_FIELD, width: 'auto', colorScheme: 'dark' }} value={dest.dateStart || dest.date || ''} onChange={e => onUpdate({ dateStart: e.target.value })} />
-                <span style={{ fontSize: 11, color: '#7D8C8A' }}>au</span>
-                <input type="date" style={{ ...RT_FIELD, width: 'auto', colorScheme: 'dark' }} value={dest.dateEnd || ''} min={dest.dateStart || dest.date || undefined} onChange={e => onUpdate({ dateEnd: e.target.value })} />
-                {leg && <span style={{ fontSize: 11, color: '#7D8C8A', marginLeft: 4 }}>{index === 0 ? 'depuis le départ' : "depuis l'arrêt précédent"} : <b className="font-bebas-regular" style={{ color: '#C9D2D0', fontSize: 14 }}>{formatDuration(leg.durationSeconds)}</b> &middot; {leg.distanceText}</span>}
+              <div className="font-bebas-regular" style={{ fontSize: 21, color: '#EDEDE9', letterSpacing: '0.03em', lineHeight: 1.05 }}>{dest.name || 'Destination'}</div>
+              {dest.address && <div style={{ fontSize: 11.5, color: '#7D8C8A', marginTop: 2 }}>{dest.address}</div>}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+                {editDate ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, color: '#7D8C8A' }}>Du</span>
+                    <input type="date" style={{ ...RT_FIELD, width: 'auto', colorScheme: 'dark', padding: '5px 8px' }} value={dStart} onChange={e => onUpdate({ dateStart: e.target.value })} />
+                    <span style={{ fontSize: 11, color: '#7D8C8A' }}>au</span>
+                    <input type="date" style={{ ...RT_FIELD, width: 'auto', colorScheme: 'dark', padding: '5px 8px' }} value={dEnd} min={dStart || undefined} onChange={e => onUpdate({ dateEnd: e.target.value })} />
+                    <button onClick={() => setEditDate(false)} style={{ ...chip, background: '#2A2F32' }}>OK</button>
+                  </span>
+                ) : (
+                  dateLabel ? <span style={chip} onClick={() => setEditDate(true)}>{dateLabel}</span> : <button style={addBtn} onClick={() => setEditDate(true)}>+ date</button>
+                )}
+                {leg && <span style={{ fontSize: 11, color: '#7D8C8A' }}>{index === 0 ? 'depuis le départ' : "depuis l'arrêt précédent"} : <b className="font-bebas-regular" style={{ color: '#C9D2D0', fontSize: 14 }}>{formatDuration(leg.durationSeconds)}</b> &middot; {leg.distanceText}</span>}
               </div>
-              <textarea style={{ ...RT_FIELD, resize: 'vertical', minHeight: 42 }} rows="2" value={dest.note || ''} onChange={e => onUpdate({ note: e.target.value })} placeholder="Note (accès, contact, repérage, matériel...)" />
+
+              <div style={{ marginTop: 8 }}>
+                {editNote ? (
+                  <textarea autoFocus style={{ ...RT_FIELD, resize: 'vertical', minHeight: 42 }} rows="2" value={dest.note || ''} onChange={e => onUpdate({ note: e.target.value })} onBlur={() => setEditNote(false)} placeholder="Note (accès, contact, repérage, matériel...)" />
+                ) : (
+                  dest.note ? <div onClick={() => setEditNote(true)} style={{ fontSize: 12, color: '#8FA09E', fontStyle: 'italic', cursor: 'pointer' }}>{dest.note}</div> : <button style={addBtn} onClick={() => setEditNote(true)}>+ note</button>
+                )}
+              </div>
+
               {dest.lat != null && dest.lng != null && (
-                <div style={{ marginTop: 8 }}>
-                  {weather ? <div style={{ zoom: 1.1 }}><WeatherRow daily={weather.daily} hourly={weather.hourly} maxDays={10} orientation={[]} onDayClick={() => {}} /></div> : <span style={{ fontSize: 11, color: '#5A6B69' }}>Météo en cours...</span>}
+                <div style={{ marginTop: 10 }}>
+                  {weather ? <div style={{ zoom: 1.1 }}><WeatherRow daily={weather.daily} hourly={weather.hourly} maxDays={5} orientation={[]} onDayClick={() => {}} /></div> : <span style={{ fontSize: 11, color: '#5A6B69' }}>Météo en cours...</span>}
                 </div>
               )}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 2, marginTop: 6 }}>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 2, marginTop: 8 }}>
                 <button onClick={() => onMove(-1)} disabled={!canUp} style={{ background: 'none', border: 'none', padding: 4, cursor: canUp ? 'pointer' : 'default', opacity: canUp ? 1 : 0.3 }}><RtChevron dir="up"/></button>
                 <button onClick={() => onMove(1)} disabled={!canDown} style={{ background: 'none', border: 'none', padding: 4, cursor: canDown ? 'pointer' : 'default', opacity: canDown ? 1 : 0.3 }}><RtChevron dir="down"/></button>
                 <button onClick={onRemove} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer' }}><RtTrash c="#d83152"/></button>
@@ -7962,12 +7960,14 @@
     };
 
     const RouteDetail = ({ route, onBack, embedded }) => {
-      const { updateRoute, deleteRoute, prefs } = useStore();
+      const { projects, updateRoute, deleteRoute, prefs } = useStore();
       const [name, setName] = useState(route.name || '');
       const [dests, setDestsLocal] = useState(route.destinations || []);
       const [depAddr, setDepAddr] = useState(route.departureAddress || '');
       const [legs, setLegs] = useState({});
       const [confirmDel, setConfirmDel] = useState(false);
+      const [picking, setPicking] = useState(false);
+      const [search, setSearch] = useState('');
       const commitTimer = useRef(null);
 
       const depLat = route.useHome ? prefs.homeLat : route.departureLat;
@@ -7975,7 +7975,8 @@
       const depLabel = route.useHome ? (prefs.homeAddress || 'Ma résidence') : (route.departureAddress || 'Point de départ');
 
       const commit = (next) => { setDestsLocal(next); clearTimeout(commitTimer.current); commitTimer.current = setTimeout(() => updateRoute(route.id, { destinations: next }), 600); };
-      const addDest = () => commit([...dests, { id: `d_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, name: '', address: '', lat: null, lng: null, date: '', note: '' }]);
+      const addFromProject = (p) => { commit([...dests, { id: `d_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, projectId: p.id, name: p.name, address: p.address || '', lat: p.lat ?? null, lng: p.lng ?? null, dateStart: '', dateEnd: '', note: '' }]); setPicking(false); setSearch(''); };
+      const projectChoices = (projects || []).filter(p => { const q = search.trim().toLowerCase(); if (!q) return true; return (p.name || '').toLowerCase().includes(q) || (p.address || '').toLowerCase().includes(q); });
       const updateDest = (id, u) => commit(dests.map(d => d.id === id ? { ...d, ...u } : d));
       const removeDest = (id) => commit(dests.filter(d => d.id !== id));
       const moveDest = (idx, dir) => { const j = idx + dir; if (j < 0 || j >= dests.length) return; const n = [...dests]; [n[idx], n[j]] = [n[j], n[idx]]; commit(n); };
@@ -8037,7 +8038,27 @@
               onMove={dir => moveDest(i, dir)} canUp={i > 0} canDown={i < dests.length - 1} />
           ))}
 
-          <button onClick={addDest} style={{ width: '100%', textAlign: 'center', border: '1px dashed #3A4143', borderRadius: 12, padding: 10, background: 'none', color: '#8B9B99', cursor: 'pointer', fontSize: 13, marginBottom: 12 }}>+ Ajouter une destination</button>
+          {picking ? (
+            <div style={{ ...RT_CARD, marginBottom: 12, padding: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span className="font-bebas-regular" style={{ fontSize: 15, color: '#C9D2D0', letterSpacing: '0.04em' }}>CHOISIR UN SHOOTING</span>
+                <button onClick={() => { setPicking(false); setSearch(''); }} style={{ background: 'none', border: 'none', color: '#7D8C8A', cursor: 'pointer', fontSize: 12 }}>Annuler</button>
+              </div>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un shooting..." style={{ ...RT_FIELD, marginBottom: 8 }} autoFocus />
+              <div style={{ maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {projectChoices.length === 0 ? (
+                  <div style={{ fontSize: 12, color: '#7D8C8A', padding: 8, textAlign: 'center' }}>Aucun shooting trouvé.</div>
+                ) : projectChoices.map(p => (
+                  <button key={p.id} onClick={() => addFromProject(p)} style={{ background: '#191D1F', border: '1px solid #2E3437', borderRadius: 8, padding: '8px 10px', textAlign: 'left', cursor: 'pointer' }}>
+                    <span className="font-bebas-regular" style={{ display: 'block', fontSize: 15, color: '#EDEDE9', letterSpacing: '0.03em' }}>{p.name || 'Sans nom'}</span>
+                    {p.address && <span style={{ fontSize: 10.5, color: '#7D8C8A' }}>{p.address}</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setPicking(true)} style={{ width: '100%', textAlign: 'center', border: '1px dashed #3A4143', borderRadius: 12, padding: 10, background: 'none', color: '#8B9B99', cursor: 'pointer', fontSize: 13, marginBottom: 12 }}>+ Ajouter une destination</button>
+          )}
 
           {totalSec > 0 && (
             <div style={{ ...RT_CARD, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -8111,9 +8132,9 @@
 
       // Desktop : deux panneaux — routes à gauche, détail à droite.
       return (
-        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', maxWidth: 1240, margin: '0 auto', paddingLeft: 16, paddingRight: 16, paddingBottom: 90, paddingTop: 100 }}>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', maxWidth: 980, margin: '0 auto', paddingLeft: 16, paddingRight: 16, paddingBottom: 90, paddingTop: 100 }}>
           {listPanel}
-          <div style={{ ...RT_PANEL, flex: 1, minWidth: 0, padding: 18 }}>
+          <div style={{ ...RT_PANEL, flex: 1, minWidth: 0, maxWidth: 620, padding: 18 }}>
             {current
               ? <RouteDetail key={current.id} route={current} embedded onBack={() => setOpenId(null)} />
               : <div style={{ color: '#7D8C8A', fontSize: 14, textAlign: 'center', padding: '60px 20px' }}>Sélectionne une route à gauche, ou crée-en une avec « + ».</div>}
