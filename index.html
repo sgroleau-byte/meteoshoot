@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.91</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.92</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7627,7 +7627,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.91</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.92</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7864,6 +7864,7 @@
       const { projects } = useStore();
       const proj = projects.find(p => p.id === dest.projectId);
       const displayName = (proj && proj.name) || dest.name || 'Sans nom';
+      const pastel = RT_PASTELS[index % RT_PASTELS.length];
       const [weather, setWeather] = useState(null);
       const [editDate, setEditDate] = useState(false);
       const [editNote, setEditNote] = useState(false);
@@ -7892,7 +7893,7 @@
       return (
         <div style={{ ...RT_CARD, marginBottom: 20 }}>
           <div style={{ display: 'flex', gap: 10 }}>
-            <div style={{ flex: '0 0 auto', width: 33, height: 33, borderRadius: '50%', background: '#2A2F32', color: '#EDEDE9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, marginTop: 2 }}>{index + 1}</div>
+            <div style={{ flex: '0 0 auto', width: 33, height: 33, borderRadius: '50%', background: pastel, color: '#181b1e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 700, marginTop: 2 }}>{index + 1}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="font-bebas-regular" style={{ fontSize: 30, color: '#EDEDE9', letterSpacing: '0.03em', lineHeight: 1.05 }}>{displayName}</div>
               {dest.address && (
@@ -7950,7 +7951,7 @@
       );
     };
 
-    const RT_PASTELS = ['#F2A9C4', '#A6C9F2', '#A9E6B8', '#F2D6A0', '#CBB6F2', '#9FE4DA', '#F2B49A', '#C7E29A'];
+    const RT_PASTELS = ['#D0A9B4', '#A9BCD0', '#A9C6B2', '#D0C6A6', '#BEB2CC', '#A8C6C2', '#D0B4A6', '#BAC4A6'];
     const RT_MAP_STYLE = [
       { elementType: 'geometry', stylers: [{ color: '#2d2d2d' }] },
       { elementType: 'labels.text.stroke', stylers: [{ color: '#2d2d2d' }] },
