@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.71</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.72</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7627,7 +7627,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.71</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.72</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7850,7 +7850,7 @@
       useEffect(() => {
         if (dest.lat == null || dest.lng == null) { setWeather(null); return; }
         let alive = true;
-        fetchWeather(dest.lat, dest.lng).then(w => { if (alive) setWeather(w); }).catch(() => {});
+        fetchWeather(dest.lat, dest.lng).then(res => { if (alive) setWeather(res && res.data ? res.data : null); }).catch(() => { if (alive) setWeather(null); });
         return () => { alive = false; };
       }, [dest.lat, dest.lng]);
 
@@ -7885,13 +7885,16 @@
               <input className="font-bebas-regular" style={{ ...RT_FIELD, fontSize: 19, letterSpacing: '0.03em', marginBottom: 6, background: 'transparent', border: 'none', padding: '2px 0' }} value={dest.name || ''} onChange={e => onUpdate({ name: e.target.value })} placeholder="NOM DE LA DESTINATION" />
               <input ref={addrRef} defaultValue={dest.address || ''} style={{ ...RT_FIELD, marginBottom: 6 }} onBlur={geocode} placeholder="Adresse..." />
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-                <input type="date" style={{ ...RT_FIELD, width: 'auto', colorScheme: 'dark' }} value={dest.date || ''} onChange={e => onUpdate({ date: e.target.value })} />
-                {leg && <span style={{ fontSize: 11, color: '#7D8C8A' }}>{index === 0 ? 'depuis le départ' : "depuis l'arrêt précédent"} : <b className="font-bebas-regular" style={{ color: '#C9D2D0', fontSize: 14 }}>{formatDuration(leg.durationSeconds)}</b> &middot; {leg.distanceText}</span>}
+                <span style={{ fontSize: 11, color: '#7D8C8A' }}>Du</span>
+                <input type="date" style={{ ...RT_FIELD, width: 'auto', colorScheme: 'dark' }} value={dest.dateStart || dest.date || ''} onChange={e => onUpdate({ dateStart: e.target.value })} />
+                <span style={{ fontSize: 11, color: '#7D8C8A' }}>au</span>
+                <input type="date" style={{ ...RT_FIELD, width: 'auto', colorScheme: 'dark' }} value={dest.dateEnd || ''} min={dest.dateStart || dest.date || undefined} onChange={e => onUpdate({ dateEnd: e.target.value })} />
+                {leg && <span style={{ fontSize: 11, color: '#7D8C8A', marginLeft: 4 }}>{index === 0 ? 'depuis le départ' : "depuis l'arrêt précédent"} : <b className="font-bebas-regular" style={{ color: '#C9D2D0', fontSize: 14 }}>{formatDuration(leg.durationSeconds)}</b> &middot; {leg.distanceText}</span>}
               </div>
               <textarea style={{ ...RT_FIELD, resize: 'vertical', minHeight: 42 }} rows="2" value={dest.note || ''} onChange={e => onUpdate({ note: e.target.value })} placeholder="Note (accès, contact, repérage, matériel...)" />
               {dest.lat != null && dest.lng != null && (
                 <div style={{ marginTop: 8 }}>
-                  {weather ? <WeatherRow daily={weather.daily} hourly={weather.hourly} orientation={[]} onDayClick={() => {}} /> : <span style={{ fontSize: 11, color: '#5A6B69' }}>Météo en cours...</span>}
+                  {weather ? <div style={{ zoom: 1.1 }}><WeatherRow daily={weather.daily} hourly={weather.hourly} maxDays={10} orientation={[]} onDayClick={() => {}} /></div> : <span style={{ fontSize: 11, color: '#5A6B69' }}>Météo en cours...</span>}
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 2, marginTop: 6 }}>
@@ -8020,7 +8023,7 @@
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {active.map(r => {
                 const ds = r.destinations || [];
-                const dated = ds.filter(d => d.date).map(d => d.date).sort();
+                const dated = ds.flatMap(d => [d.dateStart || d.date, d.dateEnd]).filter(Boolean).sort();
                 return (
                   <button key={r.id} onClick={() => setOpenId(r.id)} style={{ ...RT_CARD, width: '100%', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span>
