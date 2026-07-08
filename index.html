@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.70</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.71</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7627,7 +7627,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.70</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.71</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7842,9 +7842,11 @@
     const RtPin = ({ c = '#8B9B99' }) => <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z" stroke={c} strokeWidth="1.7"/></svg>;
 
     const RouteDestinationCard = ({ dest, index, leg, onUpdate, onRemove, onMove, canUp, canDown }) => {
-      const [addr, setAddr] = useState(dest.address || '');
       const [weather, setWeather] = useState(null);
-      useEffect(() => { setAddr(dest.address || ''); }, [dest.address]);
+      const addrRef = useRef(null);
+      const acRef = useRef(null);
+      const onUpdateRef = useRef(onUpdate);
+      useEffect(() => { onUpdateRef.current = onUpdate; });
       useEffect(() => {
         if (dest.lat == null || dest.lng == null) { setWeather(null); return; }
         let alive = true;
@@ -7852,12 +7854,27 @@
         return () => { alive = false; };
       }, [dest.lat, dest.lng]);
 
+      // Autocomplétion Google Places (même réglage que l'adresse d'un projet)
+      useEffect(() => {
+        if (!addrRef.current || acRef.current || !window.google) return;
+        acRef.current = new google.maps.places.Autocomplete(addrRef.current, {
+          types: ['address'], componentRestrictions: { country: 'ca' }, fields: ['formatted_address', 'geometry']
+        });
+        acRef.current.addListener('place_changed', () => {
+          const place = acRef.current.getPlace();
+          if (place && place.geometry) {
+            if (addrRef.current) addrRef.current.value = place.formatted_address;
+            onUpdateRef.current({ address: place.formatted_address, lat: place.geometry.location.lat(), lng: place.geometry.location.lng() });
+          }
+        });
+      }, []);
+
       const geocode = async () => {
-        const a = addr.trim();
-        if (!a) { if (dest.address) onUpdate({ address: '', lat: null, lng: null }); return; }
-        if (a === dest.address && dest.lat != null) return;
+        const a = (addrRef.current?.value || '').trim();
+        if (a === (dest.address || '')) return;
+        if (!a) { onUpdate({ address: '', lat: null, lng: null }); return; }
         onUpdate({ address: a });
-        try { const r = await geocodeAddress(a); setAddr(r.formattedAddress); onUpdate({ address: r.formattedAddress, lat: r.lat, lng: r.lng }); } catch (e) { console.warn('Géocodage destination:', e); }
+        try { const r = await geocodeAddress(a); if (addrRef.current) addrRef.current.value = r.formattedAddress; onUpdate({ address: r.formattedAddress, lat: r.lat, lng: r.lng }); } catch (e) { console.warn('Géocodage destination:', e); }
       };
 
       return (
@@ -7866,7 +7883,7 @@
             <div style={{ flex: '0 0 auto', width: 23, height: 23, borderRadius: '50%', background: '#2A2F32', color: '#EDEDE9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, marginTop: 2 }}>{index + 1}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <input className="font-bebas-regular" style={{ ...RT_FIELD, fontSize: 19, letterSpacing: '0.03em', marginBottom: 6, background: 'transparent', border: 'none', padding: '2px 0' }} value={dest.name || ''} onChange={e => onUpdate({ name: e.target.value })} placeholder="NOM DE LA DESTINATION" />
-              <input style={{ ...RT_FIELD, marginBottom: 6 }} value={addr} onChange={e => setAddr(e.target.value)} onBlur={geocode} placeholder="Adresse..." />
+              <input ref={addrRef} defaultValue={dest.address || ''} style={{ ...RT_FIELD, marginBottom: 6 }} onBlur={geocode} placeholder="Adresse..." />
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
                 <input type="date" style={{ ...RT_FIELD, width: 'auto', colorScheme: 'dark' }} value={dest.date || ''} onChange={e => onUpdate({ date: e.target.value })} />
                 {leg && <span style={{ fontSize: 11, color: '#7D8C8A' }}>{index === 0 ? 'depuis le départ' : "depuis l'arrêt précédent"} : <b className="font-bebas-regular" style={{ color: '#C9D2D0', fontSize: 14 }}>{formatDuration(leg.durationSeconds)}</b> &middot; {leg.distanceText}</span>}
