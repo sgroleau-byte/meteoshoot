@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.69</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.70</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7627,7 +7627,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.69</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.70</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7890,6 +7890,7 @@
 
     const RouteDetail = ({ route, onBack }) => {
       const { updateRoute, deleteRoute, prefs } = useStore();
+      const isMobile = useIsMobile();
       const [name, setName] = useState(route.name || '');
       const [dests, setDestsLocal] = useState(route.destinations || []);
       const [depAddr, setDepAddr] = useState(route.departureAddress || '');
@@ -7932,7 +7933,7 @@
       const totalKm = Math.round(Object.values(legs).reduce((s, l) => s + (l.distanceMeters || 0), 0) / 1000);
 
       return (
-        <div style={{ maxWidth: 820, margin: '0 auto', padding: '4px 16px 90px' }}>
+        <div style={{ maxWidth: 860, margin: '0 auto', paddingLeft: 16, paddingRight: 16, paddingBottom: 90, paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : 100 }}>
           <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#7D8C8A', cursor: 'pointer', fontSize: 13, padding: '4px 0', marginBottom: 8 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="#7D8C8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             <span className="font-bebas-regular" style={{ letterSpacing: '0.06em' }}>ROUTES</span>
@@ -7977,6 +7978,7 @@
 
     const RouteView = () => {
       const { routes, addRoute, prefs } = useStore();
+      const isMobile = useIsMobile();
       const [openId, setOpenId] = useState(null);
       const active = routes.filter(r => !r.archived);
       const current = routes.find(r => r.id === openId);
@@ -7988,11 +7990,10 @@
       };
 
       return (
-        <div style={{ maxWidth: 820, margin: '0 auto', padding: '4px 16px 90px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-            <span className="font-bebas-regular" style={{ fontSize: 30, color: '#EDEDE9', letterSpacing: '0.04em' }}>ROUTES</span>
-            <button onClick={create} style={{ width: 30, height: 30, borderRadius: '50%', background: '#2A2F32', color: '#EDEDE9', border: 'none', fontSize: 22, lineHeight: 0.7, cursor: 'pointer' }}>+</button>
-          </div>
+        <div style={{ maxWidth: 860, margin: '0 auto', paddingLeft: 16, paddingRight: 16, paddingBottom: 90, paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : 100 }}>
+          <button onClick={create} className="font-bebas-regular" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#23282A', border: '1px solid #2E3437', borderRadius: 10, color: '#EDEDE9', padding: '8px 14px', cursor: 'pointer', fontSize: 16, letterSpacing: '0.04em', marginBottom: 16 }}>
+            <span style={{ fontSize: 20, lineHeight: 0 }}>+</span> NOUVELLE ROUTE
+          </button>
 
           {active.length === 0 ? (
             <div style={{ ...RT_CARD, textAlign: 'center', color: '#7D8C8A', fontSize: 13, padding: 32 }}>
@@ -8378,7 +8379,7 @@
           }}/>}
           {/* Page titles — rendered at App level ABOVE blur */}
           {!isMobile && displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{t('projectDetailsTitle')}</h1>}
-          {!isMobile && !displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{view === 'todo' ? t('projects') : view === 'retouching' ? t('editing') : t('preferences')}</h1>}
+          {!isMobile && !displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{view === 'todo' ? t('projects') : view === 'retouching' ? t('editing') : view === 'routes' ? t('routes') : t('preferences')}</h1>}
           {!(isMobile && showNew) && <Header onChangeView={changeView} onAddProject={() => { const f = document.getElementById('persistentFlare'); if (f) { f.style.display = 'none'; f.style.animation = 'none'; } setShowNew(true); }}/>}
           <div style={{ 
             display: isMobile && showNew ? 'none' : 'block'
