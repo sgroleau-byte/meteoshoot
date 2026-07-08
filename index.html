@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.75</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.76</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7627,7 +7627,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.75</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.76</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7920,41 +7920,52 @@
     ];
 
     // Carte d'un trajet : départ + destinations reliées dans l'ordre (Google Maps sombre)
-    const RouteMiniMap = ({ depLat, depLng, destinations, height = 160 }) => {
+    const RouteMiniMap = ({ depLat, depLng, destinations, legs, height = 240 }) => {
       const ref = useRef(null);
       const mapRef = useRef(null);
+      const infoRef = useRef(null);
       const geo = (destinations || []).filter(d => d.lat != null && d.lng != null);
-      const key = JSON.stringify([depLat, depLng, ...geo.map(d => [d.lat, d.lng, d.name])]);
+      const key = JSON.stringify([depLat, depLng, ...geo.map(d => { const l = (legs || {})[d.id]; return [d.lat, d.lng, d.name, l ? l.durationSeconds : null, l ? l.distanceText : null]; })]);
       useEffect(() => {
         if (!ref.current || !window.google) return;
         const pts = [];
         if (depLat != null && depLng != null) pts.push({ lat: depLat, lng: depLng, dep: true });
-        geo.forEach((d, i) => pts.push({ lat: d.lat, lng: d.lng, n: i + 1 }));
+        geo.forEach((d, i) => pts.push({ lat: d.lat, lng: d.lng, n: i + 1, leg: (legs || {})[d.id] }));
         if (pts.length === 0) return;
         if (!mapRef.current) {
           mapRef.current = new google.maps.Map(ref.current, {
-            disableDefaultUI: true, zoomControl: false, gestureHandling: 'none', keyboardShortcuts: false,
+            disableDefaultUI: true, zoomControl: false, gestureHandling: 'cooperative', keyboardShortcuts: false,
             clickableIcons: false, backgroundColor: '#181b1e', styles: RT_MAP_STYLE, mapTypeId: 'roadmap',
           });
+          infoRef.current = new google.maps.InfoWindow();
         }
         const map = mapRef.current;
         (map.__ov || []).forEach(o => o.setMap(null));
         const ov = [];
-        const path = pts.map(p => ({ lat: p.lat, lng: p.lng }));
-        if (path.length > 1) ov.push(new google.maps.Polyline({
-          path, map, strokeOpacity: 0,
-          icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.6, strokeColor: '#8FA09E', scale: 3 }, offset: '0', repeat: '12px' }],
-        }));
+        // Segments cliquables (départ→1, 1→2, ...) : clic = temps + km
+        for (let k = 0; k < pts.length - 1; k++) {
+          const a = pts[k], b = pts[k + 1];
+          const seg = new google.maps.Polyline({ path: [{ lat: a.lat, lng: a.lng }, { lat: b.lat, lng: b.lng }], map, clickable: true, strokeColor: '#A7B7B4', strokeOpacity: 0.9, strokeWeight: 3 });
+          const leg = b.leg;
+          seg.addListener('click', (e) => {
+            if (!infoRef.current) return;
+            const txt = leg ? `${formatDuration(leg.durationSeconds)} &middot; ${leg.distanceText}` : 'Distance en calcul...';
+            infoRef.current.setContent(`<div style="font-family:Montserrat,sans-serif;font-size:13px;font-weight:600;color:#181b1e;padding:1px 3px">${txt}</div>`);
+            infoRef.current.setPosition(e.latLng);
+            infoRef.current.open(map);
+          });
+          ov.push(seg);
+        }
         pts.forEach(p => {
           if (p.dep) {
-            ov.push(new google.maps.Marker({ position: { lat: p.lat, lng: p.lng }, map, icon: { path: google.maps.SymbolPath.CIRCLE, scale: 5, fillColor: '#EDEDE9', fillOpacity: 1, strokeColor: '#181b1e', strokeWeight: 2 } }));
+            ov.push(new google.maps.Marker({ position: { lat: p.lat, lng: p.lng }, map, zIndex: 10, icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: '#EDEDE9', fillOpacity: 1, strokeColor: '#181b1e', strokeWeight: 2.5 } }));
           } else {
-            ov.push(new google.maps.Marker({ position: { lat: p.lat, lng: p.lng }, map, label: { text: String(p.n), color: '#EDEDE9', fontSize: '11px', fontWeight: '700' }, icon: { path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: '#2A2F32', fillOpacity: 1, strokeColor: '#46504E', strokeWeight: 1 } }));
+            ov.push(new google.maps.Marker({ position: { lat: p.lat, lng: p.lng }, map, zIndex: 11, label: { text: String(p.n), color: '#181b1e', fontSize: '12px', fontWeight: '700' }, icon: { path: google.maps.SymbolPath.CIRCLE, scale: 13, fillColor: '#EDEDE9', fillOpacity: 1, strokeColor: '#8FA09E', strokeWeight: 2 } }));
           }
         });
         map.__ov = ov;
-        if (pts.length === 1) { map.setCenter(path[0]); map.setZoom(10); }
-        else { const b = new google.maps.LatLngBounds(); pts.forEach(p => b.extend({ lat: p.lat, lng: p.lng })); map.fitBounds(b, 34); }
+        if (pts.length === 1) { map.setCenter({ lat: pts[0].lat, lng: pts[0].lng }); map.setZoom(9); }
+        else { const bnds = new google.maps.LatLngBounds(); pts.forEach(p => bnds.extend({ lat: p.lat, lng: p.lng })); map.fitBounds(bnds, 40); }
       }, [key]);
       return <div ref={ref} style={{ height, borderRadius: 12, overflow: 'hidden', border: '1px solid #2A2F32', background: '#15191B' }} />;
     };
@@ -8028,7 +8039,7 @@
 
           {((depLat != null && depLng != null) || dests.some(d => d.lat != null && d.lng != null)) && (
             <div style={{ marginBottom: 12 }}>
-              <RouteMiniMap depLat={depLat} depLng={depLng} destinations={dests} />
+              <RouteMiniMap depLat={depLat} depLng={depLng} destinations={dests} legs={legs} />
             </div>
           )}
 
