@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.82</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.83</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7627,7 +7627,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.82</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.83</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7855,37 +7855,37 @@
       const dStart = dest.dateStart || dest.date || '';
       const dEnd = dest.dateEnd || '';
       const dateLabel = dStart ? (dEnd && dEnd !== dStart ? `${rtFmtDateFR(dStart)} au ${rtFmtDateFR(dEnd)}` : rtFmtDateFR(dStart)) : '';
-      const chip = { fontSize: 11.5, color: '#C9D2D0', background: '#191D1F', border: '1px solid #333A3C', borderRadius: 20, padding: '3px 11px', cursor: 'pointer' };
-      const addBtn = { fontSize: 11, color: '#7D8C8A', background: 'none', border: '1px dashed #3A4143', borderRadius: 20, padding: '3px 10px', cursor: 'pointer' };
+      const chip = { fontSize: 17, color: '#C9D2D0', background: '#191D1F', border: '1px solid #333A3C', borderRadius: 20, padding: '5px 15px', cursor: 'pointer' };
+      const addBtn = { fontSize: 16, color: '#7D8C8A', background: 'none', border: '1px dashed #3A4143', borderRadius: 20, padding: '5px 14px', cursor: 'pointer' };
 
       return (
         <div style={{ ...RT_CARD, marginBottom: 10 }}>
           <div style={{ display: 'flex', gap: 10 }}>
-            <div style={{ flex: '0 0 auto', width: 23, height: 23, borderRadius: '50%', background: '#2A2F32', color: '#EDEDE9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, marginTop: 2 }}>{index + 1}</div>
+            <div style={{ flex: '0 0 auto', width: 33, height: 33, borderRadius: '50%', background: '#2A2F32', color: '#EDEDE9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, marginTop: 2 }}>{index + 1}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="font-bebas-regular" style={{ fontSize: 21, color: '#EDEDE9', letterSpacing: '0.03em', lineHeight: 1.05 }}>{dest.name || 'Destination'}</div>
-              {dest.address && <div style={{ fontSize: 11.5, color: '#7D8C8A', marginTop: 2 }}>{dest.address}</div>}
+              <div className="font-bebas-regular" style={{ fontSize: 30, color: '#EDEDE9', letterSpacing: '0.03em', lineHeight: 1.05 }}>{dest.name || 'Destination'}</div>
+              {dest.address && <div style={{ fontSize: 17, color: '#7D8C8A', marginTop: 3 }}>{dest.address}</div>}
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
                 {editDate ? (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 11, color: '#7D8C8A' }}>Du</span>
-                    <input type="date" style={{ ...RT_FIELD, width: 'auto', colorScheme: 'dark', padding: '5px 8px' }} value={dStart} onChange={e => onUpdate({ dateStart: e.target.value })} />
-                    <span style={{ fontSize: 11, color: '#7D8C8A' }}>au</span>
-                    <input type="date" style={{ ...RT_FIELD, width: 'auto', colorScheme: 'dark', padding: '5px 8px' }} value={dEnd} min={dStart || undefined} onChange={e => onUpdate({ dateEnd: e.target.value })} />
+                    <span style={{ fontSize: 16, color: '#7D8C8A' }}>Du</span>
+                    <input type="date" style={{ ...RT_FIELD, width: 'auto', colorScheme: 'dark', padding: '6px 10px', fontSize: 18 }} value={dStart} onChange={e => onUpdate({ dateStart: e.target.value })} />
+                    <span style={{ fontSize: 16, color: '#7D8C8A' }}>au</span>
+                    <input type="date" style={{ ...RT_FIELD, width: 'auto', colorScheme: 'dark', padding: '6px 10px', fontSize: 18 }} value={dEnd} min={dStart || undefined} onChange={e => onUpdate({ dateEnd: e.target.value })} />
                     <button onClick={() => setEditDate(false)} style={{ ...chip, background: '#2A2F32' }}>OK</button>
                   </span>
                 ) : (
                   dateLabel ? <span style={chip} onClick={() => setEditDate(true)}>{dateLabel}</span> : <button style={addBtn} onClick={() => setEditDate(true)}>+ date</button>
                 )}
-                {leg && <span style={{ fontSize: 11, color: '#7D8C8A' }}>{index === 0 ? 'depuis le départ' : "depuis l'arrêt précédent"} : <b className="font-bebas-regular" style={{ color: '#C9D2D0', fontSize: 14 }}>{formatDuration(leg.durationSeconds)}</b> &middot; {leg.distanceText}</span>}
+                {leg && <span style={{ fontSize: 16, color: '#7D8C8A' }}>{index === 0 ? 'depuis le départ' : "depuis l'arrêt précédent"} : <b className="font-bebas-regular" style={{ color: '#C9D2D0', fontSize: 20 }}>{formatDuration(leg.durationSeconds)}</b> &middot; {leg.distanceText}</span>}
               </div>
 
               <div style={{ marginTop: 8 }}>
                 {editNote ? (
-                  <textarea autoFocus style={{ ...RT_FIELD, resize: 'vertical', minHeight: 42 }} rows="2" value={dest.note || ''} onChange={e => onUpdate({ note: e.target.value })} onBlur={() => setEditNote(false)} placeholder="Note (accès, contact, repérage, matériel...)" />
+                  <textarea autoFocus style={{ ...RT_FIELD, resize: 'vertical', minHeight: 48, fontSize: 17 }} rows="2" value={dest.note || ''} onChange={e => onUpdate({ note: e.target.value })} onBlur={() => setEditNote(false)} placeholder="Note (accès, contact, repérage, matériel...)" />
                 ) : (
-                  dest.note ? <div onClick={() => setEditNote(true)} style={{ fontSize: 12, color: '#8FA09E', fontStyle: 'italic', cursor: 'pointer' }}>{dest.note}</div> : <button style={addBtn} onClick={() => setEditNote(true)}>+ note</button>
+                  dest.note ? <div onClick={() => setEditNote(true)} style={{ fontSize: 17, color: '#8FA09E', fontStyle: 'italic', cursor: 'pointer' }}>{dest.note}</div> : <button style={addBtn} onClick={() => setEditNote(true)}>+ note</button>
                 )}
               </div>
 
