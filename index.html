@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.89</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.90</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7627,7 +7627,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.89</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.90</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7895,7 +7895,16 @@
             <div style={{ flex: '0 0 auto', width: 33, height: 33, borderRadius: '50%', background: '#2A2F32', color: '#EDEDE9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, marginTop: 2 }}>{index + 1}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="font-bebas-regular" style={{ fontSize: 30, color: '#EDEDE9', letterSpacing: '0.03em', lineHeight: 1.05 }}>{displayName}</div>
-              {dest.address && <div style={{ fontSize: 17, color: '#7D8C8A', marginTop: 3 }}>{dest.address}</div>}
+              {dest.address && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
+                  <span style={{ fontSize: 17, color: '#7D8C8A' }}>{dest.address}</span>
+                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest.address)}`} target="_blank" rel="noopener noreferrer"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); const tmp = document.createElement('a'); tmp.href = e.currentTarget.href; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); }}
+                    title="Ouvrir dans Google Maps" style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                  </a>
+                </div>
+              )}
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
                 {editDate ? (
@@ -8002,6 +8011,23 @@
       return ov;
     };
 
+    // Contrôle de zoom custom (deux fois plus petit, fond blanc 40%)
+    const makeZoomControl = (map) => {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:flex;flex-direction:column;gap:4px;margin:8px;';
+      const mk = (label, fn) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.textContent = label;
+        b.style.cssText = 'width:22px;height:22px;border:none;border-radius:5px;background:rgba(255,255,255,0.4);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);color:#181b1e;font-size:17px;font-weight:700;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.3);';
+        b.addEventListener('click', fn);
+        return b;
+      };
+      wrap.appendChild(mk('+', () => map.setZoom((map.getZoom() || 8) + 1)));
+      wrap.appendChild(mk('−', () => map.setZoom((map.getZoom() || 8) - 1)));
+      map.controls[google.maps.ControlPosition.RIGHT_BOTTOM].push(wrap);
+      return wrap;
+    };
+
     const RouteMiniMap = ({ depLat, depLng, destinations, legs, height = 240 }) => {
       const ref = useRef(null);
       const mapRef = useRef(null);
@@ -8018,13 +8044,14 @@
         if (pts.length === 0) return;
         if (!mapRef.current) {
           mapRef.current = new google.maps.Map(ref.current, {
-            disableDefaultUI: true, zoomControl: true, zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM },
+            disableDefaultUI: true, zoomControl: false,
             gestureHandling: 'greedy', scrollwheel: false, keyboardShortcuts: false,
             clickableIcons: false, backgroundColor: '#181b1e', styles: RT_MAP_STYLE, mapTypeId: 'roadmap',
           });
           pillRef.current = makeRoutePill(mapRef.current);
           mapRef.current.addListener('click', () => { if (pillRef.current) pillRef.current.hidePill(); });
           makeMapDim(mapRef.current, '#15191B', 0.7);
+          makeZoomControl(mapRef.current);
           dirRef.current = new google.maps.DirectionsService();
         }
         const map = mapRef.current;
