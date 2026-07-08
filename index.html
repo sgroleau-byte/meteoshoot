@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.90</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.91</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7627,7 +7627,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.90</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.91</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7950,6 +7950,7 @@
       );
     };
 
+    const RT_PASTELS = ['#F2A9C4', '#A6C9F2', '#A9E6B8', '#F2D6A0', '#CBB6F2', '#9FE4DA', '#F2B49A', '#C7E29A'];
     const RT_MAP_STYLE = [
       { elementType: 'geometry', stylers: [{ color: '#2d2d2d' }] },
       { elementType: 'labels.text.stroke', stylers: [{ color: '#2d2d2d' }] },
@@ -8040,7 +8041,7 @@
         let alive = true;
         const pts = [];
         if (depLat != null && depLng != null) pts.push({ lat: depLat, lng: depLng, dep: true });
-        geo.forEach((d, i) => pts.push({ lat: d.lat, lng: d.lng, n: i + 1, leg: (legs || {})[d.id] }));
+        geo.forEach((d, i) => pts.push({ lat: d.lat, lng: d.lng, n: i + 1, leg: (legs || {})[d.id], color: RT_PASTELS[i % RT_PASTELS.length] }));
         if (pts.length === 0) return;
         if (!mapRef.current) {
           mapRef.current = new google.maps.Map(ref.current, {
@@ -8062,8 +8063,8 @@
           const txt = (durText || distText) ? `${durText || ''}${durText && distText ? ' · ' : ''}${distText || ''}` : 'Distance...';
           pillRef.current.showPill(latLng, txt);
         };
-        const addSeg = (path, durText, distText) => {
-          const seg = new google.maps.Polyline({ path, map, clickable: true, strokeColor: '#A7B7B4', strokeOpacity: 0.95, strokeWeight: 3.5 });
+        const addSeg = (path, durText, distText, color) => {
+          const seg = new google.maps.Polyline({ path, map, clickable: true, strokeColor: color || '#A7B7B4', strokeOpacity: 0.95, strokeWeight: 4 });
           seg.addListener('click', (e) => showInfo(e.latLng, durText, distText));
           ov.push(seg);
         };
@@ -8071,13 +8072,13 @@
           for (let k = 0; k < pts.length - 1; k++) {
             const a = pts[k], b = pts[k + 1];
             const lg = b.leg;
-            addSeg([{ lat: a.lat, lng: a.lng }, { lat: b.lat, lng: b.lng }], lg ? formatDuration(lg.durationSeconds) : '', lg ? lg.distanceText : '');
+            addSeg([{ lat: a.lat, lng: a.lng }, { lat: b.lat, lng: b.lng }], lg ? formatDuration(lg.durationSeconds) : '', lg ? lg.distanceText : '', b.color);
           }
         };
         // Marqueurs
         pts.forEach(p => {
           if (p.dep) ov.push(new google.maps.Marker({ position: { lat: p.lat, lng: p.lng }, map, zIndex: 10, icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: '#EDEDE9', fillOpacity: 1, strokeColor: '#181b1e', strokeWeight: 2.5 } }));
-          else ov.push(new google.maps.Marker({ position: { lat: p.lat, lng: p.lng }, map, zIndex: 11, label: { text: String(p.n), color: '#181b1e', fontSize: '12px', fontWeight: '700' }, icon: { path: google.maps.SymbolPath.CIRCLE, scale: 13, fillColor: '#EDEDE9', fillOpacity: 1, strokeColor: '#8FA09E', strokeWeight: 2 } }));
+          else ov.push(new google.maps.Marker({ position: { lat: p.lat, lng: p.lng }, map, zIndex: 11, label: { text: String(p.n), color: '#181b1e', fontSize: '12px', fontWeight: '700' }, icon: { path: google.maps.SymbolPath.CIRCLE, scale: 13, fillColor: p.color || '#EDEDE9', fillOpacity: 1, strokeColor: '#181b1e', strokeWeight: 2 } }));
         });
         map.__ov = ov;
         if (pts.length === 1) { map.setCenter({ lat: pts[0].lat, lng: pts[0].lng }); map.setZoom(11); }
@@ -8091,10 +8092,10 @@
           dirRef.current.route({ origin, destination, waypoints, travelMode: google.maps.TravelMode.DRIVING }, (res, status) => {
             if (!alive) return;
             if (status === 'OK' && res.routes && res.routes[0] && res.routes[0].legs) {
-              res.routes[0].legs.forEach((lg) => {
+              res.routes[0].legs.forEach((lg, i) => {
                 const path = [];
                 (lg.steps || []).forEach(s => (s.path || []).forEach(pt => path.push(pt)));
-                if (path.length > 1) addSeg(path, lg.duration ? formatDuration(lg.duration.value) : '', lg.distance ? lg.distance.text : '');
+                if (path.length > 1) addSeg(path, lg.duration ? formatDuration(lg.duration.value) : '', lg.distance ? lg.distance.text : '', pts[i + 1] && pts[i + 1].color);
               });
               map.__ov = ov;
               if (res.routes[0].bounds) map.fitBounds(res.routes[0].bounds, 44);
