@@ -72,6 +72,7 @@ var TRANSLATIONS = {
     // Navigation
     projects: 'PROJETS',
     editing: 'ÉDITION',
+    routes: 'ROUTE',
     preferences: 'PRÉFÉRENCES',
 
     // Project
@@ -248,6 +249,7 @@ var TRANSLATIONS = {
     // Navigation
     projects: 'PROJECTS',
     editing: 'EDITING',
+    routes: 'ROUTE',
     preferences: 'PREFERENCES',
 
     // Project

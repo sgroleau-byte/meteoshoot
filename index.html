@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.68</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.69</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -617,6 +617,7 @@
     const TBL_PROJECTS = isDev ? 'projects_dev' : 'projects';
     const TBL_PREFS = isDev ? 'preferences_dev' : 'preferences';
     const TBL_FILES = isDev ? 'project_files_dev' : 'project_files';
+    const TBL_ROUTES = isDev ? 'routes_dev' : 'routes';
     const TBL_ELEVATION = 'elevation_cache'; // shared global — no dev/prod split
     const STORAGE_BUCKET = 'project-files';
 
@@ -1581,6 +1582,19 @@
       clientFolder: 'client_folder', tag: 'tag', onHold: 'on_hold'
     };
 
+    // routeFromRow: lecture (db vers app). ROUTE_TO_ROW: correspondance des champs (app vers db).
+    const routeFromRow = (r) => ({
+      id: r.id, name: r.name || '', useHome: r.use_home !== false,
+      departureAddress: r.departure_address || '', departureLat: r.departure_lat ?? null, departureLng: r.departure_lng ?? null,
+      destinations: r.destinations || [], archived: r.archived || false,
+      sortOrder: r.sort_order ?? 0, createdAt: r.created_at
+    });
+    const ROUTE_TO_ROW = {
+      name: 'name', useHome: 'use_home', departureAddress: 'departure_address',
+      departureLat: 'departure_lat', departureLng: 'departure_lng',
+      destinations: 'destinations', archived: 'archived', sortOrder: 'sort_order'
+    };
+
     const StoreProvider = ({ children }) => {
       const { user } = useAuth();
       const { canCreateProject, getProjectLimit } = useSubscription();
@@ -1590,6 +1604,7 @@
       // enregistré (on appliquera alors le défaut "2 premiers ouverts" à l'affichage). Persisté
       // dans les préférences Supabase (partagé web + PWA) et mis en cache local pour l'offline.
       const [folderStates, setFolderStatesState] = useState(() => { try { return JSON.parse(localStorage.getItem('sp-folder-states') || '{}'); } catch (e) { return {}; } });
+      const [routes, setRoutes] = useState(() => JSON.parse(localStorage.getItem('sp-routes') || '[]'));
       const [view, setView] = useState('todo');
       const [selectedId, setSelectedId] = useState(null);
       const [synced, setSynced] = useState(false);
@@ -1598,6 +1613,7 @@
       useEffect(() => { localStorage.setItem('sp-projects', JSON.stringify(projects)); }, [projects]);
       useEffect(() => { localStorage.setItem('sp-prefs', JSON.stringify(prefs)); }, [prefs]);
       useEffect(() => { localStorage.setItem('sp-folder-states', JSON.stringify(folderStates)); }, [folderStates]);
+      useEffect(() => { localStorage.setItem('sp-routes', JSON.stringify(routes)); }, [routes]);
 
       // === SUPABASE SYNC ===
       // On login: load from Supabase or migrate localStorage
@@ -1610,10 +1626,12 @@
           localStorage.removeItem('sp-projects');
           localStorage.removeItem('sp-prefs');
           localStorage.removeItem('sp-folder-states');
+          localStorage.removeItem('sp-routes');
           localStorage.removeItem('sp-migrated-to-supabase');
           setProjects([]);
           setPrefsState({homeAddress:'',homeLat:null,homeLng:null,prepTime:60});
           setFolderStatesState({});
+          setRoutes([]);
         }
         localStorage.setItem('sp-user-id', user.id);
 
@@ -1633,6 +1651,11 @@
 
             if (pErr && pErr.code !== 'PGRST116') console.error('Projects load error:', pErr);
             if (prErr && prErr.code !== 'PGRST116') console.error('Prefs load error:', prErr);
+
+            const { data: dbRoutes, error: rErr } = await supabase
+              .from(TBL_ROUTES).select('*').order('sort_order', { ascending: true });
+            if (rErr && rErr.code !== 'PGRST116') console.error('Routes load error:', rErr);
+            if (dbRoutes) setRoutes(dbRoutes.map(routeFromRow));
 
             const hasDbData = dbProjects && dbProjects.length > 0;
             const hasLocalData = projects.length > 0;
@@ -1813,6 +1836,43 @@
         setLastDeleted(null);
       };
 
+      // === CRUD routes ===
+      const addRoute = (data = {}) => {
+        const route = {
+          id: `r_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+          name: data.name || '', useHome: data.useHome !== false,
+          departureAddress: data.departureAddress || '', departureLat: data.departureLat ?? null, departureLng: data.departureLng ?? null,
+          destinations: data.destinations || [], archived: false, sortOrder: 0, createdAt: new Date().toISOString()
+        };
+        setRoutes(prev => [route, ...prev]);
+        if (user) {
+          supabase.from(TBL_ROUTES).insert({
+            id: route.id, user_id: user.id, name: route.name, use_home: route.useHome,
+            departure_address: route.departureAddress, departure_lat: route.departureLat, departure_lng: route.departureLng,
+            destinations: route.destinations, archived: false, sort_order: 0, created_at: route.createdAt
+          }).then(({ error }) => { if (error) console.error('Route insert error:', error); });
+        }
+        return route.id;
+      };
+
+      const updateRoute = (id, upd) => {
+        setRoutes(prev => prev.map(x => x.id === id ? { ...x, ...upd } : x));
+        if (user) {
+          const dbUpd = { updated_at: new Date().toISOString() };
+          for (const [camel, snake] of Object.entries(ROUTE_TO_ROW)) {
+            if (camel in upd) dbUpd[snake] = upd[camel];
+          }
+          supabase.from(TBL_ROUTES).update(dbUpd).eq('id', id)
+            .then(({ error }) => { if (error) console.error('Route update error:', error); });
+        }
+      };
+
+      const deleteRoute = (id) => {
+        setRoutes(prev => prev.filter(x => x.id !== id));
+        if (user) supabase.from(TBL_ROUTES).delete().eq('id', id)
+          .then(({ error }) => { if (error) console.error('Route delete error:', error); });
+      };
+
       const advanceProject = (id) => setProjects(p => p.map(x => {
         if (x.id !== id) return x;
         if (x.status === ProjectStatus.TODO) {
@@ -1918,7 +1978,7 @@
         });
       };
 
-      return <StoreContext.Provider value={{ projects, synced, prefs, view, selectedId, setView, setSelectedId, addProject, updateProject, deleteProject, advanceProject, revertProject, reorderProjects, applyTodoOrder, moveToFolder, setPrefs, lastDeleted, undoDelete, folderStates, setFolderState }}>{children}</StoreContext.Provider>;
+      return <StoreContext.Provider value={{ projects, routes, synced, prefs, view, selectedId, setView, setSelectedId, addProject, updateProject, deleteProject, addRoute, updateRoute, deleteRoute, advanceProject, revertProject, reorderProjects, applyTodoOrder, moveToFolder, setPrefs, lastDeleted, undoDelete, folderStates, setFolderState }}>{children}</StoreContext.Provider>;
     };
 
     // ===== WEATHER STATUS =====
@@ -6456,6 +6516,7 @@
       const navItems = [
         { id: 'todo', label: t('projects'), icon: '☀︎' },
         { id: 'retouching', label: t('editing'), icon: '✎' },
+        { id: 'routes', label: t('routes'), icon: '⤳' },
         { id: 'preferences', label: t('preferences'), icon: '⚙' }
       ];
 
@@ -7566,7 +7627,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.68</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.69</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7767,6 +7828,195 @@
       };
       listenEl.addEventListener('wheel', onWheel, { passive: false });
       return () => { listenEl.removeEventListener('wheel', onWheel); if (raf) cancelAnimationFrame(raf); };
+    };
+
+    // ============================================================
+    // ROUTE — planification de déplacements (maison canonique)
+    // ============================================================
+    const RT_CARD = { background: '#23282A', border: '1px solid #2E3437', borderRadius: 14, padding: 14 };
+    const RT_FIELD = { width: '100%', background: '#191D1F', border: '1px solid #333A3C', borderRadius: 8, color: '#EDEDE9', padding: '8px 10px', fontSize: 14, fontFamily: 'inherit', outline: 'none' };
+    const rtFmtDateFR = (s) => { if (!s) return ''; try { return new Date(s + 'T12:00').toLocaleDateString('fr-CA', { weekday: 'short', day: 'numeric', month: 'short' }); } catch (e) { return s; } };
+
+    const RtChevron = ({ dir = 'up', c = '#7D8C8A' }) => <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d={dir === 'up' ? 'M6 14l6-6 6 6' : 'M6 10l6 6 6-6'} stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+    const RtTrash = ({ c = '#8B9B99' }) => <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m2 0v13a1 1 0 01-1 1H7a1 1 0 01-1-1V7" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+    const RtPin = ({ c = '#8B9B99' }) => <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z" stroke={c} strokeWidth="1.7"/></svg>;
+
+    const RouteDestinationCard = ({ dest, index, leg, onUpdate, onRemove, onMove, canUp, canDown }) => {
+      const [addr, setAddr] = useState(dest.address || '');
+      const [weather, setWeather] = useState(null);
+      useEffect(() => { setAddr(dest.address || ''); }, [dest.address]);
+      useEffect(() => {
+        if (dest.lat == null || dest.lng == null) { setWeather(null); return; }
+        let alive = true;
+        fetchWeather(dest.lat, dest.lng).then(w => { if (alive) setWeather(w); }).catch(() => {});
+        return () => { alive = false; };
+      }, [dest.lat, dest.lng]);
+
+      const geocode = async () => {
+        const a = addr.trim();
+        if (!a) { if (dest.address) onUpdate({ address: '', lat: null, lng: null }); return; }
+        if (a === dest.address && dest.lat != null) return;
+        onUpdate({ address: a });
+        try { const r = await geocodeAddress(a); setAddr(r.formattedAddress); onUpdate({ address: r.formattedAddress, lat: r.lat, lng: r.lng }); } catch (e) { console.warn('Géocodage destination:', e); }
+      };
+
+      return (
+        <div style={{ ...RT_CARD, marginBottom: 10 }}>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: '0 0 auto', width: 23, height: 23, borderRadius: '50%', background: '#2A2F32', color: '#EDEDE9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, marginTop: 2 }}>{index + 1}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <input className="font-bebas-regular" style={{ ...RT_FIELD, fontSize: 19, letterSpacing: '0.03em', marginBottom: 6, background: 'transparent', border: 'none', padding: '2px 0' }} value={dest.name || ''} onChange={e => onUpdate({ name: e.target.value })} placeholder="NOM DE LA DESTINATION" />
+              <input style={{ ...RT_FIELD, marginBottom: 6 }} value={addr} onChange={e => setAddr(e.target.value)} onBlur={geocode} placeholder="Adresse..." />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                <input type="date" style={{ ...RT_FIELD, width: 'auto', colorScheme: 'dark' }} value={dest.date || ''} onChange={e => onUpdate({ date: e.target.value })} />
+                {leg && <span style={{ fontSize: 11, color: '#7D8C8A' }}>{index === 0 ? 'depuis le départ' : "depuis l'arrêt précédent"} : <b className="font-bebas-regular" style={{ color: '#C9D2D0', fontSize: 14 }}>{formatDuration(leg.durationSeconds)}</b> &middot; {leg.distanceText}</span>}
+              </div>
+              <textarea style={{ ...RT_FIELD, resize: 'vertical', minHeight: 42 }} rows="2" value={dest.note || ''} onChange={e => onUpdate({ note: e.target.value })} placeholder="Note (accès, contact, repérage, matériel...)" />
+              {dest.lat != null && dest.lng != null && (
+                <div style={{ marginTop: 8 }}>
+                  {weather ? <WeatherRow daily={weather.daily} hourly={weather.hourly} orientation={[]} onDayClick={() => {}} /> : <span style={{ fontSize: 11, color: '#5A6B69' }}>Météo en cours...</span>}
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 2, marginTop: 6 }}>
+                <button onClick={() => onMove(-1)} disabled={!canUp} style={{ background: 'none', border: 'none', padding: 4, cursor: canUp ? 'pointer' : 'default', opacity: canUp ? 1 : 0.3 }}><RtChevron dir="up"/></button>
+                <button onClick={() => onMove(1)} disabled={!canDown} style={{ background: 'none', border: 'none', padding: 4, cursor: canDown ? 'pointer' : 'default', opacity: canDown ? 1 : 0.3 }}><RtChevron dir="down"/></button>
+                <button onClick={onRemove} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer' }}><RtTrash c="#d83152"/></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const RouteDetail = ({ route, onBack }) => {
+      const { updateRoute, deleteRoute, prefs } = useStore();
+      const [name, setName] = useState(route.name || '');
+      const [dests, setDestsLocal] = useState(route.destinations || []);
+      const [depAddr, setDepAddr] = useState(route.departureAddress || '');
+      const [legs, setLegs] = useState({});
+      const [confirmDel, setConfirmDel] = useState(false);
+      const commitTimer = useRef(null);
+
+      const depLat = route.useHome ? prefs.homeLat : route.departureLat;
+      const depLng = route.useHome ? prefs.homeLng : route.departureLng;
+      const depLabel = route.useHome ? (prefs.homeAddress || 'Ma résidence') : (route.departureAddress || 'Point de départ');
+
+      const commit = (next) => { setDestsLocal(next); clearTimeout(commitTimer.current); commitTimer.current = setTimeout(() => updateRoute(route.id, { destinations: next }), 600); };
+      const addDest = () => commit([...dests, { id: `d_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, name: '', address: '', lat: null, lng: null, date: '', note: '' }]);
+      const updateDest = (id, u) => commit(dests.map(d => d.id === id ? { ...d, ...u } : d));
+      const removeDest = (id) => commit(dests.filter(d => d.id !== id));
+      const moveDest = (idx, dir) => { const j = idx + dir; if (j < 0 || j >= dests.length) return; const n = [...dests]; [n[idx], n[j]] = [n[j], n[idx]]; commit(n); };
+
+      const depGeocode = async () => {
+        const a = depAddr.trim();
+        if (!a) return;
+        try { const r = await geocodeAddress(a); setDepAddr(r.formattedAddress); updateRoute(route.id, { departureAddress: r.formattedAddress, departureLat: r.lat, departureLng: r.lng }); } catch (e) { updateRoute(route.id, { departureAddress: a }); }
+      };
+
+      const geoKey = JSON.stringify([depLat, depLng, ...dests.map(d => [d.id, d.lat, d.lng])]);
+      useEffect(() => {
+        let alive = true;
+        (async () => {
+          const next = {};
+          let p = (depLat != null && depLng != null) ? { lat: depLat, lng: depLng } : null;
+          for (const d of dests) {
+            if (d.lat != null && d.lng != null && p) { try { const r = await getTravelTime(p.lat, p.lng, d.lat, d.lng); if (r) next[d.id] = r; } catch (e) {} }
+            if (d.lat != null && d.lng != null) p = { lat: d.lat, lng: d.lng };
+          }
+          if (alive) setLegs(next);
+        })();
+        return () => { alive = false; };
+      }, [geoKey]);
+
+      const totalSec = Object.values(legs).reduce((s, l) => s + (l.durationSeconds || 0), 0);
+      const totalKm = Math.round(Object.values(legs).reduce((s, l) => s + (l.distanceMeters || 0), 0) / 1000);
+
+      return (
+        <div style={{ maxWidth: 820, margin: '0 auto', padding: '4px 16px 90px' }}>
+          <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#7D8C8A', cursor: 'pointer', fontSize: 13, padding: '4px 0', marginBottom: 8 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="#7D8C8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <span className="font-bebas-regular" style={{ letterSpacing: '0.06em' }}>ROUTES</span>
+          </button>
+
+          <input className="font-bebas-regular" style={{ background: 'transparent', border: 'none', color: '#EDEDE9', fontSize: 27, letterSpacing: '0.04em', width: '100%', outline: 'none', padding: 0, marginBottom: 4 }}
+            value={name} onChange={e => setName(e.target.value)} onBlur={() => { if (name !== route.name) updateRoute(route.id, { name }); }} placeholder="NOM DE LA ROUTE" />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#7D8C8A', fontSize: 11, marginBottom: 4 }}>
+            <RtPin /><span>DÉPART &middot; {depLabel}</span>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: '#8FA09E', marginBottom: route.useHome ? 16 : 6, cursor: 'pointer' }}>
+            <input type="checkbox" checked={route.useHome !== false} onChange={e => updateRoute(route.id, { useHome: e.target.checked })} style={{ position: 'relative', top: '-1px', accentColor: '#8B9B99' }} />
+            Partir de ma résidence
+          </label>
+          {route.useHome === false && <input style={{ ...RT_FIELD, marginBottom: 16 }} value={depAddr} onChange={e => setDepAddr(e.target.value)} onBlur={depGeocode} placeholder="Adresse de départ..." />}
+
+          {dests.map((d, i) => (
+            <RouteDestinationCard key={d.id} dest={d} index={i} leg={legs[d.id]}
+              onUpdate={u => updateDest(d.id, u)} onRemove={() => removeDest(d.id)}
+              onMove={dir => moveDest(i, dir)} canUp={i > 0} canDown={i < dests.length - 1} />
+          ))}
+
+          <button onClick={addDest} style={{ width: '100%', textAlign: 'center', border: '1px dashed #3A4143', borderRadius: 12, padding: 10, background: 'none', color: '#8B9B99', cursor: 'pointer', fontSize: 13, marginBottom: 12 }}>+ Ajouter une destination</button>
+
+          {totalSec > 0 && (
+            <div style={{ ...RT_CARD, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <span style={{ fontSize: 11, color: '#7D8C8A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total du trajet</span>
+              <span className="font-bebas-regular" style={{ fontSize: 19, color: '#EDEDE9', letterSpacing: '0.03em' }}>{formatDuration(totalSec)} &middot; {totalKm} KM</span>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={() => { if (confirmDel) { deleteRoute(route.id); onBack(); } else { setConfirmDel(true); setTimeout(() => setConfirmDel(false), 3000); } }}
+              className="font-bebas-regular" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: confirmDel ? '#d83152' : '#5A6B69', cursor: 'pointer', fontSize: 14, letterSpacing: '0.04em' }}>
+              <RtTrash c={confirmDel ? '#d83152' : '#5A6B69'} />{confirmDel ? 'CONFIRMER LA SUPPRESSION' : 'SUPPRIMER LA ROUTE'}
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    const RouteView = () => {
+      const { routes, addRoute, prefs } = useStore();
+      const [openId, setOpenId] = useState(null);
+      const active = routes.filter(r => !r.archived);
+      const current = routes.find(r => r.id === openId);
+      if (current) return <RouteDetail key={current.id} route={current} onBack={() => setOpenId(null)} />;
+
+      const create = () => {
+        const id = addRoute({ useHome: true, departureAddress: prefs.homeAddress, departureLat: prefs.homeLat, departureLng: prefs.homeLng, destinations: [] });
+        setOpenId(id);
+      };
+
+      return (
+        <div style={{ maxWidth: 820, margin: '0 auto', padding: '4px 16px 90px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+            <span className="font-bebas-regular" style={{ fontSize: 30, color: '#EDEDE9', letterSpacing: '0.04em' }}>ROUTES</span>
+            <button onClick={create} style={{ width: 30, height: 30, borderRadius: '50%', background: '#2A2F32', color: '#EDEDE9', border: 'none', fontSize: 22, lineHeight: 0.7, cursor: 'pointer' }}>+</button>
+          </div>
+
+          {active.length === 0 ? (
+            <div style={{ ...RT_CARD, textAlign: 'center', color: '#7D8C8A', fontSize: 13, padding: 32 }}>
+              Aucune route pour l'instant. Crée une route pour planifier un déplacement, avec destinations, distances et météo à chaque arrêt.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {active.map(r => {
+                const ds = r.destinations || [];
+                const dated = ds.filter(d => d.date).map(d => d.date).sort();
+                return (
+                  <button key={r.id} onClick={() => setOpenId(r.id)} style={{ ...RT_CARD, width: '100%', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>
+                      <span className="font-bebas-regular" style={{ display: 'block', fontSize: 19, color: '#EDEDE9', letterSpacing: '0.03em' }}>{r.name || 'ROUTE SANS NOM'}</span>
+                      <span style={{ fontSize: 11, color: '#7D8C8A' }}>{ds.length} destination{ds.length > 1 ? 's' : ''}{dated.length > 0 ? ` · ${rtFmtDateFR(dated[0])}${dated.length > 1 ? ' au ' + rtFmtDateFR(dated[dated.length - 1]) : ''}` : ''}</span>
+                    </span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="#5A6B69" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
     };
 
     const App = () => {
@@ -8141,6 +8391,7 @@
             }}>
               {view === 'todo' && <TodoView onSelect={openProject} onAddProject={() => { const f = document.getElementById('persistentFlare'); if (f) { f.style.display = 'none'; f.style.animation = 'none'; } setShowNew(true); }} addingProject={showNew} plusRef={plusRef}/>}
               {view === 'retouching' && <RetouchingView onSelect={openProject}/>}
+              {view === 'routes' && <RouteView/>}
               {view === 'preferences' && <PreferencesView/>}
             </div>
             {displayedProjectId && <div ref={detailScrollRef} className="detail-scroll" style={{
