@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.94</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.95</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -6581,27 +6581,32 @@
         };
 
         // ResizeObserver keeps the bar exactly the width of the active label on
-        // any later change (window resize, zoom, language switch). Gated on
-        // barRevealed so the wider *fallback* font measured during the reload
-        // reflow never moves the bar before the real font is ready.
+        // any later change (zoom, language switch). Gated on barRevealed so the
+        // wider *fallback* font measured during the reload reflow never moves the
+        // bar before the real font is ready.
         const ro = new ResizeObserver(() => { if (barRevealed.current) measure(); });
         Object.values(navSpanRefs.current).forEach(s => { if (s) ro.observe(s); });
 
-        // "Simulate a click" once the real font (Bebas) is loaded and laid out.
-        // A click always lands the bar at the correct label width because by
-        // then the font is ready; we reproduce that on load. Enable the slide
-        // while the bar is still at its origin (frame 1), then measure the active
-        // label and let it animate into place at the exact width (frame 2). The
-        // measurement happens after document.fonts.ready, so it can never lock
-        // onto the wider fallback width.
-        document.fonts.ready.then(() => requestAnimationFrame(() => {
+        // FOUT: au reload, la largeur du souligné était mesurée avec la police de
+        // secours (plus large) avant que Bebas soit appliquée, d'où un souligné
+        // trop large jusqu'au premier clic. On ne mesure qu'une fois les polices
+        // prêtes ET la police du nav (Bebas Neue) réellement chargée — plus fiable
+        // que document.fonts.ready seul sur WebKit quand la police est en cache.
+        // Même fonction measure() que le repositionnement au clic.
+        const initial = () => {
           barInitialized.current = true;
           barRevealed.current = true;
           setBarReady(true);
           requestAnimationFrame(() => measure());
-        }));
+        };
+        const fontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+        const bebasReady = (document.fonts && document.fonts.load) ? document.fonts.load("400 20px 'Bebas Neue'").catch(() => {}) : Promise.resolve();
+        Promise.all([fontsReady, bebasReady]).then(() => requestAnimationFrame(initial));
 
-        return () => ro.disconnect();
+        // Recalcul au redimensionnement de la fenêtre (même fonction de mesure).
+        window.addEventListener('resize', measure);
+
+        return () => { ro.disconnect(); window.removeEventListener('resize', measure); };
       }, [view, isMobile]);
 
       if (isMobile) {
@@ -7627,7 +7632,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.94</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.95</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
