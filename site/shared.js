@@ -74,6 +74,7 @@ var TRANSLATIONS = {
     editing: 'ÉDITION',
     routes: 'ROUTE',
     preferences: 'PRÉFÉRENCES',
+    preferencesShort: 'PRÉF.',
 
     // Project
     newProject: 'NOUVEAU PROJET',
@@ -251,6 +252,7 @@ var TRANSLATIONS = {
     editing: 'EDITING',
     routes: 'ROUTE',
     preferences: 'PREFERENCES',
+    preferencesShort: 'PREF.',
 
     // Project
     newProject: 'NEW PROJECT',
