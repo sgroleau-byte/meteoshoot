@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.96</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.97</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7632,7 +7632,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.96</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.97</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7865,28 +7865,85 @@
       );
     };
 
-    // Bande météo horaire (jour ciblé), pour l'onglet « Par heure »
-    const RouteHourly = ({ hourly, date }) => {
-      const list = hourly || [];
+    // Bande météo horaire — exactement le même rendu que le détail d'un projet.
+    const RouteHourly = ({ weather }) => {
+      const { t } = useLang();
+      const getIconFromCloudcover = (cc, origIcon, isNight = false, sunFraction = null, cloudLow = null, smoke = 0) => {
+        if (origIcon === 'thunderstorm') return 'thunderstorm';
+        if (origIcon === 'snow') return 'snow';
+        if (origIcon === 'rain') return 'rain';
+        if (!isNight) {
+          if (smoke > 0) return 'sun-smoke-' + Math.min(smoke, 3);
+          const veil = veilIcon(cc, cloudLow, sunFraction);
+          if (veil) return veil;
+        }
+        return cloudcoverToIcon(cc, isNight);
+      };
+      if (!weather || !weather.hourly || !weather.hourly.length) return <span style={{ fontSize: 12, color: '#5A6B69' }}>Météo en cours...</span>;
+      const now = new Date();
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      const filtered = weather.hourly.filter(h => new Date(h.time) >= oneHourAgo).slice(0, 72);
+      const dailyMap = {};
+      if (weather.daily) weather.daily.forEach(d => { const dateStr = new Date(d.sunrise).toDateString(); dailyMap[dateStr] = { sunrise: d.sunrise, sunset: d.sunset }; });
       const days = [];
-      list.forEach(h => { const d = h.time.slice(0, 10); if (!days.includes(d)) days.push(d); });
-      const target = (date && days.includes(date)) ? date : (days[0] || '');
-      const hours = list.filter(h => { if (h.time.slice(0, 10) !== target) return false; const hr = parseInt(h.time.slice(11, 13), 10); return hr >= 5 && hr <= 22; });
-      if (!hours.length) return <span style={{ fontSize: 12, color: '#5A6B69' }}>Pas de données horaires pour ce jour.</span>;
+      let currentDay = null;
+      filtered.forEach(h => { const hDate = new Date(h.time); const dateStr = hDate.toDateString(); if (dateStr !== currentDay) { days.push({ date: hDate, dateStr, hours: [], sun: dailyMap[dateStr] || null }); currentDay = dateStr; } days[days.length - 1].hours.push(h); });
       return (
-        <div>
-          <div className="font-bebas-regular" style={{ fontSize: 13, color: '#8B9B99', letterSpacing: '0.04em', marginBottom: 4 }}>{rtFmtDateFR(target).toUpperCase()}</div>
-          <div style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 4 }}>
-            {hours.map(h => {
-              const hr = parseInt(h.time.slice(11, 13), 10);
+        <div className="relative">
+          <div className="flex gap-0 pt-0 pb-2 overflow-x-auto hour-scroll items-start">
+            {days.map((day, di) => {
+              const sunriseH = day.sun?.sunrise ? new Date(day.sun.sunrise).getHours() : null;
+              const sunsetH = day.sun?.sunset ? new Date(day.sun.sunset).getHours() : null;
+              const sunriseM = day.sun?.sunrise ? new Date(day.sun.sunrise).getMinutes() : null;
+              const sunsetM = day.sun?.sunset ? new Date(day.sun.sunset).getMinutes() : null;
               return (
-                <div key={h.time} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 48, flexShrink: 0 }}>
-                  <span className="font-bebas-regular" style={{ fontSize: 14, color: '#8B9B99' }}>{hr}H</span>
-                  <WeatherIcon type={h.icon} className="w-9 h-9" />
-                  <span className="font-bebas-regular" style={{ fontSize: 15, color: '#C9D2D0' }}>{h.temp}&deg;</span>
-                  {h.cloudcover != null && <span style={{ fontSize: 10.5, color: '#8B9B99' }}>{h.cloudcover}%</span>}
-                  {h.precip > 0 && <span style={{ fontSize: 10, color: '#7dd3c6' }}>{h.precip < 1 ? h.precip.toFixed(1) : Math.round(h.precip)}mm</span>}
-                </div>
+                <React.Fragment key={day.dateStr}>
+                  {di > 0 && (<div style={{ width: '1px', background: 'rgba(255,255,255,0.15)', alignSelf: 'stretch', flexShrink: 0, margin: '0 2px', marginBottom: '-8px' }}/>)}
+                  <div className="flex flex-col flex-shrink-0">
+                    <div className="px-2" style={{ paddingBottom: '0', marginBottom: '-9px' }}>
+                      <span className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '19px', whiteSpace: 'nowrap', color: '#8B9B99' }}>
+                        {['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'][day.date.getDay()]} {day.date.getDate()} {['JAN','FÉV','MAR','AVR','MAI','JUN','JUL','AOÛ','SEP','OCT','NOV','DÉC'][day.date.getMonth()]}.
+                      </span>
+                    </div>
+                    <div className="flex gap-0">
+                      {day.hours.map(h => {
+                        const hDate = new Date(h.time);
+                        const hr = hDate.getHours();
+                        const isSunrise = sunriseH === hr;
+                        const isSunset = sunsetH === hr;
+                        const isNight = sunriseH !== null && sunsetH !== null && (hr < sunriseH || hr >= sunsetH);
+                        const icon = getIconFromCloudcover(h.cloudcover, h.icon, isNight, h.sunFraction, h.cloudLow, h.smoke);
+                        const sunPct = h.sunFraction != null ? Math.round(h.sunFraction * 100) : null;
+                        const sunColor = sunPct == null ? '#6f7d7b' : sunPct >= 60 ? '#E9D27A' : sunPct >= 45 ? '#E4CB78' : sunPct >= 32 ? '#DBCD92' : sunPct >= 20 ? '#CFC8A4' : sunPct >= 10 ? '#C3BDAA' : '#A7A99C';
+                        let timeLabel = `${hr}H`;
+                        if (isSunrise && sunriseM !== null) timeLabel = formatTime(day.sun.sunrise).replace(':', 'H');
+                        else if (isSunset && sunsetM !== null) timeLabel = formatTime(day.sun.sunset).replace(':', 'H');
+                        return (
+                          <div key={h.time} className={`flex flex-col items-center gap-0 min-w-[56px] px-0 py-1 ${isNight ? 'bg-charcoal/5' : ''}`} style={!isNight && h.smoke ? { background: SMOKE_TINT[h.smoke] } : undefined}>
+                            {isSunrise && <svg width="18" height="10" viewBox="0 0 18 10" style={{ marginBottom: '8px' }}><polyline points="1,9 9,2 17,9" fill="none" stroke="#404A48" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                            {isSunset && <svg width="18" height="10" viewBox="0 0 18 10" style={{ marginBottom: '8px' }}><polyline points="1,1 9,8 17,1" fill="none" stroke="#404A48" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                            {!(isSunrise || isSunset) && <div style={{ height: '10px', marginBottom: '8px' }}/>}
+                            <span className="font-bebas-bold leading-none" style={{ letterSpacing: '0.04em', fontSize: (isSunrise || isSunset) ? '20px' : '18px', color: (isSunrise || isSunset) ? '#ffffff' : undefined }}>
+                              <span className={!(isSunrise || isSunset) ? 'text-charcoal-muted' : ''}>{timeLabel}</span>
+                            </span>
+                            <WeatherIcon type={icon} className={`w-10 h-10 ${isNight ? 'opacity-50' : ''}`}/>
+                            <span className="font-bebas-bold text-base leading-none text-charcoal" style={{ letterSpacing: '0.04em', marginTop: '7px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                              <svg width="12" height="12" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><g fill="#8A9794"><circle cx="12" cy="18" r="6"/><circle cx="20" cy="16" r="7"/><rect x="8" y="18" width="15" height="6" rx="3"/></g></svg>
+                              {h.cloudcover != null ? `${h.cloudcover}%` : '--'}
+                            </span>
+                            <span className="font-bebas-bold text-base leading-none" style={{ letterSpacing: '0.04em', marginTop: '7px', display: 'inline-flex', alignItems: 'center', gap: '3px', color: sunColor }}>
+                              <svg width="11" height="11" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><circle cx="16" cy="16" r="8" fill={sunColor}/></svg>
+                              {sunPct != null ? `${sunPct}%` : '--'}
+                            </span>
+                            <span className="font-bebas-bold text-base leading-none text-charcoal-muted" style={{ letterSpacing: '0.04em', marginTop: '7px' }}>{h.temp}&deg;</span>
+                            <span className="font-bebas-bold text-sm leading-none text-charcoal-muted" style={{ marginTop: '7px' }}>{h.wind} <span className="text-xs">{t('kmh')}</span></span>
+                            {h.precip > 0 && <span className="font-bebas-bold text-sm leading-none" style={{ marginTop: '7px', letterSpacing: '0.04em', color: '#7dd3c6' }}>{h.precip < 1 ? h.precip.toFixed(1) : Math.round(h.precip)} <span className="text-xs">MM</span></span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </React.Fragment>
               );
             })}
           </div>
@@ -8013,7 +8070,7 @@
                         ))}
                       </div>
                       {wxMode === 'hours'
-                        ? <RouteHourly hourly={weather.hourly} date={dStart} />
+                        ? <RouteHourly weather={weather} />
                         : <div style={{ zoom: 1.1 }}><WeatherRow daily={weather.daily} hourly={weather.hourly} maxDays={5} orientation={[]} onDayClick={() => {}} /></div>}
                     </div>
                   ) : <span style={{ fontSize: 11, color: '#5A6B69' }}>Météo en cours...</span>}
