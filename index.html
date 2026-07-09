@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.99</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.100</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7632,7 +7632,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.99</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.100</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -8170,7 +8170,36 @@
       return wrap;
     };
 
-    const RouteMiniMap = ({ depLat, depLng, destinations, legs, height = 240 }) => {
+    // Décale une trajectoire perpendiculairement à son sens de circulation (vers sa droite),
+    // en mètres, pour que deux routes empruntant la même voie (typiquement un aller et un
+    // retour, donc en sens opposés) se retrouvent de chaque côté plutôt que superposées, et
+    // restent ainsi cliquables individuellement.
+    const rtOffsetPath = (path, offMeters) => {
+      if (!offMeters || !path || path.length < 2) return path;
+      const R = 111320;
+      const toLL = (p) => ({ lat: (typeof p.lat === 'function' ? p.lat() : p.lat), lng: (typeof p.lng === 'function' ? p.lng() : p.lng) });
+      const ll = path.map(toLL);
+      const out = [];
+      for (let i = 0; i < ll.length; i++) {
+        const cur = ll[i];
+        const a = ll[Math.max(0, i - 1)];
+        const b = ll[Math.min(ll.length - 1, i + 1)];
+        const cosLat = Math.cos(cur.lat * Math.PI / 180) || 1e-6;
+        let east = (b.lng - a.lng) * R * cosLat;
+        let north = (b.lat - a.lat) * R;
+        const len = Math.hypot(east, north) || 1;
+        east /= len; north /= len;
+        // perpendiculaire droite (rotation -90°): (est, nord) -> (nord, -est)
+        const rE = north, rN = -east;
+        out.push({
+          lat: cur.lat + (rN * offMeters) / R,
+          lng: cur.lng + (rE * offMeters) / (R * cosLat),
+        });
+      }
+      return out;
+    };
+
+    const RouteMiniMap = ({ depLat, depLng, destinations, legs, height = 340 }) => {
       const ref = useRef(null);
       const mapRef = useRef(null);
       const pillRef = useRef(null);
@@ -8184,6 +8213,13 @@
         if (depLat != null && depLng != null) pts.push({ lat: depLat, lng: depLng, dep: true });
         geo.forEach((d, i) => pts.push({ lat: d.lat, lng: d.lng, n: i + 1, leg: (legs || {})[d.id], color: RT_PASTELS[i % RT_PASTELS.length] }));
         if (pts.length === 0) return;
+        // Décalage latéral proportionnel à l'étendue de la route: l'écart à l'écran reste
+        // à peu près constant à l'échelle d'ajustement (fitBounds). Facteur calibrable.
+        let mnLa = 90, mxLa = -90, mnLo = 180, mxLo = -180;
+        pts.forEach(p => { mnLa = Math.min(mnLa, p.lat); mxLa = Math.max(mxLa, p.lat); mnLo = Math.min(mnLo, p.lng); mxLo = Math.max(mxLo, p.lng); });
+        const midLa = (mnLa + mxLa) / 2;
+        const spanM = Math.max((mxLa - mnLa) * 111320, (mxLo - mnLo) * 111320 * Math.cos(midLa * Math.PI / 180), 1);
+        const offMeters = Math.min(1200, Math.max(15, spanM * 0.004));
         if (!mapRef.current) {
           mapRef.current = new google.maps.Map(ref.current, {
             disableDefaultUI: true, zoomControl: false,
@@ -8205,7 +8241,7 @@
           pillRef.current.showPill(latLng, txt);
         };
         const addSeg = (path, durText, distText, color) => {
-          const seg = new google.maps.Polyline({ path, map, clickable: true, strokeColor: color || '#A7B7B4', strokeOpacity: 0.95, strokeWeight: 4 });
+          const seg = new google.maps.Polyline({ path: rtOffsetPath(path, offMeters), map, clickable: true, strokeColor: color || '#A7B7B4', strokeOpacity: 0.95, strokeWeight: 4 });
           seg.addListener('click', (e) => showInfo(e.latLng, durText, distText));
           ov.push(seg);
         };
