@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.95</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.96</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7632,7 +7632,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.95</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.96</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7865,6 +7865,69 @@
       );
     };
 
+    // Bande météo horaire (jour ciblé), pour l'onglet « Par heure »
+    const RouteHourly = ({ hourly, date }) => {
+      const list = hourly || [];
+      const days = [];
+      list.forEach(h => { const d = h.time.slice(0, 10); if (!days.includes(d)) days.push(d); });
+      const target = (date && days.includes(date)) ? date : (days[0] || '');
+      const hours = list.filter(h => { if (h.time.slice(0, 10) !== target) return false; const hr = parseInt(h.time.slice(11, 13), 10); return hr >= 5 && hr <= 22; });
+      if (!hours.length) return <span style={{ fontSize: 12, color: '#5A6B69' }}>Pas de données horaires pour ce jour.</span>;
+      return (
+        <div>
+          <div className="font-bebas-regular" style={{ fontSize: 13, color: '#8B9B99', letterSpacing: '0.04em', marginBottom: 4 }}>{rtFmtDateFR(target).toUpperCase()}</div>
+          <div style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 4 }}>
+            {hours.map(h => {
+              const hr = parseInt(h.time.slice(11, 13), 10);
+              return (
+                <div key={h.time} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 48, flexShrink: 0 }}>
+                  <span className="font-bebas-regular" style={{ fontSize: 14, color: '#8B9B99' }}>{hr}H</span>
+                  <WeatherIcon type={h.icon} className="w-9 h-9" />
+                  <span className="font-bebas-regular" style={{ fontSize: 15, color: '#C9D2D0' }}>{h.temp}&deg;</span>
+                  {h.cloudcover != null && <span style={{ fontSize: 10.5, color: '#8B9B99' }}>{h.cloudcover}%</span>}
+                  {h.precip > 0 && <span style={{ fontSize: 10, color: '#7dd3c6' }}>{h.precip < 1 ? h.precip.toFixed(1) : Math.round(h.precip)}mm</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    };
+
+    // Ajout manuel d'une destination (Nom + Adresse géocodée), sous la liste de shootings
+    const ManualDestForm = ({ onAdd }) => {
+      const [name, setName] = useState('');
+      const addrRef = useRef(null);
+      const acRef = useRef(null);
+      const dataRef = useRef({ address: '', lat: null, lng: null });
+      useEffect(() => {
+        if (!addrRef.current || acRef.current || !window.google) return;
+        acRef.current = new google.maps.places.Autocomplete(addrRef.current, { types: ['address'], componentRestrictions: { country: 'ca' }, fields: ['formatted_address', 'geometry'] });
+        acRef.current.addListener('place_changed', () => {
+          const p = acRef.current.getPlace();
+          if (p && p.geometry) { addrRef.current.value = p.formatted_address; dataRef.current = { address: p.formatted_address, lat: p.geometry.location.lat(), lng: p.geometry.location.lng() }; }
+        });
+      }, []);
+      const submit = async () => {
+        let d = dataRef.current;
+        const typed = ((addrRef.current && addrRef.current.value) || '').trim();
+        if (typed && typed !== d.address) {
+          try { const r = await geocodeAddress(typed); d = { address: r.formattedAddress, lat: r.lat, lng: r.lng }; } catch (e) { d = { address: typed, lat: null, lng: null }; }
+        }
+        if (!name.trim() && !d.address) return;
+        onAdd({ name: name.trim() || d.address, address: d.address, lat: d.lat, lng: d.lng });
+        setName(''); if (addrRef.current) addrRef.current.value = ''; dataRef.current = { address: '', lat: null, lng: null };
+      };
+      return (
+        <div style={{ marginTop: 12, borderTop: '1px solid #2E3437', paddingTop: 10 }}>
+          <div className="font-bebas-regular" style={{ fontSize: 13, color: '#7D8C8A', letterSpacing: '0.04em', marginBottom: 6 }}>OU SAISIR UNE ADRESSE</div>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Nom" style={{ ...RT_FIELD, marginBottom: 6 }} />
+          <input ref={addrRef} placeholder="Adresse..." style={{ ...RT_FIELD, marginBottom: 8 }} />
+          <button onClick={submit} className="font-bebas-regular" style={{ width: '100%', textAlign: 'center', background: '#2A2F32', border: '1px solid #3A4143', borderRadius: 8, color: '#EDEDE9', padding: '8px', cursor: 'pointer', fontSize: 15, letterSpacing: '0.04em' }}>AJOUTER</button>
+        </div>
+      );
+    };
+
     const RouteDestinationCard = ({ dest, index, leg, onUpdate, onRemove, onMove, canUp, canDown }) => {
       const { projects } = useStore();
       const proj = projects.find(p => p.id === dest.projectId);
@@ -7873,6 +7936,7 @@
       const [weather, setWeather] = useState(null);
       const [editDate, setEditDate] = useState(false);
       const [editNote, setEditNote] = useState(false);
+      const [wxMode, setWxMode] = useState('days');
       useEffect(() => {
         if (dest.lat == null || dest.lng == null) { setWeather(null); return; }
         let alive = true;
@@ -7941,7 +8005,18 @@
 
               {dest.lat != null && dest.lng != null && (
                 <div style={{ marginTop: 10 }}>
-                  {weather ? <div style={{ zoom: 1.1 }}><WeatherRow daily={weather.daily} hourly={weather.hourly} maxDays={5} orientation={[]} onDayClick={() => {}} /></div> : <span style={{ fontSize: 11, color: '#5A6B69' }}>Météo en cours...</span>}
+                  {weather ? (
+                    <div>
+                      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                        {[['days', '5 JOURS'], ['hours', 'PAR HEURE']].map(([m, label]) => (
+                          <button key={m} onClick={() => setWxMode(m)} className="font-bebas-regular" style={{ fontSize: 13, letterSpacing: '0.05em', padding: '3px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (wxMode === m ? '#4A5453' : '#2E3437'), background: wxMode === m ? '#2A2F32' : 'transparent', color: wxMode === m ? '#EDEDE9' : '#7D8C8A' }}>{label}</button>
+                        ))}
+                      </div>
+                      {wxMode === 'hours'
+                        ? <RouteHourly hourly={weather.hourly} date={dStart} />
+                        : <div style={{ zoom: 1.1 }}><WeatherRow daily={weather.daily} hourly={weather.hourly} maxDays={5} orientation={[]} onDayClick={() => {}} /></div>}
+                    </div>
+                  ) : <span style={{ fontSize: 11, color: '#5A6B69' }}>Météo en cours...</span>}
                 </div>
               )}
 
@@ -8134,6 +8209,7 @@
       const commit = (next) => { setDestsLocal(next); clearTimeout(commitTimer.current); commitTimer.current = setTimeout(() => updateRoute(route.id, { destinations: next }), 600); };
       const addFromProject = (p) => { commit([...dests, { id: `d_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, projectId: p.id, name: p.name, address: p.address || '', lat: p.lat ?? null, lng: p.lng ?? null, dateStart: '', dateEnd: '', note: '' }]); setPicking(false); setSearch(''); };
       const projectChoices = (projects || []).filter(p => { const q = search.trim().toLowerCase(); if (!q) return true; return (p.name || '').toLowerCase().includes(q) || (p.address || '').toLowerCase().includes(q); });
+      const addManual = (data) => { commit([...dests, { id: `d_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, projectId: null, name: data.name || '', address: data.address || '', lat: data.lat ?? null, lng: data.lng ?? null, dateStart: '', dateEnd: '', note: '' }]); setPicking(false); setSearch(''); };
       const updateDest = (id, u) => commit(dests.map(d => d.id === id ? { ...d, ...u } : d));
       const removeDest = (id) => commit(dests.filter(d => d.id !== id));
       const moveDest = (idx, dir) => { const j = idx + dir; if (j < 0 || j >= dests.length) return; const n = [...dests]; [n[idx], n[j]] = [n[j], n[idx]]; commit(n); };
@@ -8212,6 +8288,7 @@
                   </button>
                 ))}
               </div>
+              <ManualDestForm onAdd={addManual} />
             </div>
           ) : (
             <button onClick={() => setPicking(true)} style={{ width: '100%', textAlign: 'center', border: '1px dashed #3A4143', borderRadius: 12, padding: 10, background: 'none', color: '#8B9B99', cursor: 'pointer', fontSize: 13, marginBottom: 12 }}>+ Ajouter une destination</button>
