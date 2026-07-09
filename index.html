@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.97</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.98</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7632,7 +7632,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.97</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.98</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7841,6 +7841,7 @@
     const RT_CARD = { background: '#23282A', border: '1px solid #2E3437', borderRadius: 14, padding: 14 };
     const RT_FIELD = { width: '100%', background: '#191D1F', border: '1px solid #333A3C', borderRadius: 8, color: '#EDEDE9', padding: '8px 10px', fontSize: 14, fontFamily: 'inherit', outline: 'none' };
     const rtFmtDateFR = (s) => { if (!s) return ''; try { return new Date(s + 'T12:00').toLocaleDateString('fr-CA', { weekday: 'short', day: 'numeric', month: 'short' }); } catch (e) { return s; } };
+    const rtToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
     const RtChevron = ({ dir = 'up', c = '#7D8C8A' }) => <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d={dir === 'up' ? 'M6 14l6-6 6 6' : 'M6 10l6 6 6-6'} stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
     const RtTrash = ({ c = '#8B9B99' }) => <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m2 0v13a1 1 0 01-1 1H7a1 1 0 01-1-1V7" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>;
@@ -8039,6 +8040,7 @@
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 16, color: '#7D8C8A', width: 26, textAlign: 'right' }}>Du</span>
                       <RouteDateSelects value={dStart} onChange={v => onUpdate({ dateStart: v })} />
+                      <button onClick={() => onUpdate({ dateStart: rtToday() })} className="font-bebas-regular" style={{ background: 'none', border: 'none', color: '#8FA09E', cursor: 'pointer', fontSize: 14, letterSpacing: '0.03em', textDecoration: 'underline', textUnderlineOffset: '3px' }}>aujourd'hui</button>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 16, color: '#7D8C8A', width: 26, textAlign: 'right' }}>au</span>
