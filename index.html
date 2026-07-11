@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.103</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.104</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7632,7 +7632,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.103</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.104</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -8292,7 +8292,9 @@
     const rtOpenMap = (e) => { e.preventDefault(); e.stopPropagation(); const tmp = document.createElement('a'); tmp.href = e.currentTarget.href; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); };
 
     // Boîte hôtel : une nuitée glissée entre deux destinations d'une route.
-    const RouteHotelBox = ({ hotel, hostName, nextName, legs, onEdit, onRemove }) => {
+    const RouteHotelBox = ({ hotel, hostName, nextName, legs, onEdit, onRemove, collapsible }) => {
+      const [open, setOpen] = useState(false);
+      const expanded = !collapsible || open;
       const to = legs && legs.to, from = legs && legs.from;
       const legRow = (lbl, leg) => (
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
@@ -8302,25 +8304,30 @@
       );
       return (
         <div style={{ ...RT_CARD, borderColor: '#37413E' }}>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-            <div className="font-bebas-regular" style={{ flex: 1, minWidth: 0, fontSize: 23, color: '#EDEDE9', letterSpacing: '0.03em', lineHeight: 1.05, wordBreak: 'break-word' }}>{hotel.name || 'Hôtel'}</div>
-            <button onClick={onRemove} title="Retirer l'hôtel" style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', flexShrink: 0 }}><RtTrash c="#5A6B69" /></button>
+          <div onClick={collapsible ? () => setOpen(o => !o) : undefined} style={{ display: 'flex', gap: 10, alignItems: 'center', cursor: collapsible ? 'pointer' : 'default' }}>
+            <div className="font-bebas-regular" style={{ flex: 1, minWidth: 0, fontSize: collapsible ? 20 : 23, color: '#EDEDE9', letterSpacing: '0.03em', lineHeight: 1.1, wordBreak: expanded ? 'break-word' : 'normal', whiteSpace: expanded ? 'normal' : 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hotel.name || 'Hôtel'}</div>
+            {collapsible && <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}><RtChevron dir={expanded ? 'up' : 'down'} c="#7D8C8A" /></span>}
+            {expanded && <button onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Retirer l'hôtel" style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', flexShrink: 0 }}><RtTrash c="#5A6B69" /></button>}
           </div>
-          {hotel.address && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-              <span style={{ fontSize: 15, color: '#7D8C8A', minWidth: 0 }}>{hotel.address}</span>
-              <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(hotel.address)}`} target="_blank" rel="noopener noreferrer" onClick={rtOpenMap} title="Ouvrir dans Google Maps" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', position: 'relative', top: '1px' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
-              </a>
-            </div>
+          {expanded && (
+            <React.Fragment>
+              {hotel.address && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                  <span style={{ fontSize: 15, color: '#7D8C8A', minWidth: 0 }}>{hotel.address}</span>
+                  <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(hotel.address)}`} target="_blank" rel="noopener noreferrer" onClick={rtOpenMap} title="Ouvrir dans Google Maps" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', position: 'relative', top: '1px' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                  </a>
+                </div>
+              )}
+              <div style={{ marginTop: 12, borderTop: '1px solid #2E3437', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {legRow(`De ${hostName}`, to)}
+                {nextName ? legRow(`Vers ${nextName}`, from) : null}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="font-bebas-regular" style={{ background: 'none', border: 'none', color: '#7D8C8A', cursor: 'pointer', fontSize: 13, letterSpacing: '0.05em', textDecoration: 'underline', textUnderlineOffset: '3px' }}>MODIFIER</button>
+              </div>
+            </React.Fragment>
           )}
-          <div style={{ marginTop: 12, borderTop: '1px solid #2E3437', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 7 }}>
-            {legRow(`De ${hostName}`, to)}
-            {nextName ? legRow(`Vers ${nextName}`, from) : null}
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-            <button onClick={onEdit} className="font-bebas-regular" style={{ background: 'none', border: 'none', color: '#7D8C8A', cursor: 'pointer', fontSize: 13, letterSpacing: '0.05em', textDecoration: 'underline', textUnderlineOffset: '3px' }}>MODIFIER</button>
-          </div>
         </div>
       );
     };
@@ -8477,9 +8484,9 @@
       const setHotel = (destId, hotel) => updateDest(destId, { hotel });
       const removeHotel = (destId) => { updateDest(destId, { hotel: null }); setEditHotelFor(null); };
       const destName = (d) => { if (!d) return ''; const p = (projects || []).find(pp => pp.id === d.projectId); return (p && p.name) || d.name || 'l\'arrêt'; };
-      const renderHotelSlot = (d, nd) => {
+      const renderHotelSlot = (d, nd, collapsible) => {
         if (editHotelFor === d.id) return <RouteHotelForm initial={d.hotel || null} onSave={h => { setHotel(d.id, h); setEditHotelFor(null); }} onCancel={() => setEditHotelFor(null)} />;
-        if (d.hotel) return <RouteHotelBox hotel={d.hotel} hostName={destName(d)} nextName={destName(nd)} legs={hotelLegs[d.id]} onEdit={() => setEditHotelFor(d.id)} onRemove={() => removeHotel(d.id)} />;
+        if (d.hotel) return <RouteHotelBox hotel={d.hotel} hostName={destName(d)} nextName={destName(nd)} legs={hotelLegs[d.id]} collapsible={collapsible} onEdit={() => setEditHotelFor(d.id)} onRemove={() => removeHotel(d.id)} />;
         return <RouteHotelAdd onClick={() => setEditHotelFor(d.id)} />;
       };
 
@@ -8519,7 +8526,7 @@
                 onUpdate={u => updateDest(d.id, u)} onRemove={() => removeDest(d.id)}
                 onMove={dir => moveDest(i, dir)} canUp={i > 0} canDown={i < dests.length - 1} />
               {!railMode && i < dests.length - 1 && (
-                <div style={{ marginBottom: 20 }}>{renderHotelSlot(d, dests[i + 1])}</div>
+                <div style={{ marginBottom: 20 }}>{renderHotelSlot(d, dests[i + 1], true)}</div>
               )}
             </React.Fragment>
           ))}
@@ -8537,7 +8544,7 @@
                       <span style={{ flex: 1, height: 2, background: `linear-gradient(90deg, rgba(74,84,83,0), ${linked ? '#4A5453' : '#3A4143'})` }} />
                       <span style={{ position: 'absolute', left: -3, width: 9, height: 9, borderRadius: '50%', background: '#23282A', border: `2px solid ${linked ? '#7dd3c6' : '#4A5453'}` }} />
                     </div>
-                    {renderHotelSlot(d, nd)}
+                    {renderHotelSlot(d, nd, false)}
                   </div>
                 );
               })}
