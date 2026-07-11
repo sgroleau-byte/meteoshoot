@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.102</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.103</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7632,7 +7632,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.102</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.103</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -8303,11 +8303,7 @@
       return (
         <div style={{ ...RT_CARD, borderColor: '#37413E' }}>
           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-            <div style={{ flex: '0 0 auto', width: 33, height: 33, borderRadius: '50%', background: '#2A3532', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}><RtBed /></div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, letterSpacing: '0.12em', color: '#7dd3c6', opacity: 0.72, lineHeight: 1 }} className="font-bebas-regular">NUITÉE</div>
-              <div className="font-bebas-regular" style={{ fontSize: 23, color: '#EDEDE9', letterSpacing: '0.03em', lineHeight: 1.05, marginTop: 2, wordBreak: 'break-word' }}>{hotel.name || 'Hôtel'}</div>
-            </div>
+            <div className="font-bebas-regular" style={{ flex: 1, minWidth: 0, fontSize: 23, color: '#EDEDE9', letterSpacing: '0.03em', lineHeight: 1.05, wordBreak: 'break-word' }}>{hotel.name || 'Hôtel'}</div>
             <button onClick={onRemove} title="Retirer l'hôtel" style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', flexShrink: 0 }}><RtTrash c="#5A6B69" /></button>
           </div>
           {hotel.address && (
