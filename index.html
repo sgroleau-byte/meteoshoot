@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.104</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.105</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -2272,8 +2272,7 @@
         if (originalIcon === 'snow') return 'snow';
         if (originalIcon === 'rain') return 'rain';
 
-        // Fumee de feux: prime sur le ciel (mais la precipitation, ci-dessus, rabat la fumee).
-        if (smoke > 0) return 'sun-smoke-' + Math.min(smoke, 3);
+        // Fumee de feux: signalee par la teinte de fond (SMOKE_TINT) seulement; l'icone reste la vraie meteo.
 
         // No hourly data at all? Use daily weathercode icon
         if (cloudcover === null || cloudcover === undefined) {
@@ -2409,7 +2408,7 @@
         if (dominantIcon === 'thunderstorm') return 'thunderstorm';
         if (dominantIcon === 'snow') return 'snow';
         if (dominantIcon === 'rain') return 'rain';
-        if (smoke > 0) return 'sun-smoke-' + Math.min(smoke, 3);
+        // Fumee de feux: signalee par la teinte de fond seulement; l'icone reste la vraie meteo.
         const veil = veilIcon(cloudcover, cloudLow, sunFraction);
         if (veil) return veil;
         return cloudcoverToIcon(cloudcover);
@@ -2472,7 +2471,7 @@
       }
       
       return (
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center" style={day.smoke ? { background: SMOKE_TINT[day.smoke], borderRadius: '6px', padding: '2px 4px' } : undefined}>
           {icon === 'sunrise' ? (
             <span className="font-bebas-bold text-xl" style={{ letterSpacing: '0.04em', color: '#5E6C6A', height: '32px', display: 'flex', alignItems: 'center' }}>{day.sunrise ? formatTime(day.sunrise) : '--:--'}</span>
           ) : icon === 'sunset' ? (
@@ -5193,7 +5192,7 @@
         if (origIcon === 'snow') return 'snow';
         if (origIcon === 'rain') return 'rain';
         if (!isNight) {
-          if (smoke > 0) return 'sun-smoke-' + Math.min(smoke, 3);   // fumee visible de jour seulement
+          // Fumee de feux: signalee par la teinte de fond seulement; l'icone reste la vraie meteo.
           const veil = veilIcon(cc, cloudLow, sunFraction);
           if (veil) return veil;
         }
@@ -6814,10 +6813,11 @@
               const cloudLow = currentHourly?.cloudLow ?? today.cloudLow ?? null;
               const smoke = currentHourly?.smoke ?? today.smoke ?? 0;
               const icon = currentHourly?.icon || today.icon || (cloudcover !== null ? null : 'cloudy');
+              // Fumee de feux: signalee par la teinte de fond seulement; l'icone reste la vraie meteo.
               const weatherIcon = cloudcover !== null
-                ? ((smoke > 0 ? 'sun-smoke-' + Math.min(smoke, 3) : null) || veilIcon(cloudcover, cloudLow, sunFraction) || (cloudcover <= 10 ? 'sunny-bright' : cloudcover <= 20 ? 'sunny' : cloudcover <= 30 ? 'sunny-few-clouds' : cloudcover <= 40 ? 'mostly-sunny' : cloudcover <= 55 ? 'partly-cloudy' : cloudcover <= 70 ? 'mostly-cloudy' : cloudcover <= 85 ? 'cloudy-glimpse' : 'cloudy'))
+                ? (veilIcon(cloudcover, cloudLow, sunFraction) || (cloudcover <= 10 ? 'sunny-bright' : cloudcover <= 20 ? 'sunny' : cloudcover <= 30 ? 'sunny-few-clouds' : cloudcover <= 40 ? 'mostly-sunny' : cloudcover <= 55 ? 'partly-cloudy' : cloudcover <= 70 ? 'mostly-cloudy' : cloudcover <= 85 ? 'cloudy-glimpse' : 'cloudy'))
                 : (icon || 'cloudy');
-              setGeoData({ cityName, sunrise: today.sunrise, sunset: today.sunset, high: today.high, low: today.low, cloudcover, weatherIcon, currentTemp: currentHourly?.temp ?? null });
+              setGeoData({ cityName, sunrise: today.sunrise, sunset: today.sunset, high: today.high, low: today.low, cloudcover, weatherIcon, smoke, currentTemp: currentHourly?.temp ?? null });
               setStatus('done');
             } catch(e) { console.error('GeoWeather error', e); setStatus('error'); }
           },
@@ -6897,7 +6897,7 @@
             </div>
             {/* Right side: icon + cloud + temps */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <div style={{ textAlign: 'center', position: 'relative', left: '-25px' }}>
+              <div style={{ textAlign: 'center', position: 'relative', left: '-25px', ...(geoData.smoke ? { background: SMOKE_TINT[geoData.smoke], borderRadius: '10px', padding: '4px 8px' } : {}) }}>
                 <WeatherIcon type={geoData.weatherIcon} className="w-8 h-8"/>
                 <div className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '13px', color: 'rgba(255,255,255,0.6)', marginTop: '2px' }}>
                   {geoData.cloudcover !== null ? `${geoData.cloudcover}%` : '—'}
@@ -7632,7 +7632,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.104</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.105</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7876,7 +7876,7 @@
         if (origIcon === 'snow') return 'snow';
         if (origIcon === 'rain') return 'rain';
         if (!isNight) {
-          if (smoke > 0) return 'sun-smoke-' + Math.min(smoke, 3);
+          // Fumee de feux: signalee par la teinte de fond seulement; l'icone reste la vraie meteo.
           const veil = veilIcon(cc, cloudLow, sunFraction);
           if (veil) return veil;
         }
