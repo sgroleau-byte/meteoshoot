@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.105</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.106</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -4545,14 +4545,11 @@
         counterOverlay.draw = function() {};
         counterOverlay.onRemove = function() { if (this._interval) clearInterval(this._interval); };
         counterOverlay.setMap(map);
-        // Manual scroll zoom — keeps center fixed (no cursor-biased panning)
-        mapContainerRef.current.addEventListener('wheel', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const delta = e.deltaY < 0 ? 1 : -1;
-          const current = map.getZoom();
-          map.setZoom(current + delta);
-        }, { passive: false });
+        // Zoom uniquement via les boutons + et - de l'interface : plus aucun zoom à la molette
+        // ni au trackpad (geste trop souvent déclenché par erreur). En ne captant plus l'évènement
+        // wheel, le survol de la carte fait défiler la page comme partout ailleurs dans le détail.
+        // Le zoom natif de la carte reste neutralisé par scrollwheel: false; le drag pour déplacer
+        // la carte demeure actif.
         // No panBy — center pin is at visual center
         map.addListener('idle', () => { const z = map.getZoom(); if (z !== mapZoom) setMapZoom(z); });
 
@@ -7632,7 +7629,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.105</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.106</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
