@@ -484,7 +484,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.107</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.108</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -1581,6 +1581,15 @@
       shotAt: 'shot_at', createdAt: 'created_at', completedAt: 'completed_at', buildings: 'buildings',
       clientFolder: 'client_folder', tag: 'tag', onHold: 'on_hold'
     };
+    // rowFromProject: écriture (app vers db), ligne complète. Sert à réinsérer un projet
+    // supprimé quand on annule la suppression (la ligne a déjà été effacée en base).
+    const rowFromProject = (proj, userId) => {
+      const row = { id: proj.id, user_id: userId, sort_order: proj.sortOrder ?? 0 };
+      for (const [camel, snake] of Object.entries(PROJECT_TO_ROW)) {
+        if (proj[camel] !== undefined) row[snake] = proj[camel];
+      }
+      return row;
+    };
 
     // routeFromRow: lecture (db vers app). ROUTE_TO_ROW: correspondance des champs (app vers db).
     const routeFromRow = (r) => ({
@@ -1809,22 +1818,37 @@
 
       const [lastDeleted, setLastDeleted] = useState(null);
       const deleteTimerRef = useRef(null);
+      // Id du projet supprimé dont les fichiers attachés attendent leur purge (fin de la
+      // fenêtre d'annulation). Les fichiers ne sont pas purgés tout de suite pour que
+      // l'annulation retrouve le dossier complet (aucune cascade en base sur project_files).
+      const pendingFilePurgeRef = useRef(null);
+
+      const purgePendingFiles = () => {
+        const pid = pendingFilePurgeRef.current;
+        pendingFilePurgeRef.current = null;
+        if (pid && user) fileHelpers.deleteAllForProject(pid).catch(e => console.error('File cleanup error:', e));
+      };
 
       const deleteProject = (id) => {
         const proj = projects.find(x => x.id === id);
         if (!proj) return;
         setProjects(p => p.filter(x => x.id !== id));
         if (selectedId === id) setSelectedId(null);
-        setLastDeleted(proj);
-        // Clear any previous timer
+        // Une suppression précédente encore en fenêtre d'annulation devient définitive
+        // (son toast est remplacé): purge de ses fichiers maintenant.
         if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
-        // Delay actual Supabase delete by 60s (undo window)
+        purgePendingFiles();
+        setLastDeleted(proj);
+        // Suppression immédiate en base: différée, elle sautait dès qu'on rechargeait
+        // l'app pendant la fenêtre d'annulation (le projet réapparaissait au reload).
+        // L'annulation réinsère la ligne complète via rowFromProject.
+        if (user) {
+          supabase.from(TBL_PROJECTS).delete().eq('id', id)
+            .then(({ error }) => { if (error) console.error('Delete error:', error); });
+        }
+        pendingFilePurgeRef.current = id;
         deleteTimerRef.current = setTimeout(() => {
-          if (user) {
-            fileHelpers.deleteAllForProject(id).catch(e => console.error('File cleanup error:', e));
-            supabase.from(TBL_PROJECTS).delete().eq('id', id)
-              .then(({ error }) => { if (error) console.error('Delete error:', error); });
-          }
+          purgePendingFiles();
           setLastDeleted(prev => prev?.id === id ? null : prev);
         }, 60000);
       };
@@ -1832,7 +1856,13 @@
       const undoDelete = () => {
         if (!lastDeleted) return;
         if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+        pendingFilePurgeRef.current = null;
         setProjects(p => [lastDeleted, ...p]);
+        // Upsert plutôt qu'insert: idempotent si le delete n'était pas parti (hors ligne).
+        if (user) {
+          supabase.from(TBL_PROJECTS).upsert(rowFromProject(lastDeleted, user.id))
+            .then(({ error }) => { if (error) console.error('Undo insert error:', error); });
+        }
         setLastDeleted(null);
       };
 
@@ -7629,7 +7659,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.107</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.108</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
