@@ -185,6 +185,18 @@ var TRANSLATIONS = {
     adminNoUsers: 'Aucun utilisateur',
     adminTierChanged: 'Tier modifié',
 
+    // Liste Édition (jours en retouche)
+    daysShort: 'J',
+    editLegend: 'Seuil {alert} jours · rouge ≥ {alert} · ambre ≥ {warn}',
+    editListSection: 'LISTE ÉDITION',
+    editAlertLabel: 'SEUIL D\'ALERTE (ROUGE)',
+    editWarnLabel: 'SEUIL D\'ATTENTION (AMBRE)',
+    editShowGaugeLabel: 'AFFICHER LA JAUGE',
+    editShowThresholdLabel: 'REPÈRE DU SEUIL SUR LA JAUGE',
+    editSortUrgencyLabel: 'TRIER PAR URGENCE',
+    yes: 'OUI',
+    no: 'NON',
+
     // Errors
     errorPrefix: 'Erreur:',
     fileLimitExceeded: 'Limite de {limit} MB par projet dépassée',
@@ -362,6 +374,18 @@ var TRANSLATIONS = {
     adminPending: 'Pending',
     adminNoUsers: 'No users',
     adminTierChanged: 'Tier changed',
+
+    // Editing list (days in editing)
+    daysShort: 'D',
+    editLegend: 'Threshold {alert} days · red ≥ {alert} · amber ≥ {warn}',
+    editListSection: 'EDITING LIST',
+    editAlertLabel: 'ALERT THRESHOLD (RED)',
+    editWarnLabel: 'WARNING THRESHOLD (AMBER)',
+    editShowGaugeLabel: 'SHOW GAUGE',
+    editShowThresholdLabel: 'THRESHOLD MARK ON GAUGE',
+    editSortUrgencyLabel: 'SORT BY URGENCY',
+    yes: 'YES',
+    no: 'NO',
 
     // Errors
     errorPrefix: 'Error:',
