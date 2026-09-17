@@ -485,7 +485,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.109</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.110</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -1054,11 +1054,13 @@
     const formatDateShort = (d) => { const date = new Date(d); return `${date.getDate()} ${['JAN','FÉV','MAR','AVR','MAI','JUIN','JUIL','AOÛT','SEP','OCT','NOV','DÉC'][date.getMonth()]} ${date.getFullYear()}`; };
     const daysSince = (d) => Math.floor((new Date() - new Date(d)) / (1000 * 60 * 60 * 24));
     // Liste Édition (option 2a) : réglages d'affichage conservés localement (sp-prefs), avec défauts.
-    const EDIT_LIST_DEFAULTS = { editAlertDays: 25, editWarnDays: 15, editShowGauge: true, editShowThreshold: true, editSortUrgency: true };
+    const EDIT_LIST_DEFAULTS = { editAlertDays: 30, editWarnDays: 15, editShowGauge: true, editShowThreshold: true, editSortUrgency: true };
     const EDIT_GAUGE_MAX_DAYS = 60; // échelle de la jauge, en jours
     const getEditListPrefs = (prefs) => { const out = { ...EDIT_LIST_DEFAULTS }; Object.keys(EDIT_LIST_DEFAULTS).forEach(k => { if (prefs && prefs[k] !== undefined && prefs[k] !== null) out[k] = prefs[k]; }); return out; };
     // Statut d'un projet en retouche selon ses jours : alerte (rouge), attention (ambre), normal.
     const editStatusFor = (days, ep) => days === null ? 'normal' : days >= ep.editAlertDays ? 'alert' : days >= ep.editWarnDays ? 'warn' : 'normal';
+    // Archives : durée réelle de la retouche, figée à l'archivage (de la date d'édition à la date d'archivage).
+    const editDaysFrozen = (p) => { if (!p.shotAt) return null; const end = p.completedAt ? new Date(p.completedAt) : new Date(); const d = Math.floor((end - new Date(p.shotAt)) / (1000 * 60 * 60 * 24)); return Number.isFinite(d) ? Math.max(0, d) : null; };
     const getDayAbbrev = (d) => ['DIM.','LUN.','MAR.','MER.','JEU.','VEN.','SAM.'][(typeof d === 'string' ? new Date(d + 'T00:00:00') : d).getDay()];
     const getDayMonth = (d) => { const date = typeof d === 'string' ? new Date(d + 'T00:00:00') : d; return `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}`; };
     const isToday = (d) => (typeof d === 'string' ? new Date(d + 'T00:00:00') : d).toDateString() === new Date().toDateString();
@@ -1615,7 +1617,13 @@
       const { user } = useAuth();
       const { canCreateProject, getProjectLimit } = useSubscription();
       const [projects, setProjects] = useState(() => JSON.parse(localStorage.getItem('sp-projects') || '[]'));
-      const [prefs, setPrefsState] = useState(() => JSON.parse(localStorage.getItem('sp-prefs') || '{"homeAddress":"","homeLat":null,"homeLng":null,"prepTime":60}'));
+      const [prefs, setPrefsState] = useState(() => {
+        const p = JSON.parse(localStorage.getItem('sp-prefs') || '{"homeAddress":"","homeLat":null,"homeLng":null,"prepTime":60}');
+        // v633.110 : le seuil rouge par défaut de la liste Édition passe de 25 à 30 jours. Un 25 déjà enregistré
+        // (ancien défaut, que le champ persistait dès qu'on le touchait) est retiré une seule fois.
+        if (!localStorage.getItem('sp-edit-alert30')) { if (p.editAlertDays === 25) delete p.editAlertDays; localStorage.setItem('sp-edit-alert30', '1'); }
+        return p;
+      });
       // État ouvert/fermé des dossiers client, carte { "NOM": true|false }. Vide = aucun état
       // enregistré (on appliquera alors le défaut "2 premiers ouverts" à l'affichage). Persisté
       // dans les préférences Supabase (partagé web + PWA) et mis en cache local pour l'offline.
@@ -2983,6 +2991,42 @@
       );
     };
 
+    // Rangée 2a, contenu seul (sans la coque de carte) : partagée par les projets en retouche et les archives.
+    // compact = mobile (chiffre, puis nom, ligne tags + date, jauge); sinon chiffre | nom + tags + jauge | date.
+    const EditRow = ({ project, days, status, editPrefs, dateLabel, compact, onClick, onDateClick, dateActive }) => {
+      const tags = editTagsLabel(project.mandates);
+      const name = <span style={{ color: '#e8ece9', fontSize: compact ? '15px' : '17px', letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1.2, minWidth: 0 }}>{project.name} {project.isContest && <StarIcon/>}</span>;
+      const gauge = editPrefs.editShowGauge && <EditGauge days={days} status={status} editPrefs={editPrefs}/>;
+      if (compact) {
+        return (
+          <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '10px 8px 12px 4px', fontFamily: EDIT_FONT }}>
+            <EditDaysFigure days={days} status={status} compact/>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '16px' }}>{name}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px', marginTop: '4px' }}>
+                <span style={{ color: '#4d5a54', fontSize: '10px', letterSpacing: '0.14em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tags}</span>
+                <span style={{ color: '#6b7a72', fontSize: '10px', letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0 }}>{dateLabel}</span>
+              </div>
+              {gauge}
+            </div>
+          </div>
+        );
+      }
+      return (
+        <div onClick={onClick} className={onClick ? 'cursor-pointer' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '26px', padding: '4px 18px', maxWidth: '720px', boxSizing: 'border-box', fontFamily: EDIT_FONT }}>
+          <EditDaysFigure days={days} status={status}/>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '16px' }}>
+              {name}
+              <span style={{ color: '#4d5a54', fontSize: '10px', letterSpacing: '0.14em', whiteSpace: 'nowrap', flexShrink: 0 }}>{tags}</span>
+            </div>
+            {gauge}
+          </div>
+          <div onClick={onDateClick} style={{ width: '82px', textAlign: 'right', color: '#6b7a72', fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', flexShrink: 0, textDecoration: dateActive ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }}>{dateLabel}</div>
+        </div>
+      );
+    };
+
     const RetouchingCard = ({ project, onSelect, index = 0, openActionsId, setOpenActionsId, days = null, editPrefs = EDIT_LIST_DEFAULTS }) => {
       const { advanceProject, revertProject, deleteProject, updateProject } = useStore();
       const { t } = useLang();
@@ -2994,7 +3038,6 @@
       const [pickerPos, setPickerPos] = useState({ top: 0, left: 0 });
       const originalDateRef = useRef(null);
       const status = editStatusFor(days, editPrefs);
-      const tags = editTagsLabel(project.mandates);
       const dateLabel = project.shotAt ? formatDateShort(project.shotAt) : '- - -';
 
       const colorCharcoal = '#8B9B99';
@@ -3030,14 +3073,6 @@
         return () => clearTimeout(timer);
       }, []);
 
-      // Ligne haute (nom + tags) et jauge, communes aux deux écrans
-      const nameLine = (nameSize) => (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '16px' }}>
-          <span style={{ color: '#e8ece9', fontSize: nameSize, letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1.2, minWidth: 0 }}>{project.name} {project.isContest && <StarIcon/>}</span>
-          {!isMobile && <span style={{ color: '#4d5a54', fontSize: '10px', letterSpacing: '0.14em', whiteSpace: 'nowrap', flexShrink: 0 }}>{tags}</span>}
-        </div>
-      );
-
       if (isMobile) {
         const tx = actionsOpen ? actionW : 0;
         const ease = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
@@ -3061,17 +3096,7 @@
                   onClick={() => { setActionsOpen(false); }}
                 />
               )}
-              <div onClick={() => { if (!actionsOpen) onSelect(project); }} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '10px 8px 12px 4px', fontFamily: EDIT_FONT }}>
-                <EditDaysFigure days={days} status={status} compact/>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  {nameLine('15px')}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px', marginTop: '4px' }}>
-                    <span style={{ color: '#4d5a54', fontSize: '10px', letterSpacing: '0.14em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tags}</span>
-                    <span style={{ color: '#6b7a72', fontSize: '10px', letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0 }}>{dateLabel}</span>
-                  </div>
-                  {editPrefs.editShowGauge && <EditGauge days={days} status={status} editPrefs={editPrefs}/>}
-                </div>
-              </div>
+              <EditRow compact project={project} days={days} status={status} editPrefs={editPrefs} dateLabel={dateLabel} onClick={() => { if (!actionsOpen) onSelect(project); }}/>
             </div>
             <div ref={actionsRef} style={{
               position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW}px`,
@@ -3095,15 +3120,8 @@
         <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden animate-card-in border-b border-adaptive"
           style={{ animationDelay: `${index * 0.1}s` }}>
           <div className="card-info-flare" style={{ left: '-350px', top: '0px', background: 'radial-gradient(circle, rgba(216,175,76,1) 0%, rgba(216,175,76,0.5) 35%, transparent 65%)' }}></div>
-          <div onClick={() => onSelect(project)} className="cursor-pointer" style={{ display: 'flex', alignItems: 'center', gap: '26px', padding: '4px 18px', maxWidth: '720px', boxSizing: 'border-box', fontFamily: EDIT_FONT }}>
-            <EditDaysFigure days={days} status={status}/>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {nameLine('17px')}
-              {editPrefs.editShowGauge && <EditGauge days={days} status={status} editPrefs={editPrefs}/>}
-            </div>
-            <div style={{ width: '82px', textAlign: 'right', color: '#6b7a72', fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', flexShrink: 0, textDecoration: editingShotDate ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }}
-              onClick={(e) => { if (!project.shotAt) return; e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setPickerPos({ top: r.bottom + 4, left: r.left }); originalDateRef.current = project.shotAt; setEditingShotDate(p => !p); }}>{dateLabel}</div>
-          </div>
+          <EditRow project={project} days={days} status={status} editPrefs={editPrefs} dateLabel={dateLabel} onClick={() => onSelect(project)} dateActive={editingShotDate}
+            onDateClick={(e) => { if (!project.shotAt) return; e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setPickerPos({ top: r.bottom + 4, left: r.left }); originalDateRef.current = project.shotAt; setEditingShotDate(p => !p); }}/>
         </div>
         <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
           <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? t('cancelEditingConfirm') : t('cancelEditing')}</button>
@@ -3123,15 +3141,17 @@
       );
     };
 
-    const DoneCard = ({ project }) => {
+    const DoneCard = ({ project, editPrefs = EDIT_LIST_DEFAULTS }) => {
       const { revertProject, deleteProject, prefs } = useStore();
       const { t } = useLang();
       const [confirmRevert, setConfirmRevert] = useState(false);
       const [confirmDelete, setConfirmDelete] = useState(false);
       const colorCharcoal = '#8B9B99';
-      const colorActive = '#FAF9F7';
-      const colorInactive = '#404A48';
-      const days = project.completedAt ? daysSince(project.completedAt) : null;
+      // Même rangée que la liste du haut, atténuée par l'opacité de la coque (0.5) et sans les couleurs
+      // d'alerte (toujours neutre). Le chiffre dit en combien de jours le projet a été livré : durée de la
+      // retouche, figée à l'archivage. La date reste la date d'édition.
+      const frozenDays = editDaysFrozen(project);
+      const doneDateLabel = project.shotAt ? formatDateShort(project.shotAt) : '- - -';
       const isMobile = useIsMobile();
       const cardRef2 = useRef(null);
       const contentRef2 = useRef(null);
@@ -3193,31 +3213,7 @@
             {/* Layer 1 — contenu */}
             <div ref={contentRef2} style={{ transform: `translateX(${-tx2}px)`, transition: ease2, padding: '5px 5px', position: 'relative', zIndex: 1, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
               {actionsOpen2 && <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} onClick={() => setActionsOpen2(false)}/>}
-              <div style={{ display: 'flex', flexDirection: 'row', gap: '0' }}>
-                {project.mandates?.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', paddingRight: '10px', borderRight: '1px solid rgba(255,255,255,0.15)', marginRight: '10px', flexShrink: 0 }}>
-                    {['INT', 'EXT', 'DRONE', 'DRONE+C', 'VID'].filter(x => project.mandates.includes(x)).map((m) => {
-                      const label = m === 'DRONE+C' ? 'DRONE' : m === 'DRONE' ? 'DRONE' : m;
-                      return <span key={m} className="font-bebas-book uppercase" style={{ fontSize: '15px', lineHeight: '0.9', letterSpacing: '0.04em', color: colorActive }}>{m === 'DRONE+C' ? <span><span style={{ color: colorActive }}>DRON</span><span style={{ color: '#d83152' }}>E</span></span> : label}</span>;
-                    })}
-                  </div>
-                )}
-                <div style={{ flex: 1, textAlign: 'left' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start' }}>
-                    <span className="font-bebas-book text-charcoal" style={{ letterSpacing: '0.04em', fontSize: '24px', lineHeight: '0.9' }}>
-                      {project.name} {project.isContest && <StarIcon/>}
-                    </span>
-                  </div>
-                  <div style={{ height: '1px', background: 'linear-gradient(to right, rgba(255,255,255,0.15), rgba(255,255,255,0))', margin: '4px 0 0 -11px' }}/>
-                  {/* Info line — CRÉÉ X JOURS ÉDITION X JOURS */}
-                  <div className="uppercase" style={{ letterSpacing: '0.04em', display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '6px', fontSize: '16px', lineHeight: '1.3', padding: '4px 0 2px 0', color: '#fff' }}>
-                    <span className="font-bebas-book">{t('created')}</span>
-                    <span className="font-bebas-regular">{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? t('day') : t('days')}</span>
-                    {project.shotAt && <><span className="font-bebas-book" style={{ marginLeft: '12px' }}>{t('edited')}</span>
-                    <span className="font-bebas-regular">{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? t('day') : t('days')}</span></>}
-                  </div>
-                </div>
-              </div>
+              <EditRow compact project={project} days={frozenDays} status='normal' editPrefs={editPrefs} dateLabel={doneDateLabel}/>
             </div>
             {/* Swipe actions */}
             <div ref={actionsRef2} style={{
@@ -3237,33 +3233,7 @@
       return (
         <div className="card-glow-wrap">
         <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden border-b border-adaptive" style={{ opacity: 0.5 }}>
-          <div className="flex items-center gap-0">
-            <div className="flex-shrink-0" style={{ width: '432px' }}>
-              <h3 className="font-bebas-book flex items-center gap-2" style={{ letterSpacing: '0.04em', fontSize: '35px', color: colorCharcoal, lineHeight: '1' }}>
-                {project.name} {project.isContest && <StarIcon/>}
-              </h3>
-            </div>
-            <div className="flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
-              <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '75px' }}>
-                {Object.values(MandateType).map(m => {
-                  const active = project.mandates?.includes(m);
-                  const alwaysShow = m === 'INT' || m === 'EXT' || m === 'DRONE';
-                  if (!alwaysShow && !active) return null;
-                  return <React.Fragment key={m}>{renderMandate(m, active ? colorCharcoal : colorInactive)}</React.Fragment>;
-                })}
-              </div>
-              <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
-                <span style={{ color: colorInactive }}>{t('created')}</span>
-                <span style={{ color: colorCharcoal }}>{formatDateShort(project.createdAt)}</span>
-                <span style={{ color: colorInactive }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? t('day') : t('days')}</span>
-              </div>
-              {project.shotAt && <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
-                <span style={{ color: colorInactive }}>{t('edited')}</span>
-                <span style={{ color: colorCharcoal }}>{formatDateShort(project.shotAt)}</span>
-                <span style={{ color: colorInactive }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? t('day') : t('days')}</span>
-              </div>}
-            </div>
-          </div>
+          <EditRow project={project} days={frozenDays} status='normal' editPrefs={editPrefs} dateLabel={doneDateLabel}/>
         </div>
         <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
           <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? t('reactivateConfirm') : t('reactivate')}</button>
@@ -7486,7 +7456,7 @@
             </div>}
           {done.length > 0 && <>
             <div className={isMobile ? 'px-6' : 'px-4'} style={{ paddingTop: '16px', paddingBottom: '16px', marginTop: '32px', }}><h2 className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '28px', color: '#8B9B99' }}>{t('archived')}</h2></div>
-            <div style={{ paddingBottom: '80px' }}>{done.map(p => <DoneCard key={p.id} project={p}/>)}</div>
+            <div style={{ paddingBottom: '80px' }}>{done.map(p => <DoneCard key={p.id} project={p} editPrefs={editPrefs}/>)}</div>
           </>}
         </div>
       );
@@ -7503,8 +7473,8 @@
           <div className="flex items-center gap-3" style={{ flexShrink: 0 }}>
             <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', display: 'inline-block' }}>
               <input type="number" value={text} min={min} max={max} step={step}
-                onChange={e => { setText(e.target.value); const n = parseInt(e.target.value, 10); if (!isNaN(n) && n >= min && n <= max) onChange(n); }}
-                onBlur={e => { const n = parseInt(e.target.value, 10); const v = isNaN(n) ? fallback : clamp(n); setText(String(v)); onChange(v); }}
+                onChange={e => { setText(e.target.value); const n = parseInt(e.target.value, 10); if (!isNaN(n) && n >= min && n <= max && n !== value) onChange(n); }}
+                onBlur={e => { const n = parseInt(e.target.value, 10); const v = isNaN(n) ? fallback : clamp(n); setText(String(v)); if (v !== value) onChange(v); }}
                 className="bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', width: '40px' }}/>
             </div>
             <span className="font-bebas-light text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '19px' }}>{unit}</span>
@@ -7741,7 +7711,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.109</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.110</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
