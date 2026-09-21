@@ -485,7 +485,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.113</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.114</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -7755,7 +7755,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.113</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.114</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
@@ -7962,6 +7962,8 @@
     // ROUTE — planification de déplacements (maison canonique)
     // ============================================================
     const RT_CARD = { background: '#23282A', border: '1px solid #2E3437', borderRadius: 14, padding: 14 };
+    // Carte hôtel : fond plus clair que les arrêts pour la repérer d'un coup d'œil dans la liste.
+    const RT_HOTEL_CARD = { ...RT_CARD, background: '#2F3639', border: '1px solid #444E51' };
     const RT_FIELD = { width: '100%', background: '#191D1F', border: '1px solid #333A3C', borderRadius: 8, color: '#EDEDE9', padding: '8px 10px', fontSize: 14, fontFamily: 'inherit', outline: 'none' };
     const rtFmtDateFR = (s) => { if (!s) return ''; try { return new Date(s + 'T12:00').toLocaleDateString('fr-CA', { weekday: 'short', day: 'numeric', month: 'short' }); } catch (e) { return s; } };
     const rtToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -8415,7 +8417,7 @@
     const rtOpenMap = (e) => { e.preventDefault(); e.stopPropagation(); const tmp = document.createElement('a'); tmp.href = e.currentTarget.href; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); };
 
     // Boîte hôtel : une nuitée glissée entre deux destinations d'une route.
-    const RouteHotelBox = ({ hotel, hostName, nextName, legs, onEdit, onRemove, collapsible }) => {
+    const RouteHotelBox = ({ hotel, hostName, nextName, fromLabel, legs, onEdit, onRemove, collapsible }) => {
       const [open, setOpen] = useState(false);
       const expanded = !collapsible || open;
       const to = legs && legs.to, from = legs && legs.from;
@@ -8426,8 +8428,9 @@
         </div>
       );
       return (
-        <div style={{ ...RT_CARD, borderColor: '#37413E' }}>
+        <div style={RT_HOTEL_CARD}>
           <div onClick={collapsible ? () => setOpen(o => !o) : undefined} style={{ display: 'flex', gap: 10, alignItems: 'center', cursor: collapsible ? 'pointer' : 'default' }}>
+            <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}><RtBed c="#C9D2D0" s={collapsible ? 18 : 20} /></span>
             <div className="font-bebas-regular" style={{ flex: 1, minWidth: 0, fontSize: collapsible ? 20 : 23, color: '#EDEDE9', letterSpacing: '0.03em', lineHeight: 1.1, wordBreak: expanded ? 'break-word' : 'normal', whiteSpace: expanded ? 'normal' : 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hotel.name || 'Hôtel'}</div>
             {collapsible && <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}><RtChevron dir={expanded ? 'up' : 'down'} c="#7D8C8A" /></span>}
             {expanded && <button onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Retirer l'hôtel" style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', flexShrink: 0 }}><RtTrash c="#5A6B69" /></button>}
@@ -8442,8 +8445,8 @@
                   </a>
                 </div>
               )}
-              <div style={{ marginTop: 12, borderTop: '1px solid #2E3437', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 7 }}>
-                {legRow(`De ${hostName}`, to)}
+              <div style={{ marginTop: 12, borderTop: '1px solid #3E4749', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {legRow(fromLabel || `De ${hostName}`, to)}
                 {nextName ? legRow(`Vers ${nextName}`, from) : null}
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
@@ -8485,7 +8488,7 @@
         onSave({ name: name.trim() || 'Hôtel', address: d.address, lat: d.lat, lng: d.lng });
       };
       return (
-        <div style={{ ...RT_CARD, borderColor: '#37413E' }}>
+        <div style={RT_HOTEL_CARD}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <RtBed c="#B9C6C3" s={17} />
             <span className="font-bebas-regular" style={{ fontSize: 15, color: '#C9D2D0', letterSpacing: '0.06em', position: 'relative', top: '1px' }}>{initial ? 'MODIFIER L\'HÔTEL' : 'AJOUTER UN HÔTEL'}</span>
@@ -8533,8 +8536,23 @@
       const projectChoices = (projects || []).filter(p => { const q = search.trim().toLowerCase(); if (!q) return true; return (p.name || '').toLowerCase().includes(q) || (p.address || '').toLowerCase().includes(q); });
       const addManual = (data) => { commit([...dests, { id: `d_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, projectId: null, name: data.name || '', address: data.address || '', lat: data.lat ?? null, lng: data.lng ?? null, dateStart: '', dateEnd: '', note: '' }]); setPicking(false); setSearch(''); };
       const updateDest = (id, u) => commit(dests.map(d => d.id === id ? { ...d, ...u } : d));
-      const removeDest = (id) => commit(dests.filter(d => d.id !== id));
-      const moveDest = (idx, dir) => { const j = idx + dir; if (j < 0 || j >= dests.length) return; const n = [...dests]; [n[idx], n[j]] = [n[j], n[idx]]; commit(n); };
+      // La nuitée « avant le premier arrêt » (hotelBefore) reste accrochée à l'arrêt en tête de liste,
+      // même quand on réordonne les arrêts ou qu'on retire le premier.
+      const keepStartHotelFirst = (list) => {
+        const i = list.findIndex(d => d.hotelBefore);
+        if (i <= 0) return list;
+        const n = list.map(d => ({ ...d }));
+        const h = n[i].hotelBefore; n[i].hotelBefore = null;
+        if (!n[0].hotelBefore) n[0].hotelBefore = h;
+        return n;
+      };
+      const removeDest = (id) => {
+        const gone = dests.find(d => d.id === id);
+        let n = dests.filter(d => d.id !== id);
+        if (gone && gone.hotelBefore && n.length > 0 && !n[0].hotelBefore) n = n.map((d, i) => i === 0 ? { ...d, hotelBefore: gone.hotelBefore } : d);
+        commit(n);
+      };
+      const moveDest = (idx, dir) => { const j = idx + dir; if (j < 0 || j >= dests.length) return; const n = [...dests]; [n[idx], n[j]] = [n[j], n[idx]]; commit(keepStartHotelFirst(n)); };
 
       const depGeocode = async () => {
         const a = depAddr.trim();
@@ -8558,11 +8576,19 @@
       }, [geoKey]);
 
       // Temps de trajet propres aux hôtels : arrêt -> hôtel -> arrêt suivant.
-      const hotelGeoKey = JSON.stringify(dests.map(d => [d.id, d.lat, d.lng, d.hotel && d.hotel.lat, d.hotel && d.hotel.lng]));
+      const startHotel = (dests[0] && dests[0].hotelBefore) || null;
+      const hotelGeoKey = JSON.stringify([depLat, depLng, startHotel && startHotel.lat, startHotel && startHotel.lng, ...dests.map(d => [d.id, d.lat, d.lng, d.hotel && d.hotel.lat, d.hotel && d.hotel.lng])]);
       useEffect(() => {
         let alive = true;
         (async () => {
           const next = {};
+          // Nuitée avant le premier arrêt : départ -> hôtel -> premier arrêt.
+          if (startHotel && startHotel.lat != null && startHotel.lng != null) {
+            const entry = {}, d0 = dests[0];
+            if (depLat != null && depLng != null) { try { entry.to = await getTravelTime(depLat, depLng, startHotel.lat, startHotel.lng); } catch (e) {} }
+            if (d0 && d0.lat != null && d0.lng != null) { try { entry.from = await getTravelTime(startHotel.lat, startHotel.lng, d0.lat, d0.lng); } catch (e) {} }
+            next.start = entry;
+          }
           for (let i = 0; i < dests.length; i++) {
             const d = dests[i], nd = dests[i + 1];
             const h = d.hotel;
@@ -8585,6 +8611,8 @@
           if (!rootRef.current) return;
           const rootTop = rootRef.current.getBoundingClientRect().top;
           const js = [];
+          // Nuitée avant le premier arrêt : ancrée juste au-dessus de la première carte.
+          if (dests.length > 0 && cardRefs.current[0]) js.push({ destId: 'start', y: (cardRefs.current[0].getBoundingClientRect().top - rootTop) - 10 });
           for (let i = 0; i < dests.length; i++) {
             const a = cardRefs.current[i];
             if (!a) continue;
@@ -8614,6 +8642,12 @@
         if (editHotelFor === d.id) return <RouteHotelForm initial={d.hotel || null} onSave={h => { setHotel(d.id, h); setEditHotelFor(null); }} onCancel={() => setEditHotelFor(null)} />;
         if (d.hotel) return <RouteHotelBox hotel={d.hotel} hostName={destName(d)} nextName={destName(nd)} legs={hotelLegs[d.id]} collapsible={collapsible} onEdit={() => setEditHotelFor(d.id)} onRemove={() => removeHotel(d.id)} />;
         return <RouteHotelAdd onClick={() => setEditHotelFor(d.id)} />;
+      };
+      const setStartHotel = (hotel) => { commit(dests.map((d, i) => i === 0 ? { ...d, hotelBefore: hotel } : d)); setEditHotelFor(null); };
+      const renderStartHotelSlot = (collapsible) => {
+        if (editHotelFor === 'start') return <RouteHotelForm initial={startHotel} onSave={setStartHotel} onCancel={() => setEditHotelFor(null)} />;
+        if (startHotel) return <RouteHotelBox hotel={startHotel} hostName={depLabel} fromLabel="Depuis le départ" nextName={destName(dests[0])} legs={hotelLegs.start} collapsible={collapsible} onEdit={() => setEditHotelFor('start')} onRemove={() => setStartHotel(null)} />;
+        return <RouteHotelAdd onClick={() => setEditHotelFor('start')} />;
       };
 
       const totalSec = Object.values(legs).reduce((s, l) => s + (l.durationSeconds || 0), 0);
@@ -8646,6 +8680,9 @@
             </div>
           )}
 
+          {!railMode && dests.length > 0 && (
+            <div style={{ marginBottom: 20 }}>{renderStartHotelSlot(true)}</div>
+          )}
           {dests.map((d, i) => (
             <React.Fragment key={d.id}>
               <RouteDestinationCard innerRef={el => { cardRefs.current[i] = el; }} dest={d} index={i} leg={legs[d.id]}
@@ -8660,17 +8697,18 @@
           {railMode && (
             <div style={{ position: 'absolute', top: 0, left: 'calc(100% + 34px)', width: 300 }} aria-hidden={junctions.length === 0}>
               {junctions.map(j => {
-                const i = dests.findIndex(x => x.id === j.destId);
-                if (i < 0) return null;
-                const d = dests[i], nd = dests[i + 1];
-                const linked = !!d.hotel;
+                const isStart = j.destId === 'start';
+                const i = isStart ? -1 : dests.findIndex(x => x.id === j.destId);
+                if (!isStart && i < 0) return null;
+                const d = isStart ? null : dests[i], nd = isStart ? null : dests[i + 1];
+                const linked = isStart ? !!startHotel : !!d.hotel;
                 return (
                   <div key={j.destId} style={{ position: 'absolute', top: j.y, right: 0, width: 300, transform: 'translateY(-50%)' }}>
                     <div style={{ position: 'absolute', left: -38, top: '50%', transform: 'translateY(-50%)', width: 38, height: 2, display: 'flex', alignItems: 'center' }}>
                       <span style={{ flex: 1, height: 2, background: `linear-gradient(90deg, rgba(74,84,83,0), ${linked ? '#4A5453' : '#3A4143'})` }} />
                       <span style={{ position: 'absolute', left: -3, width: 9, height: 9, borderRadius: '50%', background: '#23282A', border: `2px solid ${linked ? '#7dd3c6' : '#4A5453'}` }} />
                     </div>
-                    {renderHotelSlot(d, nd, false)}
+                    {isStart ? renderStartHotelSlot(false) : renderHotelSlot(d, nd, false)}
                   </div>
                 );
               })}
