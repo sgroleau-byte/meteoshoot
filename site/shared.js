@@ -151,6 +151,7 @@ var TRANSLATIONS = {
     pm: 'PM',
     travel: 'TRAJET',
     wake: 'RÉVEIL',
+    depart: 'DÉPART',
 
     // Settings
     homeAddressLabel: 'ADRESSE DE DÉPART PAR DÉFAUT (TRAJET)',
@@ -343,6 +344,7 @@ var TRANSLATIONS = {
     pm: 'PM',
     travel: 'TRAVEL',
     wake: 'WAKE',
+    depart: 'LEAVE',
 
     // Settings
     homeAddressLabel: 'DEFAULT DEPARTURE ADDRESS (TRAVEL)',

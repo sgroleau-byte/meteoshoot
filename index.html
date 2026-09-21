@@ -485,7 +485,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.112</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.113</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -1076,12 +1076,12 @@
       const minutes = totalMinutes % 60;
       return `${hours}H${String(minutes).padStart(2, '0')}`;
     };
-    // Marge pour être SUR PLACE avant le lever du soleil (repérage, installation, marche d'approche).
-    // Le réveil vise donc une arrivée sur place à (lever - cette marge), pas pile au lever.
-    const ON_SITE_LEAD_MIN = 50;
-    // Réveil = lever - marge sur place - trajet - préparation. Ainsi: réveil -> prépa -> trajet -> on arrive
-    // ON_SITE_LEAD_MIN minutes avant le lever.
-    const calcWakeUp = (sunrise, travel, prep=60) => { if (!sunrise || !travel) return null; return new Date(new Date(sunrise).getTime() - ON_SITE_LEAD_MIN*60*1000 - travel*1000 - prep*60*1000).toISOString(); };
+    // Marge pour être SUR PLACE avant le lever ou le coucher du soleil (repérage, installation, marche d'approche).
+    // Le départ vise donc une arrivée sur place à (lever ou coucher - cette marge), pas pile à l'heure du soleil.
+    const ON_SITE_LEAD_MIN = 60;
+    // Heure de départ = lever (AM) ou coucher (PM) - trajet - marge sur place. Ainsi: départ -> trajet -> on arrive
+    // ON_SITE_LEAD_MIN minutes avant le lever ou le coucher. (Remplace l'ancienne heure de réveil.)
+    const calcDeparture = (sunEvent, travel) => { if (!sunEvent || !travel) return null; return new Date(new Date(sunEvent).getTime() - ON_SITE_LEAD_MIN*60*1000 - travel*1000).toISOString(); };
     const weatherCodeIcon = { 
       0:'sunny', 1:'sunny', 2:'partly-cloudy', 3:'cloudy',  // 0-1=dégagé, 2=partiellement nuageux, 3=couvert
       45:'cloudy', 48:'cloudy',  // brouillard
@@ -2731,7 +2731,7 @@
     };
 
     const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, openActionsId, setOpenActionsId }) => {
-      const { advanceProject, deleteProject, prefs } = useStore();
+      const { advanceProject, deleteProject } = useStore();
       const { t } = useLang();
       const { reportWeather, clearWeather } = useWeatherStatus();
       const [weather, setWeather] = useState(null);
@@ -2764,7 +2764,8 @@
       // Quand la carte disparait (delete, changement de statut), on retire son rapport du contexte.
       useEffect(() => () => { clearWeather(project.id); }, [project.id, clearWeather]);
       const sun = weather?.daily?.[0];
-      const wakeUp = calcWakeUp(sun?.sunrise, project.travelTime?.durationSeconds, prefs.prepTime);
+      const departAM = calcDeparture(sun?.sunrise, project.travelTime?.durationSeconds);
+      const departPM = calcDeparture(sun?.sunset, project.travelTime?.durationSeconds);
 
       // Couleurs adaptées au mode sombre/clair
       const colorActive = '#FAF9F7';
@@ -2929,9 +2930,10 @@
                 {project.travelTime?.distanceMeters > 0 ? <span style={{ color: colorCharcoal, letterSpacing: '0.1em', marginTop: '-5px' }} className="text-lg">{Math.round(project.travelTime.distanceMeters / 1000)} KM</span> : <span style={{ color: 'transparent' }}>&nbsp;</span>}
               </div>
               <div className="flex flex-col justify-center pl-2 ml-6 border-l border-adaptive" style={{ minWidth: '75px' }}>
-                <span style={{ color: colorInactive }}>{t('wake')}</span>
-                <span style={{ color: (project.orientation?.includes('AM') && wakeUp) ? colorActive : colorInactive }}>{project.orientation?.includes('AM') && wakeUp ? formatTime(wakeUp).replace(':','H') : '—'}</span>
-                <span style={{ color: 'transparent' }}>&nbsp;</span>
+                {/* Deux lignes comme la colonne SOLEIL: départ du matin (lever) puis du soir (coucher), atténuées selon l'orientation. */}
+                <span style={{ color: colorInactive }}>{t('depart')}</span>
+                <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '—'}</span>
+                <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '—'}</span>
               </div>
               <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive" style={{ minWidth: '120px' }}>
                 <span style={{ color: colorInactive }}>{t('created')}</span>
@@ -5234,7 +5236,8 @@
 
       if (!project) return null;
       const sun = weather?.daily?.[0];
-      const wakeUp = calcWakeUp(sun?.sunrise, project.travelTime?.durationSeconds, prefs.prepTime);
+      const departAM = calcDeparture(sun?.sunrise, project.travelTime?.durationSeconds);
+      const departPM = calcDeparture(sun?.sunset, project.travelTime?.durationSeconds);
 
       const colorActive = '#FAF9F7';
       const colorInactive = '#404A48';
@@ -5429,9 +5432,9 @@
                     {project.travelTime?.distanceMeters > 0 ? <span style={{ color: colorCharcoal, letterSpacing: "0.1em", marginTop: "-3px", fontSize: "inherit" }}>{Math.round(project.travelTime.distanceMeters / 1000)} KM</span> : <span style={{ color: 'transparent' }}>&nbsp;</span>}
                   </div>
                   <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
-                    <span style={{ color: colorInactive }}>{t('wake')}</span>
-                    <span style={{ color: (project.orientation?.includes('AM') && wakeUp) ? colorActive : colorInactive }}>{project.orientation?.includes('AM') && wakeUp ? formatTime(wakeUp).replace(':','H') : '—'}</span>
-                    <span style={{ color: 'transparent' }}>&nbsp;</span>
+                    <span style={{ color: colorInactive }}>{t('depart')}</span>
+                    <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '—'}</span>
+                    <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '—'}</span>
                   </div>
                   <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
                     <span style={{ color: colorInactive }}>{t('created')}</span>
@@ -5476,9 +5479,9 @@
                     {project.travelTime?.distanceMeters > 0 ? <span style={{ color: colorCharcoal, letterSpacing: '0.1em', marginTop: '-5px' }} className="text-lg">{Math.round(project.travelTime.distanceMeters / 1000)} KM</span> : <span style={{ color: 'transparent' }}>&nbsp;</span>}
                   </div>
                   <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
-                    <span style={{ color: colorInactive }}>{t('wake')}</span>
-                    <span style={{ color: (project.orientation?.includes('AM') && wakeUp) ? colorActive : colorInactive }}>{project.orientation?.includes('AM') && wakeUp ? formatTime(wakeUp).replace(':','H') : '—'}</span>
-                    <span style={{ color: 'transparent' }}>&nbsp;</span>
+                    <span style={{ color: colorInactive }}>{t('depart')}</span>
+                    <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '—'}</span>
+                    <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '—'}</span>
                   </div>
                   <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive">
                     <span style={{ color: colorInactive }}>{t('created')}</span>
@@ -7553,7 +7556,6 @@
       const { t, lang, setLang } = useLang();
       const isMobile = useIsMobile();
       const [showUpgradePref, setShowUpgradePref] = useState(false);
-      const [prepTime, setPrepTime] = useState(prefs.prepTime || 60);
       const [msg, setMsg] = useState(null);
       const homeInputRef = React.useRef(null);
       const autocompleteRef = React.useRef(null);
@@ -7617,16 +7619,6 @@
                   />
                 </div>
                 {prefs.homeLat && <p className="text-xs mt-2" style={{ color: "#7dd3c6" }}>✓ {prefs.homeAddress}</p>}
-              </div>
-
-              <div className="py-5 border-b border-adaptive">
-                <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>{t('prepTimeLabel')}</label>
-                <div className="flex items-center gap-3" style={{ marginTop: '8px' }}>
-                  <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', display: 'inline-block' }}>
-                    <input type="number" value={prepTime} onChange={e => { const val = e.target.value; setPrepTime(val); const num = parseInt(val); if (!isNaN(num)) setPrefs({ prepTime: num }); }} onBlur={e => { const num = parseInt(e.target.value); if (isNaN(num) || num < 0) { setPrepTime(60); setPrefs({ prepTime: 60 }); } }} min="0" max="180" className="bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', width: '40px' }}/>
-                  </div>
-                  <span className="font-bebas-light text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '19px' }}>{t('minutes')}</span>
-                </div>
               </div>
 
               <div className="py-5 border-b border-adaptive">
@@ -7763,7 +7755,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.112</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.113</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
