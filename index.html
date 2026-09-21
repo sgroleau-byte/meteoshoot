@@ -485,7 +485,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.111</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.112</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -3604,6 +3604,8 @@
       }, [sunHour, project?.lat, project?.lng, sunDate]);
       const mapIsNight = nightOpacity >= 1;
       const [editingName, setEditingName] = useState(false);
+      const [addressCopied, setAddressCopied] = useState(false);
+      const addressCopiedTimer = React.useRef(null);
       const addressInputRef = React.useRef(null);
       const autocompleteRef = React.useRef(null);
       const departureInputRef = React.useRef(null);
@@ -4422,6 +4424,43 @@
         if (!depLat || !depLng || !destLat || !destLng) return null;
         try { return await getTravelTime(depLat, depLng, destLat, destLng); } catch(e) { return null; }
       };
+
+      // Copie l'adresse du projet dans le presse-papiers (bouton à côté de la flèche Google Maps).
+      // Le repli par textarea + execCommand couvre les contextes où navigator.clipboard est absent ou refusé
+      // (application installée sur iPhone, page servie sans HTTPS).
+      const copyProjectAddress = async () => {
+        const text = project?.address;
+        if (!text) return;
+        let ok = false;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+            ok = true;
+          }
+        } catch(e) {}
+        if (!ok) {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'fixed';
+          ta.style.top = '0';
+          ta.style.left = '0';
+          ta.style.opacity = '0';
+          ta.style.fontSize = '16px'; // évite le zoom automatique d'iOS sur le focus
+          document.body.appendChild(ta);
+          ta.select();
+          ta.setSelectionRange(0, text.length);
+          try { ok = document.execCommand('copy'); } catch(e) {}
+          ta.remove();
+        }
+        if (!ok) return;
+        setAddressCopied(true);
+        clearTimeout(addressCopiedTimer.current);
+        addressCopiedTimer.current = setTimeout(() => setAddressCopied(false), 1600);
+      };
+      useEffect(() => () => clearTimeout(addressCopiedTimer.current), []);
+      // Changer de projet pendant la confirmation: on repart de l'icône copier.
+      useEffect(() => { setAddressCopied(false); }, [projectId]);
 
       // Google Places Autocomplete for project address
       useEffect(() => {
@@ -5489,6 +5528,8 @@
                   <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('projectAddress')}</label>
                   <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <input key={project.address || ''} ref={addressInputRef} type="text" defaultValue={project.address || ''} placeholder={t('enterAddress')} className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1, fontFamily: "'Avenir', sans-serif", fontWeight: 300 }}/>
+                    {project.address && <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); copyProjectAddress(); }} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)', background: 'none', cursor: 'pointer' }} title={addressCopied ? t('addressCopied') : t('copyAddress')} aria-label={addressCopied ? t('addressCopied') : t('copyAddress')}><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{addressCopied ? <polyline points="20 6 9 17 4 12"/> : <g><rect x="8" y="8" width="14" height="14" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></g>}</svg></button>}
+                    {project.address && <a href={`https://earth.google.com/web/search/${encodeURIComponent(project.address)}`} target="_blank" rel="noopener noreferrer" onClick={rtOpenMap} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Google Earth" aria-label="Google Earth"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></a>}
                     {project.address && <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(project.address)}`} target="_blank" rel="noopener noreferrer" onClick={(e) => { e.preventDefault(); e.stopPropagation(); const tmp = document.createElement('a'); tmp.href = e.currentTarget.href; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); }} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Itinéraire"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>}
                   </div>
                 </div>
@@ -7722,7 +7763,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.111</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.112</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
