@@ -132,6 +132,10 @@ var TRANSLATIONS = {
     sunDate: 'DATE SOLEIL',
     updateLocation: 'METTRE À JOUR',
     kmh: 'KM/H',
+    wind: 'VENT',
+    temp: 'TEMP.',
+    gust: 'RAFALE',
+    kp: 'KP',
 
     // Time & dates
     today: "AUJOURD'HUI",
@@ -325,6 +329,10 @@ var TRANSLATIONS = {
     sunDate: 'SUN DATE',
     updateLocation: 'UPDATE',
     kmh: 'KM/H',
+    wind: 'WIND',
+    temp: 'TEMP.',
+    gust: 'GUST',
+    kp: 'KP',
 
     // Time & dates
     today: 'TODAY',

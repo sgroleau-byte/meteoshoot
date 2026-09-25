@@ -485,7 +485,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.116</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.117</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -1385,7 +1385,7 @@
       // les jours qu'il couvre, GFS (portee 16 j) pour completer jusqu'a 10 jours. La sortie
       // garde exactement la meme forme qu'une reponse Open-Meteo unique: ni l'affichage ni le
       // parsing plus bas ne changent.
-      const qs = `latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode,windspeed_10m,cloudcover,precipitation,direct_radiation,diffuse_radiation,cloudcover_low,cloudcover_mid,cloudcover_high&daily=weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=America/Toronto&forecast_days=10`;
+      const qs = `latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode,windspeed_10m,windgusts_10m,cloudcover,precipitation,direct_radiation,diffuse_radiation,cloudcover_low,cloudcover_mid,cloudcover_high&daily=weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=America/Toronto&forecast_days=10`;
       const [iconRes, gfsRes, smokeMap] = await Promise.all([
         fetchOpenMeteoModel('dwd-icon', qs),
         fetchOpenMeteoModel('gfs', qs),
@@ -1394,7 +1394,7 @@
       const icon = iconRes.data || null;
       const gfs = gfsRes.data || null;
 
-      const HOURLY_KEYS = ['temperature_2m', 'weathercode', 'windspeed_10m', 'cloudcover', 'precipitation', 'direct_radiation', 'diffuse_radiation', 'cloudcover_low', 'cloudcover_mid', 'cloudcover_high'];
+      const HOURLY_KEYS = ['temperature_2m', 'weathercode', 'windspeed_10m', 'windgusts_10m', 'cloudcover', 'precipitation', 'direct_radiation', 'diffuse_radiation', 'cloudcover_low', 'cloudcover_mid', 'cloudcover_high'];
       const DAILY_KEYS = ['weathercode', 'temperature_2m_max', 'temperature_2m_min', 'sunrise', 'sunset'];
       const dateOf = (t) => String(t).slice(0, 10);
 
@@ -1546,7 +1546,7 @@
       };
 
       const formatted = {
-        hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), cloudLow: data.hourly.cloudcover_low?.[i] ?? null, smoke: smokeMap[dateOf(t)] || 0, icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]) })),
+        hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), gust: data.hourly.windgusts_10m?.[i] != null ? Math.round(data.hourly.windgusts_10m[i]) : null, cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), cloudLow: data.hourly.cloudcover_low?.[i] ?? null, smoke: smokeMap[dateOf(t)] || 0, icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]) })),
         daily: data.daily.time.map((t,i) => {
           const stats = getDailyStats(t);
           // Use hourly-derived icon when available, fallback to daily weathercode
@@ -6880,11 +6880,112 @@
       );
     };
 
+    // Indice Kp (activité géomagnétique, aurores): estimation à la minute de la NOAA (SWPC).
+    // Valeur entière du dernier relevé; cache de 10 min en localStorage; null si injoignable.
+    const KP_CACHE_KEY = 'sp-kp-cache';
+    const KP_TTL_MS = 10 * 60 * 1000;
+    const fetchKp = async () => {
+      try {
+        const c = JSON.parse(localStorage.getItem(KP_CACHE_KEY) || 'null');
+        if (c && typeof c.kp === 'number' && (Date.now() - c.ts) < KP_TTL_MS) return c.kp;
+      } catch (e) { /* cache illisible: on ignore */ }
+      try {
+        const res = await fetch('https://services.swpc.noaa.gov/json/planetary_k_index_1m.json');
+        if (!res.ok) return null;
+        const arr = await res.json();
+        const last = Array.isArray(arr) && arr.length ? arr[arr.length - 1] : null;
+        const kp = last && last.kp_index != null ? Math.round(Number(last.kp_index)) : null;
+        if (kp == null || Number.isNaN(kp)) return null;
+        try { localStorage.setItem(KP_CACHE_KEY, JSON.stringify({ kp, ts: Date.now() })); } catch (e) { /* quota plein, on ignore */ }
+        return kp;
+      } catch (e) { return null; }
+    };
+
     // ===== GEO WEATHER CARD (mobile) =====
+    // Maquette: _PSD/MeteoActuelleApp.PSD (capture iPhone à 3x, 1179 px de large). Toutes les cotes
+    // ci-dessous sont en px CSS (valeurs de la maquette divisées par 3), comptées depuis le haut de la
+    // zone sûre et le bord gauche de l'écran, pour une largeur de 393 px; `zoom` adapte l'ensemble aux
+    // autres largeurs. La carte est une bande qui défile horizontalement: la page « météo actuelle »
+    // (soleil, deux heures, vent) glisse vers la gauche et laisse apparaître les heures suivantes.
+    const GEO_CARD_W = 393;
+    const GEO_CARD_H = 163.5;
+    const GEO_COL_W = 37.5;
+    // Courbe du soleil: cosinus surélevé, sommet en (101 ; 45,7), base à y=88,3, demi-largeur 76,7.
+    const GEO_CURVE = { peakX: 101, peakY: 45.7, baseY: 88.3, half: 76.7 };
+    const geoCurveY = (x) => {
+      const d = Math.abs(x - GEO_CURVE.peakX);
+      if (d >= GEO_CURVE.half) return GEO_CURVE.baseY;
+      return GEO_CURVE.baseY - (GEO_CURVE.baseY - GEO_CURVE.peakY) * (1 + Math.cos(Math.PI * d / GEO_CURVE.half)) / 2;
+    };
+    const GEO_CURVE_PATH = (() => {
+      const x0 = GEO_CURVE.peakX - GEO_CURVE.half, x1 = GEO_CURVE.peakX + GEO_CURVE.half, n = 80;
+      const pts = [];
+      for (let i = 0; i <= n; i++) { const x = x0 + (x1 - x0) * i / n; pts.push(`${x.toFixed(2)},${geoCurveY(x).toFixed(2)}`); }
+      return 'M' + pts.join(' L');
+    })();
+    // Fondu des deux extrémités du trait (profil d'opacité relevé sur la maquette entre x=31 et x=177).
+    const GEO_CURVE_FADE = [[0, 0], [0.046, 0.016], [0.091, 0.05], [0.137, 0.165], [0.183, 0.435], [0.228, 0.75], [0.274, 0.937], [0.32, 0.99], [0.365, 1], [0.594, 1], [0.639, 0.99], [0.685, 0.945], [0.731, 0.77], [0.776, 0.427], [0.822, 0.153], [0.868, 0.043], [0.913, 0.012], [0.959, 0.008], [1, 0]];
+    // La boule voyage du centre de l'heure de lever (x=53,7) au centre de l'heure de coucher (x=149,3).
+    const GEO_BALL_X0 = 53.7, GEO_BALL_X1 = 149.3;
+    // Teinte du % de soleil direct: même échelle que la bande horaire du détail de projet.
+    const geoSunTint = (pct) => pct == null ? '#6f7d7b' : pct >= 60 ? '#E9D27A' : pct >= 45 ? '#E4CB78' : pct >= 32 ? '#DBCD92' : pct >= 20 ? '#CFC8A4' : pct >= 10 ? '#C3BDAA' : '#A7A99C';
+
+    // Colonne d'une heure: heure, icône, % de nuages, % de soleil direct (format de la bande horaire
+    // du détail de projet réduit à 0,675, positions relevées sur la maquette).
+    const GeoHourColumn = ({ h, dailyMap }) => {
+      const d = new Date(h.time);
+      const hr = d.getHours();
+      const sun = dailyMap[d.toDateString()];
+      const srH = sun && sun.sunrise ? new Date(sun.sunrise).getHours() : null;
+      const ssH = sun && sun.sunset ? new Date(sun.sunset).getHours() : null;
+      const isNight = srH !== null && ssH !== null && (hr < srH || hr >= ssH);
+      const icon = (h.icon === 'thunderstorm' || h.icon === 'snow' || h.icon === 'rain') ? h.icon
+        : ((!isNight && veilIcon(h.cloudcover, h.cloudLow, h.sunFraction)) || cloudcoverToIcon(h.cloudcover, isNight));
+      const sunPct = h.sunFraction != null ? Math.round(h.sunFraction * 100) : null;
+      const sunColor = geoSunTint(sunPct);
+      const centered = { position: 'absolute', left: '50%', transform: 'translateX(-50%)', whiteSpace: 'nowrap', lineHeight: 1 };
+      const tint = isNight ? 'rgba(250,249,247,0.05)' : (h.smoke ? SMOKE_TINT[h.smoke] : null);
+      return (
+        <div style={{ position: 'relative', width: GEO_COL_W, height: GEO_CARD_H, flexShrink: 0 }}>
+          {tint && <div style={{ position: 'absolute', left: 0, right: 0, top: 52, height: 106, background: tint }}/>}
+          <span className="font-bebas-bold text-charcoal-muted" style={{ ...centered, top: 62.4, fontSize: 12.15, letterSpacing: '0.04em', paddingLeft: '0.04em' }}>{hr}H</span>
+          <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: 74.6, width: 27, height: 27 }}>
+            <WeatherIcon type={icon} className={`w-[27px] h-[27px] ${isNight ? 'opacity-50' : ''}`}/>
+          </div>
+          <span className="font-bebas-bold text-charcoal" style={{ ...centered, top: 112.83, fontSize: 10.8, letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+            <svg width="8.1" height="8.1" viewBox="0 0 32 32" style={{ flexShrink: 0 }}><g fill="#8A9794"><circle cx="12" cy="18" r="6"/><circle cx="20" cy="16" r="7"/><rect x="8" y="18" width="15" height="6" rx="3"/></g></svg>
+            {h.cloudcover != null ? `${h.cloudcover}%` : '--'}
+          </span>
+          <span className="font-bebas-bold" style={{ ...centered, top: 134.76, fontSize: 10.8, letterSpacing: '0.04em', color: sunColor, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+            <svg width="7.4" height="7.4" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: -1 }}><circle cx="16" cy="16" r="8" fill={sunColor}/></svg>
+            {sunPct != null ? `${sunPct}%` : '--'}
+          </span>
+        </div>
+      );
+    };
+
     const GeoWeatherCard = () => {
       const { t } = useLang();
       const [geoData, setGeoData] = useState(null);
       const [status, setStatus] = useState(() => localStorage.getItem('geo-permission') === 'granted' ? 'loading' : 'prompt');
+      // Indice Kp (activité géomagnétique), chargé une fois la météo affichée.
+      const [kp, setKp] = useState(null);
+      useEffect(() => {
+        if (status !== 'done') return;
+        let alive = true;
+        fetchKp().then((v) => { if (alive) setKp(v); });
+        return () => { alive = false; };
+      }, [status]);
+      // Tick à la minute: la boule suit l'heure courante sur la courbe.
+      const [nowMs, setNowMs] = useState(() => Date.now());
+      useEffect(() => { const id = setInterval(() => setNowMs(Date.now()), 60000); return () => clearInterval(id); }, []);
+      // Largeur d'écran: la carte est dessinée pour 393 px et mise à l'échelle (zoom) sur les autres largeurs.
+      const [vw, setVw] = useState(() => window.innerWidth || GEO_CARD_W);
+      useEffect(() => {
+        const onResize = () => setVw(window.innerWidth || GEO_CARD_W);
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+      }, []);
 
       const requestGeo = () => {
         setStatus('loading');
@@ -6895,36 +6996,31 @@
               localStorage.setItem('geo-permission', 'granted');
               const lat = pos.coords.latitude;
               const lng = pos.coords.longitude;
-              let cityName = 'Ma position';
+              let city = 'Ma position';
               try {
                 const rgResult = await reverseGeocode(lat, lng);
                 const comps = rgResult.results[0]?.address_components || [];
                 const locality = comps.find(c => c.types.includes('locality'));
                 const sublocality = comps.find(c => c.types.includes('sublocality'));
                 const admin3 = comps.find(c => c.types.includes('administrative_area_level_3'));
-                const prov = comps.find(c => c.types.includes('administrative_area_level_1'));
                 const best = locality || sublocality || admin3;
-                if (best) {
-                  cityName = best.long_name;
-                  if (prov) cityName += ', ' + prov.short_name;
-                }
+                if (best) city = best.long_name;
               } catch(e) { console.warn('Reverse geocode failed', e); }
               const weatherResult = await fetchWeather(lat, lng);
               const weather = weatherResult.data;
               const today = weather?.daily?.[0];
               if (!today) { setStatus('error'); return; }
-              const nowH = new Date().getHours();
-              const currentHourly = weather.hourly?.find(h => new Date(h.time).getHours() === nowH);
-              const cloudcover = currentHourly?.cloudcover ?? today.cloudcover ?? null;
-              const sunFraction = currentHourly?.sunFraction ?? today.sunFraction ?? null;
-              const cloudLow = currentHourly?.cloudLow ?? today.cloudLow ?? null;
-              const smoke = currentHourly?.smoke ?? today.smoke ?? 0;
-              const icon = currentHourly?.icon || today.icon || (cloudcover !== null ? null : 'cloudy');
-              // Fumee de feux: signalee par la teinte de fond seulement; l'icone reste la vraie meteo.
-              const weatherIcon = cloudcover !== null
-                ? (veilIcon(cloudcover, cloudLow, sunFraction) || (cloudcover <= 10 ? 'sunny-bright' : cloudcover <= 20 ? 'sunny' : cloudcover <= 30 ? 'sunny-few-clouds' : cloudcover <= 40 ? 'mostly-sunny' : cloudcover <= 55 ? 'partly-cloudy' : cloudcover <= 70 ? 'mostly-cloudy' : cloudcover <= 85 ? 'cloudy-glimpse' : 'cloudy'))
-                : (icon || 'cloudy');
-              setGeoData({ cityName, sunrise: today.sunrise, sunset: today.sunset, high: today.high, low: today.low, cloudcover, weatherIcon, smoke, currentTemp: currentHourly?.temp ?? null });
+              // Heures à venir: de l'heure courante à 24 h plus loin (deux visibles, le reste au défilement).
+              const startOfHour = new Date();
+              startOfHour.setMinutes(0, 0, 0);
+              const allHours = weather.hourly || [];
+              const firstIdx = allHours.findIndex(h => new Date(h.time).getTime() >= startOfHour.getTime());
+              const hours = firstIdx >= 0 ? allHours.slice(firstIdx, firstIdx + 24) : [];
+              const currentHourly = hours[0] || null;
+              // Lever et coucher par date, pour griser les heures de nuit dans les colonnes.
+              const dailyMap = {};
+              (weather.daily || []).forEach(d => { if (d.sunrise) dailyMap[new Date(d.sunrise).toDateString()] = { sunrise: d.sunrise, sunset: d.sunset }; });
+              setGeoData({ city, sunrise: today.sunrise, sunset: today.sunset, temp: currentHourly?.temp ?? null, wind: currentHourly?.wind ?? null, gust: currentHourly?.gust ?? null, hours, dailyMap });
               setStatus('done');
             } catch(e) { console.error('GeoWeather error', e); setStatus('error'); }
           },
@@ -6936,18 +7032,6 @@
       useEffect(() => {
         if (status === 'loading' && localStorage.getItem('geo-permission') === 'granted') requestGeo();
       }, []);
-
-      const now = new Date();
-      const days = ['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'];
-      const months = ['JAN','FÉV','MAR','AVR','MAI','JUIN','JUIL','AOÛT','SEP','OCT','NOV','DÉC'];
-      const dayName = days[now.getDay()];
-      const dateStr = `${dayName} ${now.getDate()} ${months[now.getMonth()]}`;
-
-      const fmtSun = (iso) => {
-        if (!iso) return '--H--';
-        const d = new Date(iso);
-        return `${d.getHours()}H${String(d.getMinutes()).padStart(2,'0')}`;
-      };
 
       if (status === 'prompt') return (
         <div style={{ margin: '0 12px', marginBottom: '15px', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', overflow: 'hidden', padding: '24px 28px', textAlign: 'center' }}>
@@ -6970,55 +7054,79 @@
       );
       if (status === 'error' || !geoData) return null;
 
-      // Done: show full weather card
+      // Position de la boule: fraction du jour écoulée entre le lever et le coucher; absente la nuit.
+      const sunriseMs = geoData.sunrise ? new Date(geoData.sunrise).getTime() : null;
+      const sunsetMs = geoData.sunset ? new Date(geoData.sunset).getTime() : null;
+      const dayFrac = (sunriseMs != null && sunsetMs != null && sunsetMs > sunriseMs) ? (nowMs - sunriseMs) / (sunsetMs - sunriseMs) : null;
+      const showBall = dayFrac !== null && dayFrac >= 0 && dayFrac <= 1;
+      const ballX = showBall ? GEO_BALL_X0 + dayFrac * (GEO_BALL_X1 - GEO_BALL_X0) : 0;
+      const ballY = showBall ? geoCurveY(ballX) : 0;
+      const scale = vw >= 320 ? vw / GEO_CARD_W : 1;
+      const hours = geoData.hours || [];
+      const fmt2 = (v) => v == null ? '--' : String(v).padStart(2, '0');
+      // Séparateurs verticaux: trait d'un tiers de px CSS (1 px physique à 3x) à 27 % de blanc, dessinés en SVG
+      // pour une couverture exacte (un div de 0,34 px est arrondi par le navigateur et ressort plus lourd).
+      const hairline = (x) => <rect x={x} y={52} width={1 / 3} height={106} fill="#ffffff" fillOpacity={0.27}/>;
+      const labelStyle = { position: 'absolute', top: 83.07, fontSize: 12.62, letterSpacing: '0.1em', color: '#575E5E', lineHeight: 1, whiteSpace: 'nowrap' };
+      const timeStyle = { position: 'absolute', top: 102.37, fontSize: 46.67, letterSpacing: 0, color: '#8D9898', lineHeight: 1, whiteSpace: 'nowrap' };
+      // Bloc vent: deux colonnes centrées à x=321,7 et x=355,8; étiquette, valeur, unité.
+      const cxA = 321.7, cxB = 355.8;
+      const wCentered = (cx, top) => ({ position: 'absolute', left: cx, top, transform: 'translateX(-50%)', lineHeight: 1, whiteSpace: 'nowrap' });
+      const wLabel = (cx, top, text) => <span className="font-bebas-book" style={{ ...wCentered(cx, top), fontSize: 9.3, letterSpacing: '0.1em', paddingLeft: '0.1em', color: '#575E5E' }}>{text}</span>;
+      const wUnit = (cx, top, text) => <span className="font-bebas-book" style={{ ...wCentered(cx, top), fontSize: 9.5, letterSpacing: '0.1em', paddingLeft: '0.1em', color: '#8D9898' }}>{text}</span>;
+      const wValue = (cx, top, text, degree) => (
+        <span className="font-bebas-bold" style={{ ...wCentered(cx, top), fontSize: 16.67, letterSpacing: '0.04em', paddingLeft: degree ? 0 : '0.04em', color: '#8D9898', display: 'inline-flex', alignItems: 'flex-start' }}>
+          {text}
+          {degree && <svg width="3" height="3" viewBox="0 0 3 3" style={{ marginLeft: 4, marginTop: 0.83, flexShrink: 0 }}><circle cx="1.5" cy="1.5" r="1.05" fill="none" stroke="#8D9898" strokeWidth="0.65"/></svg>}
+        </span>
+      );
+
+      // Marges négatives: la carte se cale sur le haut de la zone sûre (le conteneur ajoute 16 px) et
+      // annule les 16 px de la liste en dessous, pour que l'entête du premier dossier tombe comme sur la maquette.
       return (
-        <div style={{ margin: '0 12px', marginBottom: '15px', borderRadius: '37px', background: 'transparent', position: 'relative', zIndex: 2, overflow: 'hidden', padding: '20px 28px 5px' }}>
-          {/* Top row: date + city */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '2px', gap: '12px', paddingLeft: '0', textAlign: 'center' }}>
-            <div className="font-bebas-bold" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap', width: '100%', textAlign: 'center' }}>
-              {t('today')} {dateStr} / {geoData.cityName}
-            </div>
-          </div>
-          {/* Main content — centered */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '80px' }}>
-            {/* Sunrise / Sunset with PNG */}
-            <div style={{ flex: '0 0 auto' }}>
-              <div style={{ display: 'flex', gap: '28px', alignItems: 'flex-end' }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-bold" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.05em', marginBottom: '2px' }}>{t('sunrise')}</div>
-                  <div className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '25px', color: '#ffffff', lineHeight: '1' }}>{fmtSun(geoData.sunrise)}</div>
+        <div style={{ position: 'relative', zIndex: 2, marginTop: '-16px', marginBottom: '-16px', width: '100%', overflow: 'hidden' }}>
+          <div style={{ zoom: scale, width: GEO_CARD_W, height: GEO_CARD_H }}>
+            <div className="hour-scroll" style={{ width: GEO_CARD_W, height: GEO_CARD_H, overflowX: 'auto', overflowY: 'hidden' }}>
+              <div style={{ display: 'flex', width: 'max-content', height: GEO_CARD_H }}>
+                {/* Page « météo actuelle »: glisse vers la gauche au défilement. */}
+                <div style={{ position: 'relative', width: GEO_CARD_W, height: GEO_CARD_H, flexShrink: 0 }}>
+                  <div className="font-bebas-book" style={{ position: 'absolute', left: 0, right: 0, top: 5.36, textAlign: 'center', fontSize: 18.73, letterSpacing: '0.2em', paddingLeft: '0.2em', color: '#ffffff', lineHeight: 1, whiteSpace: 'nowrap', textTransform: 'uppercase' }}>{geoData.city}</div>
+                  {/* Courbe du soleil, ton sur ton, extrémités fondues. */}
+                  <svg width={GEO_CARD_W} height={GEO_CARD_H} viewBox={`0 0 ${GEO_CARD_W} ${GEO_CARD_H}`} style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none' }}>
+                    <defs>
+                      <linearGradient id="geoSunCurveFade" gradientUnits="userSpaceOnUse" x1="31" y1="0" x2="177" y2="0">
+                        {GEO_CURVE_FADE.map(([o, a], i) => <stop key={i} offset={o} stopColor="#ffffff" stopOpacity={a}/>)}
+                      </linearGradient>
+                    </defs>
+                    <path d={GEO_CURVE_PATH} fill="none" stroke="url(#geoSunCurveFade)" strokeWidth="1.33" strokeLinecap="round" opacity="0.27"/>
+                    {hairline(202.8)}
+                    {hairline(293.2)}
+                  </svg>
+                  {/* Boule du soleil (12 px, halo blanc doux), à la position de l'heure courante; absente la nuit. */}
+                  {showBall && <div style={{ position: 'absolute', left: ballX - 6, top: ballY - 6, width: 12, height: 12, borderRadius: '50%', background: '#9B9D9E', boxShadow: '0 0 11px 1.8px rgba(255,255,255,0.57)' }}/>}
+                  <span className="font-bebas-book" style={{ ...labelStyle, left: 34.3 }}>{t('sunrise')}</span>
+                  <span className="font-bebas-book" style={{ ...labelStyle, left: 130.3 }}>{t('sunset')}</span>
+                  <span className="font-bebas-book" style={{ ...timeStyle, left: 17.67 }}>{formatTime(geoData.sunrise)}</span>
+                  <span className="font-bebas-book" style={{ ...timeStyle, left: 113.67 }}>{formatTime(geoData.sunset)}</span>
+                  <div style={{ position: 'absolute', left: 203.95, top: 0, display: 'flex' }}>
+                    {hours.slice(0, 2).map(h => <GeoHourColumn key={h.time} h={h} dailyMap={geoData.dailyMap}/>)}
+                  </div>
+                  {wLabel(cxA, 58.8, t('wind'))}
+                  {wLabel(cxB, 58.8, t('temp'))}
+                  {wValue(cxA, 72.9, fmt2(geoData.wind))}
+                  {wValue(cxB, 72.9, geoData.temp == null ? '--' : String(geoData.temp), true)}
+                  {wUnit(cxA, 89.5, t('kmh'))}
+                  {wLabel(cxA, 111, t('gust'))}
+                  {wLabel(cxB, 111, t('kp'))}
+                  {wValue(cxA, 124.5, fmt2(geoData.gust))}
+                  {wValue(cxB, 124.5, kp == null ? '--' : String(kp))}
+                  {wUnit(cxA, 141.7, t('kmh'))}
+                  {wUnit(cxB, 141.7, t('kp'))}
                 </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-bold" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.05em', marginBottom: '2px' }}>{t('sunset')}</div>
-                  <div className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '25px', color: '#ffffff', lineHeight: '1' }}>{fmtSun(geoData.sunset)}</div>
-                </div>
-              </div>
-              {/* Sunrise/Sunset PNG with colored flares */}
-              <div style={{ position: 'relative', marginTop: '2px', display: 'inline-block', zoom: 0.5 }}>
-                <img src="imgProjet/sunsetsunrise.png" alt="" style={{ display: 'block', mixBlendMode: 'screen', opacity: 0.28 }}/>
-                {/* Yellow flare over sunrise (left circle) */}
-                <div style={{ position: 'absolute', left: '-5%', top: '-40px', width: '120px', height: '120px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,226,107,0.5) 0%, rgba(255,226,107,0.06) 55%, rgba(255,226,107,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none' }}/>
-                {/* Orange flare over sunset (right circle) */}
-                <div style={{ position: 'absolute', right: '-2%', top: '-40px', width: '120px', height: '120px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(210,100,20,0.5) 0%, rgba(210,100,20,0.07) 55%, rgba(210,100,20,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none' }}/>
-              </div>
-            </div>
-            {/* Right side: icon + cloud + temps */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <div style={{ textAlign: 'center', position: 'relative', left: '-25px', ...(geoData.smoke ? { background: SMOKE_TINT[geoData.smoke], borderRadius: '10px', padding: '4px 8px' } : {}) }}>
-                <WeatherIcon type={geoData.weatherIcon} className="w-8 h-8"/>
-                <div className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '13px', color: 'rgba(255,255,255,0.6)', marginTop: '2px' }}>
-                  {geoData.cloudcover !== null ? `${geoData.cloudcover}%` : '—'}
-                </div>
-              </div>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                  <span className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.35)' }}>MAX</span>
-                  <span className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '25px', color: '#ffffff', lineHeight: '1' }}>{geoData.high}°</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '2px' }}>
-                  <span className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.35)' }}>MIN</span>
-                  <span className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '25px', color: '#ffffff', lineHeight: '1' }}>{geoData.low}°</span>
-                </div>
+                {/* Heures suivantes, révélées au défilement (même colonne, même séparateur). */}
+                {hours.length > 2 && <svg width={1.15} height={GEO_CARD_H} viewBox={`0 0 1.15 ${GEO_CARD_H}`} style={{ flexShrink: 0, display: 'block' }}>{hairline(0)}</svg>}
+                {hours.slice(2).map(h => <GeoHourColumn key={h.time} h={h} dailyMap={geoData.dailyMap}/>)}
+                <div style={{ width: 14.25, flexShrink: 0 }}/>
               </div>
             </div>
           </div>
@@ -7793,7 +7901,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.116</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.117</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
