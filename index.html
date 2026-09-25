@@ -485,7 +485,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.117</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.118</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -6908,7 +6908,7 @@
     // autres largeurs. La carte est une bande qui défile horizontalement: la page « météo actuelle »
     // (soleil, deux heures, vent) glisse vers la gauche et laisse apparaître les heures suivantes.
     const GEO_CARD_W = 393;
-    const GEO_CARD_H = 163.5;
+    const GEO_CARD_H = 170;
     const GEO_COL_W = 37.5;
     // Courbe du soleil: cosinus surélevé, sommet en (101 ; 45,7), base à y=88,3, demi-largeur 76,7.
     const GEO_CURVE = { peakX: 101, peakY: 45.7, baseY: 88.3, half: 76.7 };
@@ -6947,7 +6947,7 @@
       const tint = isNight ? 'rgba(250,249,247,0.05)' : (h.smoke ? SMOKE_TINT[h.smoke] : null);
       return (
         <div style={{ position: 'relative', width: GEO_COL_W, height: GEO_CARD_H, flexShrink: 0 }}>
-          {tint && <div style={{ position: 'absolute', left: 0, right: 0, top: 52, height: 106, background: tint }}/>}
+          {tint && <div style={{ position: 'absolute', left: 0, right: 0, top: 46, height: 118, background: tint }}/>}
           <span className="font-bebas-bold text-charcoal-muted" style={{ ...centered, top: 62.4, fontSize: 12.15, letterSpacing: '0.04em', paddingLeft: '0.04em' }}>{hr}H</span>
           <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: 74.6, width: 27, height: 27 }}>
             <WeatherIcon type={icon} className={`w-[27px] h-[27px] ${isNight ? 'opacity-50' : ''}`}/>
@@ -7066,25 +7066,26 @@
       const fmt2 = (v) => v == null ? '--' : String(v).padStart(2, '0');
       // Séparateurs verticaux: trait d'un tiers de px CSS (1 px physique à 3x) à 27 % de blanc, dessinés en SVG
       // pour une couverture exacte (un div de 0,34 px est arrondi par le navigateur et ressort plus lourd).
-      const hairline = (x) => <rect x={x} y={52} width={1 / 3} height={106} fill="#ffffff" fillOpacity={0.27}/>;
+      const hairline = (x) => <rect x={x} y={46} width={1 / 3} height={118} fill="#ffffff" fillOpacity={0.27}/>;
       const labelStyle = { position: 'absolute', top: 83.07, fontSize: 12.62, letterSpacing: '0.1em', color: '#575E5E', lineHeight: 1, whiteSpace: 'nowrap' };
       const timeStyle = { position: 'absolute', top: 102.37, fontSize: 46.67, letterSpacing: 0, color: '#8D9898', lineHeight: 1, whiteSpace: 'nowrap' };
-      // Bloc vent: deux colonnes centrées à x=321,7 et x=355,8; étiquette, valeur, unité.
-      const cxA = 321.7, cxB = 355.8;
+      // Bloc vent: deux colonnes centrées à x=323 et x=363; étiquette, valeur, unité. Agrandi en v633.118
+      // (maquette: 9,3 / 16,67 / 9,5 px), recentré dans la hauteur des séparateurs (46 à 164).
+      const cxA = 323, cxB = 363;
       const wCentered = (cx, top) => ({ position: 'absolute', left: cx, top, transform: 'translateX(-50%)', lineHeight: 1, whiteSpace: 'nowrap' });
-      const wLabel = (cx, top, text) => <span className="font-bebas-book" style={{ ...wCentered(cx, top), fontSize: 9.3, letterSpacing: '0.1em', paddingLeft: '0.1em', color: '#575E5E' }}>{text}</span>;
-      const wUnit = (cx, top, text) => <span className="font-bebas-book" style={{ ...wCentered(cx, top), fontSize: 9.5, letterSpacing: '0.1em', paddingLeft: '0.1em', color: '#8D9898' }}>{text}</span>;
+      const wLabel = (cx, top, text) => <span className="font-bebas-book" style={{ ...wCentered(cx, top), fontSize: 12, letterSpacing: '0.1em', paddingLeft: '0.1em', color: '#575E5E' }}>{text}</span>;
+      const wUnit = (cx, top, text) => <span className="font-bebas-book" style={{ ...wCentered(cx, top), fontSize: 12, letterSpacing: '0.1em', paddingLeft: '0.1em', color: '#8D9898' }}>{text}</span>;
       const wValue = (cx, top, text, degree) => (
-        <span className="font-bebas-bold" style={{ ...wCentered(cx, top), fontSize: 16.67, letterSpacing: '0.04em', paddingLeft: degree ? 0 : '0.04em', color: '#8D9898', display: 'inline-flex', alignItems: 'flex-start' }}>
+        <span className="font-bebas-bold" style={{ ...wCentered(cx, top), fontSize: 22, letterSpacing: '0.04em', paddingLeft: degree ? 0 : '0.04em', color: '#8D9898', display: 'inline-flex', alignItems: 'flex-start' }}>
           {text}
-          {degree && <svg width="3" height="3" viewBox="0 0 3 3" style={{ marginLeft: 4, marginTop: 0.83, flexShrink: 0 }}><circle cx="1.5" cy="1.5" r="1.05" fill="none" stroke="#8D9898" strokeWidth="0.65"/></svg>}
+          {degree && <svg width="4" height="4" viewBox="0 0 4 4" style={{ marginLeft: 5, marginTop: 1.1, flexShrink: 0 }}><circle cx="2" cy="2" r="1.4" fill="none" stroke="#8D9898" strokeWidth="0.85"/></svg>}
         </span>
       );
 
       // Marges négatives: la carte se cale sur le haut de la zone sûre (le conteneur ajoute 16 px) et
-      // annule les 16 px de la liste en dessous, pour que l'entête du premier dossier tombe comme sur la maquette.
+      // annule les 16 px de la liste en dessous; les 25 px de padding sont la respiration demandée (v633.118).
       return (
-        <div style={{ position: 'relative', zIndex: 2, marginTop: '-16px', marginBottom: '-16px', width: '100%', overflow: 'hidden' }}>
+        <div style={{ position: 'relative', zIndex: 2, marginTop: '-16px', marginBottom: '-16px', paddingTop: 25, paddingBottom: 25, width: '100%', overflow: 'hidden' }}>
           <div style={{ zoom: scale, width: GEO_CARD_W, height: GEO_CARD_H }}>
             <div className="hour-scroll" style={{ width: GEO_CARD_W, height: GEO_CARD_H, overflowX: 'auto', overflowY: 'hidden' }}>
               <div style={{ display: 'flex', width: 'max-content', height: GEO_CARD_H }}>
@@ -7111,17 +7112,17 @@
                   <div style={{ position: 'absolute', left: 203.95, top: 0, display: 'flex' }}>
                     {hours.slice(0, 2).map(h => <GeoHourColumn key={h.time} h={h} dailyMap={geoData.dailyMap}/>)}
                   </div>
-                  {wLabel(cxA, 58.8, t('wind'))}
-                  {wLabel(cxB, 58.8, t('temp'))}
-                  {wValue(cxA, 72.9, fmt2(geoData.wind))}
-                  {wValue(cxB, 72.9, geoData.temp == null ? '--' : String(geoData.temp), true)}
-                  {wUnit(cxA, 89.5, t('kmh'))}
-                  {wLabel(cxA, 111, t('gust'))}
-                  {wLabel(cxB, 111, t('kp'))}
-                  {wValue(cxA, 124.5, fmt2(geoData.gust))}
-                  {wValue(cxB, 124.5, kp == null ? '--' : String(kp))}
-                  {wUnit(cxA, 141.7, t('kmh'))}
-                  {wUnit(cxB, 141.7, t('kp'))}
+                  {wLabel(cxA, 52.7, t('wind'))}
+                  {wLabel(cxB, 52.7, t('temp'))}
+                  {wValue(cxA, 68.2, fmt2(geoData.wind))}
+                  {wValue(cxB, 68.2, geoData.temp == null ? '--' : String(geoData.temp), true)}
+                  {wUnit(cxA, 89, t('kmh'))}
+                  {wLabel(cxA, 111.75, t('gust'))}
+                  {wLabel(cxB, 111.75, t('kp'))}
+                  {wValue(cxA, 127.25, fmt2(geoData.gust))}
+                  {wValue(cxB, 127.25, kp == null ? '--' : String(kp))}
+                  {wUnit(cxA, 148.05, t('kmh'))}
+                  {wUnit(cxB, 148.05, t('kp'))}
                 </div>
                 {/* Heures suivantes, révélées au défilement (même colonne, même séparateur). */}
                 {hours.length > 2 && <svg width={1.15} height={GEO_CARD_H} viewBox={`0 0 1.15 ${GEO_CARD_H}`} style={{ flexShrink: 0, display: 'block' }}>{hairline(0)}</svg>}
@@ -7901,7 +7902,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.117</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.118</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
