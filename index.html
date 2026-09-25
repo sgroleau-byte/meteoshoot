@@ -485,7 +485,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.119</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.120</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -6909,7 +6909,7 @@
     // (soleil, deux heures, vent) glisse vers la gauche et laisse apparaître les heures suivantes.
     const GEO_CARD_W = 393;
     const GEO_CARD_H = 182;
-    const GEO_COL_W = 50;
+    const GEO_COL_W = 44;
     // Courbe du soleil: cosinus surélevé, sommet en (101 ; 45,7), base à y=88,3, demi-largeur 76,7.
     const GEO_CURVE = { peakX: 101, peakY: 45.7, baseY: 88.3, half: 76.7 };
     const geoCurveY = (x) => {
@@ -6930,8 +6930,8 @@
     // Teinte du % de soleil direct: même échelle que la bande horaire du détail de projet.
     const geoSunTint = (pct) => pct == null ? '#6f7d7b' : pct >= 60 ? '#E9D27A' : pct >= 45 ? '#E4CB78' : pct >= 32 ? '#DBCD92' : pct >= 20 ? '#CFC8A4' : pct >= 10 ? '#C3BDAA' : '#A7A99C';
 
-    // Colonne d'une heure: heure, icône, % de nuages, % de soleil direct, avec exactement les styles de la
-    // bande horaire du détail de projet (18 px, icône 40 px, 16 px), sur 50 px de large (v633.119).
+    // Colonne d'une heure: heure, icône, % de nuages, % de soleil direct, aux tailles de la rangée météo du
+    // listing d'accueil (Bebas Bold 14 px, icône 32 px, pourcentages 14 px), sur 44 px de large (v633.120).
     const GeoHourColumn = ({ h, dailyMap }) => {
       const d = new Date(h.time);
       const hr = d.getHours();
@@ -6947,15 +6947,15 @@
       return (
         <div style={{ position: 'relative', width: GEO_COL_W, height: GEO_CARD_H, flexShrink: 0 }}>
           {tint && <div style={{ position: 'absolute', left: 0, right: 0, top: 46, height: 130, background: tint }}/>}
-          <div className="flex flex-col items-center gap-0" style={{ position: 'absolute', left: 0, right: 0, top: 55, padding: '4px 0' }}>
-            <span className="font-bebas-bold leading-none text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '18px' }}>{hr}H</span>
-            <WeatherIcon type={icon} className={`w-10 h-10 ${isNight ? 'opacity-50' : ''}`}/>
-            <span className="font-bebas-bold text-base leading-none text-charcoal" style={{ letterSpacing: '0.04em', marginTop: '7px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-              <svg width="12" height="12" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><g fill="#8A9794"><circle cx="12" cy="18" r="6"/><circle cx="20" cy="16" r="7"/><rect x="8" y="18" width="15" height="6" rx="3"/></g></svg>
+          <div className="flex flex-col items-center gap-0" style={{ position: 'absolute', left: 0, right: 0, top: 66, padding: '4px 0' }}>
+            <span className="font-bebas-bold text-sm leading-none" style={{ color: '#8B9B99' }}>{hr}H</span>
+            <WeatherIcon type={icon} className={`w-8 h-8 ${isNight ? 'opacity-50' : ''}`}/>
+            <span className="font-bebas-bold text-sm leading-none text-charcoal" style={{ letterSpacing: '0.04em', marginTop: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+              <svg width="10.5" height="10.5" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><g fill="#8A9794"><circle cx="12" cy="18" r="6"/><circle cx="20" cy="16" r="7"/><rect x="8" y="18" width="15" height="6" rx="3"/></g></svg>
               {h.cloudcover != null ? `${h.cloudcover}%` : '--'}
             </span>
-            <span className="font-bebas-bold text-base leading-none" style={{ letterSpacing: '0.04em', marginTop: '7px', display: 'inline-flex', alignItems: 'center', gap: '3px', color: sunColor }}>
-              <svg width="11" height="11" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><circle cx="16" cy="16" r="8" fill={sunColor}/></svg>
+            <span className="font-bebas-bold text-sm leading-none" style={{ letterSpacing: '0.04em', marginTop: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px', color: sunColor }}>
+              <svg width="9.6" height="9.6" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><circle cx="16" cy="16" r="8" fill={sunColor}/></svg>
               {sunPct != null ? `${sunPct}%` : '--'}
             </span>
           </div>
@@ -7070,8 +7070,8 @@
       const timeStyle = { position: 'absolute', top: 102.37, fontSize: 46.67, letterSpacing: 0, color: '#8D9898', lineHeight: 1, whiteSpace: 'nowrap' };
       // Bloc d'infos (vent, temp., rafale, Kp): cellules étiquette / valeur / unité avec la présentation standard
       // de l'appli (étiquette Bebas Bold 15 px, valeur Bebas Book 25 px blanche, unité 12 px), deux colonnes
-      // centrées à x=327 et 369 entre le séparateur (305,1) et le bord droit (v633.119).
-      const cxA = 327, cxB = 369;
+      // centrées à x=334 et 372, à 8 px du séparateur (306,8) et du bord droit (v633.120).
+      const cxA = 334, cxB = 372;
       const cellText = (cx, top, size, color) => ({ position: 'absolute', left: cx, top, transform: 'translateX(-50%)', lineHeight: 1, whiteSpace: 'nowrap', fontSize: size, letterSpacing: '0.04em', paddingLeft: '0.04em', color });
       const cell = (cx, top, label, value, unit) => (
         <React.Fragment>
@@ -7099,7 +7099,7 @@
                     </defs>
                     <path d={GEO_CURVE_PATH} fill="none" stroke="url(#geoSunCurveFade)" strokeWidth="1.33" strokeLinecap="round" opacity="0.27"/>
                     {hairline(202.8)}
-                    {hairline(305.1)}
+                    {hairline(306.8)}
                   </svg>
                   {/* Boule du soleil (12 px, halo blanc doux), à la position de l'heure courante; absente la nuit. */}
                   {showBall && <div style={{ position: 'absolute', left: ballX - 6, top: ballY - 6, width: 12, height: 12, borderRadius: '50%', background: '#9B9D9E', boxShadow: '0 0 11px 1.8px rgba(255,255,255,0.57)' }}/>}
@@ -7107,7 +7107,7 @@
                   <span className="font-bebas-book" style={{ ...labelStyle, left: 130.3 }}>{t('sunset')}</span>
                   <span className="font-bebas-book" style={{ ...timeStyle, left: 17.67 }}>{formatTime(geoData.sunrise)}</span>
                   <span className="font-bebas-book" style={{ ...timeStyle, left: 113.67 }}>{formatTime(geoData.sunset)}</span>
-                  <div style={{ position: 'absolute', left: 203.95, top: 0, display: 'flex' }}>
+                  <div style={{ position: 'absolute', left: 210.8, top: 0, display: 'flex' }}>
                     {hours.slice(0, 2).map(h => <GeoHourColumn key={h.time} h={h} dailyMap={geoData.dailyMap}/>)}
                   </div>
                   {cell(cxA, 51, t('wind'), fmt2(geoData.wind), t('kmh'))}
@@ -7116,7 +7116,7 @@
                   {cell(cxB, 115, t('kp'), kp == null ? '--' : String(kp), t('kp'))}
                 </div>
                 {/* Heures suivantes, révélées au défilement (même colonne, même séparateur). */}
-                {hours.length > 2 && <svg width={1.15} height={GEO_CARD_H} viewBox={`0 0 1.15 ${GEO_CARD_H}`} style={{ flexShrink: 0, display: 'block' }}>{hairline(0)}</svg>}
+                {hours.length > 2 && <svg width={8} height={GEO_CARD_H} viewBox={`0 0 8 ${GEO_CARD_H}`} style={{ flexShrink: 0, display: 'block' }}>{hairline(0)}</svg>}
                 {hours.slice(2).map(h => <GeoHourColumn key={h.time} h={h} dailyMap={geoData.dailyMap}/>)}
                 <div style={{ width: 14.25, flexShrink: 0 }}/>
               </div>
@@ -7893,7 +7893,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.119</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.120</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
