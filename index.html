@@ -485,7 +485,7 @@
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
   <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.118</div>
+    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.119</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
@@ -6908,8 +6908,8 @@
     // autres largeurs. La carte est une bande qui défile horizontalement: la page « météo actuelle »
     // (soleil, deux heures, vent) glisse vers la gauche et laisse apparaître les heures suivantes.
     const GEO_CARD_W = 393;
-    const GEO_CARD_H = 170;
-    const GEO_COL_W = 37.5;
+    const GEO_CARD_H = 182;
+    const GEO_COL_W = 50;
     // Courbe du soleil: cosinus surélevé, sommet en (101 ; 45,7), base à y=88,3, demi-largeur 76,7.
     const GEO_CURVE = { peakX: 101, peakY: 45.7, baseY: 88.3, half: 76.7 };
     const geoCurveY = (x) => {
@@ -6930,8 +6930,8 @@
     // Teinte du % de soleil direct: même échelle que la bande horaire du détail de projet.
     const geoSunTint = (pct) => pct == null ? '#6f7d7b' : pct >= 60 ? '#E9D27A' : pct >= 45 ? '#E4CB78' : pct >= 32 ? '#DBCD92' : pct >= 20 ? '#CFC8A4' : pct >= 10 ? '#C3BDAA' : '#A7A99C';
 
-    // Colonne d'une heure: heure, icône, % de nuages, % de soleil direct (format de la bande horaire
-    // du détail de projet réduit à 0,675, positions relevées sur la maquette).
+    // Colonne d'une heure: heure, icône, % de nuages, % de soleil direct, avec exactement les styles de la
+    // bande horaire du détail de projet (18 px, icône 40 px, 16 px), sur 50 px de large (v633.119).
     const GeoHourColumn = ({ h, dailyMap }) => {
       const d = new Date(h.time);
       const hr = d.getHours();
@@ -6943,23 +6943,22 @@
         : ((!isNight && veilIcon(h.cloudcover, h.cloudLow, h.sunFraction)) || cloudcoverToIcon(h.cloudcover, isNight));
       const sunPct = h.sunFraction != null ? Math.round(h.sunFraction * 100) : null;
       const sunColor = geoSunTint(sunPct);
-      const centered = { position: 'absolute', left: '50%', transform: 'translateX(-50%)', whiteSpace: 'nowrap', lineHeight: 1 };
       const tint = isNight ? 'rgba(250,249,247,0.05)' : (h.smoke ? SMOKE_TINT[h.smoke] : null);
       return (
         <div style={{ position: 'relative', width: GEO_COL_W, height: GEO_CARD_H, flexShrink: 0 }}>
-          {tint && <div style={{ position: 'absolute', left: 0, right: 0, top: 46, height: 118, background: tint }}/>}
-          <span className="font-bebas-bold text-charcoal-muted" style={{ ...centered, top: 62.4, fontSize: 12.15, letterSpacing: '0.04em', paddingLeft: '0.04em' }}>{hr}H</span>
-          <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: 74.6, width: 27, height: 27 }}>
-            <WeatherIcon type={icon} className={`w-[27px] h-[27px] ${isNight ? 'opacity-50' : ''}`}/>
+          {tint && <div style={{ position: 'absolute', left: 0, right: 0, top: 46, height: 130, background: tint }}/>}
+          <div className="flex flex-col items-center gap-0" style={{ position: 'absolute', left: 0, right: 0, top: 55, padding: '4px 0' }}>
+            <span className="font-bebas-bold leading-none text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '18px' }}>{hr}H</span>
+            <WeatherIcon type={icon} className={`w-10 h-10 ${isNight ? 'opacity-50' : ''}`}/>
+            <span className="font-bebas-bold text-base leading-none text-charcoal" style={{ letterSpacing: '0.04em', marginTop: '7px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+              <svg width="12" height="12" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><g fill="#8A9794"><circle cx="12" cy="18" r="6"/><circle cx="20" cy="16" r="7"/><rect x="8" y="18" width="15" height="6" rx="3"/></g></svg>
+              {h.cloudcover != null ? `${h.cloudcover}%` : '--'}
+            </span>
+            <span className="font-bebas-bold text-base leading-none" style={{ letterSpacing: '0.04em', marginTop: '7px', display: 'inline-flex', alignItems: 'center', gap: '3px', color: sunColor }}>
+              <svg width="11" height="11" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><circle cx="16" cy="16" r="8" fill={sunColor}/></svg>
+              {sunPct != null ? `${sunPct}%` : '--'}
+            </span>
           </div>
-          <span className="font-bebas-bold text-charcoal" style={{ ...centered, top: 112.83, fontSize: 10.8, letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-            <svg width="8.1" height="8.1" viewBox="0 0 32 32" style={{ flexShrink: 0 }}><g fill="#8A9794"><circle cx="12" cy="18" r="6"/><circle cx="20" cy="16" r="7"/><rect x="8" y="18" width="15" height="6" rx="3"/></g></svg>
-            {h.cloudcover != null ? `${h.cloudcover}%` : '--'}
-          </span>
-          <span className="font-bebas-bold" style={{ ...centered, top: 134.76, fontSize: 10.8, letterSpacing: '0.04em', color: sunColor, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-            <svg width="7.4" height="7.4" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: -1 }}><circle cx="16" cy="16" r="8" fill={sunColor}/></svg>
-            {sunPct != null ? `${sunPct}%` : '--'}
-          </span>
         </div>
       );
     };
@@ -7066,22 +7065,21 @@
       const fmt2 = (v) => v == null ? '--' : String(v).padStart(2, '0');
       // Séparateurs verticaux: trait d'un tiers de px CSS (1 px physique à 3x) à 27 % de blanc, dessinés en SVG
       // pour une couverture exacte (un div de 0,34 px est arrondi par le navigateur et ressort plus lourd).
-      const hairline = (x) => <rect x={x} y={46} width={1 / 3} height={118} fill="#ffffff" fillOpacity={0.27}/>;
+      const hairline = (x) => <rect x={x} y={46} width={1 / 3} height={130} fill="#ffffff" fillOpacity={0.27}/>;
       const labelStyle = { position: 'absolute', top: 83.07, fontSize: 12.62, letterSpacing: '0.1em', color: '#575E5E', lineHeight: 1, whiteSpace: 'nowrap' };
       const timeStyle = { position: 'absolute', top: 102.37, fontSize: 46.67, letterSpacing: 0, color: '#8D9898', lineHeight: 1, whiteSpace: 'nowrap' };
-      // Bloc vent: deux colonnes centrées à x=323 et x=363; étiquette, valeur, unité. Agrandi en v633.118
-      // (maquette: 9,3 / 16,67 / 9,5 px), recentré dans la hauteur des séparateurs (46 à 164).
-      const cxA = 323, cxB = 363;
-      const wCentered = (cx, top) => ({ position: 'absolute', left: cx, top, transform: 'translateX(-50%)', lineHeight: 1, whiteSpace: 'nowrap' });
-      const wLabel = (cx, top, text) => <span className="font-bebas-book" style={{ ...wCentered(cx, top), fontSize: 12, letterSpacing: '0.1em', paddingLeft: '0.1em', color: '#575E5E' }}>{text}</span>;
-      const wUnit = (cx, top, text) => <span className="font-bebas-book" style={{ ...wCentered(cx, top), fontSize: 12, letterSpacing: '0.1em', paddingLeft: '0.1em', color: '#8D9898' }}>{text}</span>;
-      const wValue = (cx, top, text, degree) => (
-        <span className="font-bebas-bold" style={{ ...wCentered(cx, top), fontSize: 22, letterSpacing: '0.04em', paddingLeft: degree ? 0 : '0.04em', color: '#8D9898', display: 'inline-flex', alignItems: 'flex-start' }}>
-          {text}
-          {degree && <svg width="4" height="4" viewBox="0 0 4 4" style={{ marginLeft: 5, marginTop: 1.1, flexShrink: 0 }}><circle cx="2" cy="2" r="1.4" fill="none" stroke="#8D9898" strokeWidth="0.85"/></svg>}
-        </span>
+      // Bloc d'infos (vent, temp., rafale, Kp): cellules étiquette / valeur / unité avec la présentation standard
+      // de l'appli (étiquette Bebas Bold 15 px, valeur Bebas Book 25 px blanche, unité 12 px), deux colonnes
+      // centrées à x=327 et 369 entre le séparateur (305,1) et le bord droit (v633.119).
+      const cxA = 327, cxB = 369;
+      const cellText = (cx, top, size, color) => ({ position: 'absolute', left: cx, top, transform: 'translateX(-50%)', lineHeight: 1, whiteSpace: 'nowrap', fontSize: size, letterSpacing: '0.04em', paddingLeft: '0.04em', color });
+      const cell = (cx, top, label, value, unit) => (
+        <React.Fragment>
+          <span className="font-bebas-bold" style={cellText(cx, top, 15, 'rgba(255,255,255,0.35)')}>{label}</span>
+          <span className="font-bebas-book" style={cellText(cx, top + 17, 25, '#ffffff')}>{value}</span>
+          {unit && <span className="font-bebas-bold" style={cellText(cx, top + 44, 12, '#8B9B99')}>{unit}</span>}
+        </React.Fragment>
       );
-
       // Marges négatives: la carte se cale sur le haut de la zone sûre (le conteneur ajoute 16 px) et
       // annule les 16 px de la liste en dessous; les 25 px de padding sont la respiration demandée (v633.118).
       return (
@@ -7101,7 +7099,7 @@
                     </defs>
                     <path d={GEO_CURVE_PATH} fill="none" stroke="url(#geoSunCurveFade)" strokeWidth="1.33" strokeLinecap="round" opacity="0.27"/>
                     {hairline(202.8)}
-                    {hairline(293.2)}
+                    {hairline(305.1)}
                   </svg>
                   {/* Boule du soleil (12 px, halo blanc doux), à la position de l'heure courante; absente la nuit. */}
                   {showBall && <div style={{ position: 'absolute', left: ballX - 6, top: ballY - 6, width: 12, height: 12, borderRadius: '50%', background: '#9B9D9E', boxShadow: '0 0 11px 1.8px rgba(255,255,255,0.57)' }}/>}
@@ -7112,17 +7110,10 @@
                   <div style={{ position: 'absolute', left: 203.95, top: 0, display: 'flex' }}>
                     {hours.slice(0, 2).map(h => <GeoHourColumn key={h.time} h={h} dailyMap={geoData.dailyMap}/>)}
                   </div>
-                  {wLabel(cxA, 52.7, t('wind'))}
-                  {wLabel(cxB, 52.7, t('temp'))}
-                  {wValue(cxA, 68.2, fmt2(geoData.wind))}
-                  {wValue(cxB, 68.2, geoData.temp == null ? '--' : String(geoData.temp), true)}
-                  {wUnit(cxA, 89, t('kmh'))}
-                  {wLabel(cxA, 111.75, t('gust'))}
-                  {wLabel(cxB, 111.75, t('kp'))}
-                  {wValue(cxA, 127.25, fmt2(geoData.gust))}
-                  {wValue(cxB, 127.25, kp == null ? '--' : String(kp))}
-                  {wUnit(cxA, 148.05, t('kmh'))}
-                  {wUnit(cxB, 148.05, t('kp'))}
+                  {cell(cxA, 51, t('wind'), fmt2(geoData.wind), t('kmh'))}
+                  {cell(cxB, 51, t('temp'), geoData.temp == null ? '--' : `${geoData.temp}°`, null)}
+                  {cell(cxA, 115, t('gust'), fmt2(geoData.gust), t('kmh'))}
+                  {cell(cxB, 115, t('kp'), kp == null ? '--' : String(kp), t('kp'))}
                 </div>
                 {/* Heures suivantes, révélées au défilement (même colonne, même séparateur). */}
                 {hours.length > 2 && <svg width={1.15} height={GEO_CARD_H} viewBox={`0 0 1.15 ${GEO_CARD_H}`} style={{ flexShrink: 0, display: 'block' }}>{hairline(0)}</svg>}
@@ -7902,7 +7893,7 @@
 
               <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.118</div>
+                  <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.119</div>
                   <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
                 </div>
               </div>
