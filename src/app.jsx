@@ -1,0 +1,8779 @@
+import React, { useState, useEffect, useRef, useCallback, createContext, useContext } from 'react';
+import ReactDOM from 'react-dom';
+import { createRoot } from 'react-dom/client';
+import { createClient } from '@supabase/supabase-js';
+import SunCalc from 'suncalc';
+import { SUPABASE_URL, SUPABASE_KEY, LEMON_CHECKOUT_URL } from './shared/config.js';
+import { TRANSLATIONS, getDefaultLang } from './shared/translations.js';
+
+
+// ===== MOBILE DETECTION =====
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+  return isMobile;
+};
+
+// ===== SUPABASE =====
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const TBL_PROJECTS = isDev ? 'projects_dev' : 'projects';
+const TBL_PREFS = isDev ? 'preferences_dev' : 'preferences';
+const TBL_FILES = isDev ? 'project_files_dev' : 'project_files';
+const TBL_ROUTES = isDev ? 'routes_dev' : 'routes';
+const TBL_ELEVATION = 'elevation_cache'; // shared global — no dev/prod split
+const STORAGE_BUCKET = 'project-files';
+
+// ===== TERRAIN ELEVATION PROFILE =====
+// Fetches horizon profile around a point (24 directions, 3km radius)
+// Returns array of {bearing, maxAngle} where maxAngle = max elevation angle in degrees
+const ELEV_GRID_PRECISION = 3; // ~111m grid cells
+const ELEV_PROFILE_VERSION = 3; // bump to invalidate cache
+const ELEV_DIRECTIONS = 36; // every 10°
+const ELEV_SAMPLES = 50; // points per direction
+const ELEV_RADIUS_M = 5000; // 5km
+
+const roundGrid = (v) => parseFloat(v.toFixed(ELEV_GRID_PRECISION));
+
+const getElevationProfile = async (lat, lng) => {
+  const gLat = roundGrid(lat), gLng = roundGrid(lng);
+  
+  // Check Supabase cache
+  try {
+    const { data } = await supabase.from(TBL_ELEVATION)
+      .select('profile, version')
+      .eq('grid_lat', gLat).eq('grid_lng', gLng)
+      .maybeSingle();
+    if (data?.profile && data?.version === ELEV_PROFILE_VERSION) return data.profile;
+  } catch(e) { console.warn('Elevation cache read error:', e); }
+  
+  // Build sample points: 36 directions × 50 points
+  // Non-linear: dense near (every 15m for first 200m), then spread out to 5km
+  const R = 6371000;
+  const allLats = [], allLngs = [], meta = [];
+  
+  const getSampleDist = (s, total) => {
+    if (s < 13) return 15 + s * 15; // 15m to 195m (every 15m)
+    const t = (s - 13) / (total - 13);
+    return 200 + t * (ELEV_RADIUS_M - 200);
+  };
+  
+  for (let d = 0; d < ELEV_DIRECTIONS; d++) {
+    const bearing = (d * 360 / ELEV_DIRECTIONS) * Math.PI / 180;
+    for (let s = 0; s < ELEV_SAMPLES; s++) {
+      const dist = getSampleDist(s, ELEV_SAMPLES);
+      const dLat = (dist * Math.cos(bearing)) / R * (180 / Math.PI);
+      const dLng = (dist * Math.sin(bearing)) / (R * Math.cos(lat * Math.PI / 180)) * (180 / Math.PI);
+      allLats.push(lat + dLat);
+      allLngs.push(lng + dLng);
+      meta.push({ dir: d, dist });
+    }
+  }
+  
+  // Fetch observer elevation first
+  let observerElev = 0;
+  try {
+    const res = await fetch('https://api.open-elevation.com/api/v1/lookup', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ locations: [{ latitude: lat, longitude: lng }] })
+    });
+    const j = await res.json();
+    observerElev = j.results?.[0]?.elevation ?? 0;
+  } catch(e) { 
+    // Fallback to Open-Meteo
+    try {
+      const res2 = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`);
+      const j2 = await res2.json();
+      observerElev = j2.elevation?.[0] ?? j2.elevation ?? 0;
+    } catch(e2) { console.warn('Observer elevation error:', e2); return null; }
+  }
+  
+  // Fetch all sample elevations in batches
+  const elevations = new Array(allLats.length).fill(0);
+  const batchSize = 200; // Open-Elevation can handle larger batches
+  
+  for (let i = 0; i < allLats.length; i += batchSize) {
+    const locations = [];
+    for (let k = i; k < Math.min(i + batchSize, allLats.length); k++) {
+      locations.push({ latitude: parseFloat(allLats[k].toFixed(6)), longitude: parseFloat(allLngs[k].toFixed(6)) });
+    }
+    try {
+      const res = await fetch('https://api.open-elevation.com/api/v1/lookup', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ locations })
+      });
+      const j = await res.json();
+      if (j.results) {
+        for (let k = 0; k < j.results.length; k++) {
+          elevations[i + k] = j.results[k].elevation ?? 0;
+        }
+      }
+      if (i + batchSize < allLats.length) await new Promise(r => setTimeout(r, 200));
+    } catch(e) {
+      // Fallback to Open-Meteo for this batch
+      console.warn('[ELEVATION] Open-Elevation failed, trying Open-Meteo fallback');
+      const bLats = allLats.slice(i, i + batchSize).map(v => v.toFixed(5)).join(',');
+      const bLngs = allLngs.slice(i, i + batchSize).map(v => v.toFixed(5)).join(',');
+      try {
+        const res2 = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${bLats}&longitude=${bLngs}`);
+        const j2 = await res2.json();
+        const elArr = Array.isArray(j2.elevation) ? j2.elevation : [j2.elevation];
+        for (let k = 0; k < elArr.length; k++) elevations[i + k] = elArr[k] ?? 0;
+      } catch(e2) { console.warn('Elevation fallback error:', e2); }
+      if (i + batchSize < allLats.length) await new Promise(r => setTimeout(r, 100));
+    }
+  }
+  
+  // Compute max elevation angle per direction
+  const profile = [];
+  for (let d = 0; d < ELEV_DIRECTIONS; d++) {
+    let maxAngle = 0;
+    const bearing = d * 360 / ELEV_DIRECTIONS;
+    for (let s = 0; s < ELEV_SAMPLES; s++) {
+      const idx = d * ELEV_SAMPLES + s;
+      const elevDiff = elevations[idx] - observerElev;
+      if (elevDiff > 0) {
+        const angle = Math.atan2(elevDiff, meta[idx].dist) * 180 / Math.PI;
+        if (angle > maxAngle) maxAngle = angle;
+      }
+    }
+    profile.push({ bearing, maxAngle: parseFloat(maxAngle.toFixed(2)) });
+  }
+  
+  // Cache in Supabase
+  try {
+    await supabase.from(TBL_ELEVATION).upsert({
+      grid_lat: gLat, grid_lng: gLng, profile, observer_elevation: observerElev, version: ELEV_PROFILE_VERSION
+    }, { onConflict: 'grid_lat,grid_lng' });
+  } catch(e) { console.warn('Elevation cache write error:', e); }
+  
+  return profile;
+};
+
+// Check if sun is behind terrain at given bearing + altitude
+// Returns: 'shadow' | 'warning' | false
+// 30 min ≈ 7.5° of sun altitude change near horizon
+const isTerrainShadow = (profile, sunBearingDeg, sunAltDeg) => {
+  if (!profile) return false;
+  if (sunAltDeg <= 0) return false;
+  const step = 360 / ELEV_DIRECTIONS;
+  const idx = ((sunBearingDeg % 360) + 360) % 360;
+  const i0 = Math.floor(idx / step) % ELEV_DIRECTIONS;
+  const i1 = (i0 + 1) % ELEV_DIRECTIONS;
+  const frac = (idx / step) - Math.floor(idx / step);
+  const horizonAngle = profile[i0].maxAngle * (1 - frac) + profile[i1].maxAngle * frac;
+  if (horizonAngle <= 0) return false;
+  if (sunAltDeg < horizonAngle) return 'shadow';
+  return false;
+};
+const MAX_PROJECT_FILES_MB = 30;
+
+// === File helpers ===
+const fileHelpers = {
+  async list(projectId) {
+    const { data, error } = await supabase.from(TBL_FILES).select('*').eq('project_id', projectId).order('created_at', { ascending: true });
+    if (error) { console.error('List files error:', error); return []; }
+    return data || [];
+  },
+  async upload(projectId, userId, file) {
+    const ts = Date.now();
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storagePath = `${userId}/${projectId}/${ts}_${safeName}`;
+    const { error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(storagePath, file, { contentType: file.type });
+    if (upErr) { console.error('Storage upload error:', upErr); throw upErr; }
+    const { error: dbErr } = await supabase.from(TBL_FILES).insert({
+      project_id: projectId, user_id: userId, filename: file.name,
+      size_bytes: file.size, mime_type: file.type, storage_path: storagePath
+    });
+    if (dbErr) { console.error('DB insert error:', dbErr); throw dbErr; }
+  },
+  async deleteFile(fileRow) {
+    await supabase.storage.from(STORAGE_BUCKET).remove([fileRow.storage_path]);
+    await supabase.from(TBL_FILES).delete().eq('id', fileRow.id);
+  },
+  async deleteAllForProject(projectId) {
+    const files = await this.list(projectId);
+    if (files.length === 0) return;
+    const paths = files.map(f => f.storage_path);
+    await supabase.storage.from(STORAGE_BUCKET).remove(paths);
+    await supabase.from(TBL_FILES).delete().eq('project_id', projectId);
+  },
+  async getUrl(storagePath) {
+    const { data } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(storagePath, 3600);
+    return data?.signedUrl || '';
+  }
+};
+
+// Auth context
+const AuthContext = createContext();
+const useAuth = () => useContext(AuthContext);
+
+const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Check current session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const signIn = async (email, password) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    return { error };
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    localStorage.removeItem('sp-projects');
+    localStorage.removeItem('sp-prefs');
+    localStorage.removeItem('sp-migrated-to-supabase');
+    setUser(null);
+  };
+
+  return <AuthContext.Provider value={{ user, loading, signIn, signOut }}>{children}</AuthContext.Provider>;
+};
+
+// ===== LANGUAGE CONTEXT =====
+const LangContext = createContext();
+const useLang = () => useContext(LangContext);
+
+const LangProvider = ({ children }) => {
+  const [lang, setLangState] = useState(getDefaultLang());
+  const setLang = (newLang) => {
+    if (TRANSLATIONS[newLang]) {
+      setLangState(newLang);
+      localStorage.setItem('sp-lang', newLang);
+      // Sync lang to Supabase user metadata (for bilingual email templates)
+      supabase.auth.updateUser({ data: { lang: newLang } });
+    }
+  };
+  const tr = (key) => {
+    const dict = TRANSLATIONS[lang];
+    return (dict && dict[key] !== undefined) ? dict[key] : (TRANSLATIONS.fr[key] || key);
+  };
+  return <LangContext.Provider value={{ lang, setLang, t: tr }}>{children}</LangContext.Provider>;
+};
+
+// ===== SUBSCRIPTION =====
+const TBL_USER_PROFILES = isDev ? 'user_profiles_dev' : 'user_profiles';
+
+const TIER_LIMITS = {
+  free: { maxProjects: Infinity },
+  shooter: { maxProjects: Infinity },
+  god: { maxProjects: Infinity }
+};
+
+const SubscriptionContext = createContext();
+const useSubscription = () => useContext(SubscriptionContext);
+
+const SubscriptionProvider = ({ children }) => {
+  const { user } = useAuth();
+  const [profile, setProfile] = useState(null);
+  const [subLoading, setSubLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) { setProfile(null); setSubLoading(false); return; }
+
+    const loadProfile = async () => {
+      const { data, error } = await supabase
+        .from(TBL_USER_PROFILES)
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error && error.code === 'PGRST116') {
+        // No profile found — create one (fallback for users created before trigger)
+        const { data: newProfile } = await supabase
+          .from(TBL_USER_PROFILES)
+          .insert({ user_id: user.id, subscription_tier: 'free', subscription_status: 'active' })
+          .select()
+          .single();
+        setProfile(newProfile);
+      } else if (data) {
+        setProfile(data);
+      }
+      setSubLoading(false);
+    };
+
+    loadProfile();
+
+    // Realtime subscription for profile changes (webhook updates tier)
+    const channel = supabase.channel('profile-changes')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: TBL_USER_PROFILES,
+        filter: `user_id=eq.${user.id}`
+      }, (payload) => {
+        setProfile(payload.new);
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
+
+  const tier = profile?.subscription_tier || 'free';
+  const limits = TIER_LIMITS[tier];
+  const isActive = profile?.subscription_status === 'active' || profile?.subscription_status === 'trialing';
+
+  const canCreateProject = (currentCount) => {
+    return currentCount < limits.maxProjects;
+  };
+
+  const getProjectLimit = () => limits.maxProjects;
+  const isShooterUser = () => tier === 'shooter' || tier === 'god';
+
+  return (
+    <SubscriptionContext.Provider value={{
+      profile, subLoading, tier, isActive,
+      canCreateProject, getProjectLimit, isShooterUser, limits
+    }}>
+      {children}
+    </SubscriptionContext.Provider>
+  );
+};
+
+// ===== UPGRADE MODAL =====
+const UpgradeModal = ({ isOpen, onClose }) => {
+  const { user } = useAuth();
+  const { tier } = useSubscription();
+  const { t } = useLang();
+  const isMobile = useIsMobile();
+
+  const openCheckout = () => {
+    if (typeof window.createLemonSqueezy === 'function') window.createLemonSqueezy();
+    if (window.LemonSqueezy && window.LemonSqueezy.Url) {
+      window.LemonSqueezy.Url.Open(
+        LEMON_CHECKOUT_URL + '?checkout[custom][user_id]=' + user.id + '&checkout[email]=' + encodeURIComponent(user.email) + '&embed=1'
+      );
+    } else {
+      window.open(LEMON_CHECKOUT_URL + '?checkout[custom][user_id]=' + user.id + '&checkout[email]=' + encodeURIComponent(user.email), '_blank');
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const cardStyle = { flex: 1, border: '1px solid rgba(255,255,255,0.12)', padding: '28px 24px', position: 'relative' };
+  const titleStyle = { fontFamily: "'Bebas Neue', sans-serif", fontWeight: 700, letterSpacing: '0.04em' };
+  const taglineStyle = { fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '14px', color: 'rgba(255,255,255,0.35)', fontStyle: 'italic', marginTop: '4px', letterSpacing: '0.02em' };
+  const featureStyle = { color: 'rgba(255,255,255,0.5)', fontSize: '14px', marginBottom: '8px', fontFamily: "'Montserrat', sans-serif", fontWeight: 300 };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ maxWidth: '860px', width: '100%' }}>
+        <h2 style={{ ...titleStyle, fontSize: '32px', color: '#ffffff', textAlign: 'center', marginBottom: '36px' }}>{t('choosePlan')}</h2>
+
+        <div style={{ display: 'flex', gap: '16px', flexDirection: isMobile ? 'column' : 'row' }}>
+          {/* GRATUIT */}
+          <div style={{ ...cardStyle, borderColor: tier === 'free' ? '#7dd3c6' : 'rgba(255,255,255,0.12)' }}>
+            <div style={{ ...titleStyle, fontSize: '22px', color: '#8B9B99' }}>{t('freePlan')}</div>
+            <div style={taglineStyle}>{t('freeTagline')}</div>
+            <div style={{ ...titleStyle, fontSize: '44px', color: '#ffffff', margin: '16px 0 4px' }}>0$</div>
+            <div style={{ margin: '16px 0 20px' }}>
+              <div style={featureStyle}>{t('maxProjectsFree')}</div>
+              <div style={featureStyle}>{t('basicWeather')}</div>
+              <div style={featureStyle}>{t('storagePerProject')}</div>
+            </div>
+            {tier === 'free' && <div style={{ ...titleStyle, fontSize: '15px', color: '#7dd3c6' }}>{t('currentPlan')}</div>}
+          </div>
+
+          {/* SHOOTER */}
+          <div style={{ ...cardStyle, borderColor: tier === 'shooter' ? '#E07A2B' : '#E07A2B', boxShadow: '0 0 30px rgba(224,122,43,0.1)' }}>
+            <div style={{ ...titleStyle, fontSize: '22px', color: '#E07A2B' }}>{t('shooterPlan')}</div>
+            <div style={taglineStyle}>{t('shooterTagline')}</div>
+            <div style={{ ...titleStyle, fontSize: '44px', color: '#ffffff', margin: '16px 0 4px' }}>---</div>
+            <div style={{ margin: '16px 0 20px' }}>
+              <div style={{ ...featureStyle, color: 'rgba(255,255,255,0.7)' }}>{t('unlimitedProjects')}</div>
+              <div style={{ ...featureStyle, color: 'rgba(255,255,255,0.7)' }}>{t('allFeatures')}</div>
+              <div style={{ ...featureStyle, color: 'rgba(255,255,255,0.7)' }}>{t('continuousUpdates')}</div>
+            </div>
+            {tier === 'shooter' ? (
+              <div style={{ ...titleStyle, fontSize: '15px', color: '#E07A2B' }}>{t('currentPlan')}</div>
+            ) : (
+              <button onClick={openCheckout} style={{
+                background: '#E07A2B', color: '#ffffff', border: 'none',
+                padding: '12px 24px', cursor: 'pointer', width: '100%',
+                fontFamily: "'Bebas Neue', sans-serif", fontWeight: 700, fontSize: '16px',
+                letterSpacing: '0.04em'
+              }}>{t('upgradeToShooter')}</button>
+            )}
+          </div>
+
+          {/* GOD */}
+          <div style={{ ...cardStyle, opacity: 0.35, borderColor: 'rgba(255,255,255,0.06)' }}>
+            <div style={{ ...titleStyle, fontSize: '22px', color: '#8B9B99' }}>{t('godPlan')}</div>
+            <div style={taglineStyle}>{t('godTagline')}</div>
+            <div style={{ ...titleStyle, fontSize: '44px', color: '#ffffff', margin: '16px 0 4px' }}>---</div>
+            <div style={{ margin: '16px 0 20px' }}>
+              <div style={featureStyle}>{t('shooterPlus')}</div>
+              <div style={featureStyle}>{t('premiumWeather')}</div>
+              <div style={featureStyle}>{t('advancedFeatures')}</div>
+            </div>
+            <div style={{ ...titleStyle, fontSize: '15px', color: 'rgba(255,255,255,0.3)' }}>{t('comingSoon')}</div>
+          </div>
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: '24px' }}>
+          <a href="site/account.html" style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px', fontFamily: "'Montserrat', sans-serif", textDecoration: 'none' }}>{t('account')}</a>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// LoginScreen — moved to /site/login.html, this redirects there
+const LoginScreen = () => {
+  useEffect(() => {
+    const here = window.location.pathname + window.location.search;
+    window.location.href = (here && here !== '/') ? '/site/login.html?redirect=' + encodeURIComponent(here) : '/site/login.html';
+  }, []);
+  return <div style={{ position: 'fixed', inset: 0, background: '#181b1e' }}/>;
+};
+
+// ===== CONSTANTS =====
+const MandateType = { INT: 'INT', EXT: 'EXT', DRONE: 'DRONE', DRONE_C: 'DRONE+C', VID: 'VID' };
+const renderMandate = (m, baseColor) => m === 'DRONE+C' ? React.createElement('span', null, React.createElement('span', {style:{color:baseColor}}, 'DRONE.'), React.createElement('span', {style:{color: baseColor === '#404A48' ? '#404A48' : '#d83152'}}, 'C')) : React.createElement('span', {style:{color:baseColor}}, m);
+const ProjectStatus = { TODO: 'todo', RETOUCHING: 'retouching', DONE: 'done' };
+
+// ===== UTILS =====
+const generateId = () => `p_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+const toggleMandate = (current, m) => {
+  if (current?.includes(m)) return current.filter(x => x !== m);
+  let next = [...(current || []), m];
+  // DRONE et DRONE+C sont mutuellement exclusifs
+  if (m === 'DRONE') next = next.filter(x => x !== 'DRONE+C');
+  if (m === 'DRONE+C') next = next.filter(x => x !== 'DRONE');
+  return next;
+};
+const formatDateShort = (d) => { const date = new Date(d); return `${date.getDate()} ${['JAN','FÉV','MAR','AVR','MAI','JUIN','JUIL','AOÛT','SEP','OCT','NOV','DÉC'][date.getMonth()]} ${date.getFullYear()}`; };
+const daysSince = (d) => Math.floor((new Date() - new Date(d)) / (1000 * 60 * 60 * 24));
+// Liste Édition (option 2a) : réglages d'affichage conservés localement (sp-prefs), avec défauts.
+const EDIT_LIST_DEFAULTS = { editAlertDays: 30, editWarnDays: 15, editShowGauge: true, editShowThreshold: true, editSortUrgency: true };
+const EDIT_GAUGE_MAX_DAYS = 60; // échelle de la jauge, en jours
+const getEditListPrefs = (prefs) => { const out = { ...EDIT_LIST_DEFAULTS }; Object.keys(EDIT_LIST_DEFAULTS).forEach(k => { if (prefs && prefs[k] !== undefined && prefs[k] !== null) out[k] = prefs[k]; }); return out; };
+// Statut d'un projet en retouche selon ses jours : alerte (rouge), attention (ambre), normal.
+const editStatusFor = (days, ep) => days === null ? 'normal' : days >= ep.editAlertDays ? 'alert' : days >= ep.editWarnDays ? 'warn' : 'normal';
+// Archives : durée réelle de la retouche, figée à l'archivage (de la date d'édition à la date d'archivage).
+const editDaysFrozen = (p) => { if (!p.shotAt) return null; const end = p.completedAt ? new Date(p.completedAt) : new Date(); const d = Math.floor((end - new Date(p.shotAt)) / (1000 * 60 * 60 * 24)); return Number.isFinite(d) ? Math.max(0, d) : null; };
+const getDayAbbrev = (d) => ['DIM.','LUN.','MAR.','MER.','JEU.','VEN.','SAM.'][(typeof d === 'string' ? new Date(d + 'T00:00:00') : d).getDay()];
+const getDayMonth = (d) => { const date = typeof d === 'string' ? new Date(d + 'T00:00:00') : d; return `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}`; };
+const isToday = (d) => (typeof d === 'string' ? new Date(d + 'T00:00:00') : d).toDateString() === new Date().toDateString();
+const formatTime = (iso) => { if (!iso) return '--:--'; const d = new Date(iso); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
+const formatDuration = (s) => { if (!s) return '—'; return `${String(Math.floor(s/3600)).padStart(2,'0')}H${String(Math.floor((s%3600)/60)).padStart(2,'0')}`; };
+// Format duree relative "3H45" pour la banniere "derniere mise a jour il y a XX".
+// Floor sur la minute, pas d'arrondi: on prefere "0H59" plutot que "1H00" si on n'a pas tout a fait passe l'heure.
+const formatTimeSince = (ts, now = Date.now()) => {
+  if (!ts) return null;
+  const diffMs = Math.max(0, now - ts);
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}H${String(minutes).padStart(2, '0')}`;
+};
+// Marge pour être SUR PLACE avant le lever ou le coucher du soleil (repérage, installation, marche d'approche).
+// Le départ vise donc une arrivée sur place à (lever ou coucher - cette marge), pas pile à l'heure du soleil.
+const ON_SITE_LEAD_MIN = 60;
+// Heure de départ = lever (AM) ou coucher (PM) - trajet - marge sur place. Ainsi: départ -> trajet -> on arrive
+// ON_SITE_LEAD_MIN minutes avant le lever ou le coucher. (Remplace l'ancienne heure de réveil.)
+const calcDeparture = (sunEvent, travel) => { if (!sunEvent || !travel) return null; return new Date(new Date(sunEvent).getTime() - ON_SITE_LEAD_MIN*60*1000 - travel*1000).toISOString(); };
+const weatherCodeIcon = { 
+  0:'sunny', 1:'sunny', 2:'partly-cloudy', 3:'cloudy',  // 0-1=dégagé, 2=partiellement nuageux, 3=couvert
+  45:'cloudy', 48:'cloudy',  // brouillard
+  51:'rain', 53:'rain', 55:'rain',  // bruine
+  56:'rain', 57:'rain',  // bruine verglaçante
+  61:'rain', 63:'rain', 65:'rain',  // pluie
+  66:'rain', 67:'rain',  // pluie verglaçante
+  71:'snow', 73:'snow', 75:'snow',  // neige
+  77:'snow',  // grains de neige
+  80:'rain', 81:'rain', 82:'rain',  // averses
+  85:'snow', 86:'snow',  // averses de neige
+  95:'thunderstorm', 96:'thunderstorm', 99:'thunderstorm'  // orages
+};
+const isGoodWeather = (c) => [0,1,2].includes(c);  // 0=dégagé, 1=principalement dégagé, 2=partiellement nuageux
+
+// Niveau d'icône (soleil le jour, lune la nuit) selon la couverture nuageuse en %. Source unique des 8 seuils.
+const CLOUD_ICONS_DAY = ['sunny-bright', 'sunny', 'sunny-few-clouds', 'mostly-sunny', 'partly-cloudy', 'mostly-cloudy', 'cloudy-glimpse', 'cloudy'];
+const CLOUD_ICONS_NIGHT = ['moon-bright', 'moon', 'moon-few-clouds', 'moon-mostly-clear', 'moon-partly-cloudy', 'moon-mostly-cloudy', 'moon-cloudy-glimpse', 'moon-cloudy'];
+const cloudcoverToIcon = (cc, night = false) => {
+  const set = night ? CLOUD_ICONS_NIGHT : CLOUD_ICONS_DAY;
+  if (cc <= 10) return set[0];
+  if (cc <= 20) return set[1];
+  if (cc <= 30) return set[2];
+  if (cc <= 40) return set[3];
+  if (cc <= 55) return set[4];
+  if (cc <= 70) return set[5];
+  if (cc <= 85) return set[6];
+  return set[7];
+};
+
+// Fraction de lumiere solaire directe (0 a 1): part qui arrive en faisceau direct du soleil
+// plutot qu'en lumiere diffuse. Proche de 1 = soleil franc et ombres; proche de 0 = gris plat.
+// null quand il y a trop peu de lumiere (nuit, aube, crepuscule) pour que ce soit significatif.
+const sunlitFraction = (direct, diffuse) => {
+  if (direct == null || diffuse == null) return null;
+  const tot = direct + diffuse;
+  if (tot < 50) return null;
+  return direct / tot;
+};
+// Icone "soleil voile": ciel couvert (couverture elevee) mais soleil qui filtre a travers une
+// fine couche en altitude (cirrus). Pilote par la fraction de lumiere directe, PAS par le %
+// total. Regle "l'opaque gagne": s'il y a assez de nuages BAS opaques (cloudLow), ce n'est pas
+// un voile, on garde l'icone habituelle selon le %. Le voile ne sort donc que pour un couvert
+// en altitude avec peu de nuages bas, et seulement si le soleil filtre vraiment. 5 niveaux.
+const VEIL_ICONS = ['sunny-veil-1', 'sunny-veil-2', 'sunny-veil-3', 'sunny-veil-4', 'sunny-veil-5'];
+const VEIL_OPAQUE_LOW = 38; // au-dela, des nuages bas opaques sont presents -> pas de voile
+const veilIcon = (cc, cloudLow, sunFraction) => {
+  if (cc == null || cc <= 70) return null;                          // pas couvert -> systeme habituel
+  if (cloudLow == null || cloudLow > VEIL_OPAQUE_LOW) return null;  // nuages bas opaques -> opaque gagne
+  if (sunFraction == null) return null;                            // nuit / pas de lumiere
+  if (sunFraction >= 0.60) return VEIL_ICONS[0];
+  if (sunFraction >= 0.45) return VEIL_ICONS[1];
+  if (sunFraction >= 0.32) return VEIL_ICONS[2];
+  if (sunFraction >= 0.20) return VEIL_ICONS[3];
+  if (sunFraction >= 0.10) return VEIL_ICONS[4];
+  return null;                                                      // trop eteint -> couvert opaque normal
+};
+
+// Teinte doree graduee selon le % de soleil direct, calee sur l'echelle des icones de voile.
+// Sert au % horaire (soleil direct) ET a l'indice d'opportunite AM/PM dans la rangee des jours.
+const SUN_DIRECT_COLOR = (pct) => pct == null ? '#6f7d7b'
+  : pct >= 60 ? '#E9D27A' : pct >= 45 ? '#E4CB78' : pct >= 32 ? '#DBCD92'
+  : pct >= 20 ? '#CFC8A4' : pct >= 10 ? '#C3BDAA' : '#A7A99C';
+// Seuil a partir duquel l'indice "belle opportunite" s'allume (en % de soleil direct). Calibrable.
+const SHOOT_OPP_MIN = 50;
+// Fenetres de shoot (def. Stephane), en minutes autour du lever / coucher.
+// AM = 1h avant le lever a 1h apres; PM = 1h30 avant le coucher a 1h apres.
+const SHOOT_WINDOWS = { am: { before: 60, after: 60 }, pm: { before: 90, after: 60 } };
+
+// ===== GOOGLE MAPS API =====
+const GOOGLE_API_KEY = 'AIzaSyCgOyu05taIWv2-LcfHM_B8okQ_D7gks8U';
+
+// === API Call Caches (reduce Google Maps billing) ===
+const _geocodeCache = {};
+const _reverseGeocodeCache = {};
+const _travelTimeCache = {};
+
+const geocodeAddress = (address) => {
+  const cacheKey = address.trim().toLowerCase();
+  if (_geocodeCache[cacheKey]) { return Promise.resolve(_geocodeCache[cacheKey]); }
+  return new Promise((resolve, reject) => {
+    const geocoder = new google.maps.Geocoder();
+    geocoder.geocode({ address, region: 'ca' }, (results, status) => {
+      if (status === 'OK' && results[0]) {
+        const loc = results[0].geometry.location;
+        const result = { lat: loc.lat(), lng: loc.lng(), formattedAddress: results[0].formatted_address };
+        _geocodeCache[cacheKey] = result;
+        resolve(result);
+      } else {
+        reject(new Error('Adresse non trouvée'));
+      }
+    });
+  });
+};
+
+const reverseGeocode = (lat, lng) => {
+  const cacheKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+  if (_reverseGeocodeCache[cacheKey]) { return Promise.resolve(_reverseGeocodeCache[cacheKey]); }
+  return new Promise((resolve) => {
+    const geocoder = new google.maps.Geocoder();
+    geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+      const addr = (status === 'OK' && results[0]) ? results[0].formatted_address : lat.toFixed(5) + ', ' + lng.toFixed(5);
+      const result = { formattedAddress: addr, results: results || [] };
+      _reverseGeocodeCache[cacheKey] = result;
+      resolve(result);
+    });
+  });
+};
+
+const getTravelTime = (originLat, originLng, destLat, destLng) => {
+  const cacheKey = `${originLat.toFixed(3)},${originLng.toFixed(3)}→${destLat.toFixed(3)},${destLng.toFixed(3)}`;
+  if (_travelTimeCache[cacheKey]) { return Promise.resolve(_travelTimeCache[cacheKey]); }
+  return new Promise((resolve, reject) => {
+    const service = new google.maps.DistanceMatrixService();
+    service.getDistanceMatrix({
+      origins: [{ lat: originLat, lng: originLng }],
+      destinations: [{ lat: destLat, lng: destLng }],
+      travelMode: 'DRIVING',
+      drivingOptions: { departureTime: new Date(Date.now() + 86400000) } // Tomorrow
+    }, (response, status) => {
+      if (status === 'OK' && response.rows[0]?.elements[0]?.status === 'OK') {
+        const element = response.rows[0].elements[0];
+        const result = { durationSeconds: element.duration.value, durationText: element.duration.text, distanceMeters: element.distance.value, distanceText: element.distance.text };
+        _travelTimeCache[cacheKey] = result;
+        resolve(result);
+      } else {
+        // Fallback: calculate straight line with estimate
+        const R = 6371;
+        const dLat = (destLat - originLat) * Math.PI / 180;
+        const dLon = (destLng - originLng) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(originLat * Math.PI / 180) * Math.cos(destLat * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const distance = R * c;
+        const durationSeconds = Math.round((distance / 80) * 3600); // ~80km/h average
+        const result = { durationSeconds, durationText: formatDuration(durationSeconds), distanceMeters: distance * 1000, distanceText: `${Math.round(distance)} km` };
+        _travelTimeCache[cacheKey] = result;
+        resolve(result);
+      }
+    });
+  });
+};
+
+// ===== WEATHER API =====
+// Mode simulation (uniquement en dev): permet de tester la banniere et le badge stale
+// sans dependre d'une vraie panne Open-Meteo. Activable par URL (?sim=api|network|off)
+// ou par le panneau dev des Preferences. La valeur est persistee en localStorage.
+const WEATHER_SIM_KEY = 'sp-debug-weather-sim';
+const getWeatherSim = () => {
+  if (typeof isDev !== 'undefined' && !isDev) return null; // bloque en prod
+  try { return localStorage.getItem(WEATHER_SIM_KEY) || null; } catch (e) { return null; }
+};
+const setWeatherSim = (mode) => {
+  try {
+    if (!mode || mode === 'off') localStorage.removeItem(WEATHER_SIM_KEY);
+    else localStorage.setItem(WEATHER_SIM_KEY, mode);
+  } catch (e) {}
+};
+// Lecture des params URL au demarrage: ?sim=api / ?sim=network / ?sim=off.
+// Permet d'activer/desactiver depuis n'importe quel onglet, y compris la PWA Mac
+// en collant l'URL voulue dans la barre Safari avant d'ouvrir l'app.
+try {
+  const _simParam = new URL(location.href).searchParams.get('sim');
+  if (_simParam && (typeof isDev === 'undefined' || isDev)) {
+    if (['api', 'network', 'off'].includes(_simParam)) setWeatherSim(_simParam);
+  }
+} catch (e) {}
+
+// Cache localStorage des dernieres reponses meteo reussies, indexees par (lat,lng).
+// Sert de filet quand l'API Open-Meteo retombe en panne: on garde les donnees affichables
+// et on signale visuellement (badge) qu'elles ne sont pas fraiches.
+const WEATHER_CACHE_KEY = 'sp-weather-cache';
+const WEATHER_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 h: au dela on considere obsolete
+const weatherCacheKey = (lat, lng) => `${Number(lat).toFixed(3)},${Number(lng).toFixed(3)}`;
+const readWeatherCache = (lat, lng) => {
+  try {
+    const all = JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY) || '{}');
+    const entry = all[weatherCacheKey(lat, lng)];
+    if (!entry || !entry.data || !entry.cachedAt) return null;
+    if (Date.now() - entry.cachedAt > WEATHER_CACHE_TTL_MS) return null;
+    return entry;
+  } catch (e) { return null; }
+};
+const writeWeatherCache = (lat, lng, data) => {
+  try {
+    const all = JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY) || '{}');
+    all[weatherCacheKey(lat, lng)] = { data, cachedAt: Date.now() };
+    // Garde-fou taille: si plus de 50 entrees, on coupe les plus vieilles.
+    const entries = Object.entries(all);
+    if (entries.length > 50) {
+      entries.sort((a, b) => (b[1].cachedAt || 0) - (a[1].cachedAt || 0));
+      const trimmed = Object.fromEntries(entries.slice(0, 50));
+      localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify(trimmed));
+    } else {
+      localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify(all));
+    }
+  } catch (e) { /* quota plein, on ignore */ }
+};
+
+// Wrapper d'un appel Open-Meteo. Retourne un objet de resultat plutot que de throw,
+// pour distinguer panne reseau, panne API (5xx/429) et reponse 200 invalide.
+//   { data }                             -> succes
+//   { error: 'network' }                 -> fetch a throw (offline, DNS, CORS bloquant, etc.)
+//   { error: 'api', status: <int> }      -> reponse non-OK (priorite aux 5xx et 429)
+//   { error: 'api', status: 'invalid' }  -> reponse 200 mais body invalide / sans hourly
+const fetchOpenMeteoModel = async (endpoint, qs) => {
+  // Court-circuit de simulation pour QA en dev: on retourne directement l'erreur
+  // simulee sans appeler le reseau, pour reproduire bannieres et badges a la demande.
+  const sim = getWeatherSim();
+  if (sim === 'network') return { error: 'network' };
+  if (sim === 'api') return { error: 'api', status: 503 };
+  let res;
+  try {
+    res = await fetch(`https://api.open-meteo.com/v1/${endpoint}?${qs}`);
+  } catch (e) {
+    return { error: 'network' };
+  }
+  if (!res.ok) {
+    return { error: 'api', status: res.status };
+  }
+  let body;
+  try {
+    body = await res.json();
+  } catch (e) {
+    return { error: 'api', status: 'invalid' };
+  }
+  if (!body || !body.hourly) {
+    return { error: 'api', status: 'invalid' };
+  }
+  return { data: body };
+};
+
+// Cache mémoire (RAM) des dernières réponses météo fraîches, par (lat,lng). Sert quand un
+// dossier est refermé puis rouvert peu après: on resserre la donnée sans rappeler l'API.
+// TTL 30 min. Distinct du cache localStorage 24 h (sp-weather-cache) qui, lui, n'est qu'un
+// filet "API en panne": ici on court-circuite carrément l'appel réseau tant que c'est frais.
+const WEATHER_MEM_TTL_MS = 30 * 60 * 1000;
+const weatherMemCache = new Map(); // key "lat,lng" (3 décimales) -> { data, fetchedAt }
+
+// ===== FUMEE DE FEUX (FireWork / Environnement Canada) =====
+// Source distincte d'Open-Meteo: la couverture nuageuse et le rayonnement ICON ne "voient" pas
+// la fumee (faite de particules, pas d'eau). On interroge la couche de fumee de feux du modele
+// FireWork via l'API ouverte GeoMet (gratuite, CORS ouvert, saison avril-sept, portee ~3 jours).
+// Niveau PAR JOUR (la fumee bouge lentement): 0 rien, 1 leger, 2 modere, 3 dense.
+const SMOKE_DAVG = 'RAQDPS.Sfc_PM2.5-WildireSmokePlume-DAvg';   // moyenne journaliere (jours suivants)
+const SMOKE_HOURLY = 'RAQDPS.Sfc_PM2.5-WildfireSmokePlume';     // horaire (pour aujourd'hui)
+const smokeLevelFromUg = (ug) => {
+  if (ug == null || ug < 5) return 0;
+  if (ug < 20) return 1;
+  if (ug < 60) return 2;
+  return 3;
+};
+const fetchSmokePoint = async (layer, time, lat, lng) => {
+  try {
+    const d = 0.05;
+    const bbox = `${(lng - d).toFixed(3)},${(lat - d).toFixed(3)},${(lng + d).toFixed(3)},${(lat + d).toFixed(3)}`;
+    const url = `https://geo.weather.gc.ca/geomet?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo&LAYERS=${layer}&QUERY_LAYERS=${layer}&SRS=EPSG:4326&BBOX=${bbox}&WIDTH=10&HEIGHT=10&X=5&Y=5&INFO_FORMAT=application/json&TIME=${time}`;
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const j = await r.json();              // une erreur GeoMet est renvoyee en XML -> throw -> catch
+    const p = j.features && j.features[0] && j.features[0].properties;
+    if (!p || p.value == null) return null;
+    return p.value * 1e9;                  // kg/m3 -> microgrammes/m3
+  } catch (e) { return null; }
+};
+// Niveau de fumee par jour (cle "YYYY-MM-DD" locale) pour aujourd'hui + 3 jours. Jamais bloquant:
+// tout echec (hors saison, reseau, pas de couche) laisse simplement le jour sans fumee.
+const fetchSmoke = async (lat, lng) => {
+  const inner = (async () => {
+    const out = {};
+    const base = new Date();
+    const jobs = [0, 1, 2, 3].map(async (i) => {
+      const dt = new Date(base.getTime() + i * 86400000);
+      const dateStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+      let ug = await fetchSmokePoint(SMOKE_DAVG, `${dateStr}T12:00:00Z`, lat, lng);
+      if (ug == null && i === 0) {           // aujourd'hui n'est pas couvert par la moyenne journaliere
+        const h = new Date();
+        const hUTC = `${h.getUTCFullYear()}-${String(h.getUTCMonth() + 1).padStart(2, '0')}-${String(h.getUTCDate()).padStart(2, '0')}T${String(h.getUTCHours()).padStart(2, '0')}:00:00Z`;
+        ug = await fetchSmokePoint(SMOKE_HOURLY, hUTC, lat, lng);
+      }
+      if (ug != null) out[dateStr] = smokeLevelFromUg(ug);
+    });
+    await Promise.all(jobs);
+    return out;
+  })();
+  // Filet: si GeoMet rame, on n'attend pas plus de 7 s pour ne pas retarder la meteo.
+  return Promise.race([inner, new Promise((res) => setTimeout(() => res({}), 7000))]).catch(() => ({}));
+};
+
+const fetchWeather = async (lat, lng) => {
+  // Hit mémoire frais (< 30 min): on resserre sans toucher au réseau. Ce sont des données
+  // d'un succès récent, donc fraîches (fromCache:false, pas le badge "stale"). Court-circuit
+  // désactivé quand une simulation dev est active, pour ne pas masquer les pannes simulées en QA.
+  const memKey = weatherCacheKey(lat, lng);
+  if (!getWeatherSim()) {
+    const mem = weatherMemCache.get(memKey);
+    if (mem && (Date.now() - mem.fetchedAt) < WEATHER_MEM_TTL_MS) {
+      return { data: mem.data, fromCache: false, cachedAt: mem.fetchedAt };
+    }
+  }
+  // Deux modeles fusionnes: ICON (meilleure qualite du couvert, portee ~7,5 j) pour
+  // les jours qu'il couvre, GFS (portee 16 j) pour completer jusqu'a 10 jours. La sortie
+  // garde exactement la meme forme qu'une reponse Open-Meteo unique: ni l'affichage ni le
+  // parsing plus bas ne changent.
+  const qs = `latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode,windspeed_10m,windgusts_10m,cloudcover,precipitation,direct_radiation,diffuse_radiation,cloudcover_low,cloudcover_mid,cloudcover_high&daily=weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=America/Toronto&forecast_days=10`;
+  const [iconRes, gfsRes, smokeMap] = await Promise.all([
+    fetchOpenMeteoModel('dwd-icon', qs),
+    fetchOpenMeteoModel('gfs', qs),
+    fetchSmoke(lat, lng),   // ne rejette jamais: {} si pas de fumee / hors saison / panne
+  ]);
+  const icon = iconRes.data || null;
+  const gfs = gfsRes.data || null;
+
+  const HOURLY_KEYS = ['temperature_2m', 'weathercode', 'windspeed_10m', 'windgusts_10m', 'cloudcover', 'precipitation', 'direct_radiation', 'diffuse_radiation', 'cloudcover_low', 'cloudcover_mid', 'cloudcover_high'];
+  const DAILY_KEYS = ['weathercode', 'temperature_2m_max', 'temperature_2m_min', 'sunrise', 'sunset'];
+  const dateOf = (t) => String(t).slice(0, 10);
+
+  const gfsOk = !!(gfs && gfs.hourly && gfs.daily && gfs.daily.time);
+  // Dernier jour reellement couvert par ICON (jour complet = temperature max non nulle).
+  // Calcule depuis la reponse, jamais code en dur: la portee d'ICON varie selon le run.
+  let lastIconDate = null;
+  if (icon && icon.daily && icon.daily.time) {
+    icon.daily.time.forEach((d, i) => {
+      if (icon.daily.temperature_2m_max[i] != null) {
+        const ds = dateOf(d);
+        if (lastIconDate === null || ds > lastIconDate) lastIconDate = ds;
+      }
+    });
+  }
+  const iconOk = !!(icon && icon.hourly && icon.daily && lastIconDate !== null);
+  if (!gfsOk && !iconOk) {
+    // Les deux modeles sont injoignables. On priorise l'erreur la plus informative:
+    // - api > network (on a eu une reponse HTTP, c'est plus parlant qu'un fetch qui throw)
+    // - 5xx > 429 > autre status > 'invalid' (un 5xx est plus signifiant qu'un 4xx)
+    const candidates = [iconRes, gfsRes].filter((r) => r && r.error);
+    let chosen = candidates.find((r) => r.error === 'api' && typeof r.status === 'number' && r.status >= 500)
+              || candidates.find((r) => r.error === 'api' && r.status === 429)
+              || candidates.find((r) => r.error === 'api')
+              || candidates.find((r) => r.error === 'network')
+              || { error: 'api', status: 'invalid' };
+    // Filet: si on a une reponse encore exploitable en cache local, on la renvoie en mode "stale".
+    const cached = readWeatherCache(lat, lng);
+    if (cached) {
+      return { data: cached.data, fromCache: true, cachedAt: cached.cachedAt, error: chosen.error, status: chosen.status };
+    }
+    return { error: chosen.error, status: chosen.status };
+  }
+
+  // Index par horodatage (horaire) et par date (journalier) pour une jointure sans trou
+  // ni doublon, meme si les grilles different d'un modele a l'autre.
+  const indexBy = (resp, part, asDate) => {
+    const m = {};
+    if (resp && resp[part] && resp[part].time) {
+      resp[part].time.forEach((t, i) => { m[asDate ? dateOf(t) : t] = i; });
+    }
+    return m;
+  };
+  const iconHourIdx = indexBy(icon, 'hourly', false);
+  const iconDayIdx = indexBy(icon, 'daily', true);
+  const gfsHourIdx = indexBy(gfs, 'hourly', false);
+  const gfsDayIdx = indexBy(gfs, 'daily', true);
+
+  // Colonne vertebrale: GFS (10 jours) si dispo, sinon les jours ICON disponibles
+  // (si GFS tombe, l'app fonctionne quand meme avec les jours d'ICON).
+  const hourlyTimes = gfsOk ? gfs.hourly.time : icon.hourly.time.filter((t) => dateOf(t) <= lastIconDate);
+  const dailyTimes = gfsOk ? gfs.daily.time : icon.daily.time.filter((t) => dateOf(t) <= lastIconDate);
+
+  const data = { hourly: { time: [] }, daily: { time: [] } };
+  HOURLY_KEYS.forEach((k) => { data.hourly[k] = []; });
+  DAILY_KEYS.forEach((k) => { data.daily[k] = []; });
+  data.daily.model = []; // 'icon' ou 'gfs' par jour: l'indice d'opportunite ne sort que sur ICON.
+
+  hourlyTimes.forEach((t) => {
+    const useIcon = iconOk && dateOf(t) <= lastIconDate && (t in iconHourIdx);
+    const src = useIcon ? icon : gfs;
+    const si = useIcon ? iconHourIdx[t] : gfsHourIdx[t];
+    data.hourly.time.push(t);
+    HOURLY_KEYS.forEach((k) => {
+      const arr = src && src.hourly ? src.hourly[k] : null;
+      data.hourly[k].push(arr && si != null ? (arr[si] ?? null) : null);
+    });
+  });
+
+  dailyTimes.forEach((t) => {
+    const ds = dateOf(t);
+    const useIcon = iconOk && ds <= lastIconDate && (ds in iconDayIdx);
+    const src = useIcon ? icon : gfs;
+    const si = useIcon ? iconDayIdx[ds] : gfsDayIdx[ds];
+    data.daily.time.push(t);
+    data.daily.model.push(useIcon ? 'icon' : 'gfs');
+    DAILY_KEYS.forEach((k) => {
+      const arr = src && src.daily ? src.daily[k] : null;
+      data.daily[k].push(arr && si != null ? (arr[si] ?? null) : null);
+    });
+  });
+
+  // Calculer stats journalières depuis les données horaires (6h-18h)
+  const getDailyStats = (dateStr) => {
+    const dayStart = new Date(dateStr + 'T06:00:00');
+    const dayEnd = new Date(dateStr + 'T18:00:00');
+    
+    let totalCloud = 0, cloudCount = 0, count = 0, precipCount = 0;
+    let hasThunderstorm = false, hasSnow = false, hasRain = false;
+    let sumDirect = 0, sumDiffuse = 0, sumLow = 0, lowCount = 0;
+
+    data.hourly.time.forEach((t, i) => {
+      const time = new Date(t);
+      if (time >= dayStart && time <= dayEnd) {
+        count++;
+        if (data.hourly.cloudcover[i] != null) {
+          totalCloud += data.hourly.cloudcover[i];
+          cloudCount++;
+        }
+        const dr = data.hourly.direct_radiation?.[i], df = data.hourly.diffuse_radiation?.[i];
+        if (dr != null && df != null) { sumDirect += dr; sumDiffuse += df; }
+        const cl = data.hourly.cloudcover_low?.[i];
+        if (cl != null) { sumLow += cl; lowCount++; }
+        const wc = data.hourly.weathercode[i];
+        if (wc >= 51) { // Any precipitation code
+          precipCount++;
+          if (wc >= 95) hasThunderstorm = true;
+          else if ((wc >= 71 && wc <= 77) || wc === 85 || wc === 86) hasSnow = true;
+          else hasRain = true;
+        }
+      }
+    });
+    
+    const cloudcover = cloudCount > 0 ? Math.round(totalCloud / cloudCount) : null;
+    // Fraction de lumiere directe du jour, ponderee par l'intensite (les heures lumineuses
+    // pesent plus). Sert a distinguer un voile fin lumineux d'un couvert opaque.
+    const sunFraction = (sumDirect + sumDiffuse) >= 50 ? sumDirect / (sumDirect + sumDiffuse) : null;
+    const cloudLow = lowCount > 0 ? Math.round(sumLow / lowCount) : null;
+    // Only show precip icon if >= 40% of daytime hours have precipitation
+    const precipRatio = count > 0 ? precipCount / count : 0;
+    let icon = null;
+    if (precipRatio >= 0.4) {
+      icon = hasThunderstorm ? 'thunderstorm' : hasSnow ? 'snow' : hasRain ? 'rain' : null;
+    }
+    return { cloudcover, icon, sunFraction, cloudLow };
+  };
+  
+  // Opportunite de shoot sur une fenetre (autour du lever ou du coucher). Renvoie { frac, cloud, precip }
+  // ou null. frac = soleil direct pondere par l'intensite sur la fenetre (heures sombres ~ ignorees).
+  const shootWindowStats = (centerISO, beforeMin, afterMin) => {
+    if (!centerISO) return null;
+    const c = new Date(centerISO).getTime();
+    const start = c - beforeMin * 60000, end = c + afterMin * 60000;
+    let sumDirect = 0, sumTot = 0, cloudSum = 0, cloudN = 0, precip = false, any = false;
+    for (let i = 0; i < data.hourly.time.length; i++) {
+      const tt = new Date(data.hourly.time[i]).getTime();
+      if (tt - 3600000 < end && tt > start) {  // rayonnement Open-Meteo = moyenne de l'heure precedente [tt-1h, tt]
+        any = true;
+        const dr = data.hourly.direct_radiation?.[i], df = data.hourly.diffuse_radiation?.[i];
+        if (dr != null && df != null) { sumDirect += dr; sumTot += dr + df; }
+        const cc = data.hourly.cloudcover?.[i];
+        if (cc != null) { cloudSum += cc; cloudN++; }
+        const wc = data.hourly.weathercode?.[i];
+        if (wc != null && wc >= 51) precip = true;
+      }
+    }
+    if (!any) return null;
+    return { frac: sumTot >= 50 ? sumDirect / sumTot : null, cloud: cloudN ? Math.round(cloudSum / cloudN) : null, precip };
+  };
+
+  const formatted = {
+    hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), gust: data.hourly.windgusts_10m?.[i] != null ? Math.round(data.hourly.windgusts_10m[i]) : null, cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), cloudLow: data.hourly.cloudcover_low?.[i] ?? null, smoke: smokeMap[dateOf(t)] || 0, icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]) })),
+    daily: data.daily.time.map((t,i) => {
+      const stats = getDailyStats(t);
+      // Use hourly-derived icon when available, fallback to daily weathercode
+      const icon = stats.icon || (stats.cloudcover !== null ? null : (weatherCodeIcon[data.daily.weathercode[i]] || 'cloudy'));
+      // Indice d'opportunite AM/PM: seulement sur les jours couverts par ICON (fiable en horaire).
+      const model = data.daily.model[i];
+      const am = model === 'icon' ? shootWindowStats(data.daily.sunrise[i], SHOOT_WINDOWS.am.before, SHOOT_WINDOWS.am.after) : null;
+      const pm = model === 'icon' ? shootWindowStats(data.daily.sunset[i], SHOOT_WINDOWS.pm.before, SHOOT_WINDOWS.pm.after) : null;
+      return { date: t, high: Math.round(data.daily.temperature_2m_max[i]), low: Math.round(data.daily.temperature_2m_min[i]), cloudcover: stats.cloudcover, sunFraction: stats.sunFraction, cloudLow: stats.cloudLow, smoke: smokeMap[dateOf(t)] || 0, icon, sunrise: data.daily.sunrise[i], sunset: data.daily.sunset[i], isGood: isGoodWeather(data.daily.weathercode[i]), model, am, pm };
+    })
+  };
+  // Conserve la reponse pour servir de filet quand l'API retombera en panne.
+  const fetchedAt = Date.now();
+  writeWeatherCache(lat, lng, formatted);
+  weatherMemCache.set(memKey, { data: formatted, fetchedAt }); // resservi < 30 min sans rappeler l'API
+  return { data: formatted, fromCache: false, cachedAt: fetchedAt };
+};
+
+// ===== STORE =====
+const StoreContext = createContext();
+const useStore = () => useContext(StoreContext);
+
+// Traduction Projet / ligne Supabase (camelCase et snake_case), source unique.
+// projectFromRow: lecture (db vers app). PROJECT_TO_ROW: correspondance des champs (app vers db).
+const projectFromRow = (p) => ({
+  id: p.id, name: p.name, address: p.address, lat: p.lat, lng: p.lng,
+  status: p.status, mandates: p.mandates || [], orientation: p.orientation || [],
+  isContest: p.is_contest, notes: p.notes, links: p.links || [],
+  departureAddress: p.departure_address, departureLat: p.departure_lat, departureLng: p.departure_lng,
+  travelTime: p.travel_time, sortOrder: p.sort_order,
+  createdAt: p.created_at, shotAt: p.shot_at, completedAt: p.completed_at,
+  buildings: p.buildings || [],
+  clientFolder: p.client_folder ?? null, tag: p.tag ?? null,
+  onHold: p.on_hold ?? false
+});
+const PROJECT_TO_ROW = {
+  name: 'name', address: 'address', lat: 'lat', lng: 'lng', status: 'status',
+  mandates: 'mandates', orientation: 'orientation', isContest: 'is_contest',
+  notes: 'notes', links: 'links', departureAddress: 'departure_address',
+  departureLat: 'departure_lat', departureLng: 'departure_lng', travelTime: 'travel_time',
+  shotAt: 'shot_at', createdAt: 'created_at', completedAt: 'completed_at', buildings: 'buildings',
+  clientFolder: 'client_folder', tag: 'tag', onHold: 'on_hold'
+};
+// rowFromProject: écriture (app vers db), ligne complète. Sert à réinsérer un projet
+// supprimé quand on annule la suppression (la ligne a déjà été effacée en base).
+const rowFromProject = (proj, userId) => {
+  const row = { id: proj.id, user_id: userId, sort_order: proj.sortOrder ?? 0 };
+  for (const [camel, snake] of Object.entries(PROJECT_TO_ROW)) {
+    if (proj[camel] !== undefined) row[snake] = proj[camel];
+  }
+  return row;
+};
+
+// routeFromRow: lecture (db vers app). ROUTE_TO_ROW: correspondance des champs (app vers db).
+const routeFromRow = (r) => ({
+  id: r.id, name: r.name || '', useHome: r.use_home !== false,
+  departureAddress: r.departure_address || '', departureLat: r.departure_lat ?? null, departureLng: r.departure_lng ?? null,
+  destinations: r.destinations || [], archived: r.archived || false,
+  sortOrder: r.sort_order ?? 0, createdAt: r.created_at
+});
+const ROUTE_TO_ROW = {
+  name: 'name', useHome: 'use_home', departureAddress: 'departure_address',
+  departureLat: 'departure_lat', departureLng: 'departure_lng',
+  destinations: 'destinations', archived: 'archived', sortOrder: 'sort_order'
+};
+
+const StoreProvider = ({ children }) => {
+  const { user } = useAuth();
+  const { canCreateProject, getProjectLimit } = useSubscription();
+  const [projects, setProjects] = useState(() => JSON.parse(localStorage.getItem('sp-projects') || '[]'));
+  const [prefs, setPrefsState] = useState(() => {
+    const p = JSON.parse(localStorage.getItem('sp-prefs') || '{"homeAddress":"","homeLat":null,"homeLng":null,"prepTime":60}');
+    // v633.110 : le seuil rouge par défaut de la liste Édition passe de 25 à 30 jours. Un 25 déjà enregistré
+    // (ancien défaut, que le champ persistait dès qu'on le touchait) est retiré une seule fois.
+    if (!localStorage.getItem('sp-edit-alert30')) { if (p.editAlertDays === 25) delete p.editAlertDays; localStorage.setItem('sp-edit-alert30', '1'); }
+    return p;
+  });
+  // État ouvert/fermé des dossiers client, carte { "NOM": true|false }. Vide = aucun état
+  // enregistré (on appliquera alors le défaut "2 premiers ouverts" à l'affichage). Persisté
+  // dans les préférences Supabase (partagé web + PWA) et mis en cache local pour l'offline.
+  const [folderStates, setFolderStatesState] = useState(() => { try { return JSON.parse(localStorage.getItem('sp-folder-states') || '{}'); } catch (e) { return {}; } });
+  const [routes, setRoutes] = useState(() => JSON.parse(localStorage.getItem('sp-routes') || '[]'));
+  const [view, setView] = useState('todo');
+  const [selectedId, setSelectedId] = useState(null);
+  const [synced, setSynced] = useState(false);
+
+  // Cache to localStorage (always, for offline)
+  useEffect(() => { localStorage.setItem('sp-projects', JSON.stringify(projects)); }, [projects]);
+  useEffect(() => { localStorage.setItem('sp-prefs', JSON.stringify(prefs)); }, [prefs]);
+  useEffect(() => { localStorage.setItem('sp-folder-states', JSON.stringify(folderStates)); }, [folderStates]);
+  useEffect(() => { localStorage.setItem('sp-routes', JSON.stringify(routes)); }, [routes]);
+
+  // === SUPABASE SYNC ===
+  // On login: load from Supabase or migrate localStorage
+  useEffect(() => {
+    if (!user) return;
+
+    // Clear localStorage if a different user logged in
+    const prevUserId = localStorage.getItem('sp-user-id');
+    if (prevUserId && prevUserId !== user.id) {
+      localStorage.removeItem('sp-projects');
+      localStorage.removeItem('sp-prefs');
+      localStorage.removeItem('sp-folder-states');
+      localStorage.removeItem('sp-routes');
+      localStorage.removeItem('sp-migrated-to-supabase');
+      setProjects([]);
+      setPrefsState({homeAddress:'',homeLat:null,homeLng:null,prepTime:60});
+      setFolderStatesState({});
+      setRoutes([]);
+    }
+    localStorage.setItem('sp-user-id', user.id);
+
+    const syncData = async () => {
+      try {
+        // Load projects from Supabase
+        const { data: dbProjects, error: pErr } = await supabase
+          .from(TBL_PROJECTS)
+          .select('*')
+          .order('sort_order', { ascending: true });
+        
+        // Load preferences
+        const { data: dbPrefs, error: prErr } = await supabase
+          .from(TBL_PREFS)
+          .select('*')
+          .single();
+
+        if (pErr && pErr.code !== 'PGRST116') console.error('Projects load error:', pErr);
+        if (prErr && prErr.code !== 'PGRST116') console.error('Prefs load error:', prErr);
+
+        const { data: dbRoutes, error: rErr } = await supabase
+          .from(TBL_ROUTES).select('*').order('sort_order', { ascending: true });
+        if (rErr && rErr.code !== 'PGRST116') console.error('Routes load error:', rErr);
+        if (dbRoutes) setRoutes(dbRoutes.map(routeFromRow));
+
+        const hasDbData = dbProjects && dbProjects.length > 0;
+        const hasLocalData = projects.length > 0;
+        const alreadyMigrated = localStorage.getItem('sp-migrated-to-supabase');
+
+        if (hasDbData) {
+          // Supabase has data → use it
+          setProjects(dbProjects.map(projectFromRow));
+        } else if (hasLocalData && !alreadyMigrated) {
+          // First login with localStorage data → migrate to Supabase
+          for (let i = 0; i < projects.length; i++) {
+            const p = projects[i];
+            await supabase.from(TBL_PROJECTS).upsert({
+              id: p.id, user_id: user.id, name: p.name, address: p.address,
+              lat: p.lat, lng: p.lng, status: p.status || 'todo',
+              mandates: p.mandates || [], orientation: p.orientation || [],
+              is_contest: p.isContest || false, client_folder: p.clientFolder ?? null, tag: p.tag ?? null, notes: p.notes || '',
+              links: p.links || [],
+              departure_address: p.departureAddress, departure_lat: p.departureLat, departure_lng: p.departureLng,
+              travel_time: p.travelTime, sort_order: i,
+              created_at: p.createdAt || new Date().toISOString(),
+              shot_at: p.shotAt, completed_at: p.completedAt
+            });
+          }
+          localStorage.setItem('sp-migrated-to-supabase', 'true');
+        }
+
+        if (dbPrefs) {
+          // Fusion (et non remplacement) : les réglages d'affichage de la liste Édition
+          // ne sont pas en base et doivent survivre à la synchronisation.
+          setPrefsState(p => ({
+            ...p,
+            homeAddress: dbPrefs.home_address || '', homeLat: dbPrefs.home_lat,
+            homeLng: dbPrefs.home_lng, prepTime: dbPrefs.prep_time || 60
+          }));
+          // État des dossiers depuis le compte (partagé web + PWA). Absent/null sur les
+          // anciens comptes ou si la migration n'a pas tourné: on garde {} (défaut appliqué à l'affichage).
+          if (dbPrefs.folder_states && typeof dbPrefs.folder_states === 'object') {
+            setFolderStatesState(dbPrefs.folder_states);
+          }
+        } else if (prefs.homeLat) {
+          // Migrate prefs
+          await supabase.from(TBL_PREFS).upsert({
+            user_id: user.id, home_address: prefs.homeAddress,
+            home_lat: prefs.homeLat, home_lng: prefs.homeLng,
+            prep_time: typeof prefs.prepTime === 'number' ? prefs.prepTime : 60
+          });
+        }
+
+        setSynced(true);
+      } catch (err) {
+        console.error('Sync error:', err);
+        setSynced(true); // Continue with localStorage
+      }
+    };
+    syncData();
+  }, [user]);
+
+  // Realtime subscription — sync across devices
+  useEffect(() => {
+    if (!user || !synced) return;
+    const channel = supabase.channel('projects-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects', filter: `user_id=eq.${user.id}` }, (payload) => {
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const p = payload.new;
+          const mapped = projectFromRow(p);
+          setProjects(prev => {
+            const exists = prev.findIndex(x => x.id === p.id);
+            if (exists >= 0) { const next = [...prev]; next[exists] = mapped; return next; }
+            return [mapped, ...prev];
+          });
+        } else if (payload.eventType === 'DELETE') {
+          setProjects(prev => prev.filter(x => x.id !== payload.old.id));
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [user, synced]);
+
+  // === CRUD (writes to Supabase + local state) ===
+  const setPrefs = (update) => {
+    setPrefsState(p => {
+      const next = {...p, ...update};
+      if (user) {
+        supabase.from(TBL_PREFS).upsert({
+          user_id: user.id, home_address: next.homeAddress,
+          home_lat: next.homeLat, home_lng: next.homeLng,
+          prep_time: typeof next.prepTime === 'number' ? next.prepTime : 60
+        }).then(({ error }) => { if (error) console.error('Prefs save error:', error); });
+      }
+      return next;
+    });
+  };
+
+  // Ouvre/ferme un dossier et persiste la carte complète dans les préférences.
+  // L'upsert ne porte que sur folder_states: PostgREST ne touche pas les autres colonnes
+  // (home_address, etc.), donc aucun écrasement des autres préférences.
+  const setFolderState = (name, open) => {
+    setFolderStatesState(prev => {
+      const next = { ...prev, [name]: open };
+      if (user) {
+        supabase.from(TBL_PREFS).upsert({ user_id: user.id, folder_states: next })
+          .then(({ error }) => { if (error) console.error('Folder state save error:', error); });
+      }
+      return next;
+    });
+  };
+
+  const addProject = (data) => {
+    // Check project limit for subscription tier
+    const activeCount = projects.filter(p => p.status !== ProjectStatus.DONE).length;
+    if (!canCreateProject(activeCount)) {
+      return { error: 'limit_reached', limit: getProjectLimit() };
+    }
+    const proj = { id: generateId(), name: data.name || 'Nouveau', address: data.address || '', lat: data.lat, lng: data.lng, mandates: data.mandates || [], orientation: data.orientation || [], deliveryDate: data.deliveryDate || null, isContest: data.isContest || false, clientFolder: (data.clientFolder && data.clientFolder.trim()) || null, status: ProjectStatus.TODO, notes: '', links: [], buildings: [], travelTime: data.travelTime || null, departureAddress: data.departureAddress || null, departureLat: data.departureLat || null, departureLng: data.departureLng || null, createdAt: new Date().toISOString(), shotAt: null };
+    setProjects(p => {
+      const newList = [proj, ...p];
+      // Update all sort_orders in Supabase
+      if (user) {
+        newList.forEach((pr, i) => {
+          if (pr.id !== proj.id) supabase.from(TBL_PROJECTS).update({ sort_order: i }).eq('id', pr.id);
+        });
+      }
+      return newList;
+    });
+    if (user) {
+      supabase.from(TBL_PROJECTS).insert({
+        id: proj.id, user_id: user.id, name: proj.name, address: proj.address,
+        lat: proj.lat, lng: proj.lng, status: proj.status,
+        mandates: proj.mandates, orientation: proj.orientation,
+        is_contest: proj.isContest, client_folder: proj.clientFolder, notes: '', links: [], buildings: [],
+        departure_address: proj.departureAddress, departure_lat: proj.departureLat, departure_lng: proj.departureLng,
+        travel_time: proj.travelTime, sort_order: 0,
+        created_at: proj.createdAt
+      }).then(({ error }) => { if (error) console.error('Insert error:', error); });
+    }
+    return proj.id;
+  };
+
+  const updateProject = (id, upd) => {
+    setProjects(p => p.map(x => x.id === id ? {...x, ...upd} : x));
+    if (user) {
+      // Map camelCase to snake_case
+      const dbUpd = {};
+      for (const [camel, snake] of Object.entries(PROJECT_TO_ROW)) {
+        if (camel in upd) dbUpd[snake] = upd[camel];
+      }
+      if (Object.keys(dbUpd).length > 0) {
+        supabase.from(TBL_PROJECTS).update(dbUpd).eq('id', id)
+          .then(({ error }) => { if (error) console.error('Update error:', error); });
+      }
+    }
+  };
+
+  const [lastDeleted, setLastDeleted] = useState(null);
+  const deleteTimerRef = useRef(null);
+  // Id du projet supprimé dont les fichiers attachés attendent leur purge (fin de la
+  // fenêtre d'annulation). Les fichiers ne sont pas purgés tout de suite pour que
+  // l'annulation retrouve le dossier complet (aucune cascade en base sur project_files).
+  const pendingFilePurgeRef = useRef(null);
+
+  const purgePendingFiles = () => {
+    const pid = pendingFilePurgeRef.current;
+    pendingFilePurgeRef.current = null;
+    if (pid && user) fileHelpers.deleteAllForProject(pid).catch(e => console.error('File cleanup error:', e));
+  };
+
+  const deleteProject = (id) => {
+    const proj = projects.find(x => x.id === id);
+    if (!proj) return;
+    setProjects(p => p.filter(x => x.id !== id));
+    if (selectedId === id) setSelectedId(null);
+    // Une suppression précédente encore en fenêtre d'annulation devient définitive
+    // (son toast est remplacé): purge de ses fichiers maintenant.
+    if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+    purgePendingFiles();
+    setLastDeleted(proj);
+    // Suppression immédiate en base: différée, elle sautait dès qu'on rechargeait
+    // l'app pendant la fenêtre d'annulation (le projet réapparaissait au reload).
+    // L'annulation réinsère la ligne complète via rowFromProject.
+    if (user) {
+      supabase.from(TBL_PROJECTS).delete().eq('id', id)
+        .then(({ error }) => { if (error) console.error('Delete error:', error); });
+    }
+    pendingFilePurgeRef.current = id;
+    deleteTimerRef.current = setTimeout(() => {
+      purgePendingFiles();
+      setLastDeleted(prev => prev?.id === id ? null : prev);
+    }, 60000);
+  };
+
+  const undoDelete = () => {
+    if (!lastDeleted) return;
+    if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+    pendingFilePurgeRef.current = null;
+    setProjects(p => [lastDeleted, ...p]);
+    // Upsert plutôt qu'insert: idempotent si le delete n'était pas parti (hors ligne).
+    if (user) {
+      supabase.from(TBL_PROJECTS).upsert(rowFromProject(lastDeleted, user.id))
+        .then(({ error }) => { if (error) console.error('Undo insert error:', error); });
+    }
+    setLastDeleted(null);
+  };
+
+  // === CRUD routes ===
+  const addRoute = (data = {}) => {
+    const route = {
+      id: `r_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      name: data.name || '', useHome: data.useHome !== false,
+      departureAddress: data.departureAddress || '', departureLat: data.departureLat ?? null, departureLng: data.departureLng ?? null,
+      destinations: data.destinations || [], archived: false, sortOrder: 0, createdAt: new Date().toISOString()
+    };
+    setRoutes(prev => [route, ...prev]);
+    if (user) {
+      supabase.from(TBL_ROUTES).insert({
+        id: route.id, user_id: user.id, name: route.name, use_home: route.useHome,
+        departure_address: route.departureAddress, departure_lat: route.departureLat, departure_lng: route.departureLng,
+        destinations: route.destinations, archived: false, sort_order: 0, created_at: route.createdAt
+      }).then(({ error }) => { if (error) console.error('Route insert error:', error); });
+    }
+    return route.id;
+  };
+
+  const updateRoute = (id, upd) => {
+    setRoutes(prev => prev.map(x => x.id === id ? { ...x, ...upd } : x));
+    if (user) {
+      const dbUpd = { updated_at: new Date().toISOString() };
+      for (const [camel, snake] of Object.entries(ROUTE_TO_ROW)) {
+        if (camel in upd) dbUpd[snake] = upd[camel];
+      }
+      supabase.from(TBL_ROUTES).update(dbUpd).eq('id', id)
+        .then(({ error }) => { if (error) console.error('Route update error:', error); });
+    }
+  };
+
+  const deleteRoute = (id) => {
+    setRoutes(prev => prev.filter(x => x.id !== id));
+    if (user) supabase.from(TBL_ROUTES).delete().eq('id', id)
+      .then(({ error }) => { if (error) console.error('Route delete error:', error); });
+  };
+
+  const advanceProject = (id) => setProjects(p => p.map(x => {
+    if (x.id !== id) return x;
+    if (x.status === ProjectStatus.TODO) {
+      const upd = { status: ProjectStatus.RETOUCHING, shotAt: new Date().toISOString() };
+      if (user) supabase.from(TBL_PROJECTS).update({ status: upd.status, shot_at: upd.shotAt }).eq('id', id)
+        .then(({ error }) => { if (error) console.error('Advance error:', error); });
+      return {...x, ...upd};
+    }
+    if (x.status === ProjectStatus.RETOUCHING) {
+      const upd = { status: ProjectStatus.DONE, completedAt: new Date().toISOString() };
+      if (user) {
+        fileHelpers.deleteAllForProject(id).catch(e => console.error('File cleanup error:', e));
+        supabase.from(TBL_PROJECTS).update({ status: upd.status, completed_at: upd.completedAt }).eq('id', id)
+          .then(({ error }) => { if (error) console.error('Advance error:', error); });
+      }
+      return {...x, ...upd};
+    }
+    return x;
+  }));
+  
+  const revertProject = (id) => setProjects(p => p.map(x => {
+    if (x.id !== id) return x;
+    if (x.status === ProjectStatus.DONE) {
+      const upd = { status: ProjectStatus.RETOUCHING, completedAt: null };
+      if (user) supabase.from(TBL_PROJECTS).update({ status: upd.status, completed_at: null }).eq('id', id)
+        .then(({ error }) => { if (error) console.error('Revert error:', error); });
+      return {...x, ...upd};
+    }
+    if (x.status === ProjectStatus.RETOUCHING) {
+      const upd = { status: ProjectStatus.TODO, shotAt: null };
+      if (user) supabase.from(TBL_PROJECTS).update({ status: upd.status, shot_at: null }).eq('id', id)
+        .then(({ error }) => { if (error) console.error('Revert error:', error); });
+      return {...x, ...upd};
+    }
+    return x;
+  }));
+  
+  const reorderProjects = (dragId, dropId) => {
+    setProjects(p => {
+      const dragIndex = p.findIndex(x => x.id === dragId);
+      const dropIndex = p.findIndex(x => x.id === dropId);
+      if (dragIndex === -1 || dropIndex === -1) return p;
+      const newProjects = [...p];
+      const [dragged] = newProjects.splice(dragIndex, 1);
+      newProjects.splice(dropIndex, 0, dragged);
+      // Update sort_order in Supabase
+      if (user) {
+        Promise.all(
+          newProjects.map((proj, i) => 
+            supabase.from(TBL_PROJECTS).update({ sort_order: i }).eq('id', proj.id)
+          )
+        ).then(results => {
+          const errors = results.filter(r => r.error);
+          if (errors.length) console.error('Reorder save errors:', errors);
+        });
+      }
+      return newProjects;
+    });
+  };
+
+  // Réordonne les projets TODO selon la séquence d'ids fournie (les projets non-TODO gardent
+  // leur place), puis réécrit sort_order pour tous. Utilisé par le glisser structuré (dossiers,
+  // cartes dans un dossier, cartes seules). Garde-fou: on n'applique que si la séquence couvre
+  // exactement tous les TODO, sinon on ne touche à rien.
+  const applyTodoOrder = (orderedTodoIds) => {
+    setProjects(p => {
+      const todoCount = p.filter(x => x.status === ProjectStatus.TODO).length;
+      const byId = new Map(p.map(x => [x.id, x]));
+      const queue = orderedTodoIds.map(id => byId.get(id)).filter(x => x && x.status === ProjectStatus.TODO);
+      if (queue.length !== todoCount) return p;
+      let qi = 0;
+      const newProjects = p.map(x => x.status === ProjectStatus.TODO ? queue[qi++] : x);
+      if (user) {
+        Promise.all(
+          newProjects.map((proj, i) => supabase.from(TBL_PROJECTS).update({ sort_order: i }).eq('id', proj.id))
+        ).then(results => { const errors = results.filter(r => r.error); if (errors.length) console.error('Reorder save errors:', errors); });
+      }
+      return newProjects;
+    });
+  };
+
+  // Assigne un projet à un dossier (clientFolder) ET applique le nouvel ordre TODO, en une
+  // seule passe. Utilisé quand on dépose une carte sans dossier sur un dossier (glisser).
+  const moveToFolder = (draggedId, folderName, orderedTodoIds) => {
+    const cf = (folderName && folderName.trim()) || null;
+    setProjects(p => {
+      const todoCount = p.filter(x => x.status === ProjectStatus.TODO).length;
+      const updated = p.map(x => x.id === draggedId ? { ...x, clientFolder: cf } : x);
+      const byId = new Map(updated.map(x => [x.id, x]));
+      const queue = orderedTodoIds.map(id => byId.get(id)).filter(x => x && x.status === ProjectStatus.TODO);
+      const ordered = queue.length === todoCount;
+      let next = updated;
+      if (ordered) { let qi = 0; next = updated.map(x => x.status === ProjectStatus.TODO ? queue[qi++] : x); }
+      if (user) {
+        supabase.from(TBL_PROJECTS).update({ client_folder: cf }).eq('id', draggedId)
+          .then(({ error }) => { if (error) console.error('Folder assign error:', error); });
+        if (ordered) {
+          Promise.all(next.map((proj, i) => supabase.from(TBL_PROJECTS).update({ sort_order: i }).eq('id', proj.id)))
+            .then(results => { const errs = results.filter(r => r.error); if (errs.length) console.error('Reorder save errors:', errs); });
+        }
+      }
+      return next;
+    });
+  };
+
+  return <StoreContext.Provider value={{ projects, routes, synced, prefs, view, selectedId, setView, setSelectedId, addProject, updateProject, deleteProject, addRoute, updateRoute, deleteRoute, advanceProject, revertProject, reorderProjects, applyTodoOrder, moveToFolder, setPrefs, lastDeleted, undoDelete, folderStates, setFolderState }}>{children}</StoreContext.Provider>;
+};
+
+// ===== WEATHER STATUS =====
+// Aggregateur de l'etat des appels meteo. Chaque ProjectCard rapporte son resultat ici via
+// reportWeather(projectId, { state, error, cachedAt }). On en derive un bannerError affiche
+// au-dessus de la liste de projets quand il y a au moins une carte sans donnees exploitables.
+//   state = 'ok'    -> donnees fraiches (succes API)
+//   state = 'stale' -> donnees de cache local (API en panne mais on a une copie)
+//   state = 'error' -> aucune donnee a montrer pour cette carte
+const WeatherStatusContext = createContext({ reportWeather: () => {}, clearWeather: () => {}, bannerError: null, lastCachedAt: null });
+const useWeatherStatus = () => useContext(WeatherStatusContext);
+
+const WeatherStatusProvider = ({ children }) => {
+  // Map projectId -> { state, error, cachedAt }. On garde un useRef pour eviter les re-renders
+  // en cascade quand 10 cartes rapportent en meme temps, et on synchronise un state derivé.
+  const reportsRef = useRef({});
+  const [bannerError, setBannerError] = useState(null);
+  const [lastCachedAt, setLastCachedAt] = useState(null);
+
+  const recompute = useCallback(() => {
+    const reports = Object.values(reportsRef.current);
+    // On signale une banniere des qu'au moins une carte est en mode degrade:
+    // 'stale' (donnees en cache, API morte) ou 'error' (aucune donnee a afficher).
+    // L'API qui marche pour certains et pas d'autres reste un cas "API en panne" du point
+    // de vue de l'utilisateur, on prefere la transparence a un faux sentiment de normalite.
+    const degraded = reports.filter((r) => r && (r.state === 'stale' || r.state === 'error'));
+    if (degraded.length === 0) { setBannerError(null); setLastCachedAt(null); return; }
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    const allNetwork = degraded.every((r) => r.error === 'network');
+    setBannerError(offline || allNetwork ? 'network' : 'api');
+    // Pour la mention "derniere mise a jour il y a XX": on prend le timestamp du cache
+    // le PLUS RECENT parmi les cartes degradees (la derniere fois ou ca a marche).
+    const stales = degraded.filter((r) => r.state === 'stale' && r.cachedAt);
+    const latest = stales.reduce((acc, r) => (r.cachedAt > acc ? r.cachedAt : acc), 0);
+    setLastCachedAt(latest || null);
+  }, []);
+
+  const reportWeather = useCallback((projectId, payload) => {
+    if (!projectId) return;
+    reportsRef.current[projectId] = payload;
+    recompute();
+  }, [recompute]);
+
+  const clearWeather = useCallback((projectId) => {
+    if (!projectId) return;
+    delete reportsRef.current[projectId];
+    recompute();
+  }, [recompute]);
+
+  // Si la connexion revient/part, on recalcule sans attendre un nouveau fetch.
+  useEffect(() => {
+    const onChange = () => recompute();
+    window.addEventListener('online', onChange);
+    window.addEventListener('offline', onChange);
+    return () => {
+      window.removeEventListener('online', onChange);
+      window.removeEventListener('offline', onChange);
+    };
+  }, [recompute]);
+
+  return <WeatherStatusContext.Provider value={{ reportWeather, clearWeather, bannerError, lastCachedAt }}>{children}</WeatherStatusContext.Provider>;
+};
+
+// ===== ICONS =====
+// Rayons d'un soleil (8 tiges) autour du centre (cx,cy), rayon r, ecart gap, longueur len
+const sunRays = (cx, cy, r, gap, len, sw, color = '#ffe26b') => [0,45,90,135,180,225,270,315].map((a, i) => {
+  const t = a * Math.PI / 180;
+  const x1 = cx + Math.cos(t) * (r + gap), y1 = cy + Math.sin(t) * (r + gap);
+  const x2 = cx + Math.cos(t) * (r + gap + len), y2 = cy + Math.sin(t) * (r + gap + len);
+  return <line key={i} x1={x1.toFixed(1)} y1={y1.toFixed(1)} x2={x2.toFixed(1)} y2={y2.toFixed(1)} stroke={color} strokeWidth={sw} strokeLinecap="round"/>;
+});
+// Gros soleil place DERRIERE le nuage : un masque avale la portion cachee, les rayons
+// depassent tout autour. Affichage volontairement optimiste pour les paliers 21-70%.
+const SUN_CLOUD_PATH = "M8 18c0-4 3-7 7-7s7 3 7 7c2 0 4 2 4 4s-2 4-4 4H8c-3 0-5-2.5-5-5s2-5 5-5z";
+let __sbcSeq = 0;
+const SunBehindCloud = ({ className, sr, gap, len, scx, scy, ccx, ccy, cs, ccolor }) => {
+  const uid = React.useMemo(() => 'sbc' + (__sbcSeq++), []);
+  const tf = `translate(${(ccx - 15 * cs).toFixed(2)} ${(ccy - 18.5 * cs).toFixed(2)}) scale(${cs})`;
+  return <svg className={className} viewBox="0 0 32 32" fill="none">
+    <defs>
+      <mask id={uid} maskUnits="userSpaceOnUse">
+        <rect x="0" y="0" width="32" height="32" fill="#fff"/>
+        <g transform={tf}><path d={SUN_CLOUD_PATH} fill="#000" stroke="#000" strokeWidth="3.4" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/></g>
+      </mask>
+    </defs>
+    <g mask={`url(#${uid})`}>
+      <circle cx={scx} cy={scy} r={sr} stroke="#ffe26b" strokeWidth="1.5"/>
+      {sunRays(scx, scy, sr, gap, len, 1.5)}
+    </g>
+    <g transform={tf}><path d={SUN_CLOUD_PATH} stroke={ccolor} strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/></g>
+  </svg>;
+};
+
+// Soleil voile: disque translucide + rayons conserves + fins filaments de cirrus par-dessus.
+// 5 niveaux (1 = voile tres leger, soleil filtre franc; 5 = voile dense, soleil a peine devine).
+// Plus le niveau monte, plus le jaune se desature, plus les rayons raccourcissent et plus les
+// filaments sont presents. Volontairement sobre (pas un gros soleil eclatant). Niveau choisi
+// par veilIcon() selon la lumiere directe.
+const VEIL_STREAKS = {
+  top: 'M3.5 10 Q10 8.5 16.5 9.8 T29 9.4',
+  up:  'M3.5 14 Q11 12.6 18 13.8 T30 13.2',
+  mid: 'M3 16.2 Q10 15 17 16 T30 15.6',
+  lo:  'M3.5 18.5 Q10.5 17 17 18.4 T29.5 18',
+  low: 'M5 22.5 Q11 21.2 17 22.2 T28 21.8'
+};
+const VEIL_CFG = {
+  1: { col: '#E9D27A', len: 2.8, rayOp: 0.85, strokeOp: 0.9,  fillOp: 0.18, streaks: [['lo', 0.4, '#AEB6B6'], ['low', 0.32, '#AEB6B6']] },
+  2: { col: '#E4CB78', len: 2.5, rayOp: 0.74, strokeOp: 0.82, fillOp: 0.15, streaks: [['top', 0.46, '#AEB6B6'], ['lo', 0.55, '#AEB6B6'], ['low', 0.45, '#AEB6B6']] },
+  3: { col: '#DBCD92', len: 2.2, rayOp: 0.6,  strokeOp: 0.72, fillOp: 0.13, streaks: [['top', 0.58, '#9CA3AF'], ['lo', 0.66, '#9CA3AF'], ['low', 0.55, '#9CA3AF']] },
+  4: { col: '#CFC8A4', len: 1.9, rayOp: 0.46, strokeOp: 0.6,  fillOp: 0.11, streaks: [['top', 0.66, '#9CA3AF'], ['up', 0.74, '#9CA3AF'], ['lo', 0.78, '#9CA3AF'], ['low', 0.64, '#9CA3AF']] },
+  5: { col: '#C3BDAA', len: 1.6, rayOp: 0.34, strokeOp: 0.5,  fillOp: 0.1,  streaks: [['top', 0.76, '#939AA3'], ['up', 0.82, '#939AA3'], ['mid', 0.8, '#939AA3'], ['lo', 0.84, '#939AA3'], ['low', 0.74, '#939AA3']] }
+};
+const SunVeil = ({ className, level }) => {
+  const c = VEIL_CFG[level] || VEIL_CFG[3];
+  return <svg className={className} viewBox="0 0 32 32" fill="none">
+    <circle cx="16" cy="16" r="6" fill={c.col} fillOpacity={c.fillOp} stroke="none"/>
+    <g opacity={c.rayOp}>{sunRays(16, 16, 6, 1.9, c.len, 1.5, c.col)}</g>
+    <circle cx="16" cy="16" r="6" fill="none" stroke={c.col} strokeWidth="1.5" opacity={c.strokeOp}/>
+    {c.streaks.map(([k, o, sc], i) => <path key={i} d={VEIL_STREAKS[k]} fill="none" stroke={sc} strokeWidth="1.1" strokeLinecap="round" opacity={o}/>)}
+  </svg>;
+};
+
+// Soleil "de fumee": disque plein teinte (ambre -> orange -> rouge selon la densite) + halo
+// diffus, rayons courts et ternes. Pour les jours ou la fumee de feux voile la lumiere.
+const SMOKE_CFG = {
+  1: { disc: '#E6B25C', halo: '#E6B25C', halOp: 0.13, halR: 9,   dR: 4.8 },
+  2: { disc: '#D9853C', halo: '#D9853C', halOp: 0.16, halR: 9.5, dR: 4.8 },
+  3: { disc: '#C5532C', halo: '#B5532C', halOp: 0.18, halR: 10,  dR: 4.4 }
+};
+// Teinte de fond appliquee aux cases (jour et heures) selon le niveau de fumee.
+const SMOKE_TINT = { 1: 'rgba(230,178,92,0.07)', 2: 'rgba(217,133,60,0.11)', 3: 'rgba(197,83,44,0.15)' };
+const SunSmoke = ({ className, level }) => {
+  const c = SMOKE_CFG[level] || SMOKE_CFG[2];
+  return <svg className={className} viewBox="0 0 32 32" fill="none">
+    <circle cx="16" cy="16" r={c.halR} fill={c.halo} fillOpacity={c.halOp}/>
+    <g opacity="0.5">{sunRays(16, 16, c.dR, 1.5, 1.4, 1.5, c.disc)}</g>
+    <circle cx="16" cy="16" r={c.dR} fill={c.disc} fillOpacity="0.92" stroke={c.disc} strokeWidth="0.8"/>
+  </svg>;
+};
+
+const WeatherIcon = ({ type, className = "w-6 h-6" }) => {
+  const icons = {
+    // Niveau 1: 0-10% - Gros soleil éclatant, rayons longs
+    'sunny-bright': <svg className={className} viewBox="0 0 32 32" fill="none">
+      <circle cx="16" cy="16" r="6" stroke="#ffe26b" strokeWidth="2"/>
+      {sunRays(16, 16, 6, 1.9, 4.2, 2)}
+    </svg>,
+    // Niveau 2: 11-20% - Gros soleil (même grosseur que les autres)
+    'sunny': <svg className={className} viewBox="0 0 32 32" fill="none">
+      <circle cx="16" cy="16" r="6" stroke="#ffe26b" strokeWidth="1.5"/>
+      {sunRays(16, 16, 6, 1.9, 3.4, 1.5)}
+    </svg>,
+    // Niveau 3: 21-30% - Gros soleil derrière, petit nuage décalé à gauche
+    'sunny-few-clouds': <SunBehindCloud className={className} sr={6} gap={1.7} len={3.6} scx={18} scy={13} ccx={14.5} ccy={24.5} cs={0.5} ccolor="#AEB6B6"/>,
+    // Niveau 4: 31-40% - Gros soleil derrière, nuage moyen
+    'mostly-sunny': <SunBehindCloud className={className} sr={6} gap={1.7} len={3.6} scx={18} scy={13} ccx={14.5} ccy={24.5} cs={0.64} ccolor="#9CA3AF"/>,
+    // Niveau 5: 41-55% - Gros soleil derrière, nuage plus gros
+    'partly-cloudy': <SunBehindCloud className={className} sr={6} gap={1.7} len={3.6} scx={18} scy={13} ccx={14} ccy={24.5} cs={0.8} ccolor="#9CA3AF"/>,
+    // Niveau 6: 56-70% - Soleil avalé par un gros nuage, juste la calotte qui pointe
+    'mostly-cloudy': <SunBehindCloud className={className} sr={4} gap={1.5} len={2.4} scx={18.5} scy={12.5} ccx={14} ccy={18.5} cs={0.95} ccolor="#9CA3AF"/>,
+    // Niveau 7: 71-85% - Nuage avec petite lueur de soleil
+    'cloudy-glimpse': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="1.5">
+      <circle cx="26" cy="5" r="2" stroke="#ffe26b" strokeWidth="1" strokeDasharray="2 1"/>
+      <path d="M6 18c0-4 3-7 7-7s7 3 7 7c2 0 4 2 4 4s-2 4-4 4H6c-3 0-5-2.5-5-5s2-5 5-5z" stroke="#808080"/>
+    </svg>,
+    // Niveau 8: 86-100% - Nuage complet
+    'cloudy': <svg className={className} viewBox="0 0 32 32" fill="none" stroke="#808080" strokeWidth="1.5">
+      <path d="M8 18c0-4 3-7 7-7s7 3 7 7c2 0 4 2 4 4s-2 4-4 4H8c-3 0-5-2.5-5-5s2-5 5-5z"/>
+    </svg>,
+    // Soleil voile (ciel couvert en altitude mais soleil qui filtre) - 5 niveaux selon la lumiere directe
+    'sunny-veil-1': <SunVeil className={className} level={1}/>,
+    'sunny-veil-2': <SunVeil className={className} level={2}/>,
+    'sunny-veil-3': <SunVeil className={className} level={3}/>,
+    'sunny-veil-4': <SunVeil className={className} level={4}/>,
+    'sunny-veil-5': <SunVeil className={className} level={5}/>,
+    // Fumee de feux (ciel enfume) - 3 niveaux selon la concentration
+    'sun-smoke-1': <SunSmoke className={className} level={1}/>,
+    'sun-smoke-2': <SunSmoke className={className} level={2}/>,
+    'sun-smoke-3': <SunSmoke className={className} level={3}/>,
+    // Pluie forte
+    'rain': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="1.5">
+      <path d="M8 12c0-4 3-6 6-6s6 2 6 6c2 0 3 1.5 3 3s-1 3-3 3H8c-2.5 0-4-2-4-4s1.5-4 4-4z" stroke="#6B7280"/>
+      <line x1="9" y1="20" x2="6" y2="26" stroke="#7dd3c6" strokeWidth="2"/><line x1="15" y1="20" x2="12" y2="26" stroke="#7dd3c6" strokeWidth="2"/><line x1="21" y1="20" x2="18" y2="26" stroke="#7dd3c6" strokeWidth="2"/>
+    </svg>,
+    // Neige forte
+    'snow': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="1.5">
+      <path d="M8 12c0-4 3-6 6-6s6 2 6 6c2 0 3 1.5 3 3s-1 3-3 3H8c-2.5 0-4-2-4-4s1.5-4 4-4z" stroke="#6B7280"/>
+      <circle cx="8" cy="24" r="1.5" fill="#7dd3c6"/><circle cx="14" cy="26" r="1.5" fill="#7dd3c6"/><circle cx="20" cy="24" r="1.5" fill="#7dd3c6"/>
+      <circle cx="11" cy="28" r="1" fill="#7dd3c6"/><circle cx="17" cy="29" r="1" fill="#7dd3c6"/>
+    </svg>,
+    // Orage
+    'thunderstorm': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="1.5">
+      <path d="M8 10c0-4 3-6 6-6s6 2 6 6c2 0 3 1.5 3 3s-1 3-3 3H8c-2.5 0-4-2-4-4s1.5-4 4-4z" stroke="#4B5563"/>
+      <path d="M16 17l-3 5h4l-3 6" stroke="#ffe26b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>,
+    
+    // ===== ICÔNES LUNE (NUIT) - Croissant bleu nuit =====
+    // Niveau 1-2: 0-20% - Lune dégagée
+    'moon-bright': <svg className={className} viewBox="0 0 32 32" fill="none" stroke="#7dd3c6" strokeWidth="2" strokeLinecap="round">
+      <path d="M23 8a8 8 0 1 1-10.2 11.3A6 6 0 1 0 23 8z"/>
+    </svg>,
+    'moon': <svg className={className} viewBox="0 0 32 32" fill="none" stroke="#7dd3c6" strokeWidth="2" strokeLinecap="round">
+      <path d="M23 8a8 8 0 1 1-10.2 11.3A6 6 0 1 0 23 8z"/>
+    </svg>,
+    // Niveau 3-4: 21-40% - Lune avec petit nuage
+    'moon-few-clouds': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="2" strokeLinecap="round">
+      <path d="M25 5a6 6 0 1 1-7.7 8.5A4.5 4.5 0 1 0 25 5z" stroke="#7dd3c6"/>
+      <path d="M5 24c0-2 1.5-3.5 3.5-3.5s3.5 1.5 3.5 3.5c1.5 0 2.5 1 2.5 2.2s-1 2.3-2.5 2.3H5c-2 0-3-1.5-3-3s1-3 3-3z" stroke="#9CA3AF" strokeWidth="1.5"/>
+    </svg>,
+    'moon-mostly-clear': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="2" strokeLinecap="round">
+      <path d="M25 5a6 6 0 1 1-7.7 8.5A4.5 4.5 0 1 0 25 5z" stroke="#7dd3c6"/>
+      <path d="M5 22c0-3 2.5-5 5-5s5 2 5 5c1.5 0 3 1.2 3 3s-1.5 3-3 3H5c-2 0-3.5-1.5-3.5-3.5S3 22 5 22z" stroke="#9CA3AF" strokeWidth="1.5"/>
+    </svg>,
+    // Niveau 5-6: 41-70% - Lune partiellement cachée
+    'moon-partly-cloudy': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="2" strokeLinecap="round">
+      <path d="M25 4a5 5 0 1 1-6.4 7A3.8 3.8 0 1 0 25 4z" stroke="#7dd3c6"/>
+      <path d="M5 20c0-3.5 2.5-6 5.5-6s5.5 2.5 5.5 6c2 0 3.5 1.5 3.5 3.5s-1.5 3.5-3.5 3.5H5c-2.5 0-4-2-4-4s1.5-4 4-4z" stroke="#9CA3AF" strokeWidth="1.5"/>
+    </svg>,
+    'moon-mostly-cloudy': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="2" strokeLinecap="round">
+      <path d="M26 3a4 4 0 1 1-5 5.2A3 3 0 1 0 26 3z" stroke="#7dd3c6"/>
+      <path d="M6 18c0-4 3-7 7-7s7 3 7 7c2 0 4 2 4 4s-2 4-4 4H6c-3 0-5-2.5-5-5s2-5 5-5z" stroke="#808080" strokeWidth="1.5"/>
+    </svg>,
+    // Niveau 7-8: 71-100% - Nuageux/Couvert
+    'moon-cloudy-glimpse': <svg className={className} viewBox="0 0 32 32" fill="none" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M27 2a3 3 0 1 1-3.8 4A2.3 2.3 0 1 0 27 2z" stroke="#7dd3c6" strokeWidth="1.5"/>
+      <path d="M6 18c0-4 3-7 7-7s7 3 7 7c2 0 4 2 4 4s-2 4-4 4H6c-3 0-5-2.5-5-5s2-5 5-5z" stroke="#808080"/>
+    </svg>,
+    'moon-cloudy': <svg className={className} viewBox="0 0 32 32" fill="none" stroke="#808080" strokeWidth="1.5">
+      <path d="M8 18c0-4 3-7 7-7s7 3 7 7c2 0 4 2 4 4s-2 4-4 4H8c-3 0-5-2.5-5-5s2-5 5-5z"/>
+    </svg>,
+  };
+  return icons[type] || icons.cloudy;
+};
+
+const StarIcon = () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="#ffe26b"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>;
+const TrashIcon = () => <svg className="w-5 h-5" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" fill="none"><polyline points="3,6 5,6 21,6"/><path d="M19,6V20A2,2,0,0,1,17,22H7A2,2,0,0,1,5,20V6M8,6V4A2,2,0,0,1,10,2H14A2,2,0,0,1,16,4V6"/></svg>;
+
+// ===== COMPONENTS =====
+
+// Global tracker for active weather tooltip
+let activeWeatherRowDismiss = null;
+
+const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9, orientation = [] }) => {
+  // Créneaux de shoot du projet (AM puis PM), pour l'indice d'opportunité sous chaque jour.
+  const shootSlots = ['AM', 'PM'].filter((o) => (orientation || []).includes(o));
+  const { t } = useLang();
+  const [hoveredIdx, setHoveredIdx] = useState(null);
+  const [cellCenterX, setCellCenterX] = useState(0);
+  const [displayX, setDisplayX] = useState(0);
+  const [visible, setVisible] = useState(false);
+  const rowRef = React.useRef(null);
+  const hideTimer = React.useRef(null);
+  const targetX = React.useRef(0);
+  const currentX = React.useRef(0);
+  const rafRef = React.useRef(null);
+  const isMobile = useIsMobile();
+
+  // Close tooltip on scroll/wheel (desktop)
+  useEffect(() => {
+    if (isMobile) return;
+    const dismiss = () => { setVisible(false); setHoveredIdx(null); };
+    window.addEventListener('scroll', dismiss, true);
+    window.addEventListener('wheel', dismiss, { passive: true });
+    return () => { window.removeEventListener('scroll', dismiss, true); window.removeEventListener('wheel', dismiss); };
+  }, [isMobile]);
+
+  // Lerp animation loop (desktop only)
+  useEffect(() => {
+    if (isMobile) return;
+    const animate = () => {
+      const diff = targetX.current - currentX.current;
+      currentX.current += diff * 0.15;
+      if (Math.abs(diff) > 0.3) {
+        setDisplayX(currentX.current);
+      }
+      rafRef.current = requestAnimationFrame(animate);
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [isMobile]);
+  
+  if (!daily?.length) return <div className="flex gap-2 py-2">{[...Array(10)].map((_,i) => <div key={i} className="flex flex-col items-center gap-0 min-w-[56px]"><div className="w-12 h-4 bg-cream-dark rounded animate-pulse"/><div className="w-8 h-8 bg-cream-dark rounded-full animate-pulse"/></div>)}</div>;
+  
+  const todayIndex = daily.findIndex(d => isToday(d.date));
+  const startIndex = todayIndex >= 0 ? todayIndex : 0;
+  const sortedDaily = daily.slice(startIndex, startIndex + maxDays);
+  
+  const getIconFromCloudcover = (cloudcover, originalIcon, sunFraction = null, cloudLow = null, smoke = 0) => {
+    // Precipitation from hourly data takes priority
+    if (originalIcon === 'thunderstorm') return 'thunderstorm';
+    if (originalIcon === 'snow') return 'snow';
+    if (originalIcon === 'rain') return 'rain';
+
+    // Fumee de feux: signalee par la teinte de fond (SMOKE_TINT) seulement; l'icone reste la vraie meteo.
+
+    // No hourly data at all? Use daily weathercode icon
+    if (cloudcover === null || cloudcover === undefined) {
+      if (originalIcon === 'sunny') return 'sunny';
+      if (originalIcon === 'partly-cloudy') return 'partly-cloudy';
+      return originalIcon || 'cloudy';
+    }
+
+    // Couvert en altitude mais soleil qui filtre (voile): icone soleil voile. La regle interne
+    // de veilIcon laisse l'opaque (nuages bas) reprendre le dessus si besoin.
+    const veil = veilIcon(cloudcover, cloudLow, sunFraction);
+    if (veil) return veil;
+    // Use cloudcover for sun/cloud level (hourly data available)
+    return cloudcoverToIcon(cloudcover);
+  };
+
+  const handleCellEnter = (i, e) => {
+    if (window.__isDragging) return;
+    // Dismiss any other row's tooltip first
+    if (activeWeatherRowDismiss && activeWeatherRowDismiss !== dismiss) {
+      activeWeatherRowDismiss();
+    }
+    activeWeatherRowDismiss = dismiss;
+    if (hideTimer.current) { clearTimeout(hideTimer.current); hideTimer.current = null; }
+    const cellRect = e.currentTarget.getBoundingClientRect();
+    const rowRect = rowRef.current.getBoundingClientRect();
+    const cx = cellRect.left + cellRect.width / 2 - rowRect.left;
+    if (hoveredIdx === null) { currentX.current = cx; setDisplayX(cx); }
+    targetX.current = cx;
+    setCellCenterX(cx);
+    setHoveredIdx(i);
+    setVisible(true);
+  };
+
+  const dismiss = () => {
+    clearTimeout(hideTimer.current);
+    setVisible(false);
+    setHoveredIdx(null);
+  };
+
+  const handleRowLeave = () => {
+    dismiss();
+    if (activeWeatherRowDismiss === dismiss) activeWeatherRowDismiss = null;
+  };
+
+  const hoveredDay = hoveredIdx !== null ? sortedDaily[hoveredIdx] : null;
+  
+  return (
+    <div 
+      className="relative" 
+      ref={rowRef}
+      onMouseLeave={isMobile ? undefined : handleRowLeave}
+    >
+      <div className="flex gap-0 py-0" style={{ overflow: 'visible' }}>
+      {sortedDaily.map((day, i) => {
+        const icon = getIconFromCloudcover(day.cloudcover, day.icon, day.sunFraction, day.cloudLow, day.smoke);
+        const hasPrecip = ['rain', 'snow', 'thunderstorm'].includes(day.icon);
+        const isSunny = hasPrecip ? false : (day.cloudcover !== null ? day.cloudcover <= 20 : ['sunny'].includes(day.icon));
+        return (
+          <div
+            key={day.date}
+            className={`day-cell relative flex flex-col items-center gap-0 min-w-[48px] px-0 py-0 rounded cursor-pointer ${i===0 ? 'bg-cream-dark/50' : ''}`}
+            style={day.smoke ? { background: SMOKE_TINT[day.smoke] } : undefined}
+            onClick={() => onDayClick?.()}
+            onMouseEnter={isMobile ? undefined : (e) => handleCellEnter(i, e)}
+          >
+            {isSunny && <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%) translateY(95%) scaleX(0.6) scaleY(1.4)', width: '60px', height: '60px', pointerEvents: 'none', zIndex: 0, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,226,107,0.3) 0%, rgba(255,226,107,0.1) 40%, transparent 70%)', animation: 'sunglowPulse 6s ease-in-out infinite' }}/>}
+            <span className="font-bebas-bold text-sm leading-none" style={{ color: '#8B9B99' }}>
+              {isToday(day.date) ? t('thisDay') : getDayAbbrev(day.date)}
+            </span>
+            <span className="font-bebas-bold text-xs leading-none" style={{ letterSpacing: '0.04em', color: '#8B9B99' }}>{getDayMonth(day.date)}</span>
+            <WeatherIcon type={icon} className="w-8 h-8"/>
+            <span className="font-bebas-bold text-sm leading-none text-charcoal-muted" style={{ letterSpacing: '0.04em', marginTop: '4px' }}>
+              {day.cloudcover !== null ? `${day.cloudcover}%` : '--'}
+            </span>
+            {(() => {
+              // Bande dorée étiquetée: les segments AM | PM du projet. Doré (intensité graduée) si le
+              // créneau s'annonce beau, éteint sinon. La bande n'apparaît que si au moins un créneau est bon.
+              const segs = shootSlots.map((slot) => {
+                const w = slot === 'AM' ? day.am : day.pm;
+                const pct = w && w.frac != null ? Math.round(w.frac * 100) : null;
+                const good = w && !w.precip && pct != null && pct >= SHOOT_OPP_MIN;
+                return { slot, good, col: good ? SUN_DIRECT_COLOR(pct) : null };
+              });
+              if (!segs.some((s) => s.good)) return null;
+              return (
+                <div style={{ marginTop: '3px', display: 'flex', gap: '1.5px', width: segs.length > 1 ? '40px' : '24px' }}>
+                  {segs.map((s) => (
+                    <div key={s.slot} className="font-bebas-bold" style={{ flex: 1, height: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: s.good ? s.col : 'rgba(255,255,255,0.08)', color: s.good ? '#412402' : 'rgba(255,255,255,0.3)', fontSize: '11px', letterSpacing: '0.02em', lineHeight: 1 }}>
+                      <span style={{ position: 'relative', top: '1px' }}>{s.slot}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        );
+      })}
+      </div>
+      {!isMobile && hoveredDay && ReactDOM.createPortal(
+        <div 
+          className="whitespace-nowrap px-3 py-2"
+          style={{ 
+            position: 'fixed',
+            zIndex: 9999,
+            top: rowRef.current ? rowRef.current.getBoundingClientRect().bottom + 12 : 0, 
+            left: rowRef.current ? rowRef.current.getBoundingClientRect().left + displayX : 0, 
+            transform: 'translateX(-50%)', 
+            backgroundColor: 'var(--bg-primary)', 
+            border: '1px solid var(--text-muted)', 
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            pointerEvents: 'none',
+            opacity: visible ? 1 : 0,
+            transition: 'opacity 0.25s ease'
+          }}
+        >
+          <div className="absolute -top-2 w-0 h-0" style={{ left: `calc(50% + ${cellCenterX - displayX}px)`, transform: 'translateX(-50%)', borderLeft: '8px solid transparent', borderRight: '8px solid transparent', borderBottom: '8px solid var(--text-muted)' }}/>
+          <div className="flex gap-2">
+            <DayPeriodIcon label={t('sunrise')} period="sunrise" icon="sunrise" day={hoveredDay} hourly={hourly} sunriseHour={hoveredDay.sunrise ? new Date(hoveredDay.sunrise).getHours() : 6} sunsetHour={hoveredDay.sunset ? new Date(hoveredDay.sunset).getHours() : 20}/>
+            <DayPeriodIcon label={t('am')} period="am" day={hoveredDay} hourly={hourly} sunriseHour={hoveredDay.sunrise ? new Date(hoveredDay.sunrise).getHours() : 6} sunsetHour={hoveredDay.sunset ? new Date(hoveredDay.sunset).getHours() : 20}/>
+            <DayPeriodIcon label={t('pm')} period="pm" day={hoveredDay} hourly={hourly} sunriseHour={hoveredDay.sunrise ? new Date(hoveredDay.sunrise).getHours() : 6} sunsetHour={hoveredDay.sunset ? new Date(hoveredDay.sunset).getHours() : 20}/>
+            <DayPeriodIcon label={t('sunset')} period="sunset" icon="sunset" day={hoveredDay} hourly={hourly} sunriseHour={hoveredDay.sunrise ? new Date(hoveredDay.sunrise).getHours() : 6} sunsetHour={hoveredDay.sunset ? new Date(hoveredDay.sunset).getHours() : 20}/>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+};
+
+const DayPeriodIcon = ({ label, period, icon, day, hourly, sunriseHour, sunsetHour }) => {
+  const getIconFromCloudAndPrecip = (cloudcover, dominantIcon, sunFraction = null, cloudLow = null, smoke = 0) => {
+    if (dominantIcon === 'thunderstorm') return 'thunderstorm';
+    if (dominantIcon === 'snow') return 'snow';
+    if (dominantIcon === 'rain') return 'rain';
+    // Fumee de feux: signalee par la teinte de fond seulement; l'icone reste la vraie meteo.
+    const veil = veilIcon(cloudcover, cloudLow, sunFraction);
+    if (veil) return veil;
+    return cloudcoverToIcon(cloudcover);
+  };
+  
+  // Calculer les heures de début/fin selon la période
+  let startHour, endHour;
+  if (period === 'sunrise') {
+    startHour = sunriseHour - 1;
+    endHour = sunriseHour + 1;
+  } else if (period === 'am') {
+    startHour = 8;
+    endHour = 11;
+  } else if (period === 'pm') {
+    startHour = 13;
+    endHour = 16;
+  } else if (period === 'sunset') {
+    startHour = sunsetHour - 1;
+    endHour = sunsetHour + 1;
+  }
+  
+  const dayDate = new Date(day.date + 'T00:00:00');
+  let avgCloud = null;
+  let avgFraction = day.sunFraction ?? null;
+  let avgLow = day.cloudLow ?? null;
+  let dominantIcon = null;
+  
+  if (hourly?.length) {
+    const periodData = hourly.filter(h => {
+      const hDate = new Date(h.time);
+      const hHour = hDate.getHours();
+      return hDate.toDateString() === dayDate.toDateString() && hHour >= startHour && hHour < endHour;
+    });
+    if (periodData.length) {
+      // Only use hours with actual cloudcover data
+      const withCloud = periodData.filter(h => h.cloudcover != null);
+      if (withCloud.length) {
+        avgCloud = Math.round(withCloud.reduce((a, b) => a + b.cloudcover, 0) / withCloud.length);
+      } else {
+        // Fallback to daily cloudcover
+        avgCloud = day.cloudcover;
+      }
+      const withFrac = periodData.filter(h => h.sunFraction != null);
+      if (withFrac.length) avgFraction = withFrac.reduce((a, b) => a + b.sunFraction, 0) / withFrac.length;
+      const withLow = periodData.filter(h => h.cloudLow != null);
+      if (withLow.length) avgLow = Math.round(withLow.reduce((a, b) => a + b.cloudLow, 0) / withLow.length);
+      // Find dominant precipitation type
+      const precipIcons = periodData.map(h => h.icon).filter(i => ['thunderstorm', 'rain', 'snow'].includes(i));
+      if (precipIcons.length > 0) {
+        if (precipIcons.includes('thunderstorm')) dominantIcon = 'thunderstorm';
+        else if (precipIcons.includes('snow')) dominantIcon = 'snow';
+        else if (precipIcons.includes('rain')) dominantIcon = 'rain';
+      }
+    } else {
+      // No hourly data for this period — fallback to daily
+      avgCloud = day.cloudcover;
+    }
+  } else {
+    avgCloud = day.cloudcover;
+  }
+  
+  return (
+    <div className="flex flex-col items-center" style={day.smoke ? { background: SMOKE_TINT[day.smoke], borderRadius: '6px', padding: '2px 4px' } : undefined}>
+      {icon === 'sunrise' ? (
+        <span className="font-bebas-bold text-xl" style={{ letterSpacing: '0.04em', color: '#5E6C6A', height: '32px', display: 'flex', alignItems: 'center' }}>{day.sunrise ? formatTime(day.sunrise) : '--:--'}</span>
+      ) : icon === 'sunset' ? (
+        <span className="font-bebas-bold text-xl" style={{ letterSpacing: '0.04em', color: '#5E6C6A', height: '32px', display: 'flex', alignItems: 'center' }}>{day.sunset ? formatTime(day.sunset) : '--:--'}</span>
+      ) : (
+        <span className="font-bebas-bold text-xl" style={{ letterSpacing: '0.04em', color: '#5E6C6A', height: '32px', display: 'flex', alignItems: 'center' }}>{label}</span>
+      )}
+      {avgCloud !== null ? (
+        <>
+          <WeatherIcon type={getIconFromCloudAndPrecip(avgCloud, dominantIcon, avgFraction, avgLow, day.smoke)} className="w-8 h-8"/>
+          <span className="font-bebas-bold text-sm text-charcoal-muted">{avgCloud}%</span>
+        </>
+      ) : (
+        <span className="text-charcoal-muted text-sm">--</span>
+      )}
+    </div>
+  );
+};
+
+const HourlyWeather = ({ hourly, sunrise, sunset }) => {
+  const { t } = useLang();
+  if (!hourly?.length) return <div className="flex gap-3 py-4">{[...Array(12)].map((_,i) => <div key={i} className="flex flex-col items-center gap-2 min-w-[44px]"><div className="w-6 h-3 bg-cream-dark rounded animate-pulse"/><div className="w-6 h-6 bg-cream-dark rounded-full animate-pulse"/><div className="w-6 h-3 bg-cream-dark rounded animate-pulse"/></div>)}</div>;
+  const sunriseH = sunrise ? new Date(sunrise).getHours() : null;
+  const sunsetH = sunset ? new Date(sunset).getHours() : null;
+  const now = new Date();
+  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+  const filtered = hourly.filter(h => new Date(h.time) >= oneHourAgo).slice(0, 24);
+  
+  const getIconForHour = (h, isNight) => {
+    const cc = h.cloudcover != null ? h.cloudcover : null;
+    const origIcon = h.icon;
+    if (origIcon === 'thunderstorm') return 'thunderstorm';
+    if (origIcon === 'snow') return 'snow';
+    if (origIcon === 'rain') return 'rain';
+    if (cc === null) return origIcon || 'cloudy';
+    return cloudcoverToIcon(cc, isNight);
+  };
+  
+  return (
+    <div className="relative">
+      <div className="flex gap-2 py-4 overflow-x-auto hour-scroll">
+        {filtered.map(h => {
+          const hr = new Date(h.time).getHours();
+          const isSunrise = sunriseH === hr;
+          const isSunset = sunsetH === hr;
+          const isNight = sunriseH && sunsetH && (hr < sunriseH || hr >= sunsetH);
+          const icon = getIconForHour(h, isNight);
+          return (
+            <div key={h.time} className={`flex flex-col items-center gap-1 min-w-[44px] px-1 py-2 rounded ${isNight ? 'bg-charcoal/5' : ''}`}>
+              <span className={`font-bebas-bold text-xs ${isSunrise || isSunset ? 'text-orange font-bold' : 'text-charcoal-muted'}`}>
+                {isSunrise ? formatTime(sunrise).replace(':','H') : isSunset ? formatTime(sunset).replace(':','H') : `${hr}H`}
+              </span>
+              <WeatherIcon type={icon} className={`w-5 h-5 ${isNight ? 'opacity-60' : ''}`}/>
+              <span className={`text-sm font-medium ${h.temp <= 0 ? 'text-blue-500' : h.temp >= 25 ? 'text-red-500' : 'text-charcoal'}`} style={{ marginTop: '3px' }}>{h.temp}°</span>
+              <span className="text-[10px] text-charcoal-muted">{h.wind} <span className="text-[8px]">{t('kmh')}</span></span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-cream to-transparent pointer-events-none"/>
+    </div>
+  );
+};
+
+// Swipe-to-reveal des actions sur mobile (cartes To-do et Retouche).
+// actionW: largeur du tiroir. scrollRef (optionnel): n'ouvre que si la bande horaire est scrollée au bout.
+// syncHalo: inclure le halo blanc dans la transition de fermeture inter-cartes (RetouchingCard oui, ProjectCard non).
+const useSwipeActions = ({ cardRef, contentRef, actionsRef, haloWhiteRef, scrollRef, actionW, isMobile, setActionsOpen, syncHalo }) => {
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card || !isMobile) return;
+    let startX = 0, startY = 0, locked = false, mode = null, open = false, px = 0, lastMoveX = 0, lastMoveT = 0, velocity = 0;
+    const ease = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
+
+    const setTx = (v) => {
+      px = v;
+      if (contentRef.current) contentRef.current.style.transform = `translateX(${-v}px)`;
+      if (haloWhiteRef.current) haloWhiteRef.current.style.transform = `translateX(${-v}px)`;
+      if (actionsRef.current) actionsRef.current.style.transform = `translateX(${actionW - v}px)`;
+    };
+
+    let rafId = null;
+    let pendingTx = null;
+    const rafSetTx = (v) => {
+      pendingTx = v;
+      if (!rafId) {
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          if (pendingTx !== null) setTx(pendingTx);
+        });
+      }
+    };
+
+    let touchInScroll = false;
+    const onStart = (e) => {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      locked = false;
+      mode = null;
+      lastMoveX = startX;
+      lastMoveT = Date.now();
+      velocity = 0;
+      touchInScroll = !!(scrollRef && scrollRef.current && scrollRef.current.contains(e.target));
+      if (contentRef.current) { contentRef.current.style.transition = 'none'; contentRef.current.style.willChange = 'transform'; }
+      if (haloWhiteRef.current) { haloWhiteRef.current.style.transition = 'none'; haloWhiteRef.current.style.willChange = 'transform'; }
+      if (actionsRef.current) { actionsRef.current.style.transition = 'none'; actionsRef.current.style.willChange = 'transform'; }
+    };
+
+    const onMove = (e) => {
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+      const now = Date.now();
+      const dt = now - (lastMoveT || now);
+      if (dt > 0) velocity = (e.touches[0].clientX - (lastMoveX || e.touches[0].clientX)) / dt;
+      lastMoveX = e.touches[0].clientX;
+      lastMoveT = now;
+
+      if (!locked) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        if (Math.abs(dy) > Math.abs(dx)) {
+          mode = null; locked = true;
+          if (open) {
+            open = false;
+            if (contentRef.current) contentRef.current.style.transition = ease;
+            if (haloWhiteRef.current) haloWhiteRef.current.style.transition = ease;
+            if (actionsRef.current) actionsRef.current.style.transition = ease;
+            setTx(0);
+            setTimeout(() => { setActionsOpen(false); }, 600);
+          }
+          return;
+        }
+        locked = true;
+        if (open) {
+          mode = 'close';
+        } else if (dx < 0) {
+          if (touchInScroll) {
+            const sc = scrollRef.current;
+            if (sc && sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 2) {
+              mode = 'open';
+            }
+          } else {
+            mode = 'open';
+          }
+        }
+      }
+
+      if (mode === 'close') {
+        e.preventDefault();
+        e.stopPropagation();
+        rafSetTx(Math.max(0, Math.min(actionW, actionW - dx)));
+      } else if (mode === 'open') {
+        e.preventDefault();
+        e.stopPropagation();
+        rafSetTx(Math.min(actionW, Math.max(0, Math.abs(dx) - 8)));
+      }
+    };
+
+    const onEnd = () => {
+      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+      if (pendingTx !== null) { setTx(pendingTx); pendingTx = null; }
+      if (mode === 'close' || mode === 'open') {
+        const v = velocity || 0;
+        const snap = mode === 'open'
+          ? (px > actionW * 0.3 || v < -0.3)
+          : (px > actionW * 0.7 && v > -0.3);
+        open = snap;
+        if (contentRef.current) contentRef.current.style.transition = ease;
+        if (haloWhiteRef.current) haloWhiteRef.current.style.transition = ease;
+        if (actionsRef.current) actionsRef.current.style.transition = ease;
+        setTx(snap ? actionW : 0);
+        setTimeout(() => {
+          setActionsOpen(snap);
+          if (contentRef.current) contentRef.current.style.willChange = '';
+          if (haloWhiteRef.current) haloWhiteRef.current.style.willChange = '';
+          if (actionsRef.current) actionsRef.current.style.willChange = '';
+        }, 600);
+      } else {
+        if (contentRef.current) { contentRef.current.style.transition = ease; contentRef.current.style.willChange = ''; }
+        if (haloWhiteRef.current) { haloWhiteRef.current.style.transition = ease; haloWhiteRef.current.style.willChange = ''; }
+        if (actionsRef.current) { actionsRef.current.style.transition = ease; actionsRef.current.style.willChange = ''; }
+      }
+      mode = null;
+    };
+
+    const syncOpen = () => {
+      const newOpen = card.dataset.open === 'true';
+      if (open && !newOpen) {
+        if (contentRef.current) contentRef.current.style.transition = ease;
+        if (syncHalo && haloWhiteRef.current) haloWhiteRef.current.style.transition = ease;
+        if (actionsRef.current) actionsRef.current.style.transition = ease;
+        setTx(0);
+      }
+      open = newOpen;
+    };
+    const attrObs = new MutationObserver(syncOpen);
+    attrObs.observe(card, { attributes: true, attributeFilter: ['data-open'] });
+
+    card.addEventListener('touchstart', onStart, { passive: true });
+    card.addEventListener('touchmove', onMove, { passive: false });
+    card.addEventListener('touchend', onEnd, { passive: true });
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      card.removeEventListener('touchstart', onStart);
+      card.removeEventListener('touchmove', onMove);
+      card.removeEventListener('touchend', onEnd);
+      attrObs.disconnect();
+    };
+  }, [isMobile]);
+};
+
+const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, openActionsId, setOpenActionsId }) => {
+  const { advanceProject, deleteProject } = useStore();
+  const { t } = useLang();
+  const { reportWeather, clearWeather } = useWeatherStatus();
+  const [weather, setWeather] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmReady, setConfirmReady] = useState(false);
+  const [confirmDone, setConfirmDone] = useState(false);
+
+  useEffect(() => {
+    if (!project.lat || !project.lng) return;
+    let cancelled = false;
+    (async () => {
+      const result = await fetchWeather(project.lat, project.lng);
+      if (cancelled) return;
+      if (result.data) {
+        setWeather(result.data);
+        reportWeather(project.id, {
+          state: result.fromCache ? 'stale' : 'ok',
+          error: result.error || null,
+          cachedAt: result.cachedAt || null,
+        });
+      } else {
+        // Aucune donnee a montrer pour cette carte: on signale l'echec au contexte.
+        setWeather(null);
+        reportWeather(project.id, { state: 'error', error: result.error, status: result.status });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [project.lat, project.lng, project.id, reportWeather]);
+
+  // Quand la carte disparait (delete, changement de statut), on retire son rapport du contexte.
+  useEffect(() => () => { clearWeather(project.id); }, [project.id, clearWeather]);
+  const sun = weather?.daily?.[0];
+  const departAM = calcDeparture(sun?.sunrise, project.travelTime?.durationSeconds);
+  const departPM = calcDeparture(sun?.sunset, project.travelTime?.durationSeconds);
+
+  // Couleurs adaptées au mode sombre/clair
+  const colorActive = '#FAF9F7';
+  const colorInactive = '#404A48';
+  const colorCharcoal = '#8B9B99';
+  const colorRed = '#d83152';
+  
+  const handleDelete = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (confirmDelete && confirmReady) {
+      deleteProject(project.id);
+    } else if (!confirmDelete) {
+      setConfirmDelete(true);
+      setConfirmReady(false);
+      setConfirmDone(false);
+      setTimeout(() => setConfirmReady(true), 600);
+      setTimeout(() => { setConfirmDelete(false); setConfirmReady(false); }, 4000);
+    }
+  };
+  
+  const handleDone = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (confirmDone) {
+      advanceProject(project.id);
+      setConfirmDone(false);
+    } else {
+      setConfirmDone(true);
+      setConfirmDelete(false);
+      setTimeout(() => setConfirmDone(false), 3000);
+    }
+  };
+
+  const isMobile = useIsMobile();
+  const cardRef = useRef(null);
+  const scrollRef = useRef(null);
+  const contentRef = useRef(null);
+  const actionsRef = useRef(null);
+  const haloWhiteRef = useRef(null);
+  const actionsOpen = openActionsId === project.id;
+  const setActionsOpen = (v) => setOpenActionsId(v ? project.id : null);
+  const actionW = 160;
+
+  useSwipeActions({ cardRef, contentRef, actionsRef, haloWhiteRef, scrollRef, actionW, isMobile, setActionsOpen, syncHalo: false });
+
+  const isFirstMount = useRef(true);
+  useEffect(() => { 
+    const timer = setTimeout(() => { isFirstMount.current = false; }, 600);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (isMobile) {
+    const tx = actionsOpen ? actionW : 0;
+    const ease = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
+    return (
+      <div ref={cardRef} data-open={actionsOpen} data-project-id={project.id} className={isFirstMount.current ? 'animate-card-in' : ''}
+        style={{ position: 'relative', margin: '0 12px', marginBottom: '40px', ...(isFirstMount.current ? { animationDelay: `${index * 0.1}s` } : {}), WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
+      >
+        {/* Layer 2 — fond (coins droits) + halos + contours flous */}
+        <div style={{ position: 'absolute', top: 0, left: '-40px', right: 0, bottom: '-15px', borderRadius: '0px', overflow: 'hidden', background: 'rgba(0,0,0,0.14)', WebkitMaskImage: 'linear-gradient(to right, black, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', WebkitMaskComposite: 'destination-in', maskImage: 'linear-gradient(to right, black, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', maskComposite: 'intersect', pointerEvents: 'none' }}>
+          <div style={{ position: 'absolute', left: '50%', bottom: '-350px', width: '700px', height: '500px', borderRadius: '50%', background: 'radial-gradient(ellipse 60% 45%, rgba(100,200,190,0.6) 0%, rgba(100,200,190,0.3) 40%, rgba(100,200,190,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translateX(-50%)' }}/>
+          <div style={{ position: 'absolute', left: '-400px', bottom: '-400px', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(251,227,127,0.4) 0%, rgba(251,227,127,0.1) 40%, rgba(251,227,127,0) 70%)', pointerEvents: 'none' }}/>
+        </div>
+        {/* Layer 1.5 — masque (coins droits) + halo blanc central */}
+        <div ref={haloWhiteRef} style={{ position: 'absolute', top: '-5px', left: '-40px', right: 0, bottom: '-5px', borderRadius: '0px', overflow: 'hidden', pointerEvents: 'none' }}>
+          <div style={{ position: 'absolute', left: '-500px', top: '50%', transform: 'translateY(-50%)', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 40%, rgba(255,255,255,0) 70%)', pointerEvents: 'none' }}/>
+        </div>
+        {/* Layer 1 — contenu */}
+        <div ref={contentRef} style={{ transform: `translateX(${-tx}px)`, transition: ease, padding: '5px 5px', position: 'relative', zIndex: 1, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
+          {actionsOpen && (
+            <div style={{ position: 'absolute', inset: 0, zIndex: 10 }}
+              onClick={() => { setActionsOpen(false); }}
+            />
+          )}
+          <div onClick={() => { if (!actionsOpen) onSelect(project); }} style={{ display: 'flex', flexDirection: 'row', gap: '0' }}>
+            {project.mandates?.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', paddingRight: '10px', borderRight: '1px solid rgba(255,255,255,0.15)', marginRight: '10px', flexShrink: 0, opacity: project.onHold ? 0.4 : 1, transition: 'opacity 0.3s' }}>
+                {['INT', 'EXT', 'DRONE', 'DRONE+C', 'VID'].filter(x => project.mandates.includes(x)).map((m) => {
+                  const label = m === 'DRONE+C' ? 'DRONE' : m === 'DRONE' ? 'DRONE' : m;
+                  return <span key={m} className="font-bebas-book uppercase" style={{ fontSize: '15px', lineHeight: '0.9', letterSpacing: '0.04em', color: colorActive }}>{m === 'DRONE+C' ? <span><span style={{ color: colorActive }}>DRON</span><span style={{ color: '#d83152' }}>E</span></span> : label}</span>;
+                })}
+              </div>
+            )}
+            <div style={{ flex: 1, textAlign: 'left', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start' }}>
+              <span className="font-bebas-book text-charcoal" style={{ letterSpacing: '0.04em', fontSize: '24px', lineHeight: '0.9', opacity: project.onHold ? 0.4 : 1, transition: 'opacity 0.3s' }}>
+                {project.name} {project.isContest && <StarIcon/>}
+              </span>
+            </div>
+          </div>
+          <div style={{ height: '1px', background: 'linear-gradient(to right, rgba(255,255,255,0.15), rgba(255,255,255,0))', margin: '4px -5px 0 -5px' }}/>
+          <div style={{ position: 'relative', margin: '0 -5px' }}>
+            <div ref={scrollRef}
+              style={{ display: 'flex', overflowX: actionsOpen ? 'hidden' : 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', marginTop: '6px', opacity: project.onHold ? 0.1 : 1, transition: 'opacity 0.3s' }}
+            >
+              <div style={{ flexShrink: 0 }} onClick={() => { if (!actionsOpen) onSelect(project); }}>
+                {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} orientation={project.orientation} onDayClick={() => { if (!actionsOpen) onSelect(project); }}/> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
+              </div>
+            </div>
+            {project.onHold && (
+              <div style={{ position: 'absolute', left: '5px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                <span className="font-bebas-regular uppercase" style={{ color: '#7dd3c6', fontSize: '20px', letterSpacing: '0.04em', lineHeight: 1 }}>{t('onHold')}</span>
+              </div>
+            )}
+          </div>
+        </div>
+        <div ref={actionsRef} style={{
+          position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW}px`,
+          display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: '16px', paddingRight: '20px',
+          transform: `translateX(${actionW - tx}px)`, transition: ease, zIndex: 1
+        }}>
+          {/* Red/pink glow - moves with swipe */}
+          <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, calc(-50% + 25px)) scaleX(1.22)' }}/>
+          {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap', position: 'relative', top: '25px' }} onClick={() => { deleteProject(project.id); }}>{t('deleteConfirm')}</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '22px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop layout (unchanged)
+  return (
+    <div className="card-glow-wrap">
+    <div 
+      className={`project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden animate-card-in border-b border-adaptive`}
+      style={{ animationDelay: `${index * 0.1}s` }}
+      onMouseDown={onMouseDownDrag ? (e) => onMouseDownDrag(e, project.id, index) : undefined}
+    >
+      <div onClick={() => onSelect(project)} className="cursor-pointer" onMouseEnter={() => { if (activeWeatherRowDismiss) { activeWeatherRowDismiss(); activeWeatherRowDismiss = null; } }}>
+        <div className="flex items-start justify-between gap-4" style={{ marginBottom: '-10px' }}>
+          <h3 className="font-bebas-book text-charcoal flex items-center gap-2" style={{ letterSpacing: '0.04em', fontSize: '35px', opacity: project.onHold ? 0.4 : 1, transition: 'opacity 0.3s' }}>
+            {project.name} {project.isContest && <StarIcon/>}
+          </h3>
+        </div>
+      </div>
+      <div className="card-info-flare" style={{ left: '-350px', top: '-50px' }}></div>
+      <div style={{ position: 'relative' }}>
+      <div className="flex items-center gap-0" style={{ opacity: project.onHold ? 0.1 : 1, transition: 'opacity 0.3s' }}>
+        <div className="min-w-0" style={{ minWidth: '432px', overflow: "visible" }}>
+          {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} orientation={project.orientation} onDayClick={() => onSelect(project)}/> : <p className="text-charcoal-muted text-sm italic py-2 cursor-pointer" onClick={() => onSelect(project)}>{t('weatherUnavailable')}</p>}
+        </div>
+        <div onMouseEnter={() => { if (activeWeatherRowDismiss) { activeWeatherRowDismiss(); activeWeatherRowDismiss = null; } }} onClick={() => onSelect(project)} className="cursor-pointer flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
+          <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '75px' }}>
+            {Object.values(MandateType).map(m => {
+              const active = project.mandates?.includes(m);
+              const alwaysShow = m === 'INT' || m === 'EXT' || m === 'DRONE';
+              if (!alwaysShow && !active) return null;
+              return <React.Fragment key={m}>{renderMandate(m, active ? colorActive : colorInactive)}</React.Fragment>;
+            })}
+          </div>
+          <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive" style={{ minWidth: '85px' }}>
+            <span style={{ color: colorInactive }}>{t('sun')}</span>
+            <span style={{ color: (project.orientation?.includes('AM') && sun) ? colorActive : colorInactive }}>
+              AM {sun ? formatTime(sun.sunrise) : '—'}
+            </span>
+            <span style={{ color: (project.orientation?.includes('PM') && sun) ? colorActive : colorInactive }}>
+              PM {sun ? formatTime(sun.sunset) : '—'}
+            </span>
+          </div>
+          <div className="flex flex-col justify-center pl-2 ml-6 border-l border-adaptive" style={{ minWidth: '80px' }}>
+            <span style={{ color: colorInactive }}>{t('travel')}</span>
+            <span style={{ color: project.travelTime?.durationSeconds ? colorActive : colorInactive }}>{project.travelTime?.durationSeconds ? formatDuration(project.travelTime.durationSeconds) : '—'}</span>
+            {project.travelTime?.distanceMeters > 0 ? <span style={{ color: colorCharcoal, letterSpacing: '0.1em', marginTop: '-5px' }} className="text-lg">{Math.round(project.travelTime.distanceMeters / 1000)} KM</span> : <span style={{ color: 'transparent' }}>&nbsp;</span>}
+          </div>
+          <div className="flex flex-col justify-center pl-2 ml-6 border-l border-adaptive" style={{ minWidth: '75px' }}>
+            {/* Deux lignes comme la colonne SOLEIL: départ du matin (lever) puis du soir (coucher), atténuées selon l'orientation. */}
+            <span style={{ color: colorInactive }}>{t('depart')}</span>
+            <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '—'}</span>
+            <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '—'}</span>
+          </div>
+          <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive" style={{ minWidth: '120px' }}>
+            <span style={{ color: colorInactive }}>{t('created')}</span>
+            <span style={{ color: colorActive }}>{formatDateShort(project.createdAt)}</span>
+            <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? t('day') : t('days')}</span>
+          </div>
+        </div>
+      </div>
+      {project.onHold && (
+        <div style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+          <span className="font-bebas-regular uppercase" style={{ color: '#7dd3c6', fontSize: '25px', letterSpacing: '0.04em', lineHeight: 1 }}>{t('onHold')}</span>
+        </div>
+      )}
+      </div>
+    </div>
+    <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
+      <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? t('moveToEditingConfirm') : t('moveToEditing')}</button>
+      {confirmDelete ? <button onClick={handleDelete} className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '16px', cursor: confirmReady ? 'pointer' : 'default', letterSpacing: '0.03em', transition: 'color 0.3s', textShadow: confirmReady ? '0 0 12px rgba(255,59,48,0.4)' : 'none', padding: '6px 2px' }}>{t('deleteConfirm')}</button> : <button onClick={handleDelete} className="p-2 trash-btn text-red-500" title={t('delete')}><TrashIcon/></button>}
+    </div>
+    </div>
+  );
+};
+
+// ===== LISTE ÉDITION (option 2a) : gros chiffre des jours en retouche à gauche, jauge sous le nom =====
+// La coque des cartes (fond, halos, filets, actions au survol / glissement) est inchangée;
+// seul le contenu de la rangée suit la maquette 2a (typo Oswald, 46 / 17 / 11 / 10 px).
+const EDIT_FONT = "'Oswald', system-ui, sans-serif";
+const EDIT_STATUS_COLORS = {
+  alert:  { num: '#e0483e', suffix: '#e0483e', gauge: '#e0483e' },
+  warn:   { num: '#d9a441', suffix: '#d9a441', gauge: '#d9a441' },
+  normal: { num: '#e8ece9', suffix: '#6b7a72', gauge: '#5d6f66' }
+};
+// Teinte graduée entre le seuil d'attention et le seuil d'alerte : ambre exact au premier, rouge exact
+// au second, et entre les deux chaque jour tire un peu plus vers le rouge (orangés). Hors de cette
+// plage (neutre, rouge, archives), la palette fixe s'applique.
+const editLerpHex = (a, b, k) => { const ch = (h, i) => parseInt(h.slice(i, i + 2), 16); return '#' + [1, 3, 5].map(i => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * k).toString(16).padStart(2, '0')).join(''); };
+const editToneFor = (days, status, ep) => {
+  if (status !== 'warn' || days === null || !(ep.editAlertDays > ep.editWarnDays)) return EDIT_STATUS_COLORS[status];
+  const k = Math.min(1, Math.max(0, (days - ep.editWarnDays) / (ep.editAlertDays - ep.editWarnDays)));
+  const c = editLerpHex(EDIT_STATUS_COLORS.warn.num, EDIT_STATUS_COLORS.alert.num, k);
+  return { num: c, suffix: c, gauge: c };
+};
+// Tags du projet dans l'ordre fixe INT · EXT · DRONE · DRONE.C · VID
+const editTagsLabel = (mandates) => ['INT', 'EXT', 'DRONE', 'DRONE+C', 'VID'].filter(m => mandates?.includes(m)).map(m => m === 'DRONE+C' ? 'DRONE.C' : m).join(' · ');
+
+// Chiffre des jours + suffixe (J / D). Poids 600 si alerte ou attention, 300 sinon.
+const EditDaysFigure = ({ days, status, compact, tone }) => {
+  const { t } = useLang();
+  const c = tone || EDIT_STATUS_COLORS[status];
+  return (
+    <div style={{ width: compact ? '62px' : '86px', display: 'flex', alignItems: 'baseline', gap: '5px', flexShrink: 0 }}>
+      <span style={{ fontSize: compact ? '38px' : '46px', fontWeight: status === 'normal' ? 300 : 600, lineHeight: 1, color: c.num }}>{days === null ? '' : days}</span>
+      {days !== null && <span style={{ fontSize: '10px', letterSpacing: '0.15em', color: c.suffix }}>{t('daysShort')}</span>}
+    </div>
+  );
+};
+
+// Jauge : remplissage = jours / échelle (60 j, plafonné), repère vertical au seuil d'alerte.
+const EditGauge = ({ days, status, editPrefs, tone }) => {
+  const pct = days === null ? 0 : Math.min(100, (days / EDIT_GAUGE_MAX_DAYS) * 100);
+  const thr = Math.min(100, (editPrefs.editAlertDays / EDIT_GAUGE_MAX_DAYS) * 100);
+  return (
+    <div style={{ position: 'relative', height: '4px', background: 'rgba(255,255,255,0.06)', borderRadius: '2px', marginTop: '9px' }}>
+      {pct > 0 && <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct}%`, background: (tone || EDIT_STATUS_COLORS[status]).gauge, borderRadius: '2px' }}/>}
+      {editPrefs.editShowThreshold && <div style={{ position: 'absolute', top: '-3px', bottom: '-3px', left: `${thr}%`, width: '1px', background: 'rgba(232,236,233,0.35)' }}/>}
+    </div>
+  );
+};
+
+// Rangée 2a, contenu seul (sans la coque de carte) : partagée par les projets en retouche et les archives.
+// compact = mobile (chiffre, puis nom, ligne tags + date, jauge); sinon chiffre | nom + tags + jauge | date.
+const EditRow = ({ project, days, status, editPrefs, dateLabel, compact, onClick, onDateClick, dateActive }) => {
+  const tags = editTagsLabel(project.mandates);
+  const tone = editToneFor(days, status, editPrefs);
+  const name = <span style={{ color: '#e8ece9', fontSize: compact ? '15px' : '17px', letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1.2, minWidth: 0 }}>{project.name} {project.isContest && <StarIcon/>}</span>;
+  const gauge = editPrefs.editShowGauge && <EditGauge days={days} status={status} editPrefs={editPrefs} tone={tone}/>;
+  if (compact) {
+    return (
+      <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '10px 8px 12px 4px', fontFamily: EDIT_FONT }}>
+        <EditDaysFigure days={days} status={status} tone={tone} compact/>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '16px' }}>{name}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px', marginTop: '4px' }}>
+            <span style={{ color: '#4d5a54', fontSize: '10px', letterSpacing: '0.14em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tags}</span>
+            <span style={{ color: '#6b7a72', fontSize: '10px', letterSpacing: '0.08em', textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0 }}>{dateLabel}</span>
+          </div>
+          {gauge}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div onClick={onClick} className={onClick ? 'cursor-pointer' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '26px', padding: '4px 18px', maxWidth: '720px', boxSizing: 'border-box', fontFamily: EDIT_FONT }}>
+      <EditDaysFigure days={days} status={status} tone={tone}/>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '16px' }}>
+          {name}
+          <span style={{ color: '#4d5a54', fontSize: '10px', letterSpacing: '0.14em', whiteSpace: 'nowrap', flexShrink: 0 }}>{tags}</span>
+        </div>
+        {gauge}
+      </div>
+      <div onClick={onDateClick} style={{ width: '82px', textAlign: 'right', color: '#6b7a72', fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', flexShrink: 0, textDecoration: dateActive ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }}>{dateLabel}</div>
+    </div>
+  );
+};
+
+const RetouchingCard = ({ project, onSelect, index = 0, openActionsId, setOpenActionsId, days = null, editPrefs = EDIT_LIST_DEFAULTS }) => {
+  const { advanceProject, revertProject, deleteProject, updateProject } = useStore();
+  const { t } = useLang();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmReady, setConfirmReady] = useState(false);
+  const [confirmDone, setConfirmDone] = useState(false);
+  const [confirmRevert, setConfirmRevert] = useState(false);
+  const [editingShotDate, setEditingShotDate] = useState(false);
+  const [pickerPos, setPickerPos] = useState({ top: 0, left: 0 });
+  const originalDateRef = useRef(null);
+  const status = editStatusFor(days, editPrefs);
+  const dateLabel = project.shotAt ? formatDateShort(project.shotAt) : '- - -';
+
+  const colorCharcoal = '#8B9B99';
+
+  const handleDelete = (e) => {
+    e.stopPropagation(); e.preventDefault();
+    if (confirmDelete && confirmReady) { deleteProject(project.id); } else if (!confirmDelete) { setConfirmDelete(true); setConfirmReady(false); setConfirmDone(false); setConfirmRevert(false); setTimeout(() => setConfirmReady(true), 600); setTimeout(() => { setConfirmDelete(false); setConfirmReady(false); }, 4000); }
+  };
+  const handleDone = (e) => {
+    e.stopPropagation(); e.preventDefault();
+    if (confirmDone) { advanceProject(project.id); setConfirmDone(false); } else { setConfirmDone(true); setConfirmDelete(false); setConfirmRevert(false); setTimeout(() => setConfirmDone(false), 3000); }
+  };
+  const handleRevert = (e) => {
+    e.stopPropagation(); e.preventDefault();
+    if (confirmRevert) { revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setConfirmDelete(false); setConfirmDone(false); setTimeout(() => setConfirmRevert(false), 3000); }
+  };
+
+  const isMobile = useIsMobile();
+
+  const cardRef = useRef(null);
+  const contentRef = useRef(null);
+  const actionsRef = useRef(null);
+  const haloWhiteRef = useRef(null);
+  const actionsOpen = openActionsId === project.id;
+  const setActionsOpen = (v) => setOpenActionsId ? setOpenActionsId(v ? project.id : null) : null;
+  const actionW = 210;
+
+  useSwipeActions({ cardRef, contentRef, actionsRef, haloWhiteRef, actionW, isMobile, setActionsOpen, syncHalo: true });
+
+  const isFirstMount = useRef(true);
+  useEffect(() => {
+    const timer = setTimeout(() => { isFirstMount.current = false; }, 600);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (isMobile) {
+    const tx = actionsOpen ? actionW : 0;
+    const ease = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
+    return (
+      <div ref={cardRef} data-open={actionsOpen} data-project-id={project.id} className={isFirstMount.current ? 'animate-card-in' : ''}
+        style={{ position: 'relative', margin: '0 12px', marginBottom: '40px', ...(isFirstMount.current ? { animationDelay: `${index * 0.1}s` } : {}), WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
+      >
+        {/* Layer 2 — fond (coins droits) + halos + contours flous */}
+        <div style={{ position: 'absolute', top: 0, left: '-40px', right: 0, bottom: '-15px', borderRadius: '0px', overflow: 'hidden', background: 'rgba(0,0,0,0.14)', WebkitMaskImage: 'linear-gradient(to right, black, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', WebkitMaskComposite: 'destination-in', maskImage: 'linear-gradient(to right, black, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', maskComposite: 'intersect', pointerEvents: 'none' }}>
+          <div style={{ position: 'absolute', left: '50%', bottom: '-350px', width: '700px', height: '500px', borderRadius: '50%', background: 'radial-gradient(ellipse 60% 45%, rgba(39,80,84,0.6) 0%, rgba(39,80,84,0.3) 40%, rgba(39,80,84,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translateX(-50%)' }}/>
+          <div style={{ position: 'absolute', left: '-400px', bottom: '-400px', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(15,117,143,0.4) 0%, rgba(15,117,143,0.1) 40%, rgba(15,117,143,0) 70%)', pointerEvents: 'none' }}/>
+        </div>
+        {/* Layer 1.5 — masque (coins droits) + halo blanc central */}
+        <div ref={haloWhiteRef} style={{ position: 'absolute', top: '-5px', left: '-40px', right: 0, bottom: '-5px', borderRadius: '0px', overflow: 'hidden', pointerEvents: 'none' }}>
+          <div style={{ position: 'absolute', left: '-500px', top: '50%', transform: 'translateY(-50%)', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 40%, rgba(255,255,255,0) 70%)', pointerEvents: 'none' }}/>
+        </div>
+        {/* Layer 1 : contenu (rangée 2a adaptée au mobile : chiffre, nom, tags + date, jauge) */}
+        <div ref={contentRef} style={{ transform: `translateX(${-tx}px)`, transition: ease, padding: '5px 5px', position: 'relative', zIndex: 1, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
+          {actionsOpen && (
+            <div style={{ position: 'absolute', inset: 0, zIndex: 10 }}
+              onClick={() => { setActionsOpen(false); }}
+            />
+          )}
+          <EditRow compact project={project} days={days} status={status} editPrefs={editPrefs} dateLabel={dateLabel} onClick={() => { if (!actionsOpen) onSelect(project); }}/>
+        </div>
+        <div ref={actionsRef} style={{
+          position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW}px`,
+          display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: '12px', paddingRight: '20px',
+          transform: `translateX(${actionW - tx}px)`, transition: ease, zIndex: 1
+        }}>
+          {/* Red/pink glow */}
+          <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '280px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
+          {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmRevert) { setActionsOpen(false); revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setConfirmDone(false); setConfirmDelete(false); setTimeout(() => setConfirmRevert(false), 3000); } }}>{confirmRevert ? t('revertConfirm') : t('revert')}</button>}
+          {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmDone) { setActionsOpen(false); advanceProject(project.id); setConfirmDone(false); } else { setConfirmDone(true); setConfirmRevert(false); setConfirmDelete(false); setTimeout(() => setConfirmDone(false), 3000); } }}>{confirmDone ? t('archiveConfirm') : t('archive')}</button>}
+          {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>{t('deleteConfirm')}</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '-3px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop layout : coque de carte inchangée (fond, halo, filet, survol), rangée 2a à l'intérieur.
+  // Le padding interne (4 px / 18 px) s'ajoute à celui de la carte (16 px) pour donner 20 px / 34 px.
+  return (
+    <div className="card-glow-wrap">
+    <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden animate-card-in border-b border-adaptive"
+      style={{ animationDelay: `${index * 0.1}s` }}>
+      <div className="card-info-flare" style={{ left: '-350px', top: '0px', background: 'radial-gradient(circle, rgba(216,175,76,1) 0%, rgba(216,175,76,0.5) 35%, transparent 65%)' }}></div>
+      <EditRow project={project} days={days} status={status} editPrefs={editPrefs} dateLabel={dateLabel} onClick={() => onSelect(project)} dateActive={editingShotDate}
+        onDateClick={(e) => { if (!project.shotAt) return; e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setPickerPos({ top: r.bottom + 4, left: r.left }); originalDateRef.current = project.shotAt; setEditingShotDate(p => !p); }}/>
+    </div>
+    <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
+      <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? t('cancelEditingConfirm') : t('cancelEditing')}</button>
+      <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? t('archiveConfirm') : t('archive')}</button>
+      {confirmDelete ? <button onClick={handleDelete} className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '16px', cursor: confirmReady ? 'pointer' : 'default', letterSpacing: '0.03em', transition: 'color 0.3s', textShadow: confirmReady ? '0 0 12px rgba(255,59,48,0.4)' : 'none', padding: '6px 2px' }}>{t('deleteConfirm')}</button> : <button onClick={handleDelete} className="p-2 trash-btn text-red-500" title={t('delete')}><TrashIcon/></button>}
+    </div>
+    {editingShotDate && project.shotAt && ReactDOM.createPortal(
+      <React.Fragment>
+        <div onClick={() => { if (originalDateRef.current) updateProject(project.id, { shotAt: originalDateRef.current }); setEditingShotDate(false); }} style={{ position: 'fixed', inset: 0, zIndex: 9998 }}/>
+        <div style={{ position: 'fixed', top: pickerPos.top, left: pickerPos.left, zIndex: 9999 }}>
+          <DateWheelPicker dropDown title={t('editedDate')} date={new Date(project.shotAt)} onChange={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onCancel={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onClose={() => setEditingShotDate(false)} />
+        </div>
+      </React.Fragment>,
+      document.body
+    )}
+    </div>
+  );
+};
+
+const DoneCard = ({ project, editPrefs = EDIT_LIST_DEFAULTS }) => {
+  const { revertProject, deleteProject, prefs } = useStore();
+  const { t } = useLang();
+  const [confirmRevert, setConfirmRevert] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const colorCharcoal = '#8B9B99';
+  // Même rangée que la liste du haut, atténuée par l'opacité de la coque (0.5) et sans les couleurs
+  // d'alerte (toujours neutre). Le chiffre dit en combien de jours le projet a été livré : durée de la
+  // retouche, figée à l'archivage. La date reste la date d'édition.
+  const frozenDays = editDaysFrozen(project);
+  const doneDateLabel = project.shotAt ? formatDateShort(project.shotAt) : '- - -';
+  const isMobile = useIsMobile();
+  const cardRef2 = useRef(null);
+  const contentRef2 = useRef(null);
+  const actionsRef2 = useRef(null);
+  const [actionsOpen2, setActionsOpen2] = useState(false);
+  const actionW2 = 160;
+
+  useEffect(() => {
+    const card = cardRef2.current;
+    if (!card || !isMobile) return;
+    let startX = 0, startY = 0, locked = false, mode = null, open = false, px = 0, lastMoveX = 0, lastMoveT = 0, velocity = 0;
+    const ease = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
+    const setTx = (v) => { px = v; if (contentRef2.current) contentRef2.current.style.transform = `translateX(${-v}px)`; if (actionsRef2.current) actionsRef2.current.style.transform = `translateX(${actionW2 - v}px)`; };
+    let rafId = null, pendingTx = null;
+    const rafSetTx = (v) => { pendingTx = v; if (!rafId) { rafId = requestAnimationFrame(() => { rafId = null; if (pendingTx !== null) setTx(pendingTx); }); } };
+    const onStart = (e) => { startX = e.touches[0].clientX; startY = e.touches[0].clientY; locked = false; mode = null; lastMoveX = startX; lastMoveT = Date.now(); velocity = 0; if (contentRef2.current) contentRef2.current.style.transition = 'none'; if (actionsRef2.current) actionsRef2.current.style.transition = 'none'; };
+    const onMove = (e) => {
+      const dx = e.touches[0].clientX - startX; const dy = e.touches[0].clientY - startY;
+      const now = Date.now(); const dt = now - (lastMoveT || now);
+      if (dt > 0) velocity = (e.touches[0].clientX - (lastMoveX || e.touches[0].clientX)) / dt;
+      lastMoveX = e.touches[0].clientX; lastMoveT = now;
+      if (!locked) { if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return; if (Math.abs(dy) > Math.abs(dx)) { mode = null; locked = true; if (open) { open = false; if (contentRef2.current) contentRef2.current.style.transition = ease; if (actionsRef2.current) actionsRef2.current.style.transition = ease; setTx(0); setTimeout(() => setActionsOpen2(false), 600); } return; } locked = true; mode = open ? 'close' : (dx < 0 ? 'open' : null); }
+      if (mode === 'close') { e.preventDefault(); rafSetTx(Math.max(0, Math.min(actionW2, actionW2 - dx))); }
+      else if (mode === 'open') { e.preventDefault(); rafSetTx(Math.min(actionW2, Math.max(0, Math.abs(dx) - 8))); }
+    };
+    const onEnd = () => {
+      if (rafId) { cancelAnimationFrame(rafId); rafId = null; } if (pendingTx !== null) { setTx(pendingTx); pendingTx = null; }
+      if (mode === 'close' || mode === 'open') { const v = velocity || 0; const snap = mode === 'open' ? (px > actionW2 * 0.3 || v < -0.3) : (px > actionW2 * 0.7 && v > -0.3); open = snap; if (contentRef2.current) contentRef2.current.style.transition = ease; if (actionsRef2.current) actionsRef2.current.style.transition = ease; setTx(snap ? actionW2 : 0); setTimeout(() => setActionsOpen2(snap), 600); }
+      else { if (contentRef2.current) contentRef2.current.style.transition = ease; if (actionsRef2.current) actionsRef2.current.style.transition = ease; }
+      mode = null;
+    };
+    card.addEventListener('touchstart', onStart, { passive: true }); card.addEventListener('touchmove', onMove, { passive: false }); card.addEventListener('touchend', onEnd, { passive: true });
+    return () => { if (rafId) cancelAnimationFrame(rafId); card.removeEventListener('touchstart', onStart); card.removeEventListener('touchmove', onMove); card.removeEventListener('touchend', onEnd); };
+  }, [isMobile]);
+
+  const handleRevert = (e) => {
+    e.stopPropagation(); e.preventDefault();
+    if (confirmRevert) { revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setConfirmDelete(false); setTimeout(() => setConfirmRevert(false), 3000); }
+  };
+  const handleDelete = (e) => {
+    e.stopPropagation(); e.preventDefault();
+    if (confirmDelete) { deleteProject(project.id); } else { setConfirmDelete(true); setConfirmRevert(false); setTimeout(() => setConfirmDelete(false), 3000); }
+  };
+
+  if (isMobile) {
+    const tx2 = actionsOpen2 ? actionW2 : 0;
+    const ease2 = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
+    return (
+      <div ref={cardRef2} style={{ position: 'relative', margin: '0 12px', marginBottom: '40px', opacity: 0.5, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}>
+        {/* Layer 2 — fond (coins droits) + halos + contours flous */}
+        <div style={{ position: 'absolute', top: 0, left: '-40px', right: 0, bottom: '-15px', borderRadius: '0px', overflow: 'hidden', background: 'rgba(0,0,0,0.14)', WebkitMaskImage: 'linear-gradient(to right, black, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', WebkitMaskComposite: 'destination-in', maskImage: 'linear-gradient(to right, black, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', maskComposite: 'intersect', pointerEvents: 'none' }}>
+          <div style={{ position: 'absolute', left: '50%', bottom: '-350px', width: '700px', height: '500px', borderRadius: '50%', background: 'radial-gradient(ellipse 60% 45%, rgba(39,80,84,0.6) 0%, rgba(39,80,84,0.3) 40%, rgba(39,80,84,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translateX(-50%)' }}/>
+          <div style={{ position: 'absolute', left: '-400px', bottom: '-400px', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(15,117,143,0.4) 0%, rgba(15,117,143,0.1) 40%, rgba(15,117,143,0) 70%)', pointerEvents: 'none' }}/>
+        </div>
+        {/* Layer 1.5 — masque (coins droits) + halo blanc central */}
+        <div style={{ position: 'absolute', top: '-5px', left: '-40px', right: 0, bottom: '-5px', borderRadius: '0px', overflow: 'hidden', pointerEvents: 'none' }}>
+          <div style={{ position: 'absolute', left: '-500px', top: '50%', transform: 'translateY(-50%)', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 40%, rgba(255,255,255,0) 70%)', pointerEvents: 'none' }}/>
+        </div>
+        {/* Layer 1 — contenu */}
+        <div ref={contentRef2} style={{ transform: `translateX(${-tx2}px)`, transition: ease2, padding: '5px 5px', position: 'relative', zIndex: 1, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
+          {actionsOpen2 && <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} onClick={() => setActionsOpen2(false)}/>}
+          <EditRow compact project={project} days={frozenDays} status='normal' editPrefs={editPrefs} dateLabel={doneDateLabel}/>
+        </div>
+        {/* Swipe actions */}
+        <div ref={actionsRef2} style={{
+          position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW2}px`,
+          display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: '12px', paddingRight: '20px',
+          transform: `translateX(${actionW2 - tx2}px)`, transition: ease2, zIndex: 1
+        }}>
+          {/* Red/pink glow */}
+          <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '280px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
+          {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmRevert) { setActionsOpen2(false); revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setConfirmDelete(false); setTimeout(() => setConfirmRevert(false), 3000); } }}>{confirmRevert ? t('reactivateConfirm') : t('reactivate')}</button>}
+          {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>{t('deleteConfirm')}</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '-3px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card-glow-wrap">
+    <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden border-b border-adaptive" style={{ opacity: 0.5 }}>
+      <EditRow project={project} days={frozenDays} status='normal' editPrefs={editPrefs} dateLabel={doneDateLabel}/>
+    </div>
+    <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
+      <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? t('reactivateConfirm') : t('reactivate')}</button>
+      <button onClick={handleDelete} className={`p-2 trash-btn text-red-500`} title={t('delete')}><TrashIcon/></button>
+    </div>
+    </div>
+  );
+};
+
+// iOS-style date wheel picker
+const MONTHS_FR = ['JAN','FÉV','MAR','AVR','MAI','JUN','JUL','AOÛ','SEP','OCT','NOV','DÉC'];
+
+// Draggable wheel column
+const WheelColumn = ({ items, selected, onSelect, width, renderItem }) => {
+  const ref = useRef(null);
+  const itemH = 40;
+  const state = useRef({ dragging: false, startY: 0, startScroll: 0, lastY: 0, lastT: 0, vel: 0 });
+  
+  useEffect(() => {
+    if (ref.current) ref.current.scrollTo({ top: items.indexOf(selected) * itemH, behavior: 'smooth' });
+  }, []);
+  
+  const snapAndSelect = () => {
+    if (!ref.current) return;
+    const idx = Math.round(ref.current.scrollTop / itemH);
+    const clamped = Math.max(0, Math.min(idx, items.length - 1));
+    ref.current.style.scrollSnapType = 'y mandatory';
+    ref.current.scrollTo({ top: clamped * itemH, behavior: 'smooth' });
+    if (items[clamped] !== selected) onSelect(items[clamped]);
+  };
+  
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const s = state.current;
+    
+    const getY = (e) => e.touches ? e.touches[0].clientY : e.clientY;
+    
+    const onDown = (e) => {
+      s.dragging = true;
+      s.startY = getY(e);
+      s.startScroll = el.scrollTop;
+      s.lastY = s.startY;
+      s.lastT = Date.now();
+      s.vel = 0;
+      el.style.scrollSnapType = 'none';
+      if (!e.touches) e.preventDefault();
+    };
+    const onMove = (e) => {
+      if (!s.dragging) return;
+      const y = getY(e);
+      const now = Date.now();
+      const dt = now - s.lastT;
+      if (dt > 0) s.vel = (s.lastY - y) / dt;
+      s.lastY = y; s.lastT = now;
+      el.scrollTop = s.startScroll - (y - s.startY);
+      // Live update
+      const idx = Math.round(el.scrollTop / itemH);
+      const clamped = Math.max(0, Math.min(idx, items.length - 1));
+      if (items[clamped] !== selected) onSelect(items[clamped]);
+    };
+    const onUp = () => {
+      if (!s.dragging) return;
+      s.dragging = false;
+      if (Math.abs(s.vel) > 0.3) {
+        const target = el.scrollTop + s.vel * 120;
+        el.scrollTop = target;
+      }
+      snapAndSelect();
+    };
+    
+    el.addEventListener('mousedown', onDown);
+    el.addEventListener('touchstart', onDown, { passive: true });
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('touchend', onUp);
+    return () => {
+      el.removeEventListener('mousedown', onDown);
+      el.removeEventListener('touchstart', onDown);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchend', onUp);
+    };
+  }, [items, selected]);
+  
+  return (
+    <div ref={ref}
+      style={{ height: itemH * 3, overflow: 'auto', scrollSnapType: 'y mandatory', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', width, cursor: 'grab', userSelect: 'none' }}>
+      <div style={{ height: itemH }}/>
+      {items.map((item, i) => (
+        <div key={i} style={{
+          height: itemH, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          scrollSnapAlign: 'center', fontSize: item === selected ? '22px' : '17px',
+          color: item === selected ? '#ffffff' : 'rgba(255,255,255,0.3)',
+          fontFamily: 'BebasNeue-Bold, sans-serif', letterSpacing: '0.05em',
+          transition: 'color 0.15s, font-size 0.15s', pointerEvents: 'none'
+        }}>{renderItem ? renderItem(item) : item}</div>
+      ))}
+      <div style={{ height: itemH }}/>
+    </div>
+  );
+};
+
+// ===== Champ DOSSIER (combo réutilisable) =====
+// Utilisé tel quel par le formulaire d'ajout (value='') et le détail projet
+// (value=project.clientFolder). Deux modes: sélection (menu déroulant custom des dossiers
+// existants) et création (saisie texte). Le + bascule vers la création; en création il pivote
+// en × pour revenir à la sélection. Un dossier n'est qu'une valeur texte portée par un projet:
+// taper un nom ne crée rien tout de suite, il est matérialisé au CRÉER / à l'updateProject.
+const useExistingFolders = () => {
+  const { projects } = useStore();
+  return React.useMemo(() => {
+    const seen = new Set(), out = [];
+    for (const p of projects) {
+      const f = (p.clientFolder || '').trim();
+      if (f && !seen.has(f)) { seen.add(f); out.push(f); }
+    }
+    return out; // dans l'ordre de première apparition (≈ ordre d'ajout)
+  }, [projects]);
+};
+
+const FolderCombo = ({ value, onChange }) => {
+  const folders = useExistingFolders();
+  const noFolders = folders.length === 0;
+  const [mode, setMode] = useState(() => noFolders ? 'create' : 'select');
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [menuRect, setMenuRect] = useState(null);
+  const rootRef = useRef(null);
+  const fieldRef = useRef(null);
+  const inputRef = useRef(null);
+  const isCreate = mode === 'create';
+
+  // Menu en position fixe (portail): on le ferme au clic dehors et au scroll, sinon il
+  // se détacherait du champ.
+  useEffect(() => {
+    if (!open) return;
+    const onDocDown = (e) => {
+      if (rootRef.current && rootRef.current.contains(e.target)) return;
+      const menu = document.getElementById('folder-menu-portal');
+      if (menu && menu.contains(e.target)) return;
+      setOpen(false);
+    };
+    const onScroll = () => setOpen(false);
+    document.addEventListener('mousedown', onDocDown);
+    window.addEventListener('scroll', onScroll, true);
+    return () => { document.removeEventListener('mousedown', onDocDown); window.removeEventListener('scroll', onScroll, true); };
+  }, [open]);
+
+  const openMenu = () => {
+    if (fieldRef.current) {
+      const r = fieldRef.current.getBoundingClientRect();
+      setMenuRect({ top: r.bottom + 2, left: r.left, width: r.width });
+    }
+    setOpen(true);
+  };
+  const toCreate = () => { setOpen(false); setMode('create'); setDraft(''); setTimeout(() => inputRef.current && inputRef.current.focus(), 0); };
+  const toSelect = () => { setMode('select'); setDraft(''); };
+  const commitDraft = () => { const v = draft.trim(); if (v) onChange(v); if (!noFolders) setMode('select'); };
+  const pick = (f) => { onChange(f); setOpen(false); };
+
+  return (
+    <div ref={rootRef} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative', top: '1px', flexShrink: 0 }} aria-hidden="true">
+        <path d="M3 7.2c0-.83.67-1.5 1.5-1.5h4.05l1.8 1.9h8.15c.83 0 1.5.67 1.5 1.5v8.2c0 .83-.67 1.5-1.5 1.5h-15.5c-.83 0-1.5-.67-1.5-1.5V7.2Z"/>
+      </svg>
+      <div ref={fieldRef} style={{ position: 'relative', flex: 1, minWidth: 0, border: '1px solid rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center' }}>
+        {isCreate ? (
+          <input ref={inputRef} type="text" value={draft}
+            autoComplete="off" autoCorrect="off" autoCapitalize="characters" spellCheck="false"
+            data-1p-ignore="true" data-lpignore="true" data-form-type="other"
+            onChange={(e) => setDraft(e.target.value.toUpperCase())}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitDraft(); } else if (e.key === 'Escape' && !noFolders) { toSelect(); } }}
+            onBlur={commitDraft}
+            placeholder="NOM DU DOSSIER"
+            className="font-bebas-book"
+            style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: '#ffffff', padding: '9px 44px 9px 12px', fontSize: '17px', letterSpacing: '0.05em' }}
+          />
+        ) : (
+          <div onClick={openMenu} className="font-bebas-book"
+            style={{ flex: 1, minWidth: 0, cursor: 'pointer', padding: '9px 44px 9px 12px', fontSize: '17px', letterSpacing: '0.05em', color: value ? '#ffffff' : 'rgba(255,255,255,0.3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {value || 'DOSSIER'}
+          </div>
+        )}
+        <button type="button" onClick={isCreate ? toSelect : toCreate}
+          aria-label={isCreate ? 'Choisir un dossier existant' : 'Créer un nouveau dossier'}
+          style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+          <span style={{ display: 'inline-block', fontSize: '24px', lineHeight: 1, fontWeight: 200, color: '#ffffff', transform: isCreate ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s ease', position: 'relative', top: '-1px' }}>+</span>
+        </button>
+      </div>
+      {open && !isCreate && menuRect && ReactDOM.createPortal(
+        <div id="folder-menu-portal" style={{ position: 'fixed', top: menuRect.top, left: menuRect.left, width: menuRect.width, zIndex: 9999, background: 'rgba(20,24,27,0.97)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.15)', maxHeight: '240px', overflowY: 'auto' }}>
+          {value && (
+            <div onClick={() => pick('')} className="font-bebas-book folder-option"
+              style={{ padding: '9px 12px', fontSize: '15px', letterSpacing: '0.05em', cursor: 'pointer', color: 'rgba(255,255,255,0.3)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>AUCUN</div>
+          )}
+          {folders.map((f) => (
+            <div key={f} onClick={() => pick(f)} className="font-bebas-book folder-option"
+              style={{ padding: '9px 12px', fontSize: '17px', letterSpacing: '0.05em', cursor: 'pointer', color: f === value ? '#ffffff' : 'rgba(255,255,255,0.45)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f}</div>
+          ))}
+        </div>, document.body)}
+    </div>
+  );
+};
+
+const DateWheelPicker = ({ date, onChange, onClose, onCancel, title, dropDown }) => {
+  const { t } = useLang();
+  const [selDay, setSelDay] = useState(date.getDate());
+  const [selMonth, setSelMonth] = useState(date.getMonth());
+  const [selYear, setSelYear] = useState(date.getFullYear());
+  const originalDate = useRef(new Date(date));
+  const itemH = 40;
+  
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+  const daysInMonth = new Date(selYear, selMonth + 1, 0).getDate();
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  
+  useEffect(() => {
+    const d = Math.min(selDay, daysInMonth);
+    const newDate = new Date(selYear, selMonth, d);
+    onChange(newDate);
+  }, [selDay, selMonth, selYear]);
+  
+  const resetToday = () => { onChange(new Date()); onClose(); };
+  const handleCancel = () => { if (onCancel) onCancel(originalDate.current); onClose(); };
+  
+  const leftBtn = onCancel
+    ? { label: t('cancel'), action: handleCancel, color: 'rgba(255,255,255,0.4)' }
+    : { label: t('today'), action: resetToday, color: '#7dd3c6' };
+  
+  const posStyle = dropDown
+    ? { position: 'relative', width: '100%', maxWidth: '350px', zIndex: 20, background: 'rgba(20,24,27,0.95)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderRadius: '16px', padding: '12px 0 18px' }
+    : { position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '350px', zIndex: 20, background: 'rgba(20,24,27,0.7)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderRadius: '16px 16px 0 0', padding: '12px 0 18px' };
+
+  return (
+    <div style={posStyle}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px 8px' }}>
+        <button onClick={leftBtn.action} className="font-bebas-bold" style={{ background: 'none', border: 'none', color: leftBtn.color, fontSize: '20px', cursor: 'pointer', letterSpacing: '0.05em' }}>{leftBtn.label}</button>
+        <span className="font-bebas-bold" style={{ fontSize: '16px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.05em' }}>{title || t('sunDate')}</span>
+        <button onClick={onClose} className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FAF9F7', fontSize: '20px', cursor: 'pointer', letterSpacing: '0.05em', textShadow: '0 0 12px rgba(255,255,255,0.4), 0 0 25px rgba(255,255,255,0.15)' }}>OK</button>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', position: 'relative' }}>
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '300px', height: itemH, background: 'rgba(255,255,255,0.08)', borderRadius: '10px', pointerEvents: 'none' }}/>
+        <WheelColumn items={MONTHS_FR.map((_, i) => i)} selected={selMonth} onSelect={setSelMonth} width="100px" renderItem={(i) => t('monthAbbrev')[i]} />
+        <WheelColumn items={days} selected={selDay} onSelect={setSelDay} width="60px" />
+        <WheelColumn items={years} selected={selYear} onSelect={setSelYear} width="80px" />
+      </div>
+    </div>
+  );
+};
+
+// Rend cliquables (tel:) les numéros de téléphone présents dans l'éditeur de notes.
+// Parcourt les noeuds de texte, enveloppe chaque numéro valide dans un lien <a href="tel:+1...">.
+// Idempotent: ignore les numéros déjà dans un <a>. Renvoie true si quelque chose a changé.
+const linkifyPhonesInEditor = (root) => {
+  if (!root) return false;
+  const RE = /(?:\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/g;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const targets = [];
+  let node;
+  while ((node = walker.nextNode())) {
+    if (!node.nodeValue) continue;
+    if (node.parentElement && node.parentElement.closest('a')) continue; // déjà un lien
+    RE.lastIndex = 0;
+    if (RE.test(node.nodeValue)) targets.push(node);
+  }
+  let changedAny = false;
+  targets.forEach((textNode) => {
+    const text = textNode.nodeValue;
+    const frag = document.createDocumentFragment();
+    let last = 0, m, appended = false;
+    RE.lastIndex = 0;
+    while ((m = RE.exec(text))) {
+      const raw = m[0];
+      const before = m.index > 0 ? text[m.index - 1] : '';
+      const after = text[m.index + raw.length] || '';
+      const digits = raw.replace(/\D/g, '');
+      const valid = digits.length === 10 || (digits.length === 11 && digits[0] === '1');
+      // Évite de couper un nombre plus long et exige 10 (ou 11 avec indicatif 1) chiffres.
+      if (/\d/.test(before) || /\d/.test(after) || !valid) continue;
+      if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+      const tel = digits.length === 10 ? '1' + digits : digits;
+      const a = document.createElement('a');
+      a.href = 'tel:+' + tel;
+      a.textContent = raw;
+      a.setAttribute('style', 'color:#60a5fa;text-decoration:underline');
+      frag.appendChild(a);
+      last = m.index + raw.length;
+      appended = true;
+    }
+    if (appended) {
+      if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+      textNode.parentNode.replaceChild(frag, textNode);
+      changedAny = true;
+    }
+  });
+  return changedAny;
+};
+
+const ProjectDetail = ({ projectId, onClose }) => {
+  const { projects, updateProject, advanceProject, revertProject, deleteProject, prefs } = useStore();
+  const { user } = useAuth();
+  const { t } = useLang();
+  const project = projects.find(p => p.id === projectId);
+  const [weather, setWeather] = useState(null);
+  const [confirm, setConfirm] = useState(false);
+  const [confirmDone, setConfirmDone] = useState(false);
+  const [mapType, setMapType] = useState('hybrid');
+  const [mapZoom, setMapZoom] = useState(project?.mapZoom || 16);
+  const [showMapFull, setShowMapFull] = useState(false);
+  const [mapMenuOpen, setMapMenuOpen] = useState(false);
+  const mapRevealedRef = React.useRef(false);
+  const [mapRevealed, setMapRevealed] = useState(false);
+  const [showSunLines, setShowSunLines] = useState(true);
+  const [sunDate, setSunDate] = useState(() => new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [editingCreatedDate, setEditingCreatedDate] = useState(false);
+  const [editingShotDate, setEditingShotDate] = useState(false);
+  const [detailPickerPos, setDetailPickerPos] = useState({ top: 0, left: 0 });
+  const originalDateRef = useRef(null);
+  const isToday = React.useMemo(() => { const n = new Date(); return sunDate.getDate() === n.getDate() && sunDate.getMonth() === n.getMonth() && sunDate.getFullYear() === n.getFullYear(); }, [sunDate]);
+  const [sunHour, setSunHour] = useState(0);
+  const [sunHourDisplay, setSunHourDisplay] = useState(0);
+  const sunHourTargetRef = React.useRef(sunHour);
+  const sunTimesSnapRef = React.useRef({ sr: 6, ss: 18 });
+  
+  // Smooth magnetic: gaussian-shaped pull, no hard edges
+  const magneticSunHour = (raw) => raw;
+  
+  const rafRef = React.useRef(null);
+  useEffect(() => {
+    sunHourTargetRef.current = sunHour;
+    const animate = () => {
+      setSunHourDisplay(prev => {
+        const diff = sunHourTargetRef.current - prev;
+        if (Math.abs(diff) < 0.003) return sunHourTargetRef.current;
+        rafRef.current = requestAnimationFrame(animate);
+        return prev + diff * 0.3;
+      });
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [sunHour]);
+  const nightOpacity = React.useMemo(() => {
+    if (!project?.lat || !project?.lng || !SunCalc) return 0;
+    const st = SunCalc.getTimes(sunDate, project.lat, project.lng);
+    const sr = st.sunrise ? st.sunrise.getHours() + st.sunrise.getMinutes()/60 : 6;
+    const ss = st.sunset ? st.sunset.getHours() + st.sunset.getMinutes()/60 : 18;
+    // Progressive: 0 during day, fade over 1h after sunset / before sunrise
+    if (sunHour >= sr && sunHour <= ss) return 0;
+    if (sunHour > ss && sunHour < ss + 1) return (sunHour - ss);
+    if (sunHour < sr && sunHour > sr - 1) return (sr - sunHour);
+    return 1;
+  }, [sunHour, project?.lat, project?.lng, sunDate]);
+  const mapIsNight = nightOpacity >= 1;
+  const [editingName, setEditingName] = useState(false);
+  const [addressCopied, setAddressCopied] = useState(false);
+  const addressCopiedTimer = React.useRef(null);
+  const addressInputRef = React.useRef(null);
+  const autocompleteRef = React.useRef(null);
+  const departureInputRef = React.useRef(null);
+  const isMobile = useIsMobile();
+  const departureAutocompleteRef = React.useRef(null);
+  const mapContainerRef = React.useRef(null);
+  const flareCanvasRef = React.useRef(null);
+  const weatherCanvasRef = React.useRef(null);
+  const weatherParticlesRef = React.useRef([]);
+  const weatherAnimRef = React.useRef(null);
+  
+  // Weather particles effect behind slider
+  useEffect(() => {
+    if (isMobile) return;
+    const canvas = weatherCanvasRef.current;
+    if (!canvas) return;
+    
+    // Find hourly weather for current slider position
+    const targetDate = new Date(sunDate);
+    targetDate.setHours(Math.floor(sunHour), 0, 0, 0);
+    const hourly = weather?.hourly?.find(h => {
+      const ht = new Date(h.time);
+      return ht.getFullYear() === targetDate.getFullYear() && ht.getMonth() === targetDate.getMonth() && ht.getDate() === targetDate.getDate() && ht.getHours() === targetDate.getHours();
+    });
+    
+    if (!hourly) { 
+      if (weatherAnimRef.current) cancelAnimationFrame(weatherAnimRef.current);
+      const ctx = canvas.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return; 
+    }
+    
+    const precip = hourly.precip || 0;
+    const temp = hourly.temp;
+    const cloud = hourly.cloudcover || 0;
+    const wind = hourly.wind || 0;
+    const icon = hourly.icon || '';
+    
+    const isRain = precip > 0 && temp > 0;
+    const isSnow = precip > 0 && temp <= 0;
+    const isFog = icon.includes('fog') || icon.includes('mist');
+    const hasParticles = isRain || isSnow || isFog;
+    
+    if (!hasParticles) {
+      if (weatherAnimRef.current) cancelAnimationFrame(weatherAnimRef.current);
+      const ctx = canvas.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      weatherParticlesRef.current = [];
+      return;
+    }
+    
+    const w = canvas.parentElement?.offsetWidth || 400;
+    const h = canvas.parentElement?.offsetHeight || 200;
+    canvas.width = w; canvas.height = h;
+    
+    // Initialize particles
+    const count = isRain ? Math.min(60, Math.round(precip * 15)) : isSnow ? Math.min(40, Math.round(precip * 10)) : 25;
+    if (weatherParticlesRef.current.length !== count) {
+      weatherParticlesRef.current = Array.from({length: count}, () => ({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        speed: isRain ? 2 + Math.random() * 4 : isSnow ? 0.3 + Math.random() * 0.8 : 0.1 + Math.random() * 0.2,
+        size: isRain ? 1 + Math.random() : isSnow ? 1.5 + Math.random() * 2.5 : 3 + Math.random() * 5,
+        opacity: isRain ? 0.15 + Math.random() * 0.2 : isSnow ? 0.2 + Math.random() * 0.25 : 0.03 + Math.random() * 0.04,
+        drift: isSnow ? -0.3 + Math.random() * 0.6 : isFog ? -0.1 + Math.random() * 0.2 : (wind > 10 ? 0.5 : 0),
+        len: isRain ? 4 + Math.random() * 6 : 0,
+      }));
+    }
+    
+    const animate = () => {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.clearRect(0, 0, w, h);
+      
+      weatherParticlesRef.current.forEach(p => {
+        if (isRain) {
+          ctx.strokeStyle = `rgba(180,200,220,${p.opacity})`;
+          ctx.lineWidth = p.size * 0.5;
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x + p.drift, p.y + p.len);
+          ctx.stroke();
+          p.y += p.speed;
+          p.x += p.drift;
+        } else if (isSnow) {
+          ctx.fillStyle = `rgba(255,255,255,${p.opacity})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+          p.y += p.speed;
+          p.x += p.drift + Math.sin(p.y * 0.02) * 0.3;
+        } else if (isFog) {
+          ctx.fillStyle = `rgba(200,200,210,${p.opacity})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+          p.x += p.drift;
+          p.y += Math.sin(p.x * 0.01) * 0.1;
+        }
+        
+        if (p.y > h + 10) { p.y = -10; p.x = Math.random() * w; }
+        if (p.x > w + 10) p.x = -10;
+        if (p.x < -10) p.x = w + 10;
+      });
+      
+      weatherAnimRef.current = requestAnimationFrame(animate);
+    };
+    
+    if (weatherAnimRef.current) cancelAnimationFrame(weatherAnimRef.current);
+    animate();
+    
+    return () => { if (weatherAnimRef.current) cancelAnimationFrame(weatherAnimRef.current); };
+  }, [sunHour, sunDate, weather]);
+
+  // Lens flare — 35mm prime style
+  const drawLensFlare = React.useCallback((sunScreenX, sunScreenY, canvasW, canvasH, sunAltitude) => {
+    const canvas = flareCanvasRef.current;
+    if (!canvas) return;
+    // Don't set canvas.width/height here — already set by caller
+    const ctx = canvas.getContext('2d');
+    
+    // No flare if sun well below horizon
+    if (sunAltitude <= -0.1) {
+      // Moon glow at night
+      const moonR = Math.min(canvasW, canvasH) * 0.12;
+      const gradM = ctx.createRadialGradient(sunScreenX, sunScreenY, 0, sunScreenX, sunScreenY, moonR);
+      gradM.addColorStop(0, 'rgba(220, 215, 200, 0.15)');
+      gradM.addColorStop(0.3, 'rgba(200, 195, 185, 0.06)');
+      gradM.addColorStop(1, 'rgba(200, 195, 185, 0)');
+      ctx.fillStyle = gradM;
+      ctx.fillRect(0, 0, canvasW, canvasH);
+      return;
+    }
+    
+    // Intensity: strongest near horizon (golden hour), fades as sun goes higher, fades to 0 at sunset
+    const altDeg = sunAltitude * 180 / Math.PI;
+    const intensity = altDeg < -3 ? 0 : altDeg < 0 ? (altDeg + 3) / 3 * 0.5 : altDeg < 5 ? 0.5 + altDeg / 10 : altDeg < 15 ? 1 : Math.max(0.35, 1 - (altDeg - 15) / 50);
+    
+    const cx = canvasW / 2, cy = canvasH / 2;
+    const sx = sunScreenX, sy = sunScreenY;
+    // Flare axis: sun → center → opposite
+    const dx = cx - sx, dy = cy - sy;
+    
+    ctx.globalCompositeOperation = 'screen';
+    
+    // 1. Main sun glow — large warm bloom
+    const mainR = Math.min(canvasW, canvasH) * 0.375 * intensity;
+    const grad1 = ctx.createRadialGradient(sx, sy, 0, sx, sy, mainR);
+    grad1.addColorStop(0, `rgba(255, 250, 230, ${0.9 * intensity})`);
+    grad1.addColorStop(0.1, `rgba(255, 230, 150, ${0.6 * intensity})`);
+    grad1.addColorStop(0.4, `rgba(255, 180, 80, ${0.15 * intensity})`);
+    grad1.addColorStop(1, 'rgba(255, 180, 80, 0)');
+    ctx.fillStyle = grad1;
+    ctx.fillRect(0, 0, canvasW, canvasH);
+    
+    // 2. Hot center
+    const hotR = mainR * 0.15;
+    const grad0 = ctx.createRadialGradient(sx, sy, 0, sx, sy, hotR);
+    grad0.addColorStop(0, `rgba(255, 255, 255, ${0.95 * intensity})`);
+    grad0.addColorStop(0.5, `rgba(255, 245, 200, ${0.5 * intensity})`);
+    grad0.addColorStop(1, 'rgba(255, 230, 150, 0)');
+    ctx.fillStyle = grad0;
+    ctx.fillRect(0, 0, canvasW, canvasH);
+    
+    // 3. Anamorphic horizontal streak
+    ctx.save();
+    ctx.translate(sx, sy);
+    const streakW = canvasW * 1.5 * intensity;
+    const streakH = 6;
+    const gradS = ctx.createLinearGradient(-streakW/2, 0, streakW/2, 0);
+    gradS.addColorStop(0, 'rgba(255, 200, 100, 0)');
+    gradS.addColorStop(0.3, `rgba(255, 220, 150, ${0.25 * intensity})`);
+    gradS.addColorStop(0.5, `rgba(255, 240, 200, ${0.5 * intensity})`);
+    gradS.addColorStop(0.7, `rgba(255, 220, 150, ${0.25 * intensity})`);
+    gradS.addColorStop(1, 'rgba(255, 200, 100, 0)');
+    ctx.fillStyle = gradS;
+    ctx.fillRect(-streakW/2, -streakH/2, streakW, streakH);
+    // Wider softer streak
+    const gradS2 = ctx.createLinearGradient(-streakW/2, 0, streakW/2, 0);
+    gradS2.addColorStop(0, 'rgba(255, 200, 100, 0)');
+    gradS2.addColorStop(0.35, `rgba(255, 210, 130, ${0.08 * intensity})`);
+    gradS2.addColorStop(0.5, `rgba(255, 230, 180, ${0.15 * intensity})`);
+    gradS2.addColorStop(0.65, `rgba(255, 210, 130, ${0.08 * intensity})`);
+    gradS2.addColorStop(1, 'rgba(255, 200, 100, 0)');
+    ctx.fillStyle = gradS2;
+    ctx.fillRect(-streakW/2, -18, streakW, 36);
+    ctx.restore();
+    
+    // 4. Ghost artifacts along flare axis
+    const ghosts = [
+      { pos: 0.3, size: 0.09, color: [255, 180, 60], alpha: 0.12 },
+      { pos: 0.5, size: 0.135, color: [120, 200, 255], alpha: 0.08 },
+      { pos: 0.65, size: 0.06, color: [255, 130, 80], alpha: 0.15 },
+      { pos: 0.8, size: 0.18, color: [100, 180, 255], alpha: 0.06 },
+      { pos: 1.0, size: 0.075, color: [200, 150, 255], alpha: 0.1 },
+      { pos: 1.2, size: 0.12, color: [255, 200, 100], alpha: 0.07 },
+      { pos: 1.5, size: 0.225, color: [80, 200, 180], alpha: 0.04 },
+      { pos: 1.8, size: 0.045, color: [255, 160, 200], alpha: 0.12 },
+    ];
+    
+    ghosts.forEach(g => {
+      const gx = sx + dx * g.pos;
+      const gy = sy + dy * g.pos;
+      const gr = Math.min(canvasW, canvasH) * g.size;
+      const [r, gc2, b] = g.color;
+      
+      // Ring ghost (hollow circle)
+      const gradG = ctx.createRadialGradient(gx, gy, gr * 0.6, gx, gy, gr);
+      gradG.addColorStop(0, 'rgba(0,0,0,0)');
+      gradG.addColorStop(0.5, `rgba(${r},${gc2},${b},${g.alpha * intensity})`);
+      gradG.addColorStop(0.8, `rgba(${r},${gc2},${b},${g.alpha * 0.5 * intensity})`);
+      gradG.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gradG;
+      ctx.beginPath();
+      ctx.arc(gx, gy, gr, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    
+    // 5. Subtle rainbow ring near sun
+    const rainR = mainR * 0.6;
+    ctx.strokeStyle = `rgba(255, 180, 100, ${0.06 * intensity})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(sx, sy, rainR, 0, Math.PI * 2);
+    ctx.stroke();
+    
+  }, []);
+  const mapInstanceRef = React.useRef(null);
+  const sunLinesRef = React.useRef([]);
+  const sunPosLineRef = React.useRef(null);
+  const shadowLineRef = React.useRef(null);
+  const sunPosMarkerRef = React.useRef(null);
+  const sunDotContainerRef = React.useRef(null);
+  const sunDotHaloRef = React.useRef(null);
+  const sunDotInnerRef = React.useRef(null);
+  const sunTimePillsRef = React.useRef([]);
+  const sunBearingRef = React.useRef(null);
+  const nightOverlayRef = React.useRef(null);
+  const markerRef = React.useRef(null);
+  const [adjustedPos, setAdjustedPos] = useState(null);
+  const effectiveCenterRef = React.useRef(null);
+  
+  // === Terrain Elevation Shadow ===
+  const [terrainProfile, setTerrainProfile] = useState(null);
+  const [terrainShadow, setTerrainShadow] = useState(false);
+  const terrainProfileRef = React.useRef(null);
+  
+  // === Buildings & Shadow Simulation ===
+  const [buildings, setBuildings] = useState(() => project?.buildings || []);
+  const [drawingMode, setDrawingMode] = useState(false);
+  const [drawingVertices, setDrawingVertices] = useState([]);
+  const drawingVerticesRef = React.useRef([]);
+  const [editingBuilding, setEditingBuilding] = useState(null); // index of building being edited
+  const [hoveredBuilding, setHoveredBuilding] = useState(null);
+  const [heightPickerIdx, setHeightPickerIdx] = useState(null);
+  const [draggingHeight, setDraggingHeight] = useState(null); // { idx, startY, startH, currentH, offsetY }
+  const BUILDING_COLORS = ['#ffe26b', '#7dd3c6', '#ff6b8a', '#b07dff', '#6bff8a'];
+
+  // Height pill drag handlers
+  useEffect(() => {
+    if (!draggingHeight) return;
+    const onMove = (clientY) => {
+      const delta = draggingHeight.startY - clientY;
+      const newH = Math.max(1, Math.min(200, Math.round(draggingHeight.startH + delta * 0.5)));
+      setDraggingHeight(prev => prev ? { ...prev, currentH: newH, offsetY: clientY - prev.startY } : null);
+      // Live update buildings for shadow
+      setBuildings(prev => prev.map((bb, ii) => ii === draggingHeight.idx ? {...bb, height: newH} : bb));
+    };
+    const onEnd = () => {
+      if (draggingHeight) {
+        const idx = draggingHeight.idx;
+        const h = draggingHeight.currentH;
+        buildingsSaveTimer.current && clearTimeout(buildingsSaveTimer.current);
+        buildingsSaveTimer.current = setTimeout(() => {
+          updateProject(project.id, { buildings: buildings.map((bb, ii) => ii === idx ? {...bb, height: h} : bb) });
+        }, 500);
+      }
+      setDraggingHeight(null);
+    };
+    const onMouseMove = (e) => onMove(e.clientY);
+    const onTouchMove = (e) => onMove(e.touches[0].clientY);
+    const onMouseUp = () => onEnd();
+    const onTouchEnd = () => onEnd();
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
+    window.addEventListener('touchend', onTouchEnd);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [draggingHeight, buildings, project?.id]);
+  const [buildingHeight, setBuildingHeight] = useState('');
+  const [buildingName, setBuildingName] = useState('');
+  const buildingPolygonsRef = React.useRef([]);
+  const shadowPolygonsRef = React.useRef([]);
+  const shadowOverlayRef = React.useRef(null);
+  const wallPolygonsRef = React.useRef([]);
+  const roofPolygonsRef = React.useRef([]);
+  const drawingPolygonRef = React.useRef(null);
+  const drawingMarkersRef = React.useRef([]);
+  const drawClickListenerRef = React.useRef(null);
+  const [editPanelPos, setEditPanelPos] = useState(null);
+  const [drawPanelPos, setDrawPanelPos] = useState(null);
+  const skipMapRecreateRef = React.useRef(false);
+  // Reset adjustedPos when switching projects
+  useEffect(() => { setAdjustedPos(null); effectiveCenterRef.current = null; }, [project?.id]);
+  
+  // Load buildings from project
+  useEffect(() => { setBuildings(project?.buildings || []); setDrawingMode(false); setDrawingVertices([]); setEditingBuilding(null); }, [project?.id]);
+  
+  // Save buildings to project when changed (debounced)
+  const buildingsSaveTimer = React.useRef(null);
+  useEffect(() => {
+    if (!project?.id) return;
+    if (buildingsSaveTimer.current) clearTimeout(buildingsSaveTimer.current);
+    buildingsSaveTimer.current = setTimeout(() => {
+      updateProject(project.id, { buildings });
+    }, 500);
+    return () => { if (buildingsSaveTimer.current) clearTimeout(buildingsSaveTimer.current); };
+  }, [buildings]);
+
+  // Drawing mode — add click listener on map
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    // Clean up previous listener
+    if (drawClickListenerRef.current) {
+      google.maps.event.removeListener(drawClickListenerRef.current);
+      drawClickListenerRef.current = null;
+    }
+    if (!drawingMode) {
+      // Clean drawing preview
+      if (drawingPolygonRef.current) { drawingPolygonRef.current.setMap(null); drawingPolygonRef.current = null; }
+      drawingMarkersRef.current.forEach(m => m.setMap(null));
+      drawingMarkersRef.current = [];
+      return;
+    }
+    map.setOptions({ draggableCursor: 'crosshair' });
+    drawClickListenerRef.current = map.addListener('click', (e) => {
+      const pt = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+      const next = [...drawingVerticesRef.current, pt];
+      drawingVerticesRef.current = next;
+      setDrawingVertices(next);
+    });
+    // Double-click to finish
+    const dblClickListener = map.addListener('dblclick', (e) => {
+      e.stop();
+      if (drawingVerticesRef.current.length >= 3) {
+        finishDrawingFromRef();
+      }
+    });
+    // Enter key to finish
+    const enterHandler = (e) => {
+      if (e.key === 'Enter' && drawingVerticesRef.current.length >= 3) {
+        finishDrawingFromRef();
+      }
+    };
+    document.addEventListener('keydown', enterHandler);
+    return () => {
+      if (drawClickListenerRef.current) {
+        google.maps.event.removeListener(drawClickListenerRef.current);
+        drawClickListenerRef.current = null;
+      }
+      google.maps.event.removeListener(dblClickListener);
+      document.removeEventListener('keydown', enterHandler);
+      map.setOptions({ draggableCursor: null });
+    };
+  }, [drawingMode]);
+
+  // Update drawing preview polygon + vertex markers
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    // Update preview polygon
+    if (drawingPolygonRef.current) drawingPolygonRef.current.setMap(null);
+    drawingMarkersRef.current.forEach(m => m.setMap(null));
+    drawingMarkersRef.current = [];
+    if (drawingVertices.length >= 2) {
+      const nextColor = BUILDING_COLORS[buildings.length % BUILDING_COLORS.length];
+      // Glow polygon (behind)
+      const glow = new google.maps.Polygon({
+        paths: drawingVertices,
+        strokeColor: nextColor, strokeOpacity: 0.3, strokeWeight: 8,
+        fillColor: nextColor, fillOpacity: 0.08, map, zIndex: 29,
+        clickable: false
+      });
+      drawingMarkersRef.current.push(glow); // reuse array for cleanup
+      // Main polygon — clickable: false so clicks pass through to the map
+      // (otherwise concave shapes like an L are impossible: clicks inside the
+      // current preview are absorbed by the polygon and never reach the map)
+      drawingPolygonRef.current = new google.maps.Polygon({
+        paths: drawingVertices,
+        strokeColor: nextColor, strokeOpacity: 0.9, strokeWeight: 2,
+        fillColor: nextColor, fillOpacity: 0.2, map,
+        zIndex: 30,
+        clickable: false
+      });
+    }
+    drawingVertices.forEach((v, i) => {
+      const isFirst = i === 0;
+      const nextColor = BUILDING_COLORS[buildings.length % BUILDING_COLORS.length];
+      const canClose = isFirst && drawingVertices.length >= 3;
+      // White circle border behind checkmark when closeable
+      if (canClose) {
+        const circleBg = new google.maps.Marker({
+          position: v, map,
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: nextColor, fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 3, strokeOpacity: 1 },
+          zIndex: 36, clickable: false
+        });
+        drawingMarkersRef.current.push(circleBg);
+      }
+      const marker = new google.maps.Marker({
+        position: v, map,
+        icon: canClose ? {
+          path: 'M-2.5,0 L-1,2 L2.5,-2',
+          scale: 2,
+          fillColor: 'transparent', fillOpacity: 0,
+          strokeColor: '#ffffff', strokeWeight: 3, strokeOpacity: 1,
+          anchor: new google.maps.Point(0, 0),
+        } : {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: isFirst ? 10 : 5,
+          fillColor: nextColor,
+          fillOpacity: 1,
+          strokeColor: '#fff',
+          strokeWeight: isFirst ? 2.5 : 1.5,
+        },
+        zIndex: 37,
+        clickable: canClose
+      });
+      // Add pulsing circle behind first vertex when closeable
+      if (canClose) {
+        const pulseCircle = new google.maps.Marker({
+          position: v, map,
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 20, fillColor: nextColor, fillOpacity: 0.3, strokeColor: nextColor, strokeWeight: 2, strokeOpacity: 0.5 },
+          zIndex: 34, clickable: false
+        });
+        drawingMarkersRef.current.push(pulseCircle);
+      }
+      if (canClose) {
+        marker.addListener('click', () => {
+          finishDrawingFromRef();
+        });
+      }
+      drawingMarkersRef.current.push(marker);
+    });
+    // Calculate panel position near last vertex
+    if (drawingVertices.length >= 1 && nightOverlayRef.current && nightOverlayRef.current.getProjection()) {
+      const last = drawingVertices[drawingVertices.length - 1];
+      const proj = nightOverlayRef.current.getProjection();
+      const px = proj.fromLatLngToContainerPixel(new google.maps.LatLng(last.lat, last.lng));
+      if (px) setDrawPanelPos({ x: px.x, y: px.y });
+    } else {
+      setDrawPanelPos(null);
+    }
+  }, [drawingVertices, buildings.length]);
+
+  const finishDrawingFromRef = () => {
+    const verts = drawingVerticesRef.current;
+    if (verts.length < 3) return;
+    if (buildings.length >= 5) { setDrawingMode(false); setDrawingVertices([]); drawingVerticesRef.current = []; return; }
+    const newBuilding = { polygon: [...verts], height: 30, name: '' };
+    setBuildings(prev => {
+      newBuilding.name = `Bâtiment ${prev.length + 1}`;
+      setEditingBuilding(prev.length);
+      return [...prev, newBuilding];
+    });
+    setBuildingHeight('30');
+    setBuildingName(newBuilding.name);
+    drawingVerticesRef.current = [];
+    setDrawingVertices([]);
+    setDrawingMode(false);
+    if (drawingPolygonRef.current) { drawingPolygonRef.current.setMap(null); drawingPolygonRef.current = null; }
+    drawingMarkersRef.current.forEach(m => m.setMap(null));
+    drawingMarkersRef.current = [];
+  };
+
+  const finishDrawing = () => {
+    if (drawingVertices.length < 3) return;
+    if (buildings.length >= 5) { setDrawingMode(false); setDrawingVertices([]); return; }
+    const newBuilding = { polygon: [...drawingVertices], height: 30, name: `Bâtiment ${buildings.length + 1}` };
+    setBuildings(prev => [...prev, newBuilding]);
+    setEditingBuilding(buildings.length);
+    setBuildingHeight('30');
+    setBuildingName(newBuilding.name);
+    setDrawingVertices([]);
+    setDrawingMode(false);
+    if (drawingPolygonRef.current) { drawingPolygonRef.current.setMap(null); drawingPolygonRef.current = null; }
+    drawingMarkersRef.current.forEach(m => m.setMap(null));
+    drawingMarkersRef.current = [];
+  };
+
+  const deleteBuilding = (idx) => {
+    setBuildings(prev => prev.filter((_, i) => i !== idx));
+    if (editingBuilding === idx) setEditingBuilding(null);
+    else if (editingBuilding > idx) setEditingBuilding(editingBuilding - 1);
+  };
+
+  // Draw building polygons + shadow + 3D extrusion on map
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !SunCalc) return;
+    const eLat = adjustedPos?.lat ?? project?.lat;
+    const eLng = adjustedPos?.lng ?? project?.lng;
+    if (!eLat || !eLng) return;
+
+    // Clear previous
+    buildingPolygonsRef.current.forEach(p => p.setMap(null));
+    buildingPolygonsRef.current = [];
+    shadowPolygonsRef.current.forEach(p => p.setMap(null));
+    shadowPolygonsRef.current = [];
+    wallPolygonsRef.current.forEach(p => p.setMap(null));
+    wallPolygonsRef.current = [];
+    roofPolygonsRef.current.forEach(p => p.setMap(null));
+    roofPolygonsRef.current = [];
+
+    // Sun position for shadow calc
+    const simDate = new Date(sunDate);
+    simDate.setHours(Math.floor(sunHour), Math.round((sunHour % 1) * 60), 0);
+    const sunPos = SunCalc.getPosition(simDate, eLat, eLng);
+    const sunAlt = sunPos.altitude;
+    const sunAz = sunPos.azimuth;
+
+    // === First pass: collect shadow shapes for canvas overlay ===
+    // We render shadows on a canvas using composite-out so the building
+    // footprints carve holes out of the shadow layer (inverted mask).
+    const shadowsData = [];
+    const buildingsData = buildings.filter(b => b.polygon.length >= 3).map(b => b.polygon);
+
+    if (sunAlt > -0.05) {
+      const altDeg = sunAlt * 180 / Math.PI;
+      const shadowOpacity = altDeg >= 5 ? 1 : altDeg <= -3 ? 0 : (altDeg + 3) / 8;
+      if (shadowOpacity > 0) {
+        buildings.forEach((bldg) => {
+          const n = bldg.polygon.length;
+          if (n < 3) return;
+          const shadowLen = Math.min(bldg.height / Math.tan(Math.max(sunAlt, 0.01)), 2000);
+          const sunBearingFromNorth = (sunAz * 180 / Math.PI + 180) % 360;
+          const shadowBearing = (sunBearingFromNorth + 180) % 360;
+          const shadowBearingRad = shadowBearing * Math.PI / 180;
+          const dLat = (shadowLen * Math.cos(shadowBearingRad)) / 111320;
+          const dLng = (shadowLen * Math.sin(shadowBearingRad)) / (111320 * Math.cos(eLat * Math.PI / 180));
+          const projVerts = bldg.polygon.map(v => ({ lat: v.lat + dLat, lng: v.lng + dLng }));
+          shadowsData.push({ path: projVerts, opacity: 0.3 * shadowOpacity });
+          for (let i = 0; i < n; i++) {
+            const j = (i + 1) % n;
+            shadowsData.push({
+              path: [bldg.polygon[i], bldg.polygon[j], projVerts[j], projVerts[i]],
+              opacity: 0.25 * shadowOpacity
+            });
+          }
+        });
+      }
+    }
+
+    // Create canvas overlay (lazy, first render only)
+    if (!shadowOverlayRef.current && window.google && google.maps.OverlayView) {
+      class ShadowCanvas extends google.maps.OverlayView {
+        constructor() { super(); this.canvas = null; this.shadows = []; this.buildings = []; }
+        onAdd() {
+          this.canvas = document.createElement('canvas');
+          this.canvas.style.cssText = 'position:absolute;pointer-events:none;';
+          this.getPanes().overlayLayer.appendChild(this.canvas);
+        }
+        draw() {
+          const projection = this.getProjection();
+          if (!projection || !this.canvas) return;
+          const m = this.getMap();
+          const bounds = m && m.getBounds();
+          if (!bounds) return;
+          const ne = bounds.getNorthEast();
+          const sw = bounds.getSouthWest();
+          const nePx = projection.fromLatLngToDivPixel(ne);
+          const swPx = projection.fromLatLngToDivPixel(sw);
+          const left = Math.min(nePx.x, swPx.x);
+          const right = Math.max(nePx.x, swPx.x);
+          const top = Math.min(nePx.y, swPx.y);
+          const bottom = Math.max(nePx.y, swPx.y);
+          const buffer = 600;
+          const cLeft = Math.floor(left - buffer);
+          const cTop = Math.floor(top - buffer);
+          const cW = Math.ceil(right - left) + 2 * buffer;
+          const cH = Math.ceil(bottom - top) + 2 * buffer;
+          if (this.canvas.width !== cW || this.canvas.height !== cH) {
+            this.canvas.width = cW;
+            this.canvas.height = cH;
+          }
+          this.canvas.style.left = cLeft + 'px';
+          this.canvas.style.top = cTop + 'px';
+          const ctx = this.canvas.getContext('2d');
+          ctx.clearRect(0, 0, cW, cH);
+          const toPx = (ll) => {
+            const dp = projection.fromLatLngToDivPixel(new google.maps.LatLng(ll.lat, ll.lng));
+            return { x: dp.x - cLeft, y: dp.y - cTop };
+          };
+          const tracePath = (path) => {
+            ctx.beginPath();
+            path.forEach((p, i) => {
+              const x = toPx(p);
+              if (i === 0) ctx.moveTo(x.x, x.y);
+              else ctx.lineTo(x.x, x.y);
+            });
+            ctx.closePath();
+          };
+          // Paint shadows
+          ctx.globalCompositeOperation = 'source-over';
+          for (const s of this.shadows) {
+            ctx.fillStyle = 'rgba(0,0,0,' + s.opacity + ')';
+            tracePath(s.path);
+            ctx.fill();
+          }
+          // Carve building footprints out of shadows (inverted mask)
+          ctx.globalCompositeOperation = 'destination-out';
+          ctx.fillStyle = 'rgba(0,0,0,1)';
+          for (const b of this.buildings) {
+            tracePath(b);
+            ctx.fill();
+          }
+        }
+        setData(shadows, buildings) {
+          this.shadows = shadows;
+          this.buildings = buildings;
+          if (this.getProjection()) this.draw();
+        }
+        onRemove() {
+          if (this.canvas && this.canvas.parentNode) this.canvas.parentNode.removeChild(this.canvas);
+          this.canvas = null;
+        }
+      }
+      shadowOverlayRef.current = new ShadowCanvas();
+      shadowOverlayRef.current.setMap(map);
+    }
+    if (shadowOverlayRef.current) {
+      shadowOverlayRef.current.setData(shadowsData, buildingsData);
+    }
+
+    // === Second pass: building polygons (no shadow logic, handled by overlay) ===
+    buildings.forEach((bldg, idx) => {
+      const isSelected = editingBuilding === idx;
+      const n = bldg.polygon.length;
+      if (n < 3) return;
+
+      // Draw building footprint — per-shape color
+      const shapeColor = BUILDING_COLORS[idx % BUILDING_COLORS.length];
+      // Glow behind
+      const glowPoly = new google.maps.Polygon({
+        paths: bldg.polygon,
+        strokeColor: shapeColor, strokeOpacity: 0.4, strokeWeight: isSelected ? 10 : 6,
+        fillColor: 'transparent', fillOpacity: 0, map, zIndex: 24,
+      });
+      buildingPolygonsRef.current.push(glowPoly);
+      
+      const poly = new google.maps.Polygon({
+        paths: bldg.polygon,
+        strokeColor: shapeColor,
+        strokeOpacity: isSelected ? 1 : 0.85, strokeWeight: isSelected ? 2.5 : 1.5,
+        fillColor: shapeColor,
+        fillOpacity: 0.12, map, zIndex: 25,
+        clickable: true
+      });
+      poly.addListener('click', () => {
+        setEditingBuilding(idx);
+        setBuildingHeight(String(bldg.height));
+        setBuildingName(bldg.name);
+      });
+      buildingPolygonsRef.current.push(poly);
+      
+      // Draggable vertex markers for selected building
+      if (isSelected) {
+        bldg.polygon.forEach((v, vi) => {
+          const vertexMarker = new google.maps.Marker({
+            position: v, map, draggable: true,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 6, fillColor: shapeColor, fillOpacity: 1,
+              strokeColor: '#fff', strokeWeight: 2,
+            },
+            zIndex: 40
+          });
+          vertexMarker.addListener('dragend', (e) => {
+            const newPos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+            setBuildings(prev => prev.map((b, bi) => {
+              if (bi !== idx) return b;
+              const newPoly = [...b.polygon];
+              newPoly[vi] = newPos;
+              return { ...b, polygon: newPoly };
+            }));
+          });
+          buildingPolygonsRef.current.push(vertexMarker);
+        });
+      }
+    });
+
+    // Calculate edit panel position near the selected building
+    if (editingBuilding !== null && buildings[editingBuilding]) {
+      const bldg = buildings[editingBuilding];
+      const centroid = bldg.polygon.reduce((acc, v) => ({ lat: acc.lat + v.lat / bldg.polygon.length, lng: acc.lng + v.lng / bldg.polygon.length }), { lat: 0, lng: 0 });
+      const overlay = nightOverlayRef.current;
+      if (overlay && overlay.getProjection()) {
+        const proj = overlay.getProjection();
+        const px = proj.fromLatLngToContainerPixel(new google.maps.LatLng(centroid.lat, centroid.lng));
+        if (px) setEditPanelPos({ x: px.x, y: px.y });
+      }
+    } else {
+      setEditPanelPos(null);
+    }
+
+    return () => {
+      buildingPolygonsRef.current.forEach(p => p.setMap(null));
+      shadowPolygonsRef.current.forEach(p => p.setMap(null));
+      wallPolygonsRef.current.forEach(p => p.setMap(null));
+      roofPolygonsRef.current.forEach(p => p.setMap(null));
+    };
+  }, [buildings, sunHour, sunDate, adjustedPos, editingBuilding, project?.lat, project?.lng, mapType]);
+
+  // === Project files ===
+  const [projectFiles, setProjectFiles] = useState([]);
+  const [fileUrls, setFileUrls] = useState({});
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
+  const [previewFile, setPreviewFile] = useState(null);
+  const fileInputRef = React.useRef(null);
+
+  const totalFilesMB = React.useMemo(() => projectFiles.reduce((s, f) => s + f.size_bytes, 0) / (1024 * 1024), [projectFiles]);
+
+  // Load files on mount / project change
+  useEffect(() => {
+    if (!project?.id) return;
+    fileHelpers.list(project.id).then(files => {
+      setProjectFiles(files);
+      // Get signed URLs for all files
+      Promise.all(files.map(async f => {
+        const url = await fileHelpers.getUrl(f.storage_path);
+        return [f.id, url];
+      })).then(pairs => setFileUrls(Object.fromEntries(pairs)));
+    });
+  }, [project?.id]);
+
+  const handleFileUpload = async (fileList) => {
+    if (!user || !project) { console.error('No user or project'); return; }
+    const files = Array.from(fileList);
+    const allowedExt = ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.pdf'];
+    const valid = files.filter(f => {
+      const ext = '.' + f.name.split('.').pop().toLowerCase();
+      return allowedExt.includes(ext);
+    });
+    if (valid.length === 0) { console.error('No valid files'); return; }
+    const newTotalMB = totalFilesMB + valid.reduce((s, f) => s + f.size, 0) / (1024 * 1024);
+    if (newTotalMB > MAX_PROJECT_FILES_MB) { alert(`Limite de ${MAX_PROJECT_FILES_MB} MB par projet dépassée`); return; }
+    setUploading(true);
+    setUploadProgress(0);
+    try {
+      for (let i = 0; i < valid.length; i++) {
+        const f = valid[i];
+        await fileHelpers.upload(project.id, user.id, f);
+        setUploadProgress(Math.round(((i + 1) / valid.length) * 100));
+      }
+      const updated = await fileHelpers.list(project.id);
+      setProjectFiles(updated);
+      const pairs = await Promise.all(updated.map(async f => {
+        const url = fileUrls[f.id] || await fileHelpers.getUrl(f.storage_path);
+        return [f.id, url];
+      }));
+      setFileUrls(Object.fromEntries(pairs));
+    } catch (e) { console.error('Upload failed:', e); alert('Erreur: ' + e.message); }
+    setUploading(false);
+  };
+
+  const handleFileDelete = async (fileRow) => {
+    await fileHelpers.deleteFile(fileRow);
+    setProjectFiles(p => p.filter(f => f.id !== fileRow.id));
+    setFileUrls(u => { const n = {...u}; delete n[fileRow.id]; return n; });
+  };
+
+  useEffect(() => {
+    if (!project?.lat || !project?.lng) return;
+    let cancelled = false;
+    (async () => {
+      const result = await fetchWeather(project.lat, project.lng);
+      if (cancelled) return;
+      // En vue detail on garde le comportement simple: on n'affiche que les donnees disponibles
+      // (fraiches ou en cache). La banniere globale reste l'affaire de la liste des projets.
+      setWeather(result.data || null);
+    })();
+    return () => { cancelled = true; };
+  }, [project?.lat, project?.lng]);
+
+  // Auto-calculate travel time if missing or when departure changes
+  const lastTravelDepsRef = React.useRef(null);
+  useEffect(() => {
+    const calcTravelIfNeeded = async () => {
+      if (!project) return;
+      if (project.lat && project.lng) {
+        const depLat = project.departureLat || prefs.homeLat;
+        const depLng = project.departureLng || prefs.homeLng;
+        if (depLat && depLng) {
+          // Skip if same deps as last calc
+          const depsKey = `${depLat},${depLng},${project.lat},${project.lng}`;
+          if (project.travelTime && lastTravelDepsRef.current === depsKey) return;
+          lastTravelDepsRef.current = depsKey;
+          try {
+            const travelTime = await getTravelTime(depLat, depLng, project.lat, project.lng);
+            if (travelTime) updateProject(project.id, { travelTime });
+          } catch(e) { console.error('Travel time calc failed:', e); }
+        }
+      }
+    };
+    calcTravelIfNeeded();
+  }, [project?.id, project?.lat, project?.lng, project?.departureLat, project?.departureLng, prefs.homeLat, prefs.homeLng]);
+
+  const recalcTravel = async (depLat, depLng, destLat, destLng) => {
+    if (!depLat || !depLng || !destLat || !destLng) return null;
+    try { return await getTravelTime(depLat, depLng, destLat, destLng); } catch(e) { return null; }
+  };
+
+  // Copie l'adresse du projet dans le presse-papiers (bouton à côté de la flèche Google Maps).
+  // Le repli par textarea + execCommand couvre les contextes où navigator.clipboard est absent ou refusé
+  // (application installée sur iPhone, page servie sans HTTPS).
+  const copyProjectAddress = async () => {
+    const text = project?.address;
+    if (!text) return;
+    let ok = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        ok = true;
+      }
+    } catch(e) {}
+    if (!ok) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.left = '0';
+      ta.style.opacity = '0';
+      ta.style.fontSize = '16px'; // évite le zoom automatique d'iOS sur le focus
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      try { ok = document.execCommand('copy'); } catch(e) {}
+      ta.remove();
+    }
+    if (!ok) return;
+    setAddressCopied(true);
+    clearTimeout(addressCopiedTimer.current);
+    addressCopiedTimer.current = setTimeout(() => setAddressCopied(false), 1600);
+  };
+  useEffect(() => () => clearTimeout(addressCopiedTimer.current), []);
+  // Changer de projet pendant la confirmation: on repart de l'icône copier.
+  useEffect(() => { setAddressCopied(false); }, [projectId]);
+
+  // Google Places Autocomplete for project address
+  useEffect(() => {
+    if (addressInputRef.current && !autocompleteRef.current && window.google) {
+      autocompleteRef.current = new google.maps.places.Autocomplete(addressInputRef.current, {
+        types: ['establishment', 'geocode'],
+        componentRestrictions: { country: 'ca' },
+        fields: ['formatted_address', 'geometry']
+      });
+      autocompleteRef.current.addListener('place_changed', async () => {
+        const place = autocompleteRef.current.getPlace();
+        if (place.geometry) {
+          const lat = place.geometry.location.lat();
+          const lng = place.geometry.location.lng();
+          const depLat = project.departureLat || prefs.homeLat;
+          const depLng = project.departureLng || prefs.homeLng;
+          const travelTime = await recalcTravel(depLat, depLng, lat, lng);
+          updateProject(project.id, { address: place.formatted_address, lat, lng, travelTime });
+        }
+      });
+    }
+  }, [projectId]);
+
+  // Google Places Autocomplete for departure address
+  useEffect(() => {
+    if (departureInputRef.current && !departureAutocompleteRef.current && window.google) {
+      departureAutocompleteRef.current = new google.maps.places.Autocomplete(departureInputRef.current, {
+        types: ['establishment', 'geocode'],
+        componentRestrictions: { country: 'ca' },
+        fields: ['formatted_address', 'geometry']
+      });
+      departureAutocompleteRef.current.addListener('place_changed', async () => {
+        const place = departureAutocompleteRef.current.getPlace();
+        if (place.geometry) {
+          const depLat = place.geometry.location.lat();
+          const depLng = place.geometry.location.lng();
+          const travelTime = await recalcTravel(depLat, depLng, project.lat, project.lng);
+          updateProject(project.id, { 
+            departureAddress: place.formatted_address, 
+            departureLat: depLat, 
+            departureLng: depLng,
+            travelTime 
+          });
+        }
+      });
+    }
+  }, [projectId]);
+
+  // Interactive Google Map with dark mode
+  useEffect(() => {
+    if (!mapContainerRef.current || !project?.lat || !project?.lng || !window.google) return;
+    // Skip map recreation when just confirming adjusted position
+    if (skipMapRecreateRef.current) {
+      skipMapRecreateRef.current = false;
+      return;
+    }
+    
+    const darkStyle = [
+      { elementType: 'geometry', stylers: [{ color: '#2d2d2d' }] },
+      { elementType: 'labels.text.stroke', stylers: [{ color: '#2d2d2d' }] },
+      { elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
+      { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#b0b0b0' }] },
+      { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
+      { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
+      { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#333333' }] },
+      { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#6b8a6b' }] },
+      { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#3a3a3a' }] },
+      { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#252525' }] },
+      { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9a9a9a' }] },
+      { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#4a4a4a' }] },
+      { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#2a2a2a' }] },
+      { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#b0b0b0' }] },
+      { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#353535' }] },
+      { featureType: 'transit.station', elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
+      { featureType: 'transit', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
+      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
+      { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4a4a4a' }] },
+      { featureType: 'water', elementType: 'labels.text.stroke', stylers: [{ color: '#1a1a1a' }] },
+    ];
+
+    const map = new google.maps.Map(mapContainerRef.current, {
+      center: { lat: project.lat, lng: project.lng },
+      zoom: project.mapZoom || (isMobile ? 16 : 18),
+      mapTypeId: mapType,
+      styles: mapType === 'roadmap' ? darkStyle : [
+        { stylers: [{ saturation: 0 }] },
+        { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
+        { featureType: 'transit', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
+      ],
+      disableDefaultUI: true,
+      disableDoubleClickZoom: true,
+      zoomControl: false,
+      gestureHandling: isMobile ? 'cooperative' : 'greedy',
+      scrollwheel: false,
+      mapTypeControl: false,
+      clickableIcons: false,
+      backgroundColor: '#181b1e',
+      ...(isMobile ? { padding: { top: 0, right: 0, bottom: 100, left: 0 } } : {}),
+    });
+    mapInstanceRef.current = map;
+    
+    // Reveal animation — start after tiles load
+    if (!mapRevealedRef.current) {
+      google.maps.event.addListenerOnce(map, 'tilesloaded', () => {
+        if (mapRevealedRef.current) return;
+        mapRevealedRef.current = true;
+        setMapRevealed(true);
+        // Set slider to start of range (far left)
+        const st2 = (project?.lat && project?.lng && SunCalc) ? SunCalc.getTimes(new Date(), project.lat, project.lng) : null;
+        const sr2 = st2?.sunrise ? st2.sunrise.getHours() + st2.sunrise.getMinutes()/60 : 6;
+        const ss2 = st2?.sunset ? st2.sunset.getHours() + st2.sunset.getMinutes()/60 : 18;
+        const range2 = (ss2 - sr2) / (4/6);
+        const min2 = sr2 - (1/6) * range2;
+        setSunHour(min2);
+        setSunHourDisplay(min2);
+        sunHourTargetRef.current = min2;
+        
+        // Animate slider to center of range
+        setTimeout(() => {
+          const targetH = min2 + range2 / 2;
+          const sliderDur = 1000;
+          const sT0 = performance.now();
+          const startH = min2;
+          const animSlider = (now2) => {
+            const p = Math.min(1, (now2 - sT0) / sliderDur);
+            // Match clip easing: cubic-bezier(0.22, 0.61, 0.36, 1)
+            const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+            setSunHour(startH + (targetH - startH) * ease);
+            if (p < 1) requestAnimationFrame(animSlider);
+          };
+          requestAnimationFrame(animSlider);
+        }, 200);
+      });
+    }
+    // Desaturation: CSS filter on container, counter-filter on all overlay panes
+    const counterOverlay = new google.maps.OverlayView();
+    counterOverlay.onAdd = function() {
+      const applyCounter = () => {
+        const panes = this.getPanes();
+        if (!panes) return;
+        Object.values(panes).forEach(pane => {
+          if (pane && pane.style) pane.style.filter = 'saturate(2.0)';
+        });
+      };
+      applyCounter();
+      // Reapply periodically in case panes get recreated
+      this._interval = setInterval(applyCounter, 2000);
+    };
+    counterOverlay.draw = function() {};
+    counterOverlay.onRemove = function() { if (this._interval) clearInterval(this._interval); };
+    counterOverlay.setMap(map);
+    // Zoom uniquement via les boutons + et - de l'interface : plus aucun zoom à la molette
+    // ni au trackpad (geste trop souvent déclenché par erreur). En ne captant plus l'évènement
+    // wheel, le survol de la carte fait défiler la page comme partout ailleurs dans le détail.
+    // Le zoom natif de la carte reste neutralisé par scrollwheel: false; le drag pour déplacer
+    // la carte demeure actif.
+    // No panBy — center pin is at visual center
+    map.addListener('idle', () => { const z = map.getZoom(); if (z !== mapZoom) setMapZoom(z); });
+
+    // Keep center anchored during scroll-zoom (not drag)
+    let isDragging = false;
+    map.addListener('dragstart', () => { isDragging = true; });
+    map.addListener('dragend', () => { isDragging = false; });
+    map.addListener('zoom_changed', () => {
+      if (!isDragging) {
+        const anchor = effectiveCenterRef.current || { lat: project.lat, lng: project.lng };
+        map.setCenter(anchor);
+      }
+      // Immediately reposition sun dot to avoid drift during zoom animation
+      if (sunPosMarkerRef.current && sunBearingRef.current) {
+        const sb = sunBearingRef.current;
+        const b = map.getBounds();
+        if (b) {
+          const R = Math.min(Math.abs(b.getNorthEast().lat() - b.getSouthWest().lat()), Math.abs(b.getNorthEast().lng() - b.getSouthWest().lng())) * 0.38;
+          const newLat = sb.eLat + R * Math.cos(sb.bearing * Math.PI / 180);
+          const newLng = sb.eLng + R * Math.sin(sb.bearing * Math.PI / 180) / Math.cos(sb.eLat * Math.PI / 180);
+          sunPosMarkerRef.current.lat = newLat;
+          sunPosMarkerRef.current.lng = newLng;
+          sunPosMarkerRef.current.draw();
+        }
+      }
+    });
+
+    // Night overlay — inserted into mapPane so it's BELOW polylines
+    class NightOverlay extends google.maps.OverlayView {
+      constructor() { super(); this.div = null; }
+      onAdd() {
+        this.div = document.createElement('div');
+        this.div.style.position = 'absolute';
+        this.div.style.top = '-5000px';
+        this.div.style.left = '-5000px';
+        this.div.style.width = '10000px';
+        this.div.style.height = '10000px';
+        this.div.style.background = 'rgba(15,20,50,0.45)';
+        this.div.style.pointerEvents = 'none';
+        this.div.style.opacity = '0';
+        this.div.style.transition = 'opacity 0.5s ease';
+        this.getPanes().mapPane.appendChild(this.div);
+      }
+      draw() {}
+      setNight(opacity) { if (this.div) this.div.style.opacity = String(opacity); }
+      onRemove() { if (this.div) { this.div.parentNode.removeChild(this.div); this.div = null; } }
+    }
+    if (nightOverlayRef.current) nightOverlayRef.current.setMap(null);
+    nightOverlayRef.current = new NightOverlay();
+    nightOverlayRef.current.setMap(map);
+
+    // Fixed center pin — map pans behind it
+    if (markerRef.current) markerRef.current.setMap(null);
+    markerRef.current = null;
+    // Detect map pan → update adjustedPos (exploratoire, ne modifie PAS le projet)
+    const panListener = map.addListener('idle', () => {
+      const c = map.getCenter();
+      const dist = Math.abs(c.lat() - project.lat) + Math.abs(c.lng() - project.lng);
+      if (dist > 0.00005) {
+        const pos = { lat: c.lat(), lng: c.lng() };
+        setAdjustedPos(pos);
+        effectiveCenterRef.current = pos;
+      } else {
+        setAdjustedPos(null);
+        effectiveCenterRef.current = null;
+      }
+    });
+
+    // Sun lines are drawn by the sunDate/adjustedPos effect.
+    // No drag/zoom listener needed: yellow line, glow, current time line
+    // and sun/moon dot are all drawn on the flareCanvas / as fixed-viewport
+    // divs, so they remain visually pinned during map movement.
+
+    return () => {
+      // When skipping (drag-reposition), don't clean up anything — everything persists
+      if (skipMapRecreateRef.current) return;
+      sunLinesRef.current.forEach(l => l.setMap(null));
+      sunLinesRef.current = [];
+      if (sunPosLineRef.current) { sunPosLineRef.current.setMap(null); sunPosLineRef.current = null; }
+      if (shadowLineRef.current) { shadowLineRef.current.setMap(null); shadowLineRef.current = null; }
+      if (sunPosMarkerRef.current) { sunPosMarkerRef.current.setMap(null); sunPosMarkerRef.current = null; }
+      sunTimePillsRef.current.forEach(el => el.remove()); sunTimePillsRef.current = [];
+      if (nightOverlayRef.current) { nightOverlayRef.current.setMap(null); nightOverlayRef.current = null; }
+      buildingPolygonsRef.current.forEach(p => p.setMap(null)); buildingPolygonsRef.current = [];
+      shadowPolygonsRef.current.forEach(p => p.setMap(null)); shadowPolygonsRef.current = [];
+      wallPolygonsRef.current.forEach(p => p.setMap(null)); wallPolygonsRef.current = [];
+      roofPolygonsRef.current.forEach(p => p.setMap(null)); roofPolygonsRef.current = [];
+      google.maps.event.removeListener(panListener);
+    };
+  }, [project?.lat, project?.lng]);
+
+  // Switch map type without recreating — preserves overlays & zoom
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    map.setMapTypeId(mapType);
+    const darkStyle = [
+      { elementType: 'geometry', stylers: [{ color: '#2c2c2c' }] },
+      { elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+      { elementType: 'labels.text.stroke', stylers: [{ color: '#212121' }] },
+      { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#3c3c3c' }] },
+      { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
+      { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4a4a4a' }] },
+      { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+    ];
+    const satStyle = [
+      { stylers: [{ saturation: 0 }] },
+      { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
+      { featureType: 'transit', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
+    ];
+    map.setOptions({ styles: mapType === 'roadmap' ? darkStyle : satStyle });
+  }, [mapType]);
+
+  // Redraw sun lines when sunDate or adjustedPos changes
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !project?.lat || !project?.lng || !SunCalc) return;
+    const eLat = adjustedPos?.lat ?? project.lat;
+    const eLng = adjustedPos?.lng ?? project.lng;
+    
+    sunLinesRef.current.forEach(l => l.setMap(null));
+    sunLinesRef.current = [];
+    
+    if (!showSunLines || drawingMode) return;
+    const bounds = map.getBounds();
+    const getR = () => {
+      if (!bounds) return 0.003;
+      const latSpan = Math.abs(bounds.getNorthEast().lat() - bounds.getSouthWest().lat());
+      const lngSpan = Math.abs(bounds.getNorthEast().lng() - bounds.getSouthWest().lng());
+      return Math.min(latSpan, lngSpan) * 0.38 * (isMobile ? 0.74 : 1);
+    };
+    
+    const sunTimes = SunCalc.getTimes(sunDate, eLat, eLng);
+    
+    // Helper: offset a point away from center by pixels (for circle cutout)
+    const circleRadiusPx = 17; // 34px/2 + 3px border
+    const metersPerPx = 156543.03392 * Math.cos(eLat * Math.PI / 180) / Math.pow(2, mapZoom);
+    const offsetDeg = (circleRadiusPx * metersPerPx) / 111320;
+    
+    const drawLine = (azRad, color, opacity, weight) => {
+      const bearing = (azRad * 180 / Math.PI + 180) % 360;
+      const R = getR();
+      const bRad = bearing * Math.PI / 180;
+      const startLat = eLat + offsetDeg * Math.cos(bRad);
+      const startLng = eLng + offsetDeg * Math.sin(bRad) / Math.cos(eLat * Math.PI / 180);
+      const lat2 = eLat + R * Math.cos(bRad);
+      const lng2 = eLng + R * Math.sin(bRad) / Math.cos(eLat * Math.PI / 180);
+      const line = new google.maps.Polyline({
+        path: [{ lat: startLat, lng: startLng }, { lat: lat2, lng: lng2 }],
+        strokeColor: color, strokeOpacity: opacity, strokeWeight: weight, map
+      });
+      sunLinesRef.current.push(line);
+    };
+
+    // sr/ss lines drawn on canvas (below: halos, above: lines)
+    
+    // Shadow pie wedge — dark gradient opposite to sun
+    const simDatePie = new Date(sunDate);
+    simDatePie.setHours(Math.floor(sunHour), Math.round((sunHour % 1) * 60), 0);
+    const sunPosPie = SunCalc.getPosition(simDatePie, eLat, eLng);
+    const sunBearingPie = (sunPosPie.azimuth * 180 / Math.PI + 180) % 360;
+    const shadowBearingPie = (sunBearingPie + 180) % 360;
+    const altDegPie = sunPosPie.altitude * 180 / Math.PI;
+    if (altDegPie > 0) {
+      // Shadow wedge drawn on canvas overlay for smooth gradient
+    }
+  }, [sunDate, project?.lat, project?.lng, mapZoom, adjustedPos, showSunLines, drawingMode, sunHour]);
+
+  // Hide POI labels in drawing mode or when sun lines hidden
+  const savedMapStylesRef = React.useRef(null);
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    if (drawingMode || !showSunLines) {
+      savedMapStylesRef.current = map.get('styles') || [];
+      const poiHidden = [
+        ...savedMapStylesRef.current.filter(s => s.featureType !== 'poi' && s.featureType !== 'transit'),
+        { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+        { featureType: 'transit', stylers: [{ visibility: 'off' }] }
+      ];
+      map.setOptions({ styles: poiHidden });
+    } else {
+      if (savedMapStylesRef.current !== null) {
+        map.setOptions({ styles: savedMapStylesRef.current });
+        savedMapStylesRef.current = null;
+      }
+    }
+  }, [drawingMode, showSunLines]);
+
+  // Escape key closes fullscreen map
+  useEffect(() => {
+    if (!showMapFull) return;
+    const onKey = (e) => { if (e.key === 'Escape') setShowMapFull(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showMapFull]);
+
+  // Resize map when fullscreen toggled
+  useEffect(() => {
+    if (mapInstanceRef.current && project?.lat && project?.lng) {
+      const doResize = () => {
+        google.maps.event.trigger(mapInstanceRef.current, 'resize');
+        mapInstanceRef.current.setCenter({ lat: project.lat, lng: project.lng });
+      };
+      setTimeout(doResize, 50);
+      setTimeout(doResize, 300);
+    }
+    document.body.style.overflow = showMapFull ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [showMapFull]);
+
+  // Fetch terrain elevation profile when position changes
+  const elevLat = adjustedPos?.lat ?? project?.lat ?? 0;
+  const elevLng = adjustedPos?.lng ?? project?.lng ?? 0;
+  const elevGridLat = parseFloat(elevLat.toFixed(3));
+  const elevGridLng = parseFloat(elevLng.toFixed(3));
+  React.useEffect(() => {
+    if (!elevLat || !elevLng) return;
+    let cancelled = false;
+    getElevationProfile(elevLat, elevLng).then(profile => {
+      if (!cancelled && profile) {
+        terrainProfileRef.current = profile;
+        setTerrainProfile(profile);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [elevGridLat, elevGridLng]);
+
+  // Separate effect for sun position line (slider) — lightweight update
+  // All dynamic sun elements (yellow line, glow, current time line, sun/moon
+  // dot) are drawn either on the flareCanvas or as fixed-viewport divs,
+  // mutated DIRECTLY via refs (no setState, no Google Maps Polyline). They
+  // stay visually pinned to the viewport center pin during map drag/zoom.
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !project?.lat || !project?.lng || !SunCalc) return;
+    const eLat = adjustedPos?.lat ?? project.lat;
+    const eLng = adjustedPos?.lng ?? project.lng;
+
+    // Hide the sun/moon dot div while we recompute (will re-show below if needed)
+    if (sunDotContainerRef.current) sunDotContainerRef.current.style.display = 'none';
+
+    if (!showSunLines || drawingMode) {
+      if (flareCanvasRef.current) { const fc = flareCanvasRef.current.getContext('2d'); fc && fc.clearRect(0, 0, flareCanvasRef.current.width, flareCanvasRef.current.height); }
+      return;
+    }
+
+    const sunTimes = SunCalc.getTimes(sunDate, eLat, eLng);
+    const srTime = sunTimes.sunrise ? sunTimes.sunrise.getHours() + sunTimes.sunrise.getMinutes()/60 : 6;
+    const ssTime = sunTimes.sunset ? sunTimes.sunset.getHours() + sunTimes.sunset.getMinutes()/60 : 18;
+
+    const simDate = new Date(sunDate);
+    simDate.setHours(Math.floor(sunHour), Math.round((sunHour % 1) * 60), 0);
+    const sunPos = SunCalc.getPosition(simDate, eLat, eLng);
+    const bearing = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
+    sunBearingRef.current = { bearing, eLat, eLng };
+
+    const isDay = sunHour >= srTime && sunHour <= ssTime;
+    const isGoldenBefore = sunHour >= (srTime - 1) && sunHour < srTime;
+    const isGoldenAfter = sunHour > ssTime && sunHour <= (ssTime + 1);
+    const isNight = !isDay && !isGoldenBefore && !isGoldenAfter;
+    // Moon mode: as soon as sun passes ss or sr lines
+    const isMoonMode = sunHour > ssTime || sunHour < srTime;
+    const lineColor = isMoonMode ? '#c8d8f0' : '#ffe26b';
+    const lineOpacity = isMoonMode ? 0.7 : (isGoldenBefore || isGoldenAfter) ? 0.8 : 1;
+
+    // Terrain shadow check
+    const sunAltDeg = sunPos.altitude * 180 / Math.PI;
+    const inTerrainShadow = isTerrainShadow(terrainProfileRef.current, bearing, sunAltDeg);
+    setTerrainShadow(inTerrainShadow);
+
+    // Lens flare + shadow wedge — project to screen
+    const overlay = nightOverlayRef.current;
+    if (overlay && overlay.getProjection() && flareCanvasRef.current) {
+      const proj = overlay.getProjection();
+      const centerPx = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat, eLng));
+      if (centerPx) {
+        const container = mapContainerRef.current;
+        const w = container ? container.offsetWidth : 400;
+        const h = container ? container.offsetHeight : 400;
+        const canvas = flareCanvasRef.current;
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, w, h);
+        // Clean up previous time pills
+        sunTimePillsRef.current.forEach(el => el.remove());
+        sunTimePillsRef.current = [];
+
+        // Compute line length in pixels — used by sr/ss white lines AND by
+        // the yellow sun line + current time line + sun/moon dot below.
+        // Same formula as before, sorti du block sr/ss pour partage.
+        const rDeg = (() => {
+          const b = map.getBounds();
+          if (!b) return 0.003;
+          const latS = Math.abs(b.getNorthEast().lat() - b.getSouthWest().lat());
+          const lngS = Math.abs(b.getNorthEast().lng() - b.getSouthWest().lng());
+          return Math.min(latS, lngS) * 0.38 * (isMobile ? 0.74 : 1);
+        })();
+        const endPtR = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat + rDeg, eLng));
+        const wLinePx = Math.abs(endPtR.y - centerPx.y);
+        const circOff = 17;
+
+        // Sun position at current sunHour, in screen-space pixels
+        const sunScrAngle = ((sunPos.azimuth * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
+        const sunPx = {
+          x: centerPx.x + Math.cos(sunScrAngle) * wLinePx,
+          y: centerPx.y + Math.sin(sunScrAngle) * wLinePx
+        };
+
+        // Sunrise & Sunset line halos — drawn first (behind white lines)
+        if (sunTimes.sunrise && sunTimes.sunset) {
+          const srAzH = SunCalc.getPosition(sunTimes.sunrise, eLat, eLng).azimuth;
+          const ssAzH = SunCalc.getPosition(sunTimes.sunset, eLat, eLng).azimuth;
+          const srScrH = ((srAzH * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
+          const ssScrH = ((ssAzH * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
+          const haloLen = Math.max(w, h) * 1.5;
+          const rDegH = (() => {
+            const b = map.getBounds();
+            if (!b) return 0.003;
+            const latS = Math.abs(b.getNorthEast().lat() - b.getSouthWest().lat());
+            const lngS = Math.abs(b.getNorthEast().lng() - b.getSouthWest().lng());
+            return Math.min(latS, lngS) * 0.38 * (isMobile ? 0.74 : 1);
+          })();
+          const endPtH = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat + rDegH, eLng));
+          const centerPtH = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat, eLng));
+          const lineLenPx = Math.abs(endPtH.y - centerPtH.y);
+
+          const drawLineHalo = (lineAngle, cr, cg, cb) => {
+            const dist = lineLenPx * 0.45;
+            const gx = centerPx.x + Math.cos(lineAngle) * dist;
+            const gy = centerPx.y + Math.sin(lineAngle) * dist;
+            const radius = isMobile ? 221 : 300;
+            
+            ctx.save();
+            ctx.globalCompositeOperation = 'overlay';
+            ctx.beginPath();
+            ctx.moveTo(centerPx.x, centerPx.y);
+            ctx.arc(centerPx.x, centerPx.y, haloLen, srScrH, ssScrH);
+            ctx.closePath();
+            ctx.clip();
+
+            const hGrad = ctx.createRadialGradient(gx, gy, 0, gx, gy, radius);
+            hGrad.addColorStop(0, 'rgba('+cr+','+cg+','+cb+',0.75)');
+            hGrad.addColorStop(0.2, 'rgba('+cr+','+cg+','+cb+',0.45)');
+            hGrad.addColorStop(0.5, 'rgba('+cr+','+cg+','+cb+',0.15)');
+            hGrad.addColorStop(1, 'rgba('+cr+','+cg+','+cb+',0)');
+            ctx.fillStyle = hGrad;
+            ctx.fillRect(0, 0, w, h);
+            ctx.restore();
+          };
+          drawLineHalo(srScrH, 172, 156, 77);
+          drawLineHalo(ssScrH, 30, 47, 63);
+        }
+        
+        // Shadow wedge — smooth radial gradient clamped to sunrise/sunset
+        const altDeg = sunPos.altitude * 180 / Math.PI;
+        if (altDeg > 0 && !isNight) {
+          const sunBearingDeg = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
+          // Sunrise/sunset bearings
+          const srAzRad = sunTimes.sunrise ? SunCalc.getPosition(sunTimes.sunrise, eLat, eLng).azimuth : 0;
+          const ssAzRad = sunTimes.sunset ? SunCalc.getPosition(sunTimes.sunset, eLat, eLng).azimuth : 0;
+          // Convert to screen angles (bearing 0=north=up, canvas 0=right, so rotate -90)
+          const srScreenAngle = ((srAzRad * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
+          const ssScreenAngle = ((ssAzRad * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
+          const shadowScreenAngle = (((sunBearingDeg + 180) % 360) - 90) * Math.PI / 180;
+          
+          // Wedge half-angle
+          const wedgeHalf = Math.max(10, 30 - altDeg * 0.4) * Math.PI / 180;
+          // Length scales with altitude
+          const shadowLen = altDeg < 10 ? 0.8 : altDeg < 30 ? 0.8 - (altDeg - 10) * 0.02 : altDeg < 60 ? 0.4 - (altDeg - 30) * 0.005 : 0.25;
+          const maxR = Math.max(w, h) * shadowLen;
+          const circleR = 17;
+          
+          // Normalize angles to find distance from shadow edges to sr/ss lines
+          const normAngle = (a) => { let v = a % (2*Math.PI); if (v < 0) v += 2*Math.PI; return v; };
+          const angleDist = (a, b) => { let d = normAngle(a - b); return d > Math.PI ? 2*Math.PI - d : d; };
+          
+          // Distance from shadow edge to sr and ss lines
+          const distToSr = angleDist(shadowScreenAngle, srScreenAngle);
+          const distToSs = angleDist(shadowScreenAngle, ssScreenAngle);
+          
+          // Clamp wedge so it doesn't pass sr/ss lines (with 5° margin)
+          const margin = 5 * Math.PI / 180;
+          const leftEdge = shadowScreenAngle - wedgeHalf;
+          const rightEdge = shadowScreenAngle + wedgeHalf;
+          const distLeftToSr = angleDist(leftEdge, srScreenAngle);
+          const distLeftToSs = angleDist(leftEdge, ssScreenAngle);
+          const distRightToSr = angleDist(rightEdge, srScreenAngle);
+          const distRightToSs = angleDist(rightEdge, ssScreenAngle);
+          
+          // Compute how close shadow center is to sr/ss — fade opacity
+          const minDist = Math.min(distToSr, distToSs);
+          const fadeZone = 45 * Math.PI / 180; // fade over 45 degrees — very gradual
+          const edgeFade = minDist < fadeZone ? Math.pow(minDist / fadeZone, 0.7) : 1;
+          const baseOpacity = 0.5 * edgeFade;
+          
+          // Clip to night-side arc (between sr and ss on shadow side)
+          ctx.save();
+          // First clip: sr to ss on the shadow side
+          ctx.beginPath();
+          ctx.moveTo(centerPx.x, centerPx.y);
+          // Draw arc from sr line to ss line going through shadow direction (the long way around on shadow side)
+          let srN = normAngle(srScreenAngle);
+          let ssN = normAngle(ssScreenAngle);
+          // The shadow side is the arc from ss → sr going the other way (through shadow)
+          ctx.arc(centerPx.x, centerPx.y, maxR * 1.5, ssScreenAngle, srScreenAngle);
+          ctx.closePath();
+          ctx.clip();
+          
+          // Now draw the wedge within the clipped region
+          ctx.beginPath();
+          ctx.moveTo(centerPx.x, centerPx.y);
+          ctx.arc(centerPx.x, centerPx.y, maxR, shadowScreenAngle - wedgeHalf, shadowScreenAngle + wedgeHalf);
+          ctx.closePath();
+          ctx.clip();
+          
+          // Smooth radial gradient — soft and blurry
+          const grad = ctx.createRadialGradient(centerPx.x, centerPx.y, circleR, centerPx.x, centerPx.y, maxR);
+          grad.addColorStop(0, `rgba(0,0,0,${0.40 * edgeFade})`);
+          grad.addColorStop(0.1, `rgba(0,0,0,${0.28 * edgeFade})`);
+          grad.addColorStop(0.3, `rgba(0,0,0,${0.12 * edgeFade})`);
+          grad.addColorStop(0.6, `rgba(0,0,0,${0.04 * edgeFade})`);              grad.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, w, h);
+          ctx.restore();
+          
+          // Soft feathered edge (also clipped)
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(centerPx.x, centerPx.y);
+          ctx.arc(centerPx.x, centerPx.y, maxR * 1.5, ssScreenAngle, srScreenAngle);
+          ctx.closePath();
+          ctx.clip();
+          ctx.beginPath();
+          ctx.moveTo(centerPx.x, centerPx.y);
+          ctx.arc(centerPx.x, centerPx.y, maxR * 1.3, shadowScreenAngle - wedgeHalf * 1.8, shadowScreenAngle + wedgeHalf * 1.8);
+          ctx.closePath();
+          ctx.clip();
+          const grad2 = ctx.createRadialGradient(centerPx.x, centerPx.y, circleR, centerPx.x, centerPx.y, maxR * 0.6);
+          grad2.addColorStop(0, `rgba(0,0,0,${0.12 * edgeFade})`);
+          grad2.addColorStop(0.3, `rgba(0,0,0,${0.05 * edgeFade})`);
+          grad2.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = grad2;
+          ctx.fillRect(0, 0, w, h);
+          ctx.restore();
+        }
+        
+        // White sr/ss lines — on top of shadow + halos
+        // (uses wLinePx + circOff already computed at top of block)
+        if (sunTimes.sunrise && sunTimes.sunset) {
+          const srAzW = SunCalc.getPosition(sunTimes.sunrise, eLat, eLng).azimuth;
+          const ssAzW = SunCalc.getPosition(sunTimes.sunset, eLat, eLng).azimuth;
+          const srScrW = ((srAzW * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
+          const ssScrW = ((ssAzW * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
+          const drawCanvasLine = (scrAngle) => {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(centerPx.x + Math.cos(scrAngle) * circOff, centerPx.y + Math.sin(scrAngle) * circOff);
+            ctx.lineTo(centerPx.x + Math.cos(scrAngle) * wLinePx, centerPx.y + Math.sin(scrAngle) * wLinePx);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+            ctx.restore();
+          };
+          drawCanvasLine(srScrW);
+          drawCanvasLine(ssScrW);
+
+          // SR/SS time pills at line endpoints (drawn as DOM overlays for sharp text)
+          const formatHM = (d) => { const h = d.getHours(); const m = String(d.getMinutes()).padStart(2, '0'); return `${h}H${m}`; };
+          const drawTimePill = (scrAngle, timeStr, nudgeX, nudgeY) => {
+            const ex = centerPx.x + Math.cos(scrAngle) * wLinePx;
+            const ey = centerPx.y + Math.sin(scrAngle) * wLinePx;
+            const pill = document.createElement('div');
+            pill.className = 'font-bebas-regular';
+            pill.textContent = timeStr;
+            // Pill touches line endpoint at its inner round edge
+            const pillHalfW = 30;
+            const offX = Math.cos(scrAngle) * pillHalfW + (nudgeX || 0);
+            const offY = Math.sin(scrAngle) * pillHalfW + (nudgeY || 0);
+            pill.style.cssText = `position:absolute;left:${ex + offX}px;top:${ey + offY}px;transform:translate(-50%,-50%);background:rgba(0,0,0,0.25);color:#fff;font-size:17px;padding:4px 10px 2px;border-radius:12px;pointer-events:none;white-space:nowrap;letter-spacing:0.04em;line-height:1;z-index:4`;
+            canvas.parentElement.appendChild(pill);
+            sunTimePillsRef.current.push(pill);
+          };
+          if (sunTimes.sunrise) drawTimePill(srScrW, formatHM(sunTimes.sunrise), -3, -4);
+          if (sunTimes.sunset) drawTimePill(ssScrW, formatHM(sunTimes.sunset), 2, -3);
+        }
+
+        // === Dynamic sun overlays — drawn on the SAME canvas, fixed to viewport ===
+        // Yellow line glow (or moon glow)
+        ctx.save();
+        ctx.lineCap = 'round';
+        if (!isMoonMode) {
+          ctx.strokeStyle = '#ffe26b';
+          ctx.globalAlpha = isMobile ? 0.017 : 0.15;
+          ctx.lineWidth = 36;
+        } else {
+          ctx.strokeStyle = '#c8d8f0';
+          ctx.globalAlpha = isMobile ? 0.05 : 0.1;
+          ctx.lineWidth = 24;
+        }
+        ctx.beginPath();
+        ctx.moveTo(centerPx.x + Math.cos(sunScrAngle) * circOff, centerPx.y + Math.sin(sunScrAngle) * circOff);
+        ctx.lineTo(sunPx.x, sunPx.y);
+        ctx.stroke();
+        ctx.restore();
+
+        // Yellow line (or blue at night) — main sun position line at current sunHour
+        ctx.save();
+        ctx.strokeStyle = lineColor;
+        ctx.globalAlpha = lineOpacity;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(centerPx.x + Math.cos(sunScrAngle) * circOff, centerPx.y + Math.sin(sunScrAngle) * circOff);
+        ctx.lineTo(sunPx.x, sunPx.y);
+        ctx.stroke();
+        ctx.restore();
+
+        // White line for current real-world time (only if sun is up or twilight)
+        {
+          const now = new Date();
+          const nowH = now.getHours() + now.getMinutes()/60;
+          if (nowH >= (srTime - 1) && nowH <= (ssTime + 1)) {
+            const sunPosNow = SunCalc.getPosition(now, eLat, eLng);
+            const nowScrAngle = ((sunPosNow.azimuth * 180 / Math.PI + 180) % 360 - 90) * Math.PI / 180;
+            ctx.save();
+            ctx.strokeStyle = '#ffffff';
+            ctx.globalAlpha = 0.35;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(centerPx.x + Math.cos(nowScrAngle) * circOff, centerPx.y + Math.sin(nowScrAngle) * circOff);
+            ctx.lineTo(centerPx.x + Math.cos(nowScrAngle) * wLinePx, centerPx.y + Math.sin(nowScrAngle) * wLinePx);
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+
+        // === Sun/Moon dot — positioned in pixels, fixed to viewport ===
+        // Mutates refs.current.style directly, no React re-render.
+        if (sunDotContainerRef.current && sunDotInnerRef.current && sunDotHaloRef.current) {
+          const dotContainer = sunDotContainerRef.current;
+          const dotInner = sunDotInnerRef.current;
+          const dotHalo = sunDotHaloRef.current;
+          const moonSz = 24, sunSz = 18, haloSz = 70;
+          const totalSz = isMoonMode ? haloSz : sunSz;
+          const innerOffset = isMoonMode ? (haloSz - moonSz) / 2 : 0;
+          const innerSz = isMoonMode ? moonSz : sunSz;
+          const newLeft = sunPx.x - totalSz / 2;
+          const newTop = sunPx.y - totalSz / 2;
+          const prevLeft = parseFloat(dotContainer.style.left);
+          const prevTop = parseFloat(dotContainer.style.top);
+          dotContainer.style.display = 'block';
+          dotContainer.style.left = newLeft + 'px';
+          dotContainer.style.top = newTop + 'px';
+          dotContainer.style.width = totalSz + 'px';
+          dotContainer.style.height = totalSz + 'px';
+          if (isMoonMode) {
+            dotHalo.style.display = 'block';
+            dotHalo.style.left = '0px';
+            dotHalo.style.top = '0px';
+            dotHalo.style.width = haloSz + 'px';
+            dotHalo.style.height = haloSz + 'px';
+            dotHalo.style.background = 'radial-gradient(circle, rgba(230,225,210,0.25) 0%, rgba(210,205,190,0.12) 35%, rgba(190,185,170,0.04) 60%, transparent 75%)';
+            dotInner.style.width = innerSz + 'px';
+            dotInner.style.height = innerSz + 'px';
+            dotInner.style.left = innerOffset + 'px';
+            dotInner.style.top = innerOffset + 'px';
+            dotInner.style.background = 'radial-gradient(circle at 35% 30%, #faf6ee 0%, #f0e8d8 20%, #ddd5c5 45%, #c8bfaf 70%, #b5ad9d 100%)';
+            dotInner.style.boxShadow = '0 0 6px 2px rgba(245,240,225,0.7), inset -4px -3px 6px rgba(0,0,0,0.2), inset 2px 2px 4px rgba(255,255,255,0.35), inset -1px 1px 2px rgba(0,0,0,0.1)';
+            dotInner.style.border = '1px solid rgba(255,255,255,0.4)';
+          } else {
+            dotHalo.style.display = 'none';
+            dotInner.style.width = innerSz + 'px';
+            dotInner.style.height = innerSz + 'px';
+            dotInner.style.left = '0px';
+            dotInner.style.top = '0px';
+            dotInner.style.background = 'radial-gradient(circle, #ffe26b 50%, rgba(255,226,107,0.3) 100%)';
+            dotInner.style.boxShadow = '0 0 6px 2px rgba(255,226,107,0.9), 0 0 14px 4px rgba(255,226,107,0.5), 0 0 3px 1px rgba(255,255,255,0.8)';
+            dotInner.style.border = '2px solid rgba(255,255,255,0.6)';
+          }
+          // Motion blur — applied instantly, cleared instantly by JS.
+          // No CSS transition: the blur tracks the dot position frame by
+          // frame (visible while moving, gone at rest), no lag, no smear.
+          if (!isNaN(prevLeft) && !isNaN(prevTop)) {
+            const dx = newLeft - prevLeft;
+            const dy = newTop - prevTop;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 1) {
+              dotInner.style.filter = 'blur(' + Math.min(dist * 0.4, 6) + 'px)';
+              requestAnimationFrame(() => {
+                if (sunDotInnerRef.current) sunDotInnerRef.current.style.filter = 'blur(0px)';
+              });
+            } else {
+              dotInner.style.filter = 'blur(0px)';
+            }
+          } else {
+            dotInner.style.filter = 'blur(0px)';
+          }
+        }
+
+        // Lens flare
+        drawLensFlare(sunPx.x, sunPx.y, w, h, sunPos.altitude);
+      }
+    }
+  }, [sunHour, project?.lat, project?.lng, mapType, mapZoom, sunDate, adjustedPos, showSunLines, drawingMode]);
+
+  // Night overlay toggle
+  useEffect(() => {
+    if (nightOverlayRef.current) nightOverlayRef.current.setNight(nightOpacity);
+  }, [nightOpacity]);
+
+  // Current time white line is now drawn on the flareCanvas in the
+  // sun-position-line effect above (fixed to viewport, no Google Maps Polyline).
+  const currentTimeLineRef = React.useRef(null);
+
+  if (!project) return null;
+  const sun = weather?.daily?.[0];
+  const departAM = calcDeparture(sun?.sunrise, project.travelTime?.durationSeconds);
+  const departPM = calcDeparture(sun?.sunset, project.travelTime?.durationSeconds);
+
+  const colorActive = '#FAF9F7';
+  const colorInactive = '#404A48';
+  const colorCharcoal = '#8B9B99';
+  const colorRed = '#d83152';
+
+  const handleDelete = () => {
+    if (confirm) { deleteProject(project.id); onClose(); }
+    else { setConfirm(true); setConfirmDone(false); setTimeout(() => setConfirm(false), 3000); }
+  };
+  const handleDone = () => {
+    if (confirmDone) { advanceProject(project.id); onClose(); }
+    else { setConfirmDone(true); setConfirm(false); setTimeout(() => setConfirmDone(false), 3000); }
+  };
+
+  // Hourly weather helper
+  const getIconFromCloudcover = (cc, origIcon, isNight = false, sunFraction = null, cloudLow = null, smoke = 0) => {
+    if (origIcon === 'thunderstorm') return 'thunderstorm';
+    if (origIcon === 'snow') return 'snow';
+    if (origIcon === 'rain') return 'rain';
+    if (!isNight) {
+      // Fumee de feux: signalee par la teinte de fond seulement; l'icone reste la vraie meteo.
+      const veil = veilIcon(cc, cloudLow, sunFraction);
+      if (veil) return veil;
+    }
+    return cloudcoverToIcon(cc, isNight);
+  };
+
+  // Group hourly by day for separators
+  const renderHourlyWeather = () => {
+    if (!project?.lat || !project?.lng) {
+      return null;
+    }
+    if (!weather?.hourly?.length) {
+      return <div className="flex gap-2 py-4">{[...Array(12)].map((_,i) => <div key={i} className="flex flex-col items-center gap-2 min-w-[48px]"><div className="w-12 h-4 bg-cream-dark rounded animate-pulse"/><div className="w-8 h-8 bg-cream-dark rounded-full animate-pulse"/></div>)}</div>;
+    }
+
+    const now = new Date();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const filtered = weather.hourly.filter(h => new Date(h.time) >= oneHourAgo).slice(0, 72);
+    
+    // Get sunrise/sunset for each day from daily data
+    const dailyMap = {};
+    if (weather?.daily) {
+      weather.daily.forEach(d => {
+        const dateStr = new Date(d.sunrise).toDateString();
+        dailyMap[dateStr] = { sunrise: d.sunrise, sunset: d.sunset };
+      });
+    }
+
+    // Group by day
+    const days = [];
+    let currentDay = null;
+    filtered.forEach(h => {
+      const hDate = new Date(h.time);
+      const dateStr = hDate.toDateString();
+      if (dateStr !== currentDay) {
+        days.push({ date: hDate, dateStr, hours: [], sun: dailyMap[dateStr] || null });
+        currentDay = dateStr;
+      }
+      days[days.length - 1].hours.push(h);
+    });
+
+    return (
+      <div className="relative">
+        <div className="flex gap-0 pt-0 pb-2 overflow-x-auto hour-scroll items-start">
+          {days.map((day, di) => {
+            const sunriseH = day.sun?.sunrise ? new Date(day.sun.sunrise).getHours() : null;
+            const sunsetH = day.sun?.sunset ? new Date(day.sun.sunset).getHours() : null;
+            const sunriseM = day.sun?.sunrise ? new Date(day.sun.sunrise).getMinutes() : null;
+            const sunsetM = day.sun?.sunset ? new Date(day.sun.sunset).getMinutes() : null;
+            
+            return (
+              <React.Fragment key={day.dateStr}>
+                {/* Day separator - vertical line between days */}
+                {di > 0 && (
+                  <div style={{ width: '1px', background: 'rgba(255,255,255,0.15)', alignSelf: 'stretch', flexShrink: 0, margin: '0 2px', marginBottom: '-8px' }}/>
+                )}
+                {/* Day header */}
+                <div className="flex flex-col flex-shrink-0">
+                  <div className="px-2" style={{ paddingBottom: '0', marginBottom: '-9px' }}>
+                    <span className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '19px', whiteSpace: 'nowrap', color: '#8B9B99' }}>
+                      {['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'][day.date.getDay()]} {day.date.getDate()} {['JAN','FÉV','MAR','AVR','MAI','JUN','JUL','AOÛ','SEP','OCT','NOV','DÉC'][day.date.getMonth()]}.
+                    </span>
+                  </div>
+                  {/* Hours row */}
+                  <div className="flex gap-0">
+                    {day.hours.map(h => {
+                      const hDate = new Date(h.time);
+                      const hr = hDate.getHours();
+                      const min = hDate.getMinutes();
+                      const isSunrise = sunriseH === hr;
+                      const isSunset = sunsetH === hr;
+                      const isNight = sunriseH !== null && sunsetH !== null && (hr < sunriseH || hr >= sunsetH);
+                      const icon = getIconFromCloudcover(h.cloudcover, h.icon, isNight, h.sunFraction, h.cloudLow, h.smoke);
+                      // Soleil direct (lumiere qui filtre reellement): % + teinte calee sur l'echelle des icones de voile.
+                      const sunPct = h.sunFraction != null ? Math.round(h.sunFraction * 100) : null;
+                      const sunColor = sunPct == null ? '#6f7d7b' : sunPct >= 60 ? '#E9D27A' : sunPct >= 45 ? '#E4CB78' : sunPct >= 32 ? '#DBCD92' : sunPct >= 20 ? '#CFC8A4' : sunPct >= 10 ? '#C3BDAA' : '#A7A99C';
+
+                      // Format sunrise/sunset time
+                      let timeLabel = `${hr}H`;
+                      if (isSunrise && sunriseM !== null) {
+                        const formattedSR = formatTime(day.sun.sunrise).replace(':','H');
+                        timeLabel = formattedSR;
+                      } else if (isSunset && sunsetM !== null) {
+                        const formattedSS = formatTime(day.sun.sunset).replace(':','H');
+                        timeLabel = formattedSS;
+                      }
+
+                      return (
+                        <div key={h.time} className={`flex flex-col items-center gap-0 min-w-[56px] px-0 py-1 ${isNight ? 'bg-charcoal/5' : ''}`} style={!isNight && h.smoke ? { background: SMOKE_TINT[h.smoke] } : undefined}>
+                          {/* Sunrise/sunset chevron above time */}
+                          {isSunrise && <svg width="18" height="10" viewBox="0 0 18 10" style={{ marginBottom: '8px' }}><polyline points="1,9 9,2 17,9" fill="none" stroke="#404A48" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          {isSunset && <svg width="18" height="10" viewBox="0 0 18 10" style={{ marginBottom: '8px' }}><polyline points="1,1 9,8 17,1" fill="none" stroke="#404A48" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          {!(isSunrise || isSunset) && <div style={{ height: '10px', marginBottom: '8px' }}/>}
+                          <span className="font-bebas-bold leading-none" style={{ letterSpacing: '0.04em', 
+                            fontSize: (isSunrise || isSunset) ? '20px' : '18px',
+                            color: (isSunrise || isSunset) ? '#ffffff' : undefined
+                          }}>
+                            <span className={!(isSunrise || isSunset) ? 'text-charcoal-muted' : ''}>{timeLabel}</span>
+                          </span>
+                          <WeatherIcon type={icon} className={`w-10 h-10 ${isNight ? 'opacity-50' : ''}`}/>
+                          <span className="font-bebas-bold text-base leading-none text-charcoal" style={{ letterSpacing: '0.04em', marginTop: '7px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                            <svg width="12" height="12" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><g fill="#8A9794"><circle cx="12" cy="18" r="6"/><circle cx="20" cy="16" r="7"/><rect x="8" y="18" width="15" height="6" rx="3"/></g></svg>
+                            {h.cloudcover != null ? `${h.cloudcover}%` : '--'}
+                          </span>
+                          <span className="font-bebas-bold text-base leading-none" style={{ letterSpacing: '0.04em', marginTop: '7px', display: 'inline-flex', alignItems: 'center', gap: '3px', color: sunColor }}>
+                            <svg width="11" height="11" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><circle cx="16" cy="16" r="8" fill={sunColor}/></svg>
+                            {sunPct != null ? `${sunPct}%` : '--'}
+                          </span>
+                          <span className="font-bebas-bold text-base leading-none text-charcoal-muted" style={{ letterSpacing: '0.04em', marginTop: '7px' }}>{h.temp}°</span>
+                          <span className="font-bebas-bold text-sm leading-none text-charcoal-muted" style={{ marginTop: '7px' }}>{h.wind} <span className="text-xs">{t('kmh')}</span></span>
+                          {h.precip > 0 && <span className="font-bebas-bold text-sm leading-none" style={{ marginTop: '7px', letterSpacing: '0.04em', color: '#7dd3c6' }}>{h.precip < 1 ? h.precip.toFixed(1) : Math.round(h.precip)} <span className="text-xs">MM</span></span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </div>
+        {!isMobile && <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-cream to-transparent pointer-events-none"/>}
+      </div>
+    );
+  };
+
+  return (
+    <div className="pt-6 animate-fade-in" style={isMobile ? { paddingTop: 'calc(24px + 25px)', paddingBottom: 'calc(130px + env(safe-area-inset-bottom))' } : { paddingTop: '75px', paddingBottom: '32px' }}>
+      {/* Bande météo + infos — même layout que l'accueil */}
+      <div className={`border-b border-adaptive py-4 ${isMobile ? 'px-4' : 'px-8'} overflow-hidden`}>
+        <button onClick={onClose} className="text-charcoal-muted hover:text-charcoal transition-colors mb-4" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div style={{ marginBottom: isMobile ? '8px' : '5px' }}>
+          <h3 className="font-bebas-book text-charcoal flex items-center gap-2" style={{ letterSpacing: '0.04em', fontSize: isMobile ? '24px' : '35px', lineHeight: '1.1', marginBottom: '0' }}>
+            {editingName ? (
+              <input 
+                autoFocus
+                defaultValue={project.name}
+                className="bg-transparent outline-none font-bebas-book text-charcoal"
+                style={{ letterSpacing: '0.04em', fontSize: isMobile ? '24px' : '35px', width: '80vw', maxWidth: '1200px' }}
+                onBlur={e => { const v = e.target.value.trim(); if (v && v !== project.name) updateProject(project.id, { name: v }); setEditingName(false); }}
+                onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingName(false); }}
+              />
+            ) : (
+              <span onClick={() => setEditingName(true)} className="cursor-pointer hover:opacity-70 transition-opacity">{project.name}</span>
+            )} {project.isContest && <StarIcon/>}
+          </h3>
+        </div>
+        {isMobile ? (
+          /* ===== MOBILE: vertical stack ===== */
+          <div>
+            <div className="flex items-stretch font-bebas-bold uppercase" style={{ letterSpacing: '0.04em', fontSize: '17px', lineHeight: '1', marginTop: '8px', padding: '4px 0' }}>
+              <div className="flex flex-col justify-center pl-2" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
+                {Object.values(MandateType).filter(m => project.mandates?.includes(m)).map(m => {
+                  return <React.Fragment key={m}>{renderMandate(m, colorActive)}</React.Fragment>;
+                })}
+              </div>
+              <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
+                <span style={{ color: colorInactive }}>{t('sun')}</span>
+                <span style={{ color: project.orientation?.includes('AM') ? colorActive : colorInactive }}>
+                  AM {sun ? formatTime(sun.sunrise) : '—'}
+                </span>
+                <span style={{ color: project.orientation?.includes('PM') ? colorActive : colorInactive }}>
+                  PM {sun ? formatTime(sun.sunset) : '—'}
+                </span>
+              </div>
+              <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
+                <span style={{ color: colorInactive }}>{t('travel')}</span>
+                <span style={{ color: project.travelTime?.durationSeconds ? colorActive : colorInactive }}>{project.travelTime?.durationSeconds ? formatDuration(project.travelTime.durationSeconds) : '—'}</span>
+                {project.travelTime?.distanceMeters > 0 ? <span style={{ color: colorCharcoal, letterSpacing: "0.1em", marginTop: "-3px", fontSize: "inherit" }}>{Math.round(project.travelTime.distanceMeters / 1000)} KM</span> : <span style={{ color: 'transparent' }}>&nbsp;</span>}
+              </div>
+              <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
+                <span style={{ color: colorInactive }}>{t('depart')}</span>
+                <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '—'}</span>
+                <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '—'}</span>
+              </div>
+              <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
+                <span style={{ color: colorInactive }}>{t('created')}</span>
+                <span style={{ color: colorActive }}>{formatDateShort(project.createdAt)}</span>
+                <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? t('day') : t('days')}</span>
+              </div>
+              {project.shotAt && <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
+                <span style={{ color: colorInactive }}>{t('edited')}</span>
+                <span style={{ color: colorActive }}>{formatDateShort(project.shotAt)}</span>
+                <span style={{ color: colorCharcoal }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? t('day') : t('days')}</span>
+              </div>}
+            </div>
+            <div className="border-b border-adaptive" style={{ marginTop: '12px', marginLeft: '-16px', marginRight: '-16px' }}/>
+            <div style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', marginTop: '12px', marginLeft: '-16px', marginRight: '-16px', paddingLeft: '16px', paddingRight: '16px' }}>
+              {project.lat && project.lng ? <div style={{ zoom: 1.15 }}><WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10} orientation={project.orientation}/></div> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
+            </div>
+          </div>
+        ) : (
+          /* ===== DESKTOP: original horizontal ===== */
+          <div className="flex items-center gap-0" style={{ width: '100%' }}>
+            <div className="min-w-0">
+              {project.lat && project.lng ? <div style={{ zoom: 1.15 }}><WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10} orientation={project.orientation}/></div> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
+            </div>
+            <div className="flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
+              <div className="flex flex-col justify-center pl-2 border-l border-adaptive">
+                {Object.values(MandateType).filter(m => project.mandates?.includes(m)).map(m => {
+                  return <React.Fragment key={m}>{renderMandate(m, colorActive)}</React.Fragment>;
+                })}
+              </div>
+              <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
+                <span style={{ color: colorInactive }}>{t('sun')}</span>
+                <span style={{ color: project.orientation?.includes('AM') ? colorActive : colorInactive }}>
+                  AM {sun ? formatTime(sun.sunrise) : '--:--'}
+                </span>
+                <span style={{ color: project.orientation?.includes('PM') ? colorActive : colorInactive }}>
+                  PM {sun ? formatTime(sun.sunset) : '--:--'}
+                </span>
+              </div>
+              <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
+                <span style={{ color: colorInactive }}>{t('travel')}</span>
+                <span style={{ color: project.travelTime?.durationSeconds ? colorActive : colorInactive }}>{project.travelTime?.durationSeconds ? formatDuration(project.travelTime.durationSeconds) : '—'}</span>
+                {project.travelTime?.distanceMeters > 0 ? <span style={{ color: colorCharcoal, letterSpacing: '0.1em', marginTop: '-5px' }} className="text-lg">{Math.round(project.travelTime.distanceMeters / 1000)} KM</span> : <span style={{ color: 'transparent' }}>&nbsp;</span>}
+              </div>
+              <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
+                <span style={{ color: colorInactive }}>{t('depart')}</span>
+                <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '—'}</span>
+                <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '—'}</span>
+              </div>
+              <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive">
+                <span style={{ color: colorInactive }}>{t('created')}</span>
+                <span style={{ color: colorActive, cursor: 'pointer', textDecoration: editingCreatedDate ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setDetailPickerPos({ top: r.bottom + 4, left: r.left }); originalDateRef.current = project.createdAt; setEditingCreatedDate(p => !p); setEditingShotDate(false); }}>
+                  {formatDateShort(project.createdAt)}
+                </span>
+                <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? t('day') : t('days')}</span>
+              </div>
+              {project.shotAt && <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive">
+                <span style={{ color: colorInactive }}>{t('edited')}</span>
+                <span style={{ color: colorActive, cursor: 'pointer', textDecoration: editingShotDate ? 'underline' : 'none', textDecorationColor: 'rgba(255,255,255,0.3)', textUnderlineOffset: '3px' }} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setDetailPickerPos({ top: r.bottom + 4, left: r.left }); originalDateRef.current = project.shotAt; setEditingShotDate(p => !p); setEditingCreatedDate(false); }}>
+                  {formatDateShort(project.shotAt)}
+                </span>
+                <span style={{ color: colorCharcoal }}>{daysSince(project.shotAt)} {daysSince(project.shotAt) <= 1 ? t('day') : t('days')}</span>
+              </div>}
+            </div>
+          </div>
+        )}
+        {(editingCreatedDate || editingShotDate) && ReactDOM.createPortal(
+          <React.Fragment>
+            <div onClick={() => { if (editingCreatedDate && originalDateRef.current) updateProject(project.id, { createdAt: originalDateRef.current }); if (editingShotDate && originalDateRef.current) updateProject(project.id, { shotAt: originalDateRef.current }); setEditingCreatedDate(false); setEditingShotDate(false); }} style={{ position: 'fixed', inset: 0, zIndex: 9998 }}/>
+            <div style={{ position: 'fixed', top: detailPickerPos.top, left: detailPickerPos.left, zIndex: 9999 }}>
+              {editingCreatedDate && <DateWheelPicker dropDown title={t('createdDate')} date={new Date(project.createdAt)} onChange={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onCancel={d => { updateProject(project.id, { createdAt: d.toISOString() }); }} onClose={() => setEditingCreatedDate(false)} />}
+              {editingShotDate && project.shotAt && <DateWheelPicker dropDown title={t('editedDate')} date={new Date(project.shotAt)} onChange={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onCancel={d => { updateProject(project.id, { shotAt: d.toISOString() }); }} onClose={() => setEditingShotDate(false)} />}
+            </div>
+          </React.Fragment>,
+          document.body
+        )}
+      </div>
+
+      {/* Météo horaire — redesigned */}
+      {(!isMobile || (project?.lat && project?.lng)) && <div className={`${isMobile ? 'pl-4 pr-0' : 'px-8 md:px-12'} border-b border-adaptive`}>
+        <div className="pt-3 pb-1">
+          <span className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('hourlyWeather')}</span>
+        </div>
+        {renderHourlyWeather()}
+      </div>}
+
+      {/* Édition + Carte — layout with map bottom-right */}
+      <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} pt-6`} style={{ position: 'relative' }}>
+        <div className={`flex gap-8 ${isMobile ? 'flex-col' : 'flex-nowrap'} items-start`} style={isMobile ? {} : {}}>
+          
+          {/* Colonne gauche — Édition */}
+          <div style={isMobile ? {} : { width: '700px', flexShrink: 0 }} className={`${isMobile ? 'w-full' : ''} space-y-5`}>
+            {/* Address inputs with box style like modal */}
+            <div>
+              <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('projectAddress')}</label>
+              <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input key={project.address || ''} ref={addressInputRef} type="text" defaultValue={project.address || ''} placeholder={t('enterAddress')} className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1, fontFamily: "'Avenir', sans-serif", fontWeight: 300 }}/>
+                {project.address && <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); copyProjectAddress(); }} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)', background: 'none', cursor: 'pointer' }} title={addressCopied ? t('addressCopied') : t('copyAddress')} aria-label={addressCopied ? t('addressCopied') : t('copyAddress')}><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{addressCopied ? <polyline points="20 6 9 17 4 12"/> : <g><rect x="8" y="8" width="14" height="14" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></g>}</svg></button>}
+                {project.address && <a href={`https://earth.google.com/web/search/${encodeURIComponent(project.address)}`} target="_blank" rel="noopener noreferrer" onClick={rtOpenMap} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Google Earth" aria-label="Google Earth"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></a>}
+                {project.address && <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(project.address)}`} target="_blank" rel="noopener noreferrer" onClick={(e) => { e.preventDefault(); e.stopPropagation(); const tmp = document.createElement('a'); tmp.href = e.currentTarget.href; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); }} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Itinéraire"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>}
+              </div>
+            </div>
+            <div>
+              <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('departureAddress')}</label>
+              <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input ref={departureInputRef} type="text" defaultValue={project.departureAddress || prefs.homeAddress || ''} placeholder={t('departureHint')} className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1, fontFamily: "'Avenir', sans-serif", fontWeight: 300 }}
+                  onBlur={(e) => {
+                    const val = e.target.value.trim();
+                    if (!val || val === prefs.homeAddress) {
+                      updateProject(project.id, { departureAddress: null, departureLat: null, departureLng: null });
+                      e.target.value = prefs.homeAddress || '';
+                    }
+                  }}
+                />
+                {(project.departureAddress || prefs.homeAddress) && <a href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(project.departureAddress || prefs.homeAddress || '')}&destination=${encodeURIComponent(project.address || '')}`} target="_blank" rel="noopener noreferrer" onClick={(e) => { e.preventDefault(); e.stopPropagation(); const tmp = document.createElement('a'); tmp.href = e.currentTarget.href; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); }} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Itinéraire"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>}
+              </div>
+            </div>
+            <div className="py-5 border-b border-adaptive">
+              <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>MANDAT</label>
+              <div className="flex gap-4 flex-wrap mt-1">
+                {Object.values(MandateType).map(m => <button key={m} onClick={() => updateProject(project.id, { mandates: toggleMandate(project.mandates, m) })} className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '22px', color: project.mandates?.includes(m) ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)' }}>{m === 'DRONE+C' ? (project.mandates?.includes(m) ? <span>DRONE.<span style={{color:'#d83152'}}>C</span></span> : 'DRONE.C') : m}</button>)}
+              </div>
+            </div>
+            <div className="py-5 border-b border-adaptive">
+              <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>ORIENTATION</label>
+              <div className="flex gap-5 mt-1">
+                {['AM','PM'].map(o => <button key={o} onClick={() => updateProject(project.id, { orientation: project.orientation?.includes(o) ? project.orientation.filter(x => x !== o) : [...(project.orientation||[]), o] })} className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '22px', color: project.orientation?.includes(o) ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)' }}>{o}</button>)}
+              </div>
+            </div>
+            <div className="py-5 border-b border-adaptive">
+              <FolderCombo key={project.id} value={project.clientFolder || ''} onChange={(v) => updateProject(project.id, { clientFolder: (v && v.trim()) || null })}/>
+            </div>
+
+            <div>
+              <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('notes')}</label>
+              {/* Mini toolbar */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginTop: '4px', marginBottom: '0px' }}>
+                <button onClick={() => { const el = document.getElementById('notes-editor-' + project.id); if (el) { el.focus(); document.execCommand('bold', false, null); } }} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '4px', color: 'rgba(255,255,255,0.6)', width: '30px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', fontFamily: 'inherit' }} title="Gras (⌘B)">B</button>
+                <button onClick={() => { const el = document.getElementById('notes-editor-' + project.id); if (el) { el.focus(); document.execCommand('fontSize', false, '2'); } }} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '4px', color: 'rgba(255,255,255,0.6)', width: '30px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '12px', fontFamily: 'inherit' }} title="Réduire texte">A−</button>
+                <button onClick={() => { const el = document.getElementById('notes-editor-' + project.id); if (el) { el.focus(); document.execCommand('fontSize', false, '5'); } }} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '4px', color: 'rgba(255,255,255,0.6)', width: '30px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '15px', fontFamily: 'inherit' }} title="Agrandir texte">A+</button>
+              </div>
+              <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '0px' }}>
+                <div
+                  id={'notes-editor-' + project.id}
+                  contentEditable
+                  suppressContentEditableWarning
+                  ref={(el) => {
+                    if (el && !el.dataset.init) {
+                      let notes = project.notes || '';
+                      let mustSave = false;
+                      // Auto-prepend project address label if not already present
+                      const addr = project.address;
+                      if (addr && !notes.includes(addr)) {
+                        const addrBlock = `<b>Adresse du projet:</b><br>${addr}`;
+                        notes = notes ? `${addrBlock}<br><br>${notes}` : addrBlock;
+                        mustSave = true;
+                      }
+                      el.innerHTML = notes;
+                      // Rend cliquables les numéros de téléphone déjà saisis.
+                      if (linkifyPhonesInEditor(el)) mustSave = true;
+                      if (mustSave) updateProject(project.id, { notes: el.innerHTML });
+                      el.dataset.init = '1';
+                    }
+                  }}
+                  onInput={(e) => {
+                    updateProject(project.id, { notes: e.currentTarget.innerHTML === '<br>' ? '' : e.currentTarget.innerHTML });
+                  }}
+                  onPaste={(e) => {
+                    // Toujours coller en texte brut: on retire la couleur/le formatage de la source
+                    // pour que le texte reste lisible (blanc) sur le fond foncé.
+                    e.preventDefault();
+                    const raw = (e.clipboardData || window.clipboardData).getData('text/plain');
+                    const text = raw.trim();
+                    if (/^https?:\/\/\S+$/.test(text)) {
+                      document.execCommand('insertHTML', false, `<a href="${text}" target="_blank" style="color:#60a5fa;text-decoration:underline">${text}</a>&nbsp;`);
+                    } else {
+                      document.execCommand('insertText', false, raw);
+                    }
+                  }}
+                  onClick={(e) => {
+                    const a = e.target.closest('a');
+                    if (a && a.href) {
+                      e.preventDefault();
+                      const href = a.getAttribute('href') || a.href;
+                      // Numéro de téléphone ou courriel: ouvrir l'app native (appel / mail).
+                      if (/^(tel:|mailto:)/i.test(href)) {
+                        window.location.href = href;
+                        return;
+                      }
+                      const tmp = document.createElement('a');
+                      tmp.href = a.href;
+                      tmp.target = '_blank';
+                      tmp.rel = 'noopener noreferrer';
+                      document.body.appendChild(tmp);
+                      tmp.click();
+                      tmp.remove();
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+                      e.preventDefault();
+                      document.execCommand('bold', false, null);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    // Quand on quitte le champ, rend cliquables les numéros nouvellement saisis.
+                    const el = e.currentTarget;
+                    if (linkifyPhonesInEditor(el)) {
+                      updateProject(project.id, { notes: el.innerHTML === '<br>' ? '' : el.innerHTML });
+                    }
+                  }}
+                  className="w-full bg-transparent text-charcoal"
+                  style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', minHeight: '120px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: '1.5', cursor: 'text', fontFamily: "'Avenir', sans-serif", fontWeight: 300, WebkitUserSelect: 'text', userSelect: 'text', WebkitTouchCallout: 'default' }}
+                  data-placeholder={t('notesPlaceholder')}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Colonne droite — Carte Google Maps interactive, square, bottom-right */}
+          <div className={`${isMobile ? 'w-full' : ''} flex flex-col`} style={{ minHeight: isMobile ? '450px' : undefined, height: isMobile ? undefined : '800px', order: isMobile ? -1 : 0, flex: isMobile ? undefined : '1 0 auto', position: isMobile ? undefined : 'sticky', top: isMobile ? undefined : '20px', alignSelf: isMobile ? undefined : 'flex-start' }}>
+            {project.lat && project.lng ? (
+              <>
+              {showMapFull && <div onClick={() => setShowMapFull(false)} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(30,30,30,0.88)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}/>}
+              <div style={{
+                ...(showMapFull ? { position: 'fixed', top: 'env(safe-area-inset-top, 50px)', left: 0, width: '100vw', height: 'calc(100vh - env(safe-area-inset-top, 50px))', zIndex: 51, overflow: 'hidden' } : { position: 'relative', overflow: 'hidden', flex: 1 }),
+                clipPath: mapRevealed || showMapFull ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
+                WebkitClipPath: mapRevealed || showMapFull ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
+                transition: 'clip-path 1.2s cubic-bezier(0.25, 0.1, 0.25, 1), -webkit-clip-path 1.2s cubic-bezier(0.25, 0.1, 0.25, 1)'
+              }}>
+                {/* Sun time slider - new design */}
+                {(() => {
+                  // Slider scale: 75% on mobile
+                  const S = isMobile ? 0.75 : 1;
+                  const filetTop = Math.round(88 * S);
+                  const blurH = Math.round(130 * S);
+                  const gradH = Math.round(140 * S);
+                  const glowSize = Math.round(250 * S);
+                  const hourSize = Math.round(24 * S);
+                  const dateSize = Math.round(20 * S);
+                  const triW = Math.round(12 * S);
+                  const triH = Math.round(8 * S);
+                  // Compute sun times for glow color and triangles
+                  const eLat = adjustedPos?.lat ?? project?.lat;
+                  const eLng = adjustedPos?.lng ?? project?.lng;
+                  const st = (eLat && eLng && SunCalc) ? SunCalc.getTimes(sunDate, eLat, eLng) : null;
+                  const srTime = st?.sunrise ? st.sunrise.getHours() + st.sunrise.getMinutes()/60 : 6;
+                  const ssTime = st?.sunset ? st.sunset.getHours() + st.sunset.getMinutes()/60 : 18;
+                  sunTimesSnapRef.current = { sr: srTime, ss: ssTime };
+                  
+                  // Dynamic slider range: sunrise at 20%, sunset at 80%.
+                  // sliderRange = (ssTime - srTime) / 0.6 makes the day
+                  // span 60% of the slider; sliderMin offsets so srTime
+                  // falls exactly at 20% (and ssTime at 80%).
+                  const sliderRange = (ssTime - srTime) / 0.6;
+                  const sliderMin = srTime - 0.2 * sliderRange;
+                  const sliderMax = sliderMin + sliderRange;
+
+                  // Pre-compute terrain shadow segments across sunrise→sunset
+                  const shadowSegments = (() => {
+                    const profile = terrainProfileRef.current;
+                    if (!profile || !eLat || !eLng || !SunCalc) return [];
+                    const segments = [];
+                    let inShadow = false;
+                    let segStart = 0;
+                    const step = 0.05; // ~3 min steps for precision
+                    const baseDate = new Date(sunDate.getFullYear(), sunDate.getMonth(), sunDate.getDate());
+                    const baseMs = baseDate.getTime();
+                    for (let h = srTime; h <= ssTime + step; h += step) {
+                      const hClamped = Math.min(h, ssTime);
+                      const d = new Date(baseMs + hClamped * 3600000);
+                      const sp = SunCalc.getPosition(d, eLat, eLng);
+                      const bearing = (sp.azimuth * 180 / Math.PI + 180) % 360;
+                      const altDeg = sp.altitude * 180 / Math.PI;
+                      const shadow = isTerrainShadow(profile, bearing, altDeg);
+                      if (shadow && !inShadow) { segStart = h; inShadow = true; }
+                      else if (!shadow && inShadow) {
+                        const startPct = ((segStart - sliderMin) / sliderRange) * 100;
+                        const endPct = ((h - sliderMin) / sliderRange) * 100;
+                        segments.push({ startPct, endPct });
+                        inShadow = false;
+                      }
+                    }
+                    if (inShadow) {
+                      const startPct = ((segStart - sliderMin) / sliderRange) * 100;
+                      const endPct = ((ssTime - sliderMin) / sliderRange) * 100;
+                      segments.push({ startPct, endPct });
+                    }
+                    return segments;
+                  })();
+
+                  // Glow color logic — smooth morphing
+                  const lerp = (a, b, t) => a + (b - a) * Math.max(0, Math.min(1, t));
+                  const hexLerp = (hex1, hex2, t) => {
+                    const r1 = parseInt(hex1.slice(1,3),16), g1 = parseInt(hex1.slice(3,5),16), b1 = parseInt(hex1.slice(5,7),16);
+                    const r2 = parseInt(hex2.slice(1,3),16), g2 = parseInt(hex2.slice(3,5),16), b2 = parseInt(hex2.slice(5,7),16);
+                    const r = Math.round(lerp(r1,r2,t)), g = Math.round(lerp(g1,g2,t)), b = Math.round(lerp(b1,b2,t));
+                    return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+                  };
+                  const DARK = '#003089', BLUE = '#1a66f3', ORANGE = '#ffc600', DAY = '#FFF3ba';
+                  let glowColor = DAY;
+                  // Relative to sunrise/sunset:
+                  // sr-1h → sr-15min: blue | sr-15min → sr+15min: orange | then day
+                  // ss-1h → ss+15min: orange | ss+15min → ss+1h: blue | then dark
+                  const m = 0.25; // 15min morph
+                  if (sunHourDisplay < srTime - 1 - m) {
+                    glowColor = DARK;
+                  } else if (sunHourDisplay < srTime - 1) {
+                    glowColor = hexLerp(DARK, BLUE, (sunHourDisplay - (srTime - 1 - m)) / m);
+                  } else if (sunHourDisplay < srTime - 0.25) {
+                    glowColor = BLUE;
+                  } else if (sunHourDisplay < srTime - 0.25 + m) {
+                    glowColor = hexLerp(BLUE, ORANGE, (sunHourDisplay - (srTime - 0.25)) / m);
+                  } else if (sunHourDisplay <= srTime + 0.25) {
+                    glowColor = ORANGE;
+                  } else if (sunHourDisplay < srTime + 0.25 + m) {
+                    glowColor = hexLerp(ORANGE, DAY, (sunHourDisplay - (srTime + 0.25)) / m);
+                  } else if (sunHourDisplay < ssTime - 1 - m) {
+                    glowColor = DAY;
+                  } else if (sunHourDisplay < ssTime - 1) {
+                    glowColor = hexLerp(DAY, ORANGE, (sunHourDisplay - (ssTime - 1 - m)) / m);
+                  } else if (sunHourDisplay <= ssTime + 0.25) {
+                    glowColor = ORANGE;
+                  } else if (sunHourDisplay < ssTime + 0.25 + m) {
+                    glowColor = hexLerp(ORANGE, BLUE, (sunHourDisplay - (ssTime + 0.25)) / m);
+                  } else if (sunHourDisplay < ssTime + 1) {
+                    glowColor = BLUE;
+                  } else if (sunHourDisplay < ssTime + 1 + m) {
+                    glowColor = hexLerp(BLUE, DARK, (sunHourDisplay - (ssTime + 1)) / m);
+                  } else {
+                    glowColor = DARK;
+                  }
+                  
+                  const thumbLeft = `${((sunHourDisplay - sliderMin) / sliderRange) * 100}%`;
+                  // Lines stay at fixed 20% / 80% — the slider range
+                  // computed above already maps srTime exactly to 20% and
+                  // ssTime to 80%.
+                  const srLeft = '20%';
+                  const ssLeft = '80%';
+                  
+                  return (
+                    <>
+                    {/* Background blur + darken gradient */}
+                    <div style={{ 
+                      position: 'absolute', top: 0, left: 0, right: 0, height: `${blurH}px`, zIndex: 10,
+                      background: 'linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.15) 75%, transparent 100%)',
+                      backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+                      maskImage: 'linear-gradient(to bottom, black 0%, black 40%, transparent 100%)',
+                      WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 40%, transparent 100%)',
+                      pointerEvents: 'none'
+                    }}/>
+                    {/* Dark gradient overlay */}
+                    <div style={{ 
+                      position: 'absolute', top: 0, left: 0, right: 0, height: `${gradH}px`, zIndex: 10,
+                      background: 'linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.4) 70%, transparent 100%)',
+                      pointerEvents: 'none'
+                    }}/>
+                    {/* Weather particles overlay */}
+                    {!isMobile && <canvas ref={weatherCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: `${gradH}px`, pointerEvents: 'none', zIndex: 11, opacity: 0.7,
+                      maskImage: 'linear-gradient(to bottom, black 0%, black 50%, transparent 100%)',
+                      WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 50%, transparent 100%)' }}/>}
+                    {/* Full-width filet at 172px */}
+                    <div style={{ position: 'absolute', top: `${filetTop}px`, left: 0, right: 0, height: '1px', background: 'rgba(255,255,255,0.5)', zIndex: 12 }}/>
+                    {/* Vignette - dark base, softer, skip top */}
+                    <div style={{
+                      position: 'absolute', inset: 0, zIndex: 4, pointerEvents: 'none',
+                      background: 'radial-gradient(ellipse 75% 70% at 50% 55%, transparent 35%, rgba(0,0,0,0.20) 50%, rgba(0,0,0,0.45) 70%, rgba(0,0,0,0.65) 90%, rgba(0,0,0,0.80) 100%)',
+                      mixBlendMode: 'multiply',
+                      maskImage: 'linear-gradient(to bottom, transparent 0%, black 15%)',
+                      WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 15%)'
+                    }}/>
+                    {/* Blue night tint */}
+                    {(() => {
+                      const h = sunHourDisplay;
+                      let nightAmt = 0;
+                      if (h < srTime - 0.25) nightAmt = 1;
+                      else if (h < srTime) nightAmt = (srTime - h) / 0.25;
+                      else if (h > ssTime + 0.25) nightAmt = 1;
+                      else if (h > ssTime) nightAmt = (h - ssTime) / 0.25;
+                      else nightAmt = 0;
+                      if (nightAmt <= 0) return null;
+                      return <div style={{
+                        position: 'absolute', inset: 0, zIndex: 3, pointerEvents: 'none',
+                        background: `rgba(10, 20, 60, ${0.25 * nightAmt})`
+                      }}/>;
+                    })()}
+                    {/* Slider content layer */}
+                    <div style={{ 
+                      position: 'absolute', top: 0, left: 0, right: 0, height: `${filetTop}px`, zIndex: 11,
+                      pointerEvents: 'none'
+                    }}>
+                      
+                      {/* Slider track area — centered vertically in 172px zone */}
+                      {isMobile && <div
+                        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'auto', zIndex: 3, touchAction: 'none', padding: '0 16px' }}
+                        onTouchStart={e => {
+                          e.preventDefault();
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const pad = 16;
+                          const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left - pad) / (rect.width - pad * 2)));
+                          setSunHour(magneticSunHour(sliderMin + pct * sliderRange));
+                        }}
+                        onTouchMove={e => {
+                          e.preventDefault();
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const pad = 16;
+                          const pct = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left - pad) / (rect.width - pad * 2)));
+                          setSunHour(magneticSunHour(sliderMin + pct * sliderRange));
+                        }}
+                      />}
+                      {/* z:1 — Glow + wisps (back) */}
+                      <div style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: thumbLeft,
+                        transform: 'translate(-50%, -50%)',
+                        width: `${glowSize}px`, height: `${glowSize}px`,
+                        borderRadius: '50%',
+                        background: `radial-gradient(circle, ${glowColor} 0%, ${glowColor} 24%, ${glowColor}80 45%, transparent 70%)`,
+                        opacity: 0.3,
+                        pointerEvents: 'none',
+                        filter: 'blur(15px)',
+                        zIndex: 1
+                      }}/>
+                      {!isMobile && <div style={{ position: 'absolute', top: '50%', left: thumbLeft, width: `${Math.round(300*S)}px`, height: `${Math.round(120*S)}px`, transform: 'translate(-50%, -50%)', pointerEvents: 'none', overflow: 'visible', zIndex: 1 }}>
+                        <div style={{ position: 'absolute', top: '50%', left: '20%', width: '120px', height: '40px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}30 0%, ${glowColor}10 50%, transparent 75%)`, filter: 'blur(12px)', animation: 'vaporDrift1 8s ease-in-out infinite', opacity: 0.6 }}/>
+                        <div style={{ position: 'absolute', top: '50%', left: '60%', width: '90px', height: '35px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}25 0%, ${glowColor}0c 50%, transparent 75%)`, filter: 'blur(10px)', animation: 'vaporDrift2 11s ease-in-out infinite', animationDelay: '-3s', opacity: 0.5 }}/>
+                        <div style={{ position: 'absolute', top: '50%', left: '40%', width: '150px', height: '50px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}20 0%, ${glowColor}08 50%, transparent 75%)`, filter: 'blur(14px)', animation: 'vaporDrift3 14s ease-in-out infinite', animationDelay: '-7s', opacity: 0.45 }}/>
+                        <div style={{ position: 'absolute', top: '50%', left: '10%', width: '100px', height: '30px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}28 0%, ${glowColor}0a 50%, transparent 75%)`, filter: 'blur(8px)', animation: 'vaporDrift1 6s ease-in-out infinite', animationDelay: '-2s', opacity: 0.4 }}/>
+                        <div style={{ position: 'absolute', top: '50%', left: '70%', width: '130px', height: '45px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}1a 0%, ${glowColor}08 50%, transparent 75%)`, filter: 'blur(16px)', animation: 'vaporDrift2 16s ease-in-out infinite', animationDelay: '-5s', opacity: 0.35 }}/>
+                      </div>}
+                      {/* z:4 — Slider thumb (front) */}
+                      <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, transform: 'translateY(-50%)', zIndex: 4, padding: isMobile ? '0 16px' : 0 }}>
+                        <input
+                          type="range"
+                          min={sliderMin} max={sliderMax} step="0.05"
+                          value={sunHour}
+                          onChange={e => setSunHour(magneticSunHour(parseFloat(e.target.value)))}
+                          style={{
+                            width: '100%', appearance: 'none', WebkitAppearance: 'none',
+                            background: 'transparent', position: 'relative', zIndex: 2,
+                            outline: 'none', cursor: 'pointer',
+                            pointerEvents: isMobile ? 'none' : 'auto'
+                          }}
+                        />
+                      </div>
+                      {/* Time + date display below filet */}
+                      <div style={{
+                        position: 'absolute',
+                        top: `${filetTop}px`,
+                        marginTop: `${Math.round(10 * S)}px`,
+                        left: `${((sunHourDisplay - sliderMin) / sliderRange) * 100}%`,
+                        transform: 'translateX(-50%)',
+                        pointerEvents: 'auto',
+                        zIndex: 13,
+                        display: 'flex', alignItems: 'baseline', gap: `${Math.round(8 * S)}px`,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap'
+                      }} onClick={() => setShowDatePicker(p => !p)}>
+                        <span className="font-bebas-bold" style={{ 
+                          fontSize: `${hourSize}px`, color: '#ffffff', letterSpacing: '0.04em',
+                          lineHeight: '1'
+                        }}>
+                          {`${Math.floor(sunHourDisplay)}H${String(Math.round((sunHourDisplay % 1) * 60)).padStart(2, '0')}`}
+                        </span>
+                        <span className="font-bebas-regular" style={{ 
+                          fontSize: `${dateSize}px`, color: '#ffffff', letterSpacing: '0.04em',
+                          lineHeight: '1'
+                        }}>
+                          {t('monthAbbrev')[sunDate.getMonth()]} {sunDate.getDate()}
+                        </span>
+                      </div>
+                      {/* Terrain shadow alert — text top-left + red band on filet */}
+                      {shadowSegments.length > 0 && showSunLines && <>
+                        {/* Label top-left — only when slider is in shadow zone */}
+                        {terrainShadow && <div style={{
+                          position: 'absolute', top: `${Math.round(8 * S)}px`, left: 0, right: 0,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: `${Math.round(6 * S)}px`,
+                          pointerEvents: 'none', zIndex: 13, animation: 'fadeIn 1.5s ease'
+                        }}>
+                          <svg width={isMobile ? 16 : 18} height={isMobile ? 16 : 18} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                            <path d="M4 20L10 8l4 6 2-3 4 9H4z"/>
+                          </svg>
+                          <span className="font-bebas-book" style={{ fontSize: `${isMobile ? 12 : 14}px`, color: '#ffffff', letterSpacing: '0.15em', lineHeight: '1', marginTop: '7px' }}>
+                            OMBRE TERRAIN POSSIBLE
+                          </span>
+                        </div>}
+                        {/* Red band(s) on filet line — clamped between sunrise (20%) and sunset (80%) */}
+                        {shadowSegments.map((seg, i) => {
+                          const clampStart = Math.max(seg.startPct, 20);
+                          const clampEnd = Math.min(seg.endPct, 80);
+                          if (clampEnd <= clampStart) return null;
+                          return <div key={i} style={{
+                            position: 'absolute',
+                            top: `${filetTop}px`,
+                            left: `${clampStart}%`,
+                            width: `${clampEnd - clampStart}%`,
+                            height: '10px',
+                            background: 'rgba(255, 40, 50, 0.7)',
+                            pointerEvents: 'none',
+                            zIndex: 12,
+                            borderRadius: '2px'
+                          }}/>;
+                        })}
+                      </>}
+                      {/* Sunrise/Sunset vertical lines + triangles */}
+                      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: `${filetTop + triH}px`, pointerEvents: 'none', zIndex: 10 }}>
+                        {/* Sunrise vertical line */}
+                        <div style={{ position: 'absolute', top: 0, bottom: `${triH}px`, left: srLeft, width: '1px', background: 'rgba(255,255,255,0.15)', transform: 'translateX(-0.5px)' }}/>
+                        {/* Sunset vertical line */}
+                        <div style={{ position: 'absolute', top: 0, bottom: `${triH}px`, left: ssLeft, width: '1px', background: 'rgba(255,255,255,0.15)', transform: 'translateX(-0.5px)' }}/>
+                        {/* Sunrise ▲ - base on filet line, pointing UP */}
+                        <div style={{ position: 'absolute', bottom: `${triH}px`, left: srLeft, transform: 'translate(-50%, 0)' }}>
+                          <svg width={triW} height={triH} viewBox={`0 0 ${triW} ${triH}`}>
+                            <path d={`M${triW*0.5},0 L${triW},${triH} Q${triW},${triH} ${triW*0.85},${triH} L${triW*0.15},${triH} Q0,${triH} 0,${triH} Z`} fill="#ffffff" strokeLinejoin="round" stroke="#ffffff" strokeWidth="0.5"/>
+                          </svg>
+                        </div>
+                        {/* Sunset ▼ - base on filet line, pointing DOWN */}
+                        <div style={{ position: 'absolute', bottom: `${triH}px`, left: ssLeft, transform: 'translate(-50%, 0)' }}>
+                          <svg width={triW} height={triH} viewBox={`0 0 ${triW} ${triH}`}>
+                            <path d={`M${triW*0.5},${triH} L${triW},0 Q${triW},0 ${triW*0.85},0 L${triW*0.15},0 Q0,0 0,0 Z`} fill="#ffffff" strokeLinejoin="round" stroke="#ffffff" strokeWidth="0.5"/>
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                    </>
+                  );
+                })()}
+                {/* Map controls - stacked vertically with subtle border */}
+                <div ref={mapContainerRef} className="detail-map-keep" style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#181b1e', filter: 'saturate(0.50)' }}/>
+                <canvas ref={flareCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}/>
+                {nightOpacity > 0 && <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 3, background: `radial-gradient(ellipse at center, transparent 30%, rgba(0,0,15,${0.4 * nightOpacity}) 70%, rgba(0,0,15,${0.7 * nightOpacity}) 100%)`, transition: 'opacity 0.5s ease' }}/>}
+                {/* Fixed center pin */}
+                <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 5, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'transparent', border: '4px solid #ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.5)' }}/>
+                </div>
+                {/* Sun/Moon dot — fixed to viewport, mutated via refs (no React re-render) */}
+                <div ref={sunDotContainerRef} style={{ position: 'absolute', pointerEvents: 'none', zIndex: 4, display: 'none' }}>
+                  <div ref={sunDotHaloRef} style={{ position: 'absolute', borderRadius: '50%', display: 'none' }}/>
+                  <div ref={sunDotInnerRef} style={{ position: 'absolute', borderRadius: '50%' }}/>
+                </div>
+                {/* Update address button — visible only when map has been dragged */}
+                {adjustedPos && (
+                  <div style={{ position: 'absolute', bottom: `${isMobile ? 40 : 200}px`, left: '50%', transform: 'translateX(-50%)', zIndex: 15 }}>
+                    <button onClick={async () => {
+                      const pos = adjustedPos;
+                      try {
+                        const result = await reverseGeocode(pos.lat, pos.lng);
+                        skipMapRecreateRef.current = true;
+                        updateProject(project.id, { lat: pos.lat, lng: pos.lng, address: result.formattedAddress, mapZoom: mapZoom });
+                        setAdjustedPos(null);
+                        effectiveCenterRef.current = null;
+                      } catch(e) {
+                        skipMapRecreateRef.current = true;
+                        updateProject(project.id, { lat: pos.lat, lng: pos.lng, address: pos.lat.toFixed(5) + ', ' + pos.lng.toFixed(5), mapZoom: mapZoom });
+                        setAdjustedPos(null);
+                        effectiveCenterRef.current = null;
+                      }
+                    }} style={{
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                      background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+                      border: '1.5px solid rgba(255,255,255,0.3)', borderRadius: '20px',
+                      padding: '8px 16px', cursor: 'pointer',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.4)'
+                    }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                      <span className="font-bebas-book" style={{ fontSize: '13px', color: '#ffffff', letterSpacing: '0.08em', lineHeight: '1', paddingTop: '2px' }}>{t('updateLocation')}</span>
+                    </button>
+                  </div>
+                )}
+                {/* Shape labels */}
+                {buildings.length > 0 && (isMobile ? (
+                  /* Mobile: simple labels top-left under filet */
+                  <div style={{ position: 'absolute', top: `${Math.round(88 * 0.75) + 14}px`, left: '12px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {buildings.map((b, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span className="font-bebas-book" style={{ fontSize: '12px', color: '#fff', letterSpacing: '0.1em', lineHeight: '1' }}>{t('shape')} {i + 1}</span>
+                        <button onClick={(e) => { e.stopPropagation(); deleteBuilding(i); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0', display: 'flex', alignItems: 'center' }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  /* Desktop: original pill labels top-right */
+                  <div style={{ position: 'absolute', top: '145px', right: '-2px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+                    {buildings.map((b, i) => {
+                      const color = BUILDING_COLORS[i % BUILDING_COLORS.length];
+                      const displayH = draggingHeight && draggingHeight.idx === i ? draggingHeight.currentH : b.height;
+                      const pillOffsetY = draggingHeight && draggingHeight.idx === i ? draggingHeight.offsetY : 0;
+                      const isDragging = draggingHeight && draggingHeight.idx === i;
+                      const hexToRgba = (hex, a) => { const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16); return `rgba(${r},${g},${b},${a})`; };
+                      return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0px', position: 'relative', zIndex: isDragging ? 20 : 1 }}
+                        onMouseEnter={() => setHoveredBuilding(i)} onMouseLeave={() => setHoveredBuilding(null)}>
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: '0px',
+                          background: hexToRgba(color, 0.25), borderRadius: '16px', padding: '2px 3px 2px 6px',
+                          whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+                          opacity: (hoveredBuilding !== null && hoveredBuilding !== i) ? 0.15 : 1,
+                          transition: 'opacity 0.2s ease'
+                        }}>
+                          <div onClick={() => { setEditingBuilding(i); setBuildingHeight(String(b.height)); setBuildingName(b.name); }} style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', padding: '2px 6px 2px 0' }}>
+                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: color, flexShrink: 0 }}/>
+                            <span className="font-bebas-bold" style={{ letterSpacing: '0.06em', fontSize: '17px', color: '#fff', lineHeight: '1', padding: '3px 0 0 0' }}>{t('shape')} {i + 1}</span>
+                          </div>
+                          <div style={{ position: 'relative' }}>
+                            {(hoveredBuilding === i || isDragging) && (<>
+                              <div style={{ position: 'absolute', left: '50%', transform: `translateX(-50%) translateY(${pillOffsetY}px)`, top: '-13px', pointerEvents: 'none', opacity: isDragging ? 0.8 : 0.5, transition: isDragging ? 'none' : 'opacity 0.2s' }}>
+                                <svg width="10" height="7" viewBox="0 0 10 7" fill="none"><path d="M2 7L5 1L8 7" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                              </div>
+                              <div style={{ position: 'absolute', left: '50%', transform: `translateX(-50%) translateY(${pillOffsetY}px)`, bottom: '-13px', pointerEvents: 'none', opacity: isDragging ? 0.8 : 0.5, transition: isDragging ? 'none' : 'opacity 0.2s' }}>
+                                <svg width="10" height="7" viewBox="0 0 10 7" fill="none"><path d="M2 0L5 6L8 0" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                              </div>
+                            </>)}
+                            <div style={{ background: '#fff', borderRadius: '13px', padding: '4px 8px 1px 8px', cursor: isDragging ? 'grabbing' : 'grab', userSelect: 'none', WebkitUserSelect: 'none', transform: `translateY(${pillOffsetY}px)`, transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)', boxShadow: '0 2px 8px rgba(0,0,0,0.25)', minWidth: '48px', textAlign: 'center' }}
+                              onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setDraggingHeight({ idx: i, startY: e.clientY, startH: b.height, currentH: b.height, offsetY: 0 }); }}
+                              onTouchStart={e => { e.stopPropagation(); const t = e.touches[0]; setDraggingHeight({ idx: i, startY: t.clientY, startH: b.height, currentH: b.height, offsetY: 0 }); }}>
+                              <span className="font-bebas-bold" style={{ fontSize: '17px', color: '#000', letterSpacing: '0.04em', lineHeight: '1' }}>{displayH} M</span>
+                            </div>
+                          </div>
+                        </div>
+                        <button onClick={(e) => { e.stopPropagation(); deleteBuilding(i); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', marginLeft: '4px', opacity: hoveredBuilding === i ? 1 : 0, transition: 'opacity 0.2s ease', pointerEvents: hoveredBuilding === i ? 'auto' : 'none' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,100,100,0.8)" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                      </div>);
+                    })}
+                  </div>
+                ))}
+                {/* Controls pill + Zoom pill wrapper */}
+                {/* Mobile: small round pill top-right, opens menu on click */}
+                {isMobile && <>
+                    {/* Small trigger pill */}
+                    {/* Small trigger pill — hidden when menu open */}
+                    {!mapMenuOpen && <div onClick={() => setMapMenuOpen(true)} style={{
+                      position: 'absolute', top: `${Math.round(88 * 0.75) + 21}px`, right: '12px', zIndex: 14,
+                      backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                      borderRadius: '14px', border: '1.5px solid rgba(255,255,255,0.7)',
+                      padding: '4px 10px', cursor: 'pointer'
+                    }}>
+                      <span className="font-bebas-bold" style={{ fontSize: '12px', color: 'rgba(255,255,255,0.9)', letterSpacing: '0.04em' }}>
+                        {mapType === 'hybrid' ? 'SAT' : 'MAP'}
+                      </span>
+                    </div>}
+                    {/* Expanded menu */}
+                    {mapMenuOpen && <div style={{
+                      position: 'absolute', top: `${Math.round(88 * 0.75) + 21}px`, right: '12px', zIndex: 15,
+                      display: 'flex', flexDirection: 'column', alignItems: 'center',
+                      backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                      borderRadius: '20px', border: '1.5px solid rgba(255,255,255,0.7)',
+                      padding: '6px 2px', gap: '0px', width: '38px', boxSizing: 'border-box'
+                    }}>
+                      <button onClick={() => { setMapType('hybrid'); setMapMenuOpen(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '13px', padding: '4px 8px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'hybrid' ? '0 0 10px rgba(255,255,255,0.7)' : 'none' }}>SAT</button>
+                      <button onClick={() => { setMapType('roadmap'); setMapMenuOpen(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '13px', padding: '4px 8px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'roadmap' ? '0 0 10px rgba(255,255,255,0.7)' : 'none' }}>MAP</button>
+                      <button onClick={() => { if (drawingMode) { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(false); } else { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(true); setEditingBuilding(null); } setMapMenuOpen(false); }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '5px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: drawingMode ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none' }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                      </button>
+                      <button onClick={() => { setShowSunLines(v => !v); setMapMenuOpen(false); }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '5px', color: showSunLines ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: showSunLines ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none' }}>
+                        {showSunLines ? (
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        ) : (
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                        )}
+                      </button>
+                      <button onClick={() => { setShowMapFull(f => !f); setMapMenuOpen(false); }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '5px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: showMapFull ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none' }}>
+                        {showMapFull ? (
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                        ) : (
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                        )}
+                      </button>
+                    </div>}
+                </>}
+                {/* Desktop: original vertical pill */}
+                {!isMobile && <div style={{ position: 'absolute', top: '70%', transform: 'translateY(-50%)', right: '12px', zIndex: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '35px' }}>
+                  <div style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+                    borderRadius: '28px',
+                    border: '2px solid rgba(255,255,255,0.9)',
+                    padding: '10px 2px', gap: '2px',
+                    width: '44px', boxSizing: 'border-box'
+                  }}>
+                    <button onClick={() => setMapType('hybrid')} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '17px', padding: '6px 12px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'hybrid' ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none', transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>SAT</button>
+                    <button onClick={() => setMapType('roadmap')} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '17px', padding: '6px 12px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'roadmap' ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none', transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>MAP</button>
+                    <button onClick={() => { if (drawingMode) { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(false); } else { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(true); setEditingBuilding(null); } }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '8px', marginTop: '2px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: drawingMode ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none', transition: 'filter 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                    </button>
+                    <button onClick={() => setShowSunLines(v => !v)} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '8px', color: showSunLines ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: showSunLines ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none', transition: 'filter 0.3s ease, color 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
+                      {showSunLines ? (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                      ) : (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                      )}
+                    </button>
+                    <button className="pill-btn" onClick={() => setShowMapFull(f => !f)} style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '8px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: showMapFull ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none', transition: 'filter 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
+                      {showMapFull ? (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                      ) : (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                      )}
+                    </button>
+                  </div>
+                  {/* Zoom pill */}
+                  {!isMobile && (
+                    <div style={{ 
+                      position: 'relative',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center',
+                      background: 'rgba(255,255,255,0.92)', 
+                      borderRadius: '24px', 
+                      width: '36px', boxSizing: 'border-box',
+                      padding: '16px 0 4px 0'
+                    }}>
+                      <span className="font-bebas-book"
+                        style={{ width: '100%', height: '28px',
+                          color: '#333', fontSize: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+                        }}>+</span>
+                      <span className="font-bebas-book"
+                        style={{ width: '100%', height: '28px',
+                          color: '#333', fontSize: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+                        }}>−</span>
+                      {/* Invisible 50/50 click overlays */}
+                      <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() + 1); }}
+                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '50%', background: 'transparent', border: 'none', cursor: 'pointer' }}/>
+                      <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() - 1); }}
+                        style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: '50%', background: 'transparent', border: 'none', cursor: 'pointer' }}/>
+                    </div>
+                  )}
+                </div>}
+                {/* Zoom scale bar */}
+                {(() => {
+                  const lat = adjustedPos?.lat ?? project?.lat ?? 45;
+                  const mPerPx = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, mapZoom);
+                  const targetPx = 100;
+                  const targetM = targetPx * mPerPx;
+                  const nice = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+                  const best = nice.reduce((a, b) => Math.abs(b - targetM) < Math.abs(a - targetM) ? b : a);
+                  const barPx = Math.round(best / mPerPx);
+                  const label = best >= 1000 ? (best / 1000) + ' km' : best + ' m';
+                  return (
+                    <div style={{ position: 'absolute', bottom: '14px', right: '10px', zIndex: 13, pointerEvents: 'none', display: 'flex', alignItems: 'flex-end', gap: '8px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                        <span className="font-bebas-bold" style={{ fontSize: '12px', color: '#ffffff', letterSpacing: '0.06em', textShadow: '0 1px 3px rgba(0,0,0,0.8)', marginBottom: '2px' }}>{label}</span>
+                        <div style={{ width: barPx + 'px', height: '2px', background: '#ffffff', boxShadow: '0 1px 3px rgba(0,0,0,0.6)', position: 'relative' }}>
+                          <div style={{ position: 'absolute', left: 0, top: '-3px', width: '2px', height: '8px', background: '#ffffff' }}/>
+                          <div style={{ position: 'absolute', right: 0, top: '-3px', width: '2px', height: '8px', background: '#ffffff' }}/>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+                {/* Drawing mode hint — near the polygon */}
+                {drawingMode && (
+                  <div style={{ position: 'absolute', 
+                    bottom: '14px', left: '50%', transform: 'translateX(-50%)',
+                    zIndex: 13, 
+                    background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', borderRadius: '8px', padding: '6px 14px',
+                    display: 'flex', alignItems: 'center', gap: '10px'
+                  }}>
+                    <span className="font-bebas-bold" style={{ fontSize: '14px', color: '#7dd3c6', letterSpacing: '0.04em' }}>
+                      {drawingVertices.length === 0 ? 'CLIQUER POUR PLACER LE PREMIER POINT' : 
+                       drawingVertices.length < 3 ? `${drawingVertices.length} POINT${drawingVertices.length > 1 ? 'S' : ''} | CONTINUEZ` :
+                       `${drawingVertices.length} POINTS`}
+                    </span>
+                    {drawingVertices.length >= 3 && (
+                      <button onClick={() => finishDrawing()} className="font-bebas-bold"
+                        style={{ background: 'rgba(125,211,198,0.3)', border: '1px solid rgba(125,211,198,0.5)', borderRadius: '4px', cursor: 'pointer', padding: '2px 10px', color: '#7dd3c6', fontSize: '14px', letterSpacing: '0.04em' }}>OK</button>
+                    )}
+                    <button onClick={() => { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(false); }} className="font-bebas-regular"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>✕</button>
+                  </div>
+                )}
+                {/* Date wheel picker */}
+                {showDatePicker && <DateWheelPicker date={sunDate} onChange={setSunDate} onClose={() => setShowDatePicker(false)} />}
+                {/* Position auto-updates on map pan — no button needed */}
+              </div>
+              </>
+            ) : (
+              <div style={{ width: '100%', flex: 1, minHeight: '500px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span className="text-charcoal-muted font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '18px' }}>{t('noAddress')}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Fichiers */}
+      <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} mt-6`} style={{ maxWidth: isMobile ? '100%' : '700px' }}>
+        <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('files')}</label>
+        {projectFiles.length > 0 && <span className="font-bebas-light" style={{ fontSize: '14px', color: '#404A48', letterSpacing: '0.04em', marginLeft: '12px' }}>{totalFilesMB.toFixed(1)} / {MAX_PROJECT_FILES_MB} MB</span>}
+
+        {/* Upload zone — desktop only, before files */}
+        {!isMobile && project?.status !== 'done' && (
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFileUpload(e.dataTransfer.files); }}
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              borderStyle: 'dashed', borderWidth: '2.5px', borderColor: dragOver ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.15)',
+              borderRadius: '8px',
+              padding: '18px 12px', cursor: 'pointer', marginTop: '10px', minHeight: '60px',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              background: dragOver ? 'rgba(255,255,255,0.03)' : 'transparent',
+              boxShadow: dragOver ? '0 0 12px rgba(255,255,255,0.08), inset 0 0 12px rgba(255,255,255,0.03)' : 'none',
+              transition: 'all 0.25s ease'
+            }}
+          >
+            <input ref={fileInputRef} type="file" multiple accept=".jpg,.jpeg,.png,.webp,.heic,.pdf" style={{ display: 'none' }}
+              onChange={(e) => { handleFileUpload(e.target.files); e.target.value = ''; }}
+            />
+            <span className="text-charcoal" style={{ fontSize: '15px', color: uploading ? '#7dd3c6' : 'rgba(255,255,255,0.4)' }}>
+              {uploading ? `Téléversement... ${uploadProgress}%` : 'Glisser ou cliquer pour ajouter...'}
+            </span>
+            {uploading && (
+              <div style={{ width: '80%', height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                <div style={{ width: `${uploadProgress}%`, height: '100%', background: '#7dd3c6', borderRadius: '2px', transition: 'width 0.3s ease' }}/>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Files list — below upload zone */}
+        {projectFiles.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '12px' }}>
+            {projectFiles.map(f => {
+              const isPdf = f.mime_type === 'application/pdf' || f.filename.toLowerCase().endsWith('.pdf');
+              const ext = f.filename.split('.').pop().toUpperCase();
+              const sizeMB = (f.size_bytes / (1024 * 1024)).toFixed(1);
+              const url = fileUrls[f.id];
+              return (
+                <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer', transition: 'background 0.15s' }}
+                  onClick={() => { if (url) { if (isMobile) { setPreviewFile(f); } else { const tmp = document.createElement('a'); tmp.href = url; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); } } }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+                >
+                  {isPdf ? (
+                    <div style={{ width: '88px', height: '88px', borderRadius: '6px', background: 'rgba(232,150,122,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <span className="font-bebas-bold" style={{ fontSize: '22px', color: '#e8967a', letterSpacing: '0.04em', position: 'relative', top: '1px' }}>PDF</span>
+                    </div>
+                  ) : url ? (
+                    <img src={url} alt={f.filename} style={{ width: '88px', height: '88px', borderRadius: '6px', objectFit: 'cover', background: 'rgba(255,255,255,0.04)', flexShrink: 0 }}/>
+                  ) : (
+                    <div style={{ width: '88px', height: '88px', borderRadius: '6px', background: 'rgba(125,211,198,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <span className="font-bebas-bold" style={{ fontSize: '20px', color: '#7dd3c6', letterSpacing: '0.04em', position: 'relative', top: '1px' }}>{ext}</span>
+                    </div>
+                  )}
+                  <span style={{ fontSize: '14px', color: '#c8d0ce', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.filename}</span>
+                  <span style={{ fontSize: '11px', color: '#556462', flexShrink: 0 }}>{sizeMB} MB</span>
+                  {!isMobile && (
+                    <button onClick={(e) => { e.stopPropagation(); handleFileDelete(f); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', opacity: 0.5, transition: 'opacity 0.15s', flexShrink: 0 }}
+                      onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                      onMouseLeave={e => e.currentTarget.style.opacity = 0.5}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF3B30" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {projectFiles.length === 0 && isMobile && (
+          <div style={{ border: '1px dashed rgba(255,255,255,0.15)', padding: '18px 12px', marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60px' }}>
+            <span style={{ fontSize: '15px', color: 'rgba(255,255,255,0.4)' }}>Aucun fichier</span>
+          </div>
+        )}
+      </div>
+
+      {/* File preview overlay */}
+      {previewFile && (
+        <div onClick={() => setPreviewFile(null)} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          {previewFile.mime_type === 'application/pdf' ? (
+            <iframe src={fileUrls[previewFile.id]} style={{ width: '90%', height: '90%', border: 'none', borderRadius: '8px' }}/>
+          ) : (
+            <img src={fileUrls[previewFile.id]} style={{ maxWidth: '95%', maxHeight: '95%', objectFit: 'contain', borderRadius: '8px' }} alt={previewFile.filename}/>
+          )}
+        </div>
+      )}
+
+      {/* Actions en bas */}
+      <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} mt-8 pt-4 border-t border-adaptive flex items-center ${isMobile ? 'justify-between' : 'gap-8'}`}>
+        <button onClick={onClose} className="text-charcoal-muted hover:text-charcoal transition-colors" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div className={`flex items-center ${isMobile ? 'gap-6' : 'gap-8'}`} style={isMobile ? {} : { marginLeft: '80px' }}>
+          {project.status === 'todo' && (
+            <button onClick={() => updateProject(project.id, { onHold: !project.onHold })} className="font-bebas-bold text-xl" style={{ letterSpacing: '0.04em', background: 'none', border: 'none', cursor: 'pointer', color: project.onHold ? '#7dd3c6' : '#8B9B99', transition: 'text-shadow 0.2s, color 0.2s', textShadow: project.onHold ? '0 0 12px rgba(125,211,198,0.45), 0 0 30px rgba(125,211,198,0.15)' : 'none' }}
+              onMouseEnter={e => { if (!project.onHold) { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }}}
+              onMouseLeave={e => { if (!project.onHold) { e.target.style.color = '#8B9B99'; e.target.style.textShadow = 'none'; }}}
+            >{t('onHold')}</button>
+          )}
+          {project.status === 'todo' && (
+            <button onClick={handleDone} className="font-bebas-bold text-xl" style={{ letterSpacing: '0.04em', background: 'none', border: 'none', cursor: 'pointer', color: confirmDone ? '#d83152' : '#8B9B99', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }}
+              onMouseEnter={e => { if (!confirmDone) { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }}}
+              onMouseLeave={e => { if (!confirmDone) { e.target.style.color = '#8B9B99'; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; }}}
+            >{confirmDone ? t('moveToEditingConfirm') : t('moveToEditing')}</button>
+          )}
+          <button onClick={handleDelete} className="font-bebas-bold text-xl" style={{ letterSpacing: '0.04em', background: 'none', border: 'none', cursor: 'pointer', color: confirm ? '#d83152' : '#8B9B99', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirm ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }}
+            onMouseEnter={e => { if (!confirm) { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }}}
+            onMouseLeave={e => { if (!confirm) { e.target.style.color = '#8B9B99'; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; }}}
+          >{confirm ? t('deleteConfirm') : t('delete')}</button>
+        </div>
+        {!isMobile && <span className="ml-auto"/>}
+      </div>
+    </div>
+  );
+};
+
+const NewProjectModal = ({ isOpen, onClose, onCreated, origin, onOpen }) => {
+  const { addProject, prefs } = useStore();
+  const { t } = useLang();
+  const [form, setForm] = useState({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false, clientFolder: '' });
+  const [loading, setLoading] = useState(false);
+  const [justCreated, setJustCreated] = useState(null);
+  const [animated, setAnimated] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [winSize, setWinSize] = useState({ w: window.innerWidth, h: window.innerHeight });
+  const addressInputRef = React.useRef(null);
+  const nameInputRef = React.useRef(null);
+  const autocompleteRef = React.useRef(null);
+  const prevOpen = React.useRef(false);
+  const isMobile = useIsMobile();
+
+  useEffect(() => {
+    const onResize = () => setWinSize({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Animate open + reset form
+  useEffect(() => {
+    if (isOpen && !prevOpen.current) {
+      setForm({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false, clientFolder: '' });
+      if (addressInputRef.current) addressInputRef.current.value = '';
+      autocompleteRef.current = null;
+      requestAnimationFrame(() => requestAnimationFrame(() => setAnimated(true)));
+      setTimeout(() => nameInputRef.current?.focus(), 500);
+    }
+    prevOpen.current = isOpen;
+  }, [isOpen]);
+
+  // Init Google Places when opening
+  useEffect(() => {
+    if (animated && addressInputRef.current && !autocompleteRef.current && window.google) {
+      autocompleteRef.current = new google.maps.places.Autocomplete(addressInputRef.current, {
+        types: ['establishment', 'geocode'],
+        componentRestrictions: { country: 'ca' },
+        fields: ['formatted_address', 'geometry', 'name']
+      });
+      autocompleteRef.current.addListener('place_changed', () => {
+        const place = autocompleteRef.current.getPlace();
+        if (place.geometry) {
+          setForm(f => ({ ...f, address: place.formatted_address, lat: place.geometry.location.lat(), lng: place.geometry.location.lng() }));
+        }
+      });
+    }
+  }, [animated]);
+
+  const handleClose = () => {
+    setAnimated(false);
+    setTimeout(() => onClose(), 600);
+  };
+
+  const handleSubmit = async () => {
+    if (!form.name.trim()) return;
+    setLoading(true);
+    let data = { ...form };
+    if (form.address && !form.lat) {
+      try { const result = await geocodeAddress(form.address); data.lat = result.lat; data.lng = result.lng; data.address = result.formattedAddress; } catch (err) { console.warn('Geocoding error:', err); }
+    }
+    if (data.lat && data.lng && prefs.homeLat && prefs.homeLng) {
+      try { const travel = await getTravelTime(prefs.homeLat, prefs.homeLng, data.lat, data.lng); data.travelTime = travel; data.departureAddress = prefs.homeAddress; data.departureLat = prefs.homeLat; data.departureLng = prefs.homeLng; } catch (err) { console.warn('Travel time error:', err); }
+    }
+    const result = addProject(data);
+    setLoading(false);
+    if (result && result.error === 'limit_reached') {
+      setShowUpgradeModal(true);
+      return;
+    }
+    handleClose();
+  };
+
+  // ===== MOBILE LAYOUT =====
+  if (isMobile) {
+    return (
+      <React.Fragment>
+        {/* Floating + button - desktop only, hidden on mobile (in nav bar) */}
+        {!isOpen && !animated && !isMobile && (
+          <button 
+            onClick={onOpen}
+            style={{ 
+              position: 'fixed', zIndex: 51, bottom: '90px', right: '16px',
+              width: '56px', height: '56px', borderRadius: '50%',
+              background: '#E07A2B', color: '#fff', border: 'none',
+              fontSize: '32px', lineHeight: '1', cursor: 'pointer',
+              boxShadow: '0 4px 20px rgba(224,122,43,0.4)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}
+          >+</button>
+        )}
+
+        {/* Full-screen modal */}
+        {(isOpen || animated) && (
+          <div 
+            className={`newproj-overlay ${animated ? 'open' : ''}`}
+            style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', padding: '24px', paddingTop: '80px' }}
+            onClick={handleClose}
+          >
+            <div onClick={e => e.stopPropagation()} style={{ 
+              border: '1px solid rgba(255,255,255,0.15)', 
+              padding: '24px 20px',
+              background: 'rgba(30,34,36,0.95)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              maxWidth: '400px', width: '100%', margin: '0 auto',
+              opacity: animated ? 1 : 0,
+              transform: animated ? 'translateY(0)' : 'translateY(20px)',
+              transition: 'opacity 0.3s ease 0.15s, transform 0.3s ease 0.15s'
+            }}>
+              <div className="mb-5">
+                <label className="newproj-label font-bebas-book">{t('projectName')}</label>
+                <input ref={nameInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder={t('projectNamePlaceholder')} style={{ background: 'transparent', position: 'relative', zIndex: 2, border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
+              </div>
+              <div className="mb-5">
+                <label className="newproj-label font-bebas-book">{t('projectAddress')}</label>
+                <input ref={addressInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder={t('enterAddress')} style={{ background: 'transparent', position: 'relative', zIndex: 2, border: '1px solid rgba(255,255,255,0.15)', padding: '10px 12px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '15px' }}/>
+              </div>
+              <div className="mb-5">
+                <label className="newproj-label font-bebas-book">MANDAT</label>
+                <div className="flex gap-4 flex-wrap">
+                  {Object.values(MandateType).map(m => (
+                    <button key={m} type="button" onClick={() => setForm({...form, mandates: toggleMandate(form.mandates, m)})} className={`newproj-toggle font-bebas-bold ${form.mandates.includes(m) ? 'active' : ''}`} style={form.mandates.includes(m) && m === 'DRONE+C' ? {} : {}}>{m === 'DRONE+C' ? (form.mandates.includes(m) ? React.createElement('span', null, 'DRONE.', React.createElement('span', {style:{color:'#d83152'}}, 'C')) : 'DRONE.C') : m}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="mb-6">
+                <label className="newproj-label font-bebas-book">ORIENTATION</label>
+                <div className="flex gap-4">
+                  {['AM','PM'].map(o => (
+                    <button key={o} type="button" onClick={() => setForm({...form, orientation: form.orientation.includes(o) ? form.orientation.filter(x => x !== o) : [...form.orientation, o]})} className={`newproj-toggle font-bebas-bold ${form.orientation.includes(o) ? 'active' : ''}`}>{o}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <button onClick={handleSubmit} disabled={loading || !form.name.trim()} className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '18px', color: !form.name.trim() ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.6)', background: 'none', border: 'none', cursor: 'pointer' }}>{loading ? 'CRÉATION...' : t('added')}</button>
+                <div style={{ width: '1px', height: '18px', background: 'rgba(255,255,255,0.15)' }}/>
+                <button onClick={handleClose} className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '18px', color: 'rgba(255,255,255,0.6)', background: 'none', border: 'none', cursor: 'pointer' }}>{t('cancel')}</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </React.Fragment>
+    );
+  }
+
+  // ===== DESKTOP LAYOUT (original) =====
+  // Panel: centered on screen
+  const panelW = 560;
+  const panelH = 485; // +75 pour loger la ligne DOSSIER sous ORIENTATION sans chevaucher CRÉER/ANNULER
+  const panelX = (winSize.w - panelW) / 2 + 60;
+  const panelY = (winSize.h - panelH) / 2;
+
+  // + big position center
+  const plusSize = 900;
+  const plusBaseX = panelX - plusSize * 0.45 + 275 - 125 + 25;
+  const plusBaseY = panelY + panelH / 2 - plusSize * 0.38 + 113.5;
+  const plusCX = plusBaseX + plusSize * 0.10;
+  const plusCY = plusBaseY + plusSize * 0.32;
+
+  return (
+    <React.Fragment>
+      {/* Overlay - only when open */}
+      {(isOpen || animated) && <div className={`newproj-overlay ${animated ? 'open' : ''}`} onClick={handleClose}/>}
+
+      {/* The + : always visible, small when idle, big when open */}
+      <span 
+        className="font-bebas-regular" 
+        onClick={!isOpen && !animated ? onOpen : undefined}
+        style={{ 
+          position: 'fixed', zIndex: 61, lineHeight: '0.8', cursor: !animated ? 'pointer' : 'default',
+          left: animated ? plusCX : (origin ? origin.x : 0), 
+          top: animated ? plusCY : (origin ? origin.y : 0), 
+          fontSize: animated ? '900px' : '110px',
+          transform: animated ? 'translate(-50%, -50%) rotate(90deg)' : 'none',
+          filter: animated ? 'blur(3px)' : 'blur(0px)',
+          color: animated ? 'rgba(255,255,255,0.25)' : 'var(--text-primary)',
+          transition: 'left 0.55s cubic-bezier(0.16, 1, 0.3, 1), top 0.55s cubic-bezier(0.16, 1, 0.3, 1), font-size 0.55s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), filter 0.55s cubic-bezier(0.16, 1, 0.3, 1), color 0.3s ease'
+        }}
+      >+</span>
+
+      {/* Blur zone + Panel + Actions: only when open */}
+      {(isOpen || animated) && (
+        <React.Fragment>
+          <div className={`newproj-plusblur ${animated ? 'open' : ''}`} style={{ left: panelX, top: panelY, width: panelW, height: panelH }}/>
+
+          <div className={`newproj-panel ${animated ? 'open' : ''}`} style={{ left: panelX, top: panelY, width: panelW, padding: '28px 32px' }} onClick={e => e.stopPropagation()}>
+            <div className="mb-5">
+              <label className="newproj-label font-bebas-book">{t('projectName')}</label>
+              <input ref={nameInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder={t('projectNamePlaceholder')}/>
+            </div>
+            <div className="mb-5">
+              <label className="newproj-label font-bebas-book">{t('projectAddress')}</label>
+              <input ref={addressInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder={t('enterAddress')}/>
+            </div>
+            <div className="mb-5">
+              <label className="newproj-label font-bebas-book">MANDAT</label>
+              <div className="flex gap-5">
+                {Object.values(MandateType).map(m => (
+                  <button key={m} type="button" onClick={() => setForm({...form, mandates: toggleMandate(form.mandates, m)})} className={`newproj-toggle font-bebas-bold ${form.mandates.includes(m) ? 'active' : ''}`} style={form.mandates.includes(m) && m === 'DRONE+C' ? {} : {}}>{m === 'DRONE+C' ? (form.mandates.includes(m) ? React.createElement('span', null, 'DRONE.', React.createElement('span', {style:{color:'#d83152'}}, 'C')) : 'DRONE.C') : m}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="newproj-label font-bebas-book">ORIENTATION</label>
+              <div className="flex gap-4">
+                {['AM','PM'].map(o => (
+                  <button key={o} type="button" onClick={() => setForm({...form, orientation: form.orientation.includes(o) ? form.orientation.filter(x => x !== o) : [...form.orientation, o]})} className={`newproj-toggle font-bebas-bold ${form.orientation.includes(o) ? 'active' : ''}`}>{o}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{ marginTop: '22px' }}>
+              <FolderCombo value={form.clientFolder} onChange={(v) => setForm(f => ({ ...f, clientFolder: v }))}/>
+            </div>
+          </div>
+
+          <div className={`newproj-actions ${animated ? 'open' : ''}`} style={{ left: panelX, top: panelY + panelH + 14 }}>
+            <div className="flex items-end">
+              <button onClick={handleSubmit} disabled={loading || !form.name.trim()} className="font-bebas-bold">{loading ? 'CRÉATION...' : t('added')}</button>
+              <div style={{ width: '1px', background: 'rgba(255,255,255,0.15)', alignSelf: 'stretch', marginLeft: '20px', marginRight: '20px', marginTop: '-9px' }}/>
+              <button onClick={handleClose} className="font-bebas-bold">{t('cancel')}</button>
+              {justCreated && <span className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '14px', color: 'rgba(255,255,255,0.4)', marginLeft: '16px' }}>✓ {justCreated} {t('added')}</span>}
+            </div>
+          </div>
+        </React.Fragment>
+      )}
+    </React.Fragment>
+  );
+};
+
+
+const Header = ({ onChangeView, onAddProject }) => {
+  const { view, prefs, setPrefs } = useStore();
+  const { t } = useLang();
+  const isMobile = useIsMobile();
+  const [hoveredItem, setHoveredItem] = useState(null);
+
+  // iPhone : quand le clavier s'ouvre, WebKit garde le viewport de mise en page tel quel et ne
+  // réduit que le viewport visuel ; le nav (position: fixed; bottom: 0) se retrouve alors au
+  // milieu de l'écran, et reste parfois coincé là après la fermeture du clavier tant qu'on n'a
+  // pas scrollé. On le masque tant que le clavier est ouvert et, à la fermeture, on force WebKit
+  // à recaler les éléments fixes avec un scroll d'un pixel aller-retour.
+  const [kbOpen, setKbOpen] = useState(false);
+  useEffect(() => {
+    if (!isMobile) return;
+    const vv = window.visualViewport;
+    let wasOpen = false, timer = null;
+    const nudge = () => {
+      const els = [document.scrollingElement || document.documentElement, ...document.querySelectorAll('.detail-scroll')].filter(Boolean);
+      const ys = els.map(el => el.scrollTop);
+      els.forEach((el, i) => { el.scrollTop = ys[i] > 0 ? ys[i] - 1 : ys[i] + 1; });
+      requestAnimationFrame(() => els.forEach((el, i) => { el.scrollTop = ys[i]; }));
+    };
+    const check = () => {
+      const visible = vv ? vv.height * (vv.scale || 1) : window.innerHeight;
+      const open = visible < window.innerHeight * 0.75;
+      if (open === wasOpen) return;
+      wasOpen = open;
+      setKbOpen(open);
+      if (!open) { requestAnimationFrame(nudge); setTimeout(nudge, 300); }
+    };
+    // Filet de sécurité si visualViewport ne signale pas le clavier : re-vérifie après un focus / blur.
+    const later = () => { clearTimeout(timer); timer = setTimeout(check, 350); };
+    if (vv) { vv.addEventListener('resize', check); vv.addEventListener('scroll', check); }
+    window.addEventListener('focusin', later);
+    window.addEventListener('focusout', later);
+    return () => {
+      clearTimeout(timer);
+      if (vv) { vv.removeEventListener('resize', check); vv.removeEventListener('scroll', check); }
+      window.removeEventListener('focusin', later);
+      window.removeEventListener('focusout', later);
+    };
+  }, [isMobile]);
+  const navItems = [
+    { id: 'todo', label: t('projects'), icon: '☀︎' },
+    { id: 'retouching', label: t('editing'), icon: '✎' },
+    { id: 'routes', label: t('routes'), icon: '⤳' },
+    { id: 'preferences', label: t('preferences'), icon: '⚙' }
+  ];
+
+  // Scroll-driven glow position along pill border
+  const glowRef = useRef(null);
+  useEffect(() => {
+    if (!isMobile) return;
+    const onScroll = () => {
+      if (!glowRef.current) return;
+      const scrollY = window.scrollY || window.pageYOffset;
+      // Map scroll to a 0-1 progress along the pill perimeter
+      const t = ((scrollY * 0.3) % 360) / 360;
+      // Trace the pill border: top edge left→right, then right cap, bottom right→left, left cap
+      let gx, gy;
+      if (t < 0.35) {
+        // Top edge: left to right
+        gx = (t / 0.35) * 100;
+        gy = 0;
+      } else if (t < 0.5) {
+        // Right side: top to bottom
+        const p = (t - 0.35) / 0.15;
+        gx = 100;
+        gy = p * 100;
+      } else if (t < 0.85) {
+        // Bottom edge: right to left
+        gx = (1 - (t - 0.5) / 0.35) * 100;
+        gy = 100;
+      } else {
+        // Left side: bottom to top
+        const p = (t - 0.85) / 0.15;
+        gx = 0;
+        gy = (1 - p) * 100;
+      }
+      glowRef.current.style.setProperty('--gx', gx + '%');
+      glowRef.current.style.setProperty('--gy', gy + '%');
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [isMobile]);
+
+  // Desktop nav bar — hooks must be before any conditional return
+  const navContainerRef = useRef(null);
+  const navSpanRefs = useRef({});
+  const [barStyle, setBarStyle] = useState({ left: 0, width: 0 });
+  const [barReady, setBarReady] = useState(false);
+  const barInitialized = useRef(false);
+  const barRevealed = useRef(false);
+
+  useEffect(() => {
+    if (isMobile) return;
+    const measure = () => {
+      const span = navSpanRefs.current[view];
+      const container = navContainerRef.current;
+      if (!span || !container) return;
+      const cRect = container.getBoundingClientRect();
+      const sRect = span.getBoundingClientRect();
+      setBarStyle({
+        left: sRect.left - cRect.left,
+        width: sRect.width,
+      });
+    };
+
+    // ResizeObserver keeps the bar exactly the width of the active label on
+    // any later change (zoom, language switch). Gated on barRevealed so the
+    // wider *fallback* font measured during the reload reflow never moves the
+    // bar before the real font is ready.
+    const ro = new ResizeObserver(() => { if (barRevealed.current) measure(); });
+    Object.values(navSpanRefs.current).forEach(s => { if (s) ro.observe(s); });
+
+    // FOUT: au reload, la largeur du souligné était mesurée avec la police de
+    // secours (plus large) avant que Bebas soit appliquée, d'où un souligné
+    // trop large jusqu'au premier clic. On ne mesure qu'une fois les polices
+    // prêtes ET la police du nav (Bebas Neue) réellement chargée — plus fiable
+    // que document.fonts.ready seul sur WebKit quand la police est en cache.
+    // Même fonction measure() que le repositionnement au clic.
+    const initial = () => {
+      barInitialized.current = true;
+      barRevealed.current = true;
+      setBarReady(true);
+      requestAnimationFrame(() => measure());
+    };
+    const fontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+    const bebasReady = (document.fonts && document.fonts.load) ? document.fonts.load("400 20px 'Bebas Neue'").catch(() => {}) : Promise.resolve();
+    Promise.all([fontsReady, bebasReady]).then(() => requestAnimationFrame(initial));
+
+    // Recalcul au redimensionnement de la fenêtre (même fonction de mesure).
+    window.addEventListener('resize', measure);
+
+    return () => { ro.disconnect(); window.removeEventListener('resize', measure); };
+  }, [view, isMobile]);
+
+  if (isMobile) {
+    return (
+      <nav className="mobile-bottom-nav fixed bottom-0 left-0 right-0 z-40" 
+        style={{ 
+          height: 'calc(120px + env(safe-area-inset-bottom))',
+          visibility: kbOpen ? 'hidden' : 'visible',
+          pointerEvents: kbOpen ? 'none' : 'auto',
+          background: 'transparent',
+          backdropFilter: 'blur(20px) saturate(1.3)',
+          WebkitBackdropFilter: 'blur(20px) saturate(1.3)',
+          WebkitMaskImage: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 100%)',
+          maskImage: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 100%)',
+          overflow: 'hidden'
+        }}>
+        {/* Yellow glow - bottom left, subtle */}
+        <div style={{ position: 'absolute', left: '-250px', bottom: 0, width: '500px', height: '86px', overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
+          <div style={{ position: 'absolute', left: 0, bottom: '-300px', width: '500px', height: '500px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(210,188,110,0.30) 0%, rgba(210,188,110,0.04) 40%, rgba(210,188,110,0) 70%)' }}/>
+        </div>
+        {/* Teal glow - center, contours only */}
+        <div style={{ position: 'absolute', left: 'calc(50% + 50px)', bottom: 0, width: '500px', height: '86px', overflow: 'hidden', pointerEvents: 'none', zIndex: 0, transform: 'translateX(-50%)' }}>
+          <div style={{ position: 'absolute', left: 0, bottom: '-370px', width: '500px', height: '500px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(61,130,170,0.35) 0%, rgba(61,130,170,0.1) 40%, rgba(61,130,170,0) 70%)' }}/>
+        </div>
+        {/* Black flare - bottom right, in 86px mask (257px @3x) */}
+        <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '86px', overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
+          <div style={{ position: 'absolute', right: '-400px', bottom: '-400px', width: '760px', height: '760px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0) 70%)' }}/>
+        </div>
+        {/* Content row - positioned from bottom */}
+        <div style={{ position: 'absolute', bottom: '20px', left: 0, right: 0, display: 'flex', alignItems: 'center', height: '50px', zIndex: 1 }}>
+          {/* + button with halo */}
+          <button
+            onClick={view === 'todo' ? onAddProject : undefined}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: view === 'todo' ? 'pointer' : 'default',
+              position: 'relative',
+              marginLeft: '23px',
+              flexShrink: 0,
+              opacity: view === 'todo' ? 1 : 0.3,
+              pointerEvents: view === 'todo' ? 'auto' : 'none',
+              WebkitTapHighlightColor: 'transparent',
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <span className="font-bebas-book" style={{ letterSpacing: '0.04em', color: '#ffffff', fontSize: '67px', lineHeight: '0.7', position: 'relative', zIndex: 1, textShadow: '0 0 10px rgba(255,255,255,0.8), 0 0 30px rgba(255,255,255,0.5), 0 0 60px rgba(255,255,255,0.25)' }}>+</span>
+          </button>
+          {/* Nav labels */}
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '20px' }}>
+            {navItems.map(item => {
+              const isActive = view === item.id;
+              return (
+                <button 
+                  key={item.id}
+                  onClick={() => onChangeView(item.id)}
+                  style={{ 
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    WebkitTapHighlightColor: 'transparent'
+                  }}
+                >
+                  <span 
+                    className="font-bebas-book" 
+                    style={{ 
+                      fontSize: '20px',
+                      color: isActive ? '#ffffff' : '#919b99',
+                      letterSpacing: '0.1em',
+                      transition: 'color 0.3s'
+                    }}
+                  >
+                    {item.id === 'preferences' ? t('preferencesShort') : item.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </nav>
+    );
+  }
+
+  return (
+    <header 
+      className="fixed top-0 right-0 z-40"
+      style={{ paddingTop: '10px', paddingRight: '13px' }}
+    >
+      <div ref={navContainerRef} className="flex gap-6" style={{ position: 'relative', paddingBottom: '5px' }}>
+        {navItems.map(item => {
+          const isActive = view === item.id;
+          return (
+            <button 
+              key={item.id}
+              onClick={() => onChangeView(item.id)}
+              onMouseEnter={() => setHoveredItem(item.id)}
+              onMouseLeave={() => setHoveredItem(null)}
+              className="cursor-pointer"
+              style={{ 
+                background: 'none',
+                border: 'none',
+                padding: '0 4px',
+                position: 'relative',
+              }}
+            >
+              <span 
+                ref={el => navSpanRefs.current[item.id] = el}
+                className="font-bebas-regular tracking-wider whitespace-nowrap"
+                style={{ letterSpacing: '0.04em', 
+                  fontSize: '20px',
+                  color: isActive ? '#FAF9F7' : hoveredItem === item.id ? '#8B9B99' : '#5A6B69',
+                  textShadow: isActive ? '0 0 12px rgba(155,171,169,0.4), 0 0 25px rgba(155,171,169,0.15)' : 'none',
+                  lineHeight: '1.2',
+                  transition: 'color 0.2s ease-out, text-shadow 0.3s ease',
+                }}
+              >
+                {item.label}
+              </span>
+            </button>
+          );
+        })}
+        {/* Per-item glow above active word */}
+        {navItems.map(item => {
+          const span = navSpanRefs.current[item.id];
+          const container = navContainerRef.current;
+          if (!span || !container) return null;
+          const cRect = container.getBoundingClientRect();
+          const sRect = span.getBoundingClientRect();
+          const centerX = sRect.left - cRect.left + sRect.width / 2 - 30;
+          const isActive = view === item.id;
+          const glowColor = 'rgba(255,255,255,0.12)';
+          return (
+            <div key={item.id + '-glow'} style={{
+              position: 'absolute',
+              top: '-8px',
+              left: centerX + 'px',
+              width: '60px',
+              height: '30px',
+              background: `radial-gradient(ellipse at center, ${glowColor} 0%, transparent 70%)`,
+              borderRadius: '50%',
+              pointerEvents: 'none',
+              opacity: isActive ? 1 : 0,
+              transition: 'opacity 0.35s ease',
+            }}/>
+          );
+        })}
+        {/* Sliding underline bar */}
+        <div style={{
+          position: 'absolute',
+          bottom: '0',
+          left: barStyle.left + 'px',
+          width: barStyle.width + 'px',
+          height: '3px',
+          backgroundColor: view === 'retouching' ? 'rgba(216,175,76,0.5)' : 'rgba(90,107,105,0.5)',
+          borderRadius: '1px',
+          opacity: barReady ? 1 : 0,
+          transition: (barInitialized.current ? 'left 0.35s cubic-bezier(0.4, 0, 0.2, 1), width 0.35s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.35s ease, ' : '') + 'opacity 0.25s ease',
+          boxShadow: view === 'retouching' ? '0 0 6px rgba(216,175,76,0.4)' : '0 0 4px rgba(90,107,105,0.25)',
+        }}/>
+      </div>
+    </header>
+  );
+};
+
+// Indice Kp (activité géomagnétique, aurores): estimation à la minute de la NOAA (SWPC).
+// Valeur entière du dernier relevé; cache de 10 min en localStorage; null si injoignable.
+const KP_CACHE_KEY = 'sp-kp-cache';
+const KP_TTL_MS = 10 * 60 * 1000;
+const fetchKp = async () => {
+  try {
+    const c = JSON.parse(localStorage.getItem(KP_CACHE_KEY) || 'null');
+    if (c && typeof c.kp === 'number' && (Date.now() - c.ts) < KP_TTL_MS) return c.kp;
+  } catch (e) { /* cache illisible: on ignore */ }
+  try {
+    const res = await fetch('https://services.swpc.noaa.gov/json/planetary_k_index_1m.json');
+    if (!res.ok) return null;
+    const arr = await res.json();
+    const last = Array.isArray(arr) && arr.length ? arr[arr.length - 1] : null;
+    const kp = last && last.kp_index != null ? Math.round(Number(last.kp_index)) : null;
+    if (kp == null || Number.isNaN(kp)) return null;
+    try { localStorage.setItem(KP_CACHE_KEY, JSON.stringify({ kp, ts: Date.now() })); } catch (e) { /* quota plein, on ignore */ }
+    return kp;
+  } catch (e) { return null; }
+};
+
+// ===== GEO WEATHER CARD (mobile) =====
+// Maquette: _PSD/MeteoActuelleApp.PSD (capture iPhone à 3x, 1179 px de large). Toutes les cotes
+// ci-dessous sont en px CSS (valeurs de la maquette divisées par 3), comptées depuis le haut de la
+// zone sûre et le bord gauche de l'écran, pour une largeur de 393 px; `zoom` adapte l'ensemble aux
+// autres largeurs. La carte est une bande qui défile horizontalement: la page « météo actuelle »
+// (soleil, deux heures, vent) glisse vers la gauche et laisse apparaître les heures suivantes.
+const GEO_CARD_W = 393;
+const GEO_CARD_H = 182;
+const GEO_COL_W = 44;
+// Courbe du soleil: cosinus surélevé, sommet en (101 ; 45,7), base à y=88,3, demi-largeur 76,7.
+const GEO_CURVE = { peakX: 101, peakY: 45.7, baseY: 88.3, half: 76.7 };
+const geoCurveY = (x) => {
+  const d = Math.abs(x - GEO_CURVE.peakX);
+  if (d >= GEO_CURVE.half) return GEO_CURVE.baseY;
+  return GEO_CURVE.baseY - (GEO_CURVE.baseY - GEO_CURVE.peakY) * (1 + Math.cos(Math.PI * d / GEO_CURVE.half)) / 2;
+};
+const GEO_CURVE_PATH = (() => {
+  const x0 = GEO_CURVE.peakX - GEO_CURVE.half, x1 = GEO_CURVE.peakX + GEO_CURVE.half, n = 80;
+  const pts = [];
+  for (let i = 0; i <= n; i++) { const x = x0 + (x1 - x0) * i / n; pts.push(`${x.toFixed(2)},${geoCurveY(x).toFixed(2)}`); }
+  return 'M' + pts.join(' L');
+})();
+// Fondu des deux extrémités du trait (profil d'opacité relevé sur la maquette entre x=31 et x=177).
+const GEO_CURVE_FADE = [[0, 0], [0.046, 0.016], [0.091, 0.05], [0.137, 0.165], [0.183, 0.435], [0.228, 0.75], [0.274, 0.937], [0.32, 0.99], [0.365, 1], [0.594, 1], [0.639, 0.99], [0.685, 0.945], [0.731, 0.77], [0.776, 0.427], [0.822, 0.153], [0.868, 0.043], [0.913, 0.012], [0.959, 0.008], [1, 0]];
+// La boule voyage du centre de l'heure de lever (x=53,7) au centre de l'heure de coucher (x=149,3).
+const GEO_BALL_X0 = 53.7, GEO_BALL_X1 = 149.3;
+// Teinte du % de soleil direct: même échelle que la bande horaire du détail de projet.
+const geoSunTint = (pct) => pct == null ? '#6f7d7b' : pct >= 60 ? '#E9D27A' : pct >= 45 ? '#E4CB78' : pct >= 32 ? '#DBCD92' : pct >= 20 ? '#CFC8A4' : pct >= 10 ? '#C3BDAA' : '#A7A99C';
+
+// Colonne d'une heure: heure, icône, % de nuages, % de soleil direct, aux tailles de la rangée météo du
+// listing d'accueil (Bebas Bold 14 px, icône 32 px, pourcentages 14 px), sur 44 px de large (v633.120).
+const GeoHourColumn = ({ h, dailyMap }) => {
+  const d = new Date(h.time);
+  const hr = d.getHours();
+  const sun = dailyMap[d.toDateString()];
+  const srH = sun && sun.sunrise ? new Date(sun.sunrise).getHours() : null;
+  const ssH = sun && sun.sunset ? new Date(sun.sunset).getHours() : null;
+  const isNight = srH !== null && ssH !== null && (hr < srH || hr >= ssH);
+  const icon = (h.icon === 'thunderstorm' || h.icon === 'snow' || h.icon === 'rain') ? h.icon
+    : ((!isNight && veilIcon(h.cloudcover, h.cloudLow, h.sunFraction)) || cloudcoverToIcon(h.cloudcover, isNight));
+  const sunPct = h.sunFraction != null ? Math.round(h.sunFraction * 100) : null;
+  const sunColor = geoSunTint(sunPct);
+  const tint = isNight ? 'rgba(250,249,247,0.05)' : (h.smoke ? SMOKE_TINT[h.smoke] : null);
+  return (
+    <div style={{ position: 'relative', width: GEO_COL_W, height: GEO_CARD_H, flexShrink: 0 }}>
+      {tint && <div style={{ position: 'absolute', left: 0, right: 0, top: 46, height: 130, background: tint }}/>}
+      <div className="flex flex-col items-center gap-0" style={{ position: 'absolute', left: 0, right: 0, top: 66, padding: '4px 0' }}>
+        <span className="font-bebas-bold text-sm leading-none" style={{ color: '#8B9B99' }}>{hr}H</span>
+        <WeatherIcon type={icon} className={`w-8 h-8 ${isNight ? 'opacity-50' : ''}`}/>
+        <span className="font-bebas-bold text-sm leading-none text-charcoal" style={{ letterSpacing: '0.04em', marginTop: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+          <svg width="10.5" height="10.5" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><g fill="#8A9794"><circle cx="12" cy="18" r="6"/><circle cx="20" cy="16" r="7"/><rect x="8" y="18" width="15" height="6" rx="3"/></g></svg>
+          {h.cloudcover != null ? `${h.cloudcover}%` : '--'}
+        </span>
+        <span className="font-bebas-bold text-sm leading-none" style={{ letterSpacing: '0.04em', marginTop: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px', color: sunColor }}>
+          <svg width="9.6" height="9.6" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><circle cx="16" cy="16" r="8" fill={sunColor}/></svg>
+          {sunPct != null ? `${sunPct}%` : '--'}
+        </span>
+      </div>
+    </div>
+  );
+};
+
+const GeoWeatherCard = () => {
+  const { t } = useLang();
+  const [geoData, setGeoData] = useState(null);
+  const [status, setStatus] = useState(() => localStorage.getItem('geo-permission') === 'granted' ? 'loading' : 'prompt');
+  // Indice Kp (activité géomagnétique), chargé une fois la météo affichée.
+  const [kp, setKp] = useState(null);
+  useEffect(() => {
+    if (status !== 'done') return;
+    let alive = true;
+    fetchKp().then((v) => { if (alive) setKp(v); });
+    return () => { alive = false; };
+  }, [status]);
+  // Tick à la minute: la boule suit l'heure courante sur la courbe.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => { const id = setInterval(() => setNowMs(Date.now()), 60000); return () => clearInterval(id); }, []);
+  // Largeur d'écran: la carte est dessinée pour 393 px et mise à l'échelle (zoom) sur les autres largeurs.
+  const [vw, setVw] = useState(() => window.innerWidth || GEO_CARD_W);
+  useEffect(() => {
+    const onResize = () => setVw(window.innerWidth || GEO_CARD_W);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const requestGeo = () => {
+    setStatus('loading');
+    if (!navigator.geolocation) { setStatus('error'); return; }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          localStorage.setItem('geo-permission', 'granted');
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          let city = 'Ma position';
+          try {
+            const rgResult = await reverseGeocode(lat, lng);
+            const comps = rgResult.results[0]?.address_components || [];
+            const locality = comps.find(c => c.types.includes('locality'));
+            const sublocality = comps.find(c => c.types.includes('sublocality'));
+            const admin3 = comps.find(c => c.types.includes('administrative_area_level_3'));
+            const best = locality || sublocality || admin3;
+            if (best) city = best.long_name;
+          } catch(e) { console.warn('Reverse geocode failed', e); }
+          const weatherResult = await fetchWeather(lat, lng);
+          const weather = weatherResult.data;
+          const today = weather?.daily?.[0];
+          if (!today) { setStatus('error'); return; }
+          // Heures à venir: de l'heure courante à 24 h plus loin (deux visibles, le reste au défilement).
+          const startOfHour = new Date();
+          startOfHour.setMinutes(0, 0, 0);
+          const allHours = weather.hourly || [];
+          const firstIdx = allHours.findIndex(h => new Date(h.time).getTime() >= startOfHour.getTime());
+          const hours = firstIdx >= 0 ? allHours.slice(firstIdx, firstIdx + 24) : [];
+          const currentHourly = hours[0] || null;
+          // Lever et coucher par date, pour griser les heures de nuit dans les colonnes.
+          const dailyMap = {};
+          (weather.daily || []).forEach(d => { if (d.sunrise) dailyMap[new Date(d.sunrise).toDateString()] = { sunrise: d.sunrise, sunset: d.sunset }; });
+          setGeoData({ city, sunrise: today.sunrise, sunset: today.sunset, temp: currentHourly?.temp ?? null, wind: currentHourly?.wind ?? null, gust: currentHourly?.gust ?? null, hours, dailyMap });
+          setStatus('done');
+        } catch(e) { console.error('GeoWeather error', e); setStatus('error'); }
+      },
+      (err) => { console.error('Geolocation denied', err); setStatus('denied'); },
+      { enableHighAccuracy: false, timeout: 10000 }
+    );
+  };
+
+  useEffect(() => {
+    if (status === 'loading' && localStorage.getItem('geo-permission') === 'granted') requestGeo();
+  }, []);
+
+  if (status === 'prompt') return (
+    <div style={{ margin: '0 12px', marginBottom: '15px', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', overflow: 'hidden', padding: '24px 28px', textAlign: 'center' }}>
+      <div className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>{t('currentLocationWeather')}</div>
+      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>{t('browserLocationPermission')}</div>
+      <button onClick={requestGeo} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: '20px', color: '#FAF9F7', fontSize: '16px', padding: '8px 24px', cursor: 'pointer', textShadow: '0 0 12px rgba(255,255,255,0.3)' }}>{t('enableLocation')}</button>
+    </div>
+  );
+  if (status === 'loading') return (
+    <div style={{ margin: '0 12px', marginBottom: '35px', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', overflow: 'hidden', padding: '24px 28px', textAlign: 'center' }}>
+      <div className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '13px', color: '#424a48' }}>Chargement météo...</div>
+    </div>
+  );
+  if (status === 'denied') return (
+    <div style={{ margin: '0 12px', marginBottom: '15px', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', overflow: 'hidden', padding: '24px 28px', textAlign: 'center' }}>
+      <div className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>{t('locationDenied')}</div>
+      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>{t('locationHelp')}</div>
+      <button onClick={() => { localStorage.removeItem('geo-permission'); requestGeo(); }} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: '20px', color: 'rgba(255,255,255,0.5)', fontSize: '14px', padding: '6px 20px', cursor: 'pointer' }}>{t('retry')}</button>
+    </div>
+  );
+  if (status === 'error' || !geoData) return null;
+
+  // Position de la boule: fraction du jour écoulée entre le lever et le coucher; absente la nuit.
+  const sunriseMs = geoData.sunrise ? new Date(geoData.sunrise).getTime() : null;
+  const sunsetMs = geoData.sunset ? new Date(geoData.sunset).getTime() : null;
+  const dayFrac = (sunriseMs != null && sunsetMs != null && sunsetMs > sunriseMs) ? (nowMs - sunriseMs) / (sunsetMs - sunriseMs) : null;
+  const showBall = dayFrac !== null && dayFrac >= 0 && dayFrac <= 1;
+  const ballX = showBall ? GEO_BALL_X0 + dayFrac * (GEO_BALL_X1 - GEO_BALL_X0) : 0;
+  const ballY = showBall ? geoCurveY(ballX) : 0;
+  const scale = vw >= 320 ? vw / GEO_CARD_W : 1;
+  const hours = geoData.hours || [];
+  const fmt2 = (v) => v == null ? '--' : String(v).padStart(2, '0');
+  // Séparateurs verticaux: trait d'un tiers de px CSS (1 px physique à 3x) à 27 % de blanc, dessinés en SVG
+  // pour une couverture exacte (un div de 0,34 px est arrondi par le navigateur et ressort plus lourd).
+  const hairline = (x) => <rect x={x} y={46} width={1 / 3} height={130} fill="#ffffff" fillOpacity={0.27}/>;
+  const labelStyle = { position: 'absolute', top: 83.07, fontSize: 12.62, letterSpacing: '0.1em', color: '#575E5E', lineHeight: 1, whiteSpace: 'nowrap' };
+  const timeStyle = { position: 'absolute', top: 102.37, fontSize: 46.67, letterSpacing: 0, color: '#8D9898', lineHeight: 1, whiteSpace: 'nowrap' };
+  // Bloc d'infos (vent, temp., rafale, Kp): cellules étiquette / valeur / unité avec la présentation standard
+  // de l'appli (étiquette Bebas Bold 15 px, valeur Bebas Book 25 px blanche, unité 12 px), deux colonnes
+  // centrées à x=334 et 372, à 8 px du séparateur (306,8) et du bord droit (v633.120).
+  const cxA = 334, cxB = 372;
+  const cellText = (cx, top, size, color) => ({ position: 'absolute', left: cx, top, transform: 'translateX(-50%)', lineHeight: 1, whiteSpace: 'nowrap', fontSize: size, letterSpacing: '0.04em', paddingLeft: '0.04em', color });
+  const cell = (cx, top, label, value, unit) => (
+    <React.Fragment>
+      <span className="font-bebas-bold" style={cellText(cx, top, 15, 'rgba(255,255,255,0.35)')}>{label}</span>
+      <span className="font-bebas-book" style={cellText(cx, top + 17, 25, '#ffffff')}>{value}</span>
+      {unit && <span className="font-bebas-bold" style={cellText(cx, top + 44, 12, '#8B9B99')}>{unit}</span>}
+    </React.Fragment>
+  );
+  // Marges négatives: la carte se cale sur le haut de la zone sûre (le conteneur ajoute 16 px) et
+  // annule les 16 px de la liste en dessous; les 25 px de padding sont la respiration demandée (v633.118).
+  return (
+    <div style={{ position: 'relative', zIndex: 2, marginTop: '-16px', marginBottom: '-16px', paddingTop: 25, paddingBottom: 25, width: '100%', overflow: 'hidden' }}>
+      <div style={{ zoom: scale, width: GEO_CARD_W, height: GEO_CARD_H }}>
+        <div className="hour-scroll" style={{ width: GEO_CARD_W, height: GEO_CARD_H, overflowX: 'auto', overflowY: 'hidden' }}>
+          <div style={{ display: 'flex', width: 'max-content', height: GEO_CARD_H }}>
+            {/* Page « météo actuelle »: glisse vers la gauche au défilement. */}
+            <div style={{ position: 'relative', width: GEO_CARD_W, height: GEO_CARD_H, flexShrink: 0 }}>
+              <div className="font-bebas-book" style={{ position: 'absolute', left: 0, right: 0, top: 5.36, textAlign: 'center', fontSize: 18.73, letterSpacing: '0.2em', paddingLeft: '0.2em', color: '#ffffff', lineHeight: 1, whiteSpace: 'nowrap', textTransform: 'uppercase' }}>{geoData.city}</div>
+              {/* Courbe du soleil, ton sur ton, extrémités fondues. */}
+              <svg width={GEO_CARD_W} height={GEO_CARD_H} viewBox={`0 0 ${GEO_CARD_W} ${GEO_CARD_H}`} style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none' }}>
+                <defs>
+                  <linearGradient id="geoSunCurveFade" gradientUnits="userSpaceOnUse" x1="31" y1="0" x2="177" y2="0">
+                    {GEO_CURVE_FADE.map(([o, a], i) => <stop key={i} offset={o} stopColor="#ffffff" stopOpacity={a}/>)}
+                  </linearGradient>
+                </defs>
+                <path d={GEO_CURVE_PATH} fill="none" stroke="url(#geoSunCurveFade)" strokeWidth="1.33" strokeLinecap="round" opacity="0.27"/>
+                {hairline(202.8)}
+                {hairline(306.8)}
+              </svg>
+              {/* Boule du soleil (12 px, halo blanc doux), à la position de l'heure courante; absente la nuit. */}
+              {showBall && <div style={{ position: 'absolute', left: ballX - 6, top: ballY - 6, width: 12, height: 12, borderRadius: '50%', background: '#9B9D9E', boxShadow: '0 0 11px 1.8px rgba(255,255,255,0.57)' }}/>}
+              <span className="font-bebas-book" style={{ ...labelStyle, left: 34.3 }}>{t('sunrise')}</span>
+              <span className="font-bebas-book" style={{ ...labelStyle, left: 130.3 }}>{t('sunset')}</span>
+              <span className="font-bebas-book" style={{ ...timeStyle, left: 17.67 }}>{formatTime(geoData.sunrise)}</span>
+              <span className="font-bebas-book" style={{ ...timeStyle, left: 113.67 }}>{formatTime(geoData.sunset)}</span>
+              <div style={{ position: 'absolute', left: 210.8, top: 0, display: 'flex' }}>
+                {hours.slice(0, 2).map(h => <GeoHourColumn key={h.time} h={h} dailyMap={geoData.dailyMap}/>)}
+              </div>
+              {cell(cxA, 51, t('wind'), fmt2(geoData.wind), t('kmh'))}
+              {cell(cxB, 51, t('temp'), geoData.temp == null ? '--' : `${geoData.temp}°`, null)}
+              {cell(cxA, 115, t('gust'), fmt2(geoData.gust), t('kmh'))}
+              {cell(cxB, 115, t('kp'), kp == null ? '--' : String(kp), t('kp'))}
+            </div>
+            {/* Heures suivantes, révélées au défilement (même colonne, même séparateur). */}
+            {hours.length > 2 && <svg width={8} height={GEO_CARD_H} viewBox={`0 0 8 ${GEO_CARD_H}`} style={{ flexShrink: 0, display: 'block' }}>{hairline(0)}</svg>}
+            {hours.slice(2).map(h => <GeoHourColumn key={h.time} h={h} dailyMap={geoData.dailyMap}/>)}
+            <div style={{ width: 14.25, flexShrink: 0 }}/>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// En-tête de dossier (accordéon). Contrôlé: l'état ouvert/fermé vient du parent (folderStates).
+// Gauche: "{count} / {NOM}" (nombre + séparateur gris, nom blanc condensé majuscule).
+// Droite: contrôle replier/déplier (+ fermé, − ouvert).
+const FolderAccordion = ({ name, count, isOpen, onToggle, children }) => {
+  const isMobile = useIsMobile();
+  return (
+    <div data-folder={name} style={{ marginBottom: '4px', background: 'linear-gradient(to right, rgba(139, 155, 153, 0.2) 0, rgba(139, 155, 153, 0) 200px)' }}>
+      <div className="folder-acc-header" onClick={onToggle}
+        style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', padding: isMobile ? '10px 24px 5px' : '9px 16px 4px', borderBottom: '1px solid rgba(255,255,255,0.07)', WebkitUserSelect: 'none', userSelect: 'none' }}>
+        <span className="font-bebas-light" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.32)', letterSpacing: '0.08em', position: 'relative', top: '1px' }}>{count}</span>
+        <span className="font-bebas-light" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.16)', letterSpacing: '0.08em', margin: '0 11px', position: 'relative', top: '1px' }}>/</span>
+        <span className="font-bebas-book" style={{ fontSize: '22px', color: '#ffffff', letterSpacing: '0.06em' }}>{name}</span>
+        <span style={{ flex: 1 }}/>
+        <span aria-hidden="true" style={{ width: '22px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '22px', fontWeight: 200, lineHeight: 1, position: 'relative', top: '-1px' }}>{isOpen ? '−' : '+'}</span>
+      </div>
+      {isOpen && <div style={{ paddingTop: '16px' }}>{children}</div>}
+    </div>
+  );
+};
+
+// ===== Glisser-déposer structuré de la liste TODO =====
+// Un seul système (souris + tactile, via Pointer Events) pour:
+//  - réordonner une carte à l'intérieur de son dossier (entre les cartes du dossier),
+//  - réordonner un dossier entier parmi les blocs de premier niveau (en saisissant son en-tête),
+//  - réordonner une carte sans dossier parmi les blocs de premier niveau,
+//  - classer une carte sans dossier DANS un dossier (la déposer sur le bloc du dossier),
+//  - SORTIR une carte de son dossier (la tirer au-dessus de l'en-tête ou sous la dernière
+//    carte): elle redevient une carte sans dossier, posée au premier niveau à l'endroit visé.
+// Tactile: appui long (380 ms) pour armer; tout mouvement avant l'armement laisse le scroll/swipe.
+// Souris: on arme dès 5 px. Visuel sobre: le bloc tiré est atténué + une fine ligne rouge marque la cible.
+const useFolderDnD = ({ listRef, groupedItems, applyTodoOrder, moveToFolder, setFolderState }) => {
+  const [dropLine, setDropLine] = useState(null);
+  const st = useRef(null);
+
+  const flattenIds = (items) => {
+    const ids = [];
+    items.forEach(it => { if (it.type === 'project') ids.push(it.project.id); else it.projects.forEach(p => ids.push(p.id)); });
+    return ids;
+  };
+  const cloneItems = (items) => items.map(it => it.type === 'folder' ? { ...it, projects: [...it.projects] } : it);
+
+  const onListPointerDown = (e) => {
+    if (e.button != null && e.button !== 0) return;
+    if (e.target.closest('button, a, input, textarea, select, .hour-scroll, #folder-menu-portal')) return;
+    const list = listRef.current; if (!list) return;
+    const cardEl = e.target.closest('[data-drag-card]');
+    const headerEl = e.target.closest('.folder-acc-header');
+    let folderName = '', scope, blockEl, dragType;
+    if (headerEl && !cardEl) {
+      const wrap = headerEl.closest('[data-folder]'); if (!wrap) return;
+      folderName = wrap.dataset.folder; scope = 'top'; blockEl = wrap; dragType = 'folder';
+    } else if (cardEl) {
+      folderName = cardEl.dataset.cardFolder || '';
+      scope = folderName ? 'folder' : 'top'; blockEl = cardEl;
+      dragType = folderName ? 'folder-card' : 'standalone-card';
+    } else return;
+    if (!blockEl) return;
+
+    const isTouch = e.pointerType === 'touch';
+    const startX = e.clientX, startY = e.clientY;
+    let armed = false, timer = null;
+    // Empêche la sélection de texte native (surlignage bleu) pendant tout le geste de glisser.
+    const preventSelect = (ev) => ev.preventDefault();
+
+    const blocksForScope = () => {
+      if (scope === 'folder') {
+        const wrap = blockEl.closest('[data-folder]');
+        return wrap ? Array.from(wrap.querySelectorAll('[data-drag-card]')) : [];
+      }
+      return Array.from(list.children).filter(ch => ch.matches('[data-folder]') || (ch.matches('[data-drag-card]') && !ch.dataset.cardFolder));
+    };
+    const computeTarget = (y, blocks) => {
+      let idx = blocks.length;
+      for (let i = 0; i < blocks.length; i++) { const r = blocks[i].getBoundingClientRect(); if (y < r.top + r.height / 2) { idx = i; break; } }
+      return idx;
+    };
+    const lineY = (blocks, idx) => {
+      if (!blocks.length) return null;
+      if (idx <= 0) return blocks[0].getBoundingClientRect().top - 5;
+      if (idx >= blocks.length) return blocks[blocks.length - 1].getBoundingClientRect().bottom + 5;
+      return (blocks[idx - 1].getBoundingClientRect().bottom + blocks[idx].getBoundingClientRect().top) / 2;
+    };
+    const clearHighlight = () => {
+      if (st.current && st.current.highlightEl) {
+        st.current.highlightEl.style.boxShadow = '';
+        st.current.highlightEl.style.borderRadius = '';
+        st.current.highlightEl = null;
+      }
+    };
+    const update = (y) => {
+      if (!st.current) return;
+      // Carte sans dossier survolant un dossier => mode "déposer dans le dossier" (assignation).
+      if (st.current.dragType === 'standalone-card') {
+        const over = Array.from(list.querySelectorAll('[data-folder]')).find(w => {
+          const r = w.getBoundingClientRect(); return y >= r.top && y <= r.bottom;
+        });
+        if (over) {
+          if (st.current.highlightEl && st.current.highlightEl !== over) clearHighlight();
+          st.current.highlightEl = over;
+          over.style.boxShadow = 'inset 0 0 0 2px rgba(255,255,255,0.6)';
+          over.style.borderRadius = '2px';
+          const cards = Array.from(over.querySelectorAll('[data-drag-card]'));
+          let ins = cards.length;
+          for (let i = 0; i < cards.length; i++) { const r = cards[i].getBoundingClientRect(); if (y < r.top + r.height / 2) { ins = i; break; } }
+          st.current.drop = { mode: 'folder', folderName: over.dataset.folder, insertIndex: ins, closed: cards.length === 0 };
+          setDropLine(null);
+          return;
+        }
+        clearHighlight();
+      }
+      // Carte de dossier tirée HORS de son dossier (au-dessus de l'en-tête ou sous la dernière
+      // carte) => mode extraction: cible parmi les blocs de premier niveau, ligne rouge au top.
+      // Tant que le pointeur reste dans le dossier, on retombe sur le réordonnancement interne.
+      if (st.current.dragType === 'folder-card' && st.current.folderWrap) {
+        const wr = st.current.folderWrap.getBoundingClientRect();
+        if (y < wr.top || y > wr.bottom) {
+          clearHighlight();
+          const tb = st.current.topBlocks || [];
+          const idx = computeTarget(y, tb);
+          st.current.drop = { mode: 'extract', topIndex: idx };
+          const ly = lineY(tb, idx);
+          const lr = list.getBoundingClientRect();
+          if (ly != null) setDropLine({ top: ly, left: lr.left, width: lr.width });
+          return;
+        }
+      }
+      const blocks = st.current.blocks;
+      st.current.targetIndex = computeTarget(y, blocks);
+      st.current.drop = { mode: st.current.scope === 'folder' ? 'within' : 'top', targetIndex: st.current.targetIndex };
+      const ly = lineY(blocks, st.current.targetIndex);
+      const lr = list.getBoundingClientRect();
+      if (ly != null) setDropLine({ top: ly, left: lr.left, width: lr.width });
+    };
+    const cleanup = () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+      document.removeEventListener('selectstart', preventSelect);
+      if (timer) { clearTimeout(timer); timer = null; }
+    };
+    const teardown = () => {
+      clearHighlight();
+      if (st.current && st.current.blockEl) st.current.blockEl.style.opacity = '';
+      if (listRef.current) listRef.current.style.touchAction = '';
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      window.__isDragging = false;
+      setDropLine(null);
+      st.current = null;
+    };
+    const arm = () => {
+      const blocks = blocksForScope();
+      const draggedIndex = blocks.indexOf(blockEl);
+      if (draggedIndex === -1) return;
+      armed = true;
+      // Pour une carte de dossier: on mémorise son dossier d'origine et la liste des blocs de
+      // premier niveau, nécessaires si l'utilisateur la tire hors du dossier (mode extraction).
+      const folderWrap = dragType === 'folder-card' ? blockEl.closest('[data-folder]') : null;
+      const topBlocks = dragType === 'folder-card'
+        ? Array.from(list.children).filter(ch => ch.matches('[data-folder]') || (ch.matches('[data-drag-card]') && !ch.dataset.cardFolder))
+        : null;
+      st.current = { scope, dragType, folderName, blockEl, blocks, draggedIndex, targetIndex: draggedIndex, drop: null, highlightEl: null, folderWrap, topBlocks };
+      window.__isDragging = true;
+      if (typeof activeWeatherRowDismiss !== 'undefined' && activeWeatherRowDismiss) { activeWeatherRowDismiss(); activeWeatherRowDismiss = null; }
+      document.body.style.userSelect = 'none';
+      const sel = window.getSelection && window.getSelection(); if (sel) sel.removeAllRanges();
+      document.body.style.cursor = 'grabbing';
+      if (isTouch) list.style.touchAction = 'none';
+      blockEl.style.opacity = '0.35';
+      if (isTouch && navigator.vibrate) navigator.vibrate(20);
+      update(startY);
+    };
+    const onMove = (ev) => {
+      const dx = ev.clientX - startX, dy = ev.clientY - startY;
+      if (!armed) {
+        if (isTouch) { if (Math.abs(dx) > 8 || Math.abs(dy) > 8) cleanup(); return; }
+        if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+        arm();
+        if (!armed) { cleanup(); return; }
+      } else {
+        ev.preventDefault();
+        update(ev.clientY);
+      }
+    };
+    const commit = () => {
+      const s = st.current;
+      const drop = s.drop;
+      if (!drop) return;
+      const items = cloneItems(groupedItems);
+      // Déposer une carte sans dossier sur un dossier => l'y classer (clientFolder) + l'y placer.
+      if (drop.mode === 'folder') {
+        const [movedItem] = items.splice(s.draggedIndex, 1);
+        if (!movedItem || movedItem.type !== 'project') return;
+        const fit = items.find(it => it.type === 'folder' && it.name === drop.folderName);
+        if (!fit) return;
+        const at = drop.closed ? fit.projects.length : Math.max(0, Math.min(drop.insertIndex, fit.projects.length));
+        fit.projects.splice(at, 0, movedItem.project);
+        moveToFolder(movedItem.project.id, drop.folderName, flattenIds(items));
+        if (setFolderState) setFolderState(drop.folderName, true); // ouvrir pour montrer le résultat
+        return;
+      }
+      // Sortir une carte de son dossier => clientFolder = null, posée au premier niveau à
+      // l'index visé. Si le dossier se vide, son bloc disparaît au prochain rendu (plus aucun
+      // projet ne le référence) et flattenIds ignore de toute façon les dossiers vides.
+      if (drop.mode === 'extract') {
+        const draggedId = s.blockEl.dataset.dragCard;
+        const fit = items.find(it => it.type === 'folder' && it.name === s.folderName);
+        if (!fit) return;
+        const pIdx = fit.projects.findIndex(p => p.id === draggedId);
+        if (pIdx === -1) return;
+        const [movedProj] = fit.projects.splice(pIdx, 1);
+        const at = Math.max(0, Math.min(drop.topIndex, items.length));
+        items.splice(at, 0, { type: 'project', project: movedProj });
+        moveToFolder(draggedId, null, flattenIds(items));
+        return;
+      }
+      // Réordonnancement (premier niveau ou dans un dossier).
+      let from = s.draggedIndex, to = drop.targetIndex;
+      if (to === from || to === from + 1) return; // même emplacement
+      if (drop.mode === 'top') {
+        const [moved] = items.splice(from, 1);
+        if (to > from) to -= 1;
+        items.splice(to, 0, moved);
+        applyTodoOrder(flattenIds(items));
+      } else {
+        const fit = items.find(it => it.type === 'folder' && it.name === s.folderName);
+        if (!fit) return;
+        const [moved] = fit.projects.splice(from, 1);
+        if (to > from) to -= 1;
+        fit.projects.splice(to, 0, moved);
+        applyTodoOrder(flattenIds(items));
+      }
+    };
+    const onUp = () => {
+      cleanup();
+      if (armed && st.current) {
+        commit();
+        const blocker = (ce) => { ce.stopPropagation(); ce.preventDefault(); };
+        list.addEventListener('click', blocker, { capture: true, once: true });
+        setTimeout(() => { try { list.removeEventListener('click', blocker, { capture: true }); } catch (e) {} }, 80);
+      }
+      teardown();
+    };
+
+    document.addEventListener('pointermove', onMove, { passive: false });
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+    document.addEventListener('selectstart', preventSelect);
+    if (isTouch) timer = setTimeout(arm, 380);
+  };
+
+  return { onListPointerDown, dropLine };
+};
+
+const TodoView = ({ onSelect, onAddProject, addingProject, plusRef }) => {
+  const { projects, reorderProjects, applyTodoOrder, moveToFolder, folderStates, setFolderState } = useStore();
+  const isMobile = useIsMobile();
+  const { tier, getProjectLimit, canCreateProject } = useSubscription();
+  const { t } = useLang();
+  const { bannerError, lastCachedAt } = useWeatherStatus();
+  const todoProjects = projects.filter(p => p.status === ProjectStatus.TODO);
+  // Regroupement par dossier client. Parcours dans l'ordre (sort_order): projet sans dossier
+  // => carte seule; projet avec dossier => accordéon à la position de sa 1ère apparition
+  // (ordre des dossiers = ordre d'apparition ≈ ordre d'ajout), les suivants y sont absorbés.
+  const groupedItems = (() => {
+    const items = [], byName = {};
+    let order = 0;
+    for (const p of todoProjects) {
+      const f = (p.clientFolder || '').trim();
+      if (!f) { items.push({ type: 'project', project: p }); continue; }
+      if (byName[f]) { byName[f].projects.push(p); continue; }
+      const it = { type: 'folder', name: f, projects: [p], order: order++ };
+      byName[f] = it; items.push(it);
+    }
+    return items;
+  })();
+  // Ouvert/fermé d'un dossier: état explicite si présent, sinon défaut = 2 premiers ouverts.
+  const isFolderOpen = (it) => (it.name in folderStates) ? !!folderStates[it.name] : (it.order < 2);
+  const [openActionsId, setOpenActionsId] = useState(null);
+  const [showUpgradeFromTodo, setShowUpgradeFromTodo] = useState(false);
+  const listRef = useRef(null);
+  const { onListPointerDown, dropLine } = useFolderDnD({ listRef, groupedItems, applyTodoOrder, moveToFolder, setFolderState });
+  // Tick chaque minute pour faire avancer le compteur "il y a 3H45" de la banniere.
+  // 60s suffit: la precision affichee est la minute.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!bannerError || !lastCachedAt) return;
+    const id = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(id);
+  }, [bannerError, lastCachedAt]);
+  
+  // Close actions on vertical scroll
+  useEffect(() => {
+    if (!isMobile) return;
+    const onScroll = () => { if (openActionsId) setOpenActionsId(null); };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [isMobile, openActionsId]);
+  
+  
+  return (
+    <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px', ...(isMobile ? { minHeight: '100vh', touchAction: 'pan-y', overflowX: 'clip' } : {}) }}>
+      {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>PROJETS</h1>}
+      {(() => {
+        const limit = getProjectLimit();
+        const isLimited = limit !== Infinity;
+        const activeCount = projects.filter(p => p.status !== ProjectStatus.DONE).length;
+        if (!isLimited) return null;
+        return (
+          <div style={{ padding: isMobile ? '0 24px 8px' : '0 16px 8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span className="font-bebas-light" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.06em' }}>
+              {activeCount}/{limit} {t('projectsCount')}
+            </span>
+            {activeCount >= limit && (
+              <span onClick={() => setShowUpgradeFromTodo(true)} className="font-bebas-regular" style={{ fontSize: '14px', color: '#E07A2B', cursor: 'pointer', letterSpacing: '0.04em' }}>
+                {t('upgradeToShooter')}
+              </span>
+            )}
+          </div>
+        );
+      })()}
+      <UpgradeModal isOpen={showUpgradeFromTodo} onClose={() => setShowUpgradeFromTodo(false)} />
+      {(() => {
+        // Banniere d'alerte API meteo: alignee verticalement avec le bouton + et
+        // commencant horizontalement sur la 1ere stroke verticale des cartes (apres la
+        // WeatherRow). Sur les cartes desktop: padding 16 + WeatherRow.minWidth 432 +
+        // ml-4 16 = 464 depuis le bord. Le wrapper du + a px-6 (24) sur md, et le
+        // placeholder + occupe les 68px suivants. La banniere demarre donc a:
+        //   marginLeft du wrapper-+ = 464 - 24 (px-6) = 440px depuis le bord du wrapper.
+        // On laisse le placeholder + a sa place et on positionne la banniere en absolute
+        // par rapport au wrapper flex pour ne PAS pousser le + a droite.
+        const sinceLabel = lastCachedAt ? formatTimeSince(lastCachedAt, now) : null;
+        const showBanner = !!bannerError;
+        if (!isMobile) {
+          return (
+            <div className="px-4 md:px-6" style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+              <div ref={plusRef} style={{ width: '68px', height: '88px', marginLeft: '-6px' }}/>
+              {showBanner && (
+                <div role="status" aria-live="polite"
+                  {...(bannerError !== 'network' ? {
+                    onClick: () => { const tmp = document.createElement('a'); tmp.href = 'https://status.open-meteo.com/'; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); },
+                  } : {})}
+                  style={{
+                    marginLeft: '378px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '18px',
+                }}>
+                  <svg width="38" height="34" viewBox="0 0 32 28" fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true">
+                    {/* Triangle avec coins arrondis: chaque sommet est remplace par une
+                        courbe de Bezier quadratique. Radius ~2 sur les 3 sommets. */}
+                    <path d="M 4 24.26 L 15 4.74 Q 16 3 17 4.74 L 28 24.26 Q 29 26 27 26 L 5 26 Q 3 26 4 24.26 Z"/>
+                    <line x1="16" y1="11" x2="16" y2="17"/>
+                    <circle cx="16" cy="21.5" r="1.1" fill="#ffffff" stroke="none"/>
+                  </svg>
+                  <div className="font-bebas-regular" style={{
+                    fontSize: '12.6pt',
+                    letterSpacing: '0.17em',
+                    color: '#404a48',
+                    textTransform: 'uppercase',
+                    lineHeight: 1.25,
+                  }}>
+                    <div>
+                      {bannerError === 'network'
+                        ? 'Connexion internet inaccessible'
+                        : 'API météo temporairement inaccessible'}
+                    </div>
+                    {sinceLabel && (
+                      <div>
+                        Dernière mise à jour il y a <span style={{ color: '#ffffff' }}>{sinceLabel}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        }
+        // Mobile: l'IIFE rend seulement le placeholder du + et GeoWeatherCard.
+        // La banniere mobile est rendue plus bas, juste avant le premier projet,
+        // pour qu'elle se sente "attachee" a la liste et non a la carte GPS.
+        return (
+          <React.Fragment>
+            <div ref={plusRef} style={{ width: 0, height: 0 }}/>
+            <GeoWeatherCard/>
+          </React.Fragment>
+        );
+      })()}
+      {todoProjects.length === 0 ? (isMobile ? (
+        <div ref={el => {
+          if (!el) return;
+          const flare = document.getElementById('persistentFlare');
+          if (!flare) return;
+          // Position while hidden, then fade in
+          flare.style.transition = 'none';
+          flare.style.opacity = '0';
+          flare.style.animation = 'none';
+          setTimeout(() => {
+            const r = el.getBoundingClientRect();
+            const w = parseFloat(flare.dataset.splashWidth) || 200;
+            flare.style.top = (r.top + r.height / 2 - w / 2 + 30) + 'px';
+            flare.style.left = (r.left + r.width / 2 - w / 2 + 5) + 'px';
+            flare.style.width = w + 'px';
+            flare.style.display = 'block';
+            requestAnimationFrame(() => {
+              flare.style.transition = 'opacity 1s ease';
+              flare.style.opacity = '0.7';
+              flare.style.animation = 'flareOrgFloat 12s ease-in-out infinite';
+            });
+          }, 400);
+        }} onClick={onAddProject} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100vh - 450px)', cursor: 'pointer', position: 'relative' }}>
+          {/* Large soft blue halo */}
+          <div style={{ position: 'absolute', width: '250px', height: '312px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(36,89,117,0.45) 0%, rgba(36,89,117,0.15) 40%, rgba(36,89,117,0) 70%)', pointerEvents: 'none', marginTop: '-50px', marginLeft: '-20px' }}/>
+          {/* White halo around + */}
+          <div style={{ position: 'absolute', width: '60px', height: '60px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 50%, rgba(255,255,255,0) 70%)', pointerEvents: 'none' }}/>
+          <span className="font-bebas-book" style={{ fontSize: '234px', color: '#FFFFFF', lineHeight: 1, textShadow: '0 0 30px rgba(255,255,255,0.15)' }}>+</span>
+        </div>
+      ) : (
+        <div onClick={onAddProject} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100vh - 300px)', cursor: 'pointer', position: 'relative' }}>
+          <div style={{ position: 'absolute', width: '250px', height: '312px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(36,89,117,0.45) 0%, rgba(36,89,117,0.15) 40%, rgba(36,89,117,0) 70%)', pointerEvents: 'none', marginTop: '-30px' }}/>
+          <div style={{ position: 'absolute', width: '60px', height: '60px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 50%, rgba(255,255,255,0) 70%)', pointerEvents: 'none' }}/>
+          <span className="font-bebas-book" style={{ fontSize: '180px', color: '#FFFFFF', lineHeight: 1, textShadow: '0 0 30px rgba(255,255,255,0.15)' }}>+</span>
+        </div>
+      ))
+      : <div ref={el => { const f = document.getElementById('persistentFlare'); if (f) { f.style.opacity = '0'; f.style.animation = 'none'; } return listRef.current = el; }} onPointerDown={onListPointerDown} style={{ paddingTop: '16px', paddingBottom: '80px', userSelect: 'none', WebkitUserSelect: 'none' }}>
+          {isMobile && bannerError && (
+            <div role="status" aria-live="polite"
+              {...(bannerError !== 'network' ? {
+                onClick: () => { const tmp = document.createElement('a'); tmp.href = 'https://status.open-meteo.com/'; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); },
+              } : {})}
+              style={{
+                margin: '0 24px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+            }}>
+              <svg width="31" height="28" viewBox="0 0 32 28" fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+                <path d="M 4 24.26 L 15 4.74 Q 16 3 17 4.74 L 28 24.26 Q 29 26 27 26 L 5 26 Q 3 26 4 24.26 Z"/>
+                <line x1="16" y1="11" x2="16" y2="17"/>
+                <circle cx="16" cy="21.5" r="1.1" fill="#ffffff" stroke="none"/>
+              </svg>
+              <div className="font-bebas-regular" style={{
+                fontSize: '9.1pt',
+                letterSpacing: '0.14em',
+                color: '#404a48',
+                textTransform: 'uppercase',
+                lineHeight: 1.25,
+              }}>
+                <div>
+                  {bannerError === 'network'
+                    ? 'Connexion internet inaccessible'
+                    : 'API météo temporairement inaccessible'}
+                </div>
+                {lastCachedAt && (
+                  <div>
+                    Dernière mise à jour il y a <span style={{ color: '#ffffff' }}>{formatTimeSince(lastCachedAt, now)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {(() => {
+            let ci = 0; // index courant des cartes visibles (stagger d'animation)
+            return groupedItems.map((it) => {
+              if (it.type === 'project') {
+                const i = ci++;
+                return <div key={it.project.id} data-drag-card={it.project.id} data-card-folder=""><ProjectCard project={it.project} index={i} onSelect={onSelect} openActionsId={openActionsId} setOpenActionsId={setOpenActionsId}/></div>;
+              }
+              const open = isFolderOpen(it);
+              return (
+                <FolderAccordion key={'folder:' + it.name} name={it.name} count={it.projects.length} isOpen={open} onToggle={() => setFolderState(it.name, !open)}>
+                  {open && it.projects.map((p) => {
+                    const i = ci++;
+                    return <div key={p.id} data-drag-card={p.id} data-card-folder={it.name}><ProjectCard project={p} index={i} onSelect={onSelect} openActionsId={openActionsId} setOpenActionsId={setOpenActionsId}/></div>;
+                  })}
+                </FolderAccordion>
+              );
+            });
+          })()}
+        </div>}
+      {dropLine && ReactDOM.createPortal(
+        <div style={{ position: 'fixed', left: dropLine.left, top: dropLine.top - 1, width: dropLine.width, height: 0, borderTop: '2px solid #ffffff', zIndex: 9998, pointerEvents: 'none' }}/>,
+        document.body)}
+    </div>
+  );
+};
+
+const RetouchingView = ({ onSelect }) => {
+  const { projects, prefs } = useStore();
+  const { t } = useLang();
+  const isMobile = useIsMobile();
+  const [openActionsId, setOpenActionsId] = useState(null);
+  const editPrefs = getEditListPrefs(prefs);
+  // Jours en retouche recalculés à minuit (app laissée ouverte) et au retour au premier plan.
+  const [, setDayTick] = useState(0);
+  useEffect(() => {
+    let timer = null;
+    const schedule = () => {
+      const now = new Date();
+      const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+      timer = setTimeout(() => { setDayTick(x => x + 1); schedule(); }, next - now);
+    };
+    schedule();
+    const onVisible = () => { if (document.visibilityState === 'visible') setDayTick(x => x + 1); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible); };
+  }, []);
+  // Jours entiers depuis la date d'édition; tri décroissant (le plus ancien en haut) si demandé.
+  const retouching = projects.filter(p => p.status === ProjectStatus.RETOUCHING).map(p => { const d = p.shotAt ? daysSince(p.shotAt) : null; return { project: p, days: Number.isFinite(d) ? d : null }; });
+  if (editPrefs.editSortUrgency) retouching.sort((a, b) => (b.days ?? -1) - (a.days ?? -1));
+  const done = projects.filter(p => p.status === ProjectStatus.DONE);
+  const legend = t('editLegend').replace(/\{alert\}/g, editPrefs.editAlertDays).replace(/\{warn\}/g, editPrefs.editWarnDays);
+  return (
+    <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px', ...(isMobile ? { minHeight: '100vh', touchAction: 'pan-y', overflowX: 'clip' } : {}) }}>
+      {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>{t('editing')}</h1>}
+      {retouching.length === 0 ? <div className="text-center py-16"><p className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '24px' }}>{t('noProjectsEditing')}</p></div>
+      : <div style={{ paddingBottom: '80px' }}>
+          {retouching.map(({ project, days }, i) => <RetouchingCard key={project.id} project={project} days={days} editPrefs={editPrefs} onSelect={onSelect} index={i} openActionsId={openActionsId} setOpenActionsId={setOpenActionsId}/>)}
+          {/* Légende des seuils, sous la liste */}
+          <div style={{ padding: isMobile ? '0 20px 14px' : '10px 34px 14px', color: '#4d5a54', fontSize: '10px', letterSpacing: '0.16em', textTransform: 'uppercase', fontFamily: EDIT_FONT }}>{legend}</div>
+        </div>}
+      {done.length > 0 && <>
+        <div className={isMobile ? 'px-6' : 'px-4'} style={{ paddingTop: '16px', paddingBottom: '16px', marginTop: '32px', }}><h2 className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '28px', color: '#8B9B99' }}>{t('archived')}</h2></div>
+        <div style={{ paddingBottom: '80px' }}>{done.map(p => <DoneCard key={p.id} project={p} editPrefs={editPrefs}/>)}</div>
+      </>}
+    </div>
+  );
+};
+
+// Préférences de la liste Édition : champ numérique borné (pas de 5) et bascule OUI | NON.
+const EditPrefNumber = ({ label, value, min, max, step, fallback, unit, onChange }) => {
+  const [text, setText] = useState(String(value));
+  useEffect(() => { setText(String(value)); }, [value]);
+  const clamp = (n) => Math.min(max, Math.max(min, n));
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+      <span className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '16px', letterSpacing: '0.04em' }}>{label}</span>
+      <div className="flex items-center gap-3" style={{ flexShrink: 0 }}>
+        <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', display: 'inline-block' }}>
+          <input type="number" value={text} min={min} max={max} step={step}
+            onChange={e => { setText(e.target.value); const n = parseInt(e.target.value, 10); if (!isNaN(n) && n >= min && n <= max && n !== value) onChange(n); }}
+            onBlur={e => { const n = parseInt(e.target.value, 10); const v = isNaN(n) ? fallback : clamp(n); setText(String(v)); if (v !== value) onChange(v); }}
+            className="bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', width: '40px' }}/>
+        </div>
+        <span className="font-bebas-light text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '19px' }}>{unit}</span>
+      </div>
+    </div>
+  );
+};
+const EditPrefToggle = ({ label, value, onChange }) => {
+  const { t } = useLang();
+  const opt = (on, key) => <span onClick={() => onChange(on)} style={{ fontFamily: "'Bebas Neue', sans-serif", fontWeight: value === on ? 700 : 300, fontSize: '18px', letterSpacing: '0.04em', cursor: 'pointer', color: value === on ? '#ffffff' : 'rgba(255,255,255,0.3)' }}>{t(key)}</span>;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+      <span className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '16px', letterSpacing: '0.04em' }}>{label}</span>
+      <div className="flex items-center gap-4" style={{ flexShrink: 0 }}>{opt(true, 'yes')}<span style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>{opt(false, 'no')}</div>
+    </div>
+  );
+};
+
+const PreferencesView = () => {
+  const { prefs, setPrefs } = useStore();
+  const editPrefs = getEditListPrefs(prefs);
+  const { user, signOut } = useAuth();
+  const { tier, isActive, profile, isShooterUser } = useSubscription();
+  const { t, lang, setLang } = useLang();
+  const isMobile = useIsMobile();
+  const [showUpgradePref, setShowUpgradePref] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const homeInputRef = React.useRef(null);
+  const autocompleteRef = React.useRef(null);
+
+  // Setup Google Places Autocomplete for home address
+  useEffect(() => {
+    if (homeInputRef.current && !autocompleteRef.current && window.google) {
+      autocompleteRef.current = new google.maps.places.Autocomplete(homeInputRef.current, {
+        types: ['address'],
+        componentRestrictions: { country: 'ca' },
+        fields: ['formatted_address', 'geometry']
+      });
+      
+      autocompleteRef.current.addListener('place_changed', async () => {
+        const place = autocompleteRef.current.getPlace();
+        if (place.geometry) {
+          setPrefs({
+            homeAddress: place.formatted_address,
+            homeLat: place.geometry.location.lat(),
+            homeLng: place.geometry.location.lng()
+          });
+          setMsg({ type: 'success', text: t('addressSaved') });
+        }
+      });
+    }
+  }, []);
+
+  const saveHomeManual = async () => {
+    const address = homeInputRef.current?.value;
+    if (!address) return;
+    
+    try {
+      const result = await geocodeAddress(address);
+      setPrefs({
+        homeAddress: result.formattedAddress,
+        homeLat: result.lat,
+        homeLng: result.lng
+      });
+      homeInputRef.current.value = result.formattedAddress;
+      setMsg({ type: 'success', text: t('addressSavedShort') });
+    } catch (e) {
+      setMsg({ type: 'error', text: t('addressNotFound') });
+    }
+  };
+
+  return (
+    <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px' }}>
+      {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>{t('preferences')}</h1>}
+      <div className={isMobile ? 'px-4' : 'pl-8 md:pl-12'}>
+        {msg && <div className={`mb-6 p-3 rounded ${msg.type === "success" ? "bg-transparent" : "bg-red-50 text-red-700"}`} style={msg.type === "success" ? { color: "#7dd3c6" } : {}}>{msg.text}</div>}
+        <div>
+          <div className="py-5 border-b border-adaptive">
+            <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>{t('homeAddressLabel')}</label>
+            <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '8px', maxWidth: '600px' }}>
+              <input
+                ref={homeInputRef}
+                type="text"
+                defaultValue={prefs.homeAddress || ''}
+                placeholder={t('homeAddressPlaceholder')} 
+                className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)' }}
+              />
+            </div>
+            {prefs.homeLat && <p className="text-xs mt-2" style={{ color: "#7dd3c6" }}>✓ {prefs.homeAddress}</p>}
+          </div>
+
+          <div className="py-5 border-b border-adaptive">
+            <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>{t('editListSection')}</label>
+            <div style={{ marginTop: '10px', maxWidth: '600px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <EditPrefNumber label={t('editAlertLabel')} value={editPrefs.editAlertDays} min={5} max={90} step={5} fallback={EDIT_LIST_DEFAULTS.editAlertDays} unit={t('days')} onChange={v => setPrefs({ editAlertDays: v })}/>
+              <EditPrefNumber label={t('editWarnLabel')} value={editPrefs.editWarnDays} min={0} max={60} step={5} fallback={EDIT_LIST_DEFAULTS.editWarnDays} unit={t('days')} onChange={v => setPrefs({ editWarnDays: v })}/>
+              <EditPrefToggle label={t('editShowGaugeLabel')} value={editPrefs.editShowGauge} onChange={v => setPrefs({ editShowGauge: v })}/>
+              <EditPrefToggle label={t('editShowThresholdLabel')} value={editPrefs.editShowThreshold} onChange={v => setPrefs({ editShowThreshold: v })}/>
+              <EditPrefToggle label={t('editSortUrgencyLabel')} value={editPrefs.editSortUrgency} onChange={v => setPrefs({ editSortUrgency: v })}/>
+            </div>
+          </div>
+
+          <div className="py-5 border-b border-adaptive">
+            <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>{t('plan')}</label>
+            <div style={{ marginTop: '8px', maxWidth: '600px' }}>
+              <div className="flex items-center gap-3">
+                <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: tier === 'shooter' ? '#E07A2B' : '#7dd3c6', boxShadow: tier === 'shooter' ? '0 0 6px rgba(224,122,43,0.5)' : '0 0 6px rgba(125,211,198,0.5)', flexShrink: 0 }}/>
+                <span className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '18px', color: 'rgba(255,255,255,0.7)' }}>
+                  {tier === 'free' ? t('freePlan') : tier === 'shooter' ? t('shooterPlan') : t('godPlan')}
+                  {' | '}
+                  {isActive ? t('active') : (profile?.subscription_status || '').toUpperCase()}
+                </span>
+              </div>
+              {tier === 'free' && (
+                <button onClick={() => setShowUpgradePref(true)} style={{
+                  marginTop: '12px', background: 'none', border: '1px solid #E07A2B',
+                  color: '#E07A2B', padding: '8px 20px', cursor: 'pointer',
+                  fontFamily: "'Bebas Neue', sans-serif", fontWeight: 700, fontSize: '16px',
+                  letterSpacing: '0.04em'
+                }}>{t('upgradeToShooter')}</button>
+              )}
+              <a href="site/account.html" style={{
+                display: 'inline-block', marginTop: '12px', marginLeft: tier === 'free' ? '16px' : '0',
+                color: 'rgba(255,255,255,0.35)', fontSize: '14px',
+                fontFamily: "'Bebas Neue', sans-serif", fontWeight: 300,
+                letterSpacing: '0.04em', textDecoration: 'none'
+              }}>{t('account')}</a>
+            </div>
+          </div>
+
+          <div className="py-5 border-b border-adaptive">
+            <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>{t('language')}</label>
+            <div className="flex items-center gap-4" style={{ marginTop: '8px' }}>
+              <span onClick={() => setLang('fr')} style={{
+                fontFamily: "'Bebas Neue', sans-serif", fontWeight: lang === 'fr' ? 700 : 300,
+                fontSize: '18px', letterSpacing: '0.04em', cursor: 'pointer',
+                color: lang === 'fr' ? '#ffffff' : 'rgba(255,255,255,0.3)'
+              }}>FR</span>
+              <span style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+              <span onClick={() => setLang('en')} style={{
+                fontFamily: "'Bebas Neue', sans-serif", fontWeight: lang === 'en' ? 700 : 300,
+                fontSize: '18px', letterSpacing: '0.04em', cursor: 'pointer',
+                color: lang === 'en' ? '#ffffff' : 'rgba(255,255,255,0.3)'
+              }}>EN</span>
+            </div>
+          </div>
+
+          <div className="py-5 border-b border-adaptive">
+            <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>{t('weatherService')}</label>
+            <div style={{ marginTop: '8px', maxWidth: '600px' }}>
+              <div className="flex items-center gap-3">
+                <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#7dd3c6', boxShadow: '0 0 6px rgba(125,211,198,0.5)', flexShrink: 0 }}/>
+                <span className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '18px', color: 'rgba(255,255,255,0.7)' }}>OPEN-METEO | ICON (DWD) + GFS (NOAA)</span>
+              </div>
+              <div style={{ marginTop: '16px' }}>
+                <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '16px', letterSpacing: '0.04em' }}>{t('apiKeyLabel')}</label>
+                <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '4px' }}>
+                  <input 
+                    type="text" 
+                    value={prefs.weatherApiKey || ''}
+                    onChange={e => setPrefs({ weatherApiKey: e.target.value })}
+                    placeholder={t('apiKeyPlaceholder')}
+                    disabled
+                    className="w-full bg-transparent" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {isDev && (
+            <div className="py-5 border-b border-adaptive">
+              <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>SIMULATION MÉTÉO (DEV)</label>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+                {[
+                  { key: 'off', label: 'AUCUNE' },
+                  { key: 'api', label: 'PANNE API' },
+                  { key: 'network', label: 'PANNE RÉSEAU' },
+                ].map(opt => {
+                  const current = getWeatherSim() || 'off';
+                  const active = current === opt.key;
+                  return (
+                    <button
+                      key={opt.key}
+                      onClick={() => {
+                        setWeatherSim(opt.key);
+                        // Force un rechargement pour relancer les useEffect des cartes.
+                        // C'est le plus direct et garantit que tout l'arbre repart proprement.
+                        location.reload();
+                      }}
+                      className="font-bebas-regular"
+                      style={{
+                        background: active ? 'rgba(224,122,43,0.18)' : 'transparent',
+                        border: `1px solid ${active ? 'rgba(224,122,43,0.55)' : 'rgba(255,255,255,0.15)'}`,
+                        color: active ? '#E07A2B' : 'rgba(255,255,255,0.55)',
+                        padding: '6px 14px',
+                        borderRadius: '4px',
+                        fontSize: '14px',
+                        letterSpacing: '0.05em',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="font-bebas-light" style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', marginTop: '10px', letterSpacing: '0.04em', lineHeight: 1.45 }}>
+                Court-circuite les appels Open-Meteo pour tester la bannière et le badge de cache. Disponible uniquement en dev.
+              </div>
+            </div>
+          )}
+
+          {user?.email === 'sgroleau@me.com' && (
+            <div className="py-5 border-b border-adaptive" onClick={() => { window.location.href = '/site/dieu.html'; }} style={{ cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
+              <span className="font-bebas-regular" style={{ fontSize: '22px', letterSpacing: '0.04em', color: 'rgba(224,122,43,0.4)' }}>ADMIN</span>
+            </div>
+          )}
+
+          <div className="py-5 border-b border-adaptive" onClick={(e) => { e.preventDefault(); e.stopPropagation(); signOut(); }} style={{ cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
+            <span className="font-bebas-regular" style={{ fontSize: '22px', letterSpacing: '0.04em', color: 'rgba(255,255,255,0.4)' }}>{t('disconnect')}</span>
+          </div>
+
+          <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
+            <div style={{ textAlign: 'center' }}>
+              <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.120</div>
+              <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <UpgradeModal isOpen={showUpgradePref} onClose={() => setShowUpgradePref(false)} />
+    </div>
+  );
+};
+
+// === Mobile New Project Screen (slides in from right) ===
+const MobileNewProjectScreen = ({ isOpen, onClose, onCreated }) => {
+  const { addProject, prefs } = useStore();
+  const { t } = useLang();
+  const [form, setForm] = useState({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false, clientFolder: '' });
+  const [loading, setLoading] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const addressInputRef = React.useRef(null);
+  const nameInputRef = React.useRef(null);
+  const autocompleteRef = React.useRef(null);
+  const prevOpen = React.useRef(false);
+
+  // Reset form when opening
+  useEffect(() => {
+    if (isOpen && !prevOpen.current) {
+      setForm({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false, clientFolder: '' });
+      if (addressInputRef.current) addressInputRef.current.value = '';
+      autocompleteRef.current = null;
+      setTimeout(() => nameInputRef.current?.focus(), 500);
+    }
+    prevOpen.current = isOpen;
+  }, [isOpen]);
+
+  // Init Google Places
+  useEffect(() => {
+    if (isOpen && addressInputRef.current && !autocompleteRef.current && window.google) {
+      autocompleteRef.current = new google.maps.places.Autocomplete(addressInputRef.current, {
+        types: ['establishment', 'geocode'],
+        componentRestrictions: { country: 'ca' },
+        fields: ['formatted_address', 'geometry', 'name']
+      });
+      autocompleteRef.current.addListener('place_changed', () => {
+        const place = autocompleteRef.current.getPlace();
+        if (place.geometry) {
+          setForm(f => ({ ...f, address: place.formatted_address, lat: place.geometry.location.lat(), lng: place.geometry.location.lng() }));
+        }
+      });
+    }
+  }, [isOpen]);
+
+  const handleSubmit = async () => {
+    if (!form.name.trim()) return;
+    setLoading(true);
+    let data = { ...form };
+    if (form.address && !form.lat) {
+      try { const result = await geocodeAddress(form.address); data.lat = result.lat; data.lng = result.lng; data.address = result.formattedAddress; } catch (err) { console.warn('Geocoding error:', err); }
+    }
+    if (data.lat && data.lng && prefs.homeLat && prefs.homeLng) {
+      try { const travel = await getTravelTime(prefs.homeLat, prefs.homeLng, data.lat, data.lng); data.travelTime = travel; data.departureAddress = prefs.homeAddress; data.departureLat = prefs.homeLat; data.departureLng = prefs.homeLng; } catch (err) { console.warn('Travel time error:', err); }
+    }
+    const result = addProject(data);
+    setLoading(false);
+    if (result && result.error === 'limit_reached') {
+      setShowUpgradeModal(true);
+      return;
+    }
+    onCreated();
+  };
+
+  const inputStyle = { background: 'transparent', position: 'relative', zIndex: 2, border: '1px solid rgba(255,255,255,0.15)', padding: '12px 14px', color: 'rgba(255,255,255,0.85)', width: '100%', outline: 'none', fontSize: '16px', borderRadius: '8px' };
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, right: 0, bottom: 0, width: '100%',
+      background: '#1e2224',
+      zIndex: 50,
+      transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
+      transition: 'transform 0.4s cubic-bezier(0.32, 0.72, 0, 1)',
+      overflowY: 'auto',
+      WebkitOverflowScrolling: 'touch',
+      paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)',
+      paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 100px)',
+      paddingLeft: '20px',
+      paddingRight: '20px'
+    }}>
+      {/* Back button */}
+      <button onClick={onClose} style={{ 
+        background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', 
+        fontSize: '16px', padding: '8px 0', marginBottom: '24px', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', gap: '6px'
+      }}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        <span className="font-bebas-book" style={{ fontSize: '18px', letterSpacing: '0.05em' }}>RETOUR</span>
+      </button>
+
+      <h2 className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '28px', color: 'rgba(255,255,255,0.85)', marginBottom: '32px' }}>{t('newProject')}</h2>
+
+      <div style={{ marginBottom: '24px' }}>
+        <label className="newproj-label font-bebas-book">{t('projectName')}</label>
+        <input ref={nameInputRef} type="search" autoComplete="one-time-code" autoCorrect="off" autoCapitalize="characters" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" name="projectname_notafield" enterKeyHint="done" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => { if (e.key === 'Enter') { e.target.blur(); handleSubmit(); } }} placeholder={t('projectNamePlaceholder')} style={inputStyle}/>
+      </div>
+
+      <div style={{ marginBottom: '24px' }}>
+        <label className="newproj-label font-bebas-book">{t('projectAddress')}</label>
+        <input ref={addressInputRef} type="search" autoComplete="one-time-code" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" name="projectaddr_notafield" enterKeyHint="done" defaultValue={form.address} placeholder={t('enterAddress')} style={inputStyle}/>
+      </div>
+
+      <div style={{ marginBottom: '24px' }}>
+        <label className="newproj-label font-bebas-book">MANDAT</label>
+        <div className="flex gap-3 flex-wrap">
+          {Object.values(MandateType).map(m => (
+            <button key={m} type="button" onClick={() => setForm({...form, mandates: toggleMandate(form.mandates, m)})} className={`newproj-toggle font-bebas-bold ${form.mandates.includes(m) ? 'active' : ''}`} style={form.mandates.includes(m) && m === 'DRONE+C' ? {} : {}}>{m === 'DRONE+C' ? (form.mandates.includes(m) ? React.createElement('span', null, 'DRONE.', React.createElement('span', {style:{color:'#d83152'}}, 'C')) : 'DRONE.C') : m}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginBottom: '32px' }}>
+        <label className="newproj-label font-bebas-book">ORIENTATION</label>
+        <div className="flex gap-3">
+          {['AM','PM'].map(o => (
+            <button key={o} type="button" onClick={() => setForm({...form, orientation: form.orientation.includes(o) ? form.orientation.filter(x => x !== o) : [...form.orientation, o]})} className={`newproj-toggle font-bebas-bold ${form.orientation.includes(o) ? 'active' : ''}`}>{o}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginBottom: '32px' }}>
+        <FolderCombo value={form.clientFolder} onChange={(v) => setForm(f => ({ ...f, clientFolder: v }))}/>
+      </div>
+
+      <div style={{ display: 'flex', gap: '24px', alignItems: 'center', marginTop: '8px' }}>
+        <button onClick={handleSubmit} disabled={loading || !form.name.trim()} className="font-bebas-bold" style={{
+          background: 'none', border: 'none', padding: '8px 0',
+          color: !form.name.trim() ? 'rgba(255,255,255,0.2)' : '#FAF9F7',
+          fontSize: '20px', cursor: 'pointer', letterSpacing: '0.05em',
+          textShadow: form.name.trim() ? '0 0 12px rgba(255,255,255,0.3)' : 'none',
+          transition: 'color 0.2s, text-shadow 0.2s'
+        }}>{loading ? 'CRÉATION...' : t('added')}</button>
+        <button onClick={onClose} className="font-bebas-bold" style={{
+          background: 'none', border: 'none', padding: '8px 0',
+          color: '#FAF9F7', fontSize: '20px', cursor: 'pointer', letterSpacing: '0.05em'
+        }}>{t('cancel')}</button>
+      </div>
+      <UpgradeModal isOpen={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />
+    </div>
+  );
+};
+
+const UndoToast = ({ onUndo, projectName }) => {
+  const { t } = useLang();
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(false), 5000);
+    return () => clearTimeout(timer);
+  }, []);
+  if (!visible) return null;
+  return (
+    <div style={{
+      position: 'fixed', bottom: '30px', left: '50%', transform: 'translateX(-50%)',
+      background: 'rgba(20,24,27,0.92)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+      borderRadius: '14px', padding: '12px 24px', zIndex: 9999,
+      display: 'flex', alignItems: 'center', gap: '16px',
+      border: '1px solid rgba(255,255,255,0.1)',
+      animation: 'fadeIn 0.3s ease'
+    }}>
+      <span className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '16px', color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>{t('projectDeleted')}</span>
+      <button onClick={onUndo} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: 'none', color: '#FAF9F7', fontSize: '16px', cursor: 'pointer', textShadow: '0 0 12px rgba(255,255,255,0.4)', padding: '0' }}>{t('undo')}</button>
+      <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>{/iPhone|iPad|Android/i.test(navigator.userAgent) ? '' : '⌘Z'}</span>
+    </div>
+  );
+};
+
+// Défilement fluide (amorti) à la molette. Mécanisme unique réutilisé tel quel par le détail
+// projet ET les vues principales (listing, édition, préférences): mêmes réglages (ease 0.18),
+// même gestion de la molette. Desktop uniquement (sur mobile on garde l'inertie native).
+//   listenEl : élément sur lequel on écoute la molette (un conteneur, ou window).
+//   scrollEl : élément dont on anime scrollTop (le conteneur, ou document.scrollingElement).
+const attachSmoothWheel = (listenEl, scrollEl) => {
+  if (!listenEl || !scrollEl) return () => {};
+  let target = scrollEl.scrollTop;
+  let raf = null;
+  const ease = 0.18;
+  const tick = () => {
+    const diff = target - scrollEl.scrollTop;
+    if (Math.abs(diff) < 0.5) { scrollEl.scrollTop = target; raf = null; return; }
+    scrollEl.scrollTop += diff * ease;
+    raf = requestAnimationFrame(tick);
+  };
+  const onWheel = (e) => {
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // laisse les bandes horizontales
+    let dy = e.deltaY;
+    if (e.deltaMode === 1) dy *= 16;                 // lignes -> pixels approx
+    else if (e.deltaMode === 2) dy *= scrollEl.clientHeight; // pages
+    e.preventDefault();
+    const max = scrollEl.scrollHeight - scrollEl.clientHeight;
+    if (raf === null) target = scrollEl.scrollTop;   // resync au début d'un nouveau geste
+    target = Math.max(0, Math.min(max, target + dy));
+    if (raf === null) raf = requestAnimationFrame(tick);
+  };
+  listenEl.addEventListener('wheel', onWheel, { passive: false });
+  return () => { listenEl.removeEventListener('wheel', onWheel); if (raf) cancelAnimationFrame(raf); };
+};
+
+// ============================================================
+// ROUTE — planification de déplacements (maison canonique)
+// ============================================================
+const RT_CARD = { background: '#23282A', border: '1px solid #2E3437', borderRadius: 14, padding: 14 };
+// Carte hôtel : fond plus clair que les arrêts pour la repérer d'un coup d'œil dans la liste.
+const RT_HOTEL_CARD = { ...RT_CARD, background: '#2F3639', border: '1px solid #444E51' };
+const RT_FIELD = { width: '100%', background: '#191D1F', border: '1px solid #333A3C', borderRadius: 8, color: '#EDEDE9', padding: '8px 10px', fontSize: 14, fontFamily: 'inherit', outline: 'none' };
+const rtFmtDateFR = (s) => { if (!s) return ''; try { return new Date(s + 'T12:00').toLocaleDateString('fr-CA', { weekday: 'short', day: 'numeric', month: 'short' }); } catch (e) { return s; } };
+const rtToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+const RtChevron = ({ dir = 'up', c = '#7D8C8A' }) => <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d={dir === 'up' ? 'M6 14l6-6 6 6' : 'M6 10l6 6 6-6'} stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+const RtTrash = ({ c = '#8B9B99' }) => <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m2 0v13a1 1 0 01-1 1H7a1 1 0 01-1-1V7" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+const RtPin = ({ c = '#8B9B99' }) => <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z" stroke={c} strokeWidth="1.7"/></svg>;
+const RtBed = ({ c = '#B9C6C3', s = 19 }) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative', top: '1px' }}><path d="M2 20v-7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v7"/><path d="M4 11V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4"/><path d="M2 18h20"/><path d="M12 5v6"/></svg>;
+
+const MONTHS_ABBR = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+// Sélecteur de date inline (jour / mois abrégé / année), sans calendrier natif.
+const RouteDateSelects = ({ value, onChange }) => {
+  const parse = (v) => { const p = v ? v.split('-').map(Number) : []; return { y: p[0] || '', m: p[1] || '', d: p[2] || '' }; };
+  const [st, setSt] = useState(() => parse(value));
+  useEffect(() => { setSt(parse(value)); }, [value]);
+  const { y, m, d } = st;
+  const change = (ny, nm, nd) => { setSt({ y: ny, m: nm, d: nd }); if (ny && nm && nd) onChange(`${ny}-${String(nm).padStart(2, '0')}-${String(nd).padStart(2, '0')}`); };
+  const dim = new Date(y || 2026, m || 1, 0).getDate();
+  const cy = new Date().getFullYear();
+  const sel = { background: '#191D1F', border: '1px solid #333A3C', borderRadius: 8, color: '#EDEDE9', padding: '6px 9px', fontSize: 16, fontFamily: 'inherit', cursor: 'pointer' };
+  return (
+    <span style={{ display: 'inline-flex', gap: 5 }}>
+      <select style={sel} value={d} onChange={e => change(y, m, Number(e.target.value) || '')}><option value="">jour</option>{Array.from({ length: dim }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}</option>)}</select>
+      <select style={sel} value={m} onChange={e => change(y, Number(e.target.value) || '', d)}><option value="">mois</option>{MONTHS_ABBR.map((mo, i) => <option key={i} value={i + 1}>{mo}</option>)}</select>
+      <select style={sel} value={y} onChange={e => change(Number(e.target.value) || '', m, d)}><option value="">année</option>{[cy, cy + 1].map(yr => <option key={yr} value={yr}>{yr}</option>)}</select>
+    </span>
+  );
+};
+
+// Bande météo horaire — exactement le même rendu que le détail d'un projet.
+const RouteHourly = ({ weather }) => {
+  const { t } = useLang();
+  const getIconFromCloudcover = (cc, origIcon, isNight = false, sunFraction = null, cloudLow = null, smoke = 0) => {
+    if (origIcon === 'thunderstorm') return 'thunderstorm';
+    if (origIcon === 'snow') return 'snow';
+    if (origIcon === 'rain') return 'rain';
+    if (!isNight) {
+      // Fumee de feux: signalee par la teinte de fond seulement; l'icone reste la vraie meteo.
+      const veil = veilIcon(cc, cloudLow, sunFraction);
+      if (veil) return veil;
+    }
+    return cloudcoverToIcon(cc, isNight);
+  };
+  if (!weather || !weather.hourly || !weather.hourly.length) return <span style={{ fontSize: 12, color: '#5A6B69' }}>Météo en cours...</span>;
+  const now = new Date();
+  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+  const filtered = weather.hourly.filter(h => new Date(h.time) >= oneHourAgo).slice(0, 72);
+  const dailyMap = {};
+  if (weather.daily) weather.daily.forEach(d => { const dateStr = new Date(d.sunrise).toDateString(); dailyMap[dateStr] = { sunrise: d.sunrise, sunset: d.sunset }; });
+  const days = [];
+  let currentDay = null;
+  filtered.forEach(h => { const hDate = new Date(h.time); const dateStr = hDate.toDateString(); if (dateStr !== currentDay) { days.push({ date: hDate, dateStr, hours: [], sun: dailyMap[dateStr] || null }); currentDay = dateStr; } days[days.length - 1].hours.push(h); });
+  return (
+    <div className="relative">
+      <div className="flex gap-0 pt-0 pb-2 overflow-x-auto hour-scroll items-start">
+        {days.map((day, di) => {
+          const sunriseH = day.sun?.sunrise ? new Date(day.sun.sunrise).getHours() : null;
+          const sunsetH = day.sun?.sunset ? new Date(day.sun.sunset).getHours() : null;
+          const sunriseM = day.sun?.sunrise ? new Date(day.sun.sunrise).getMinutes() : null;
+          const sunsetM = day.sun?.sunset ? new Date(day.sun.sunset).getMinutes() : null;
+          return (
+            <React.Fragment key={day.dateStr}>
+              {di > 0 && (<div style={{ width: '1px', background: 'rgba(255,255,255,0.15)', alignSelf: 'stretch', flexShrink: 0, margin: '0 2px', marginBottom: '-8px' }}/>)}
+              <div className="flex flex-col flex-shrink-0">
+                <div className="px-2" style={{ paddingBottom: '0', marginBottom: '-9px' }}>
+                  <span className="font-bebas-book" style={{ letterSpacing: '0.04em', fontSize: '19px', whiteSpace: 'nowrap', color: '#8B9B99' }}>
+                    {['DIMANCHE','LUNDI','MARDI','MERCREDI','JEUDI','VENDREDI','SAMEDI'][day.date.getDay()]} {day.date.getDate()} {['JAN','FÉV','MAR','AVR','MAI','JUN','JUL','AOÛ','SEP','OCT','NOV','DÉC'][day.date.getMonth()]}.
+                  </span>
+                </div>
+                <div className="flex gap-0">
+                  {day.hours.map(h => {
+                    const hDate = new Date(h.time);
+                    const hr = hDate.getHours();
+                    const isSunrise = sunriseH === hr;
+                    const isSunset = sunsetH === hr;
+                    const isNight = sunriseH !== null && sunsetH !== null && (hr < sunriseH || hr >= sunsetH);
+                    const icon = getIconFromCloudcover(h.cloudcover, h.icon, isNight, h.sunFraction, h.cloudLow, h.smoke);
+                    const sunPct = h.sunFraction != null ? Math.round(h.sunFraction * 100) : null;
+                    const sunColor = sunPct == null ? '#6f7d7b' : sunPct >= 60 ? '#E9D27A' : sunPct >= 45 ? '#E4CB78' : sunPct >= 32 ? '#DBCD92' : sunPct >= 20 ? '#CFC8A4' : sunPct >= 10 ? '#C3BDAA' : '#A7A99C';
+                    let timeLabel = `${hr}H`;
+                    if (isSunrise && sunriseM !== null) timeLabel = formatTime(day.sun.sunrise).replace(':', 'H');
+                    else if (isSunset && sunsetM !== null) timeLabel = formatTime(day.sun.sunset).replace(':', 'H');
+                    return (
+                      <div key={h.time} className={`flex flex-col items-center gap-0 min-w-[56px] px-0 py-1 ${isNight ? 'bg-charcoal/5' : ''}`} style={!isNight && h.smoke ? { background: SMOKE_TINT[h.smoke] } : undefined}>
+                        {isSunrise && <svg width="18" height="10" viewBox="0 0 18 10" style={{ marginBottom: '8px' }}><polyline points="1,9 9,2 17,9" fill="none" stroke="#404A48" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        {isSunset && <svg width="18" height="10" viewBox="0 0 18 10" style={{ marginBottom: '8px' }}><polyline points="1,1 9,8 17,1" fill="none" stroke="#404A48" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        {!(isSunrise || isSunset) && <div style={{ height: '10px', marginBottom: '8px' }}/>}
+                        <span className="font-bebas-bold leading-none" style={{ letterSpacing: '0.04em', fontSize: (isSunrise || isSunset) ? '20px' : '18px', color: (isSunrise || isSunset) ? '#ffffff' : undefined }}>
+                          <span className={!(isSunrise || isSunset) ? 'text-charcoal-muted' : ''}>{timeLabel}</span>
+                        </span>
+                        <WeatherIcon type={icon} className={`w-10 h-10 ${isNight ? 'opacity-50' : ''}`}/>
+                        <span className="font-bebas-bold text-base leading-none text-charcoal" style={{ letterSpacing: '0.04em', marginTop: '7px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <svg width="12" height="12" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><g fill="#8A9794"><circle cx="12" cy="18" r="6"/><circle cx="20" cy="16" r="7"/><rect x="8" y="18" width="15" height="6" rx="3"/></g></svg>
+                          {h.cloudcover != null ? `${h.cloudcover}%` : '--'}
+                        </span>
+                        <span className="font-bebas-bold text-base leading-none" style={{ letterSpacing: '0.04em', marginTop: '7px', display: 'inline-flex', alignItems: 'center', gap: '3px', color: sunColor }}>
+                          <svg width="11" height="11" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><circle cx="16" cy="16" r="8" fill={sunColor}/></svg>
+                          {sunPct != null ? `${sunPct}%` : '--'}
+                        </span>
+                        <span className="font-bebas-bold text-base leading-none text-charcoal-muted" style={{ letterSpacing: '0.04em', marginTop: '7px' }}>{h.temp}&deg;</span>
+                        <span className="font-bebas-bold text-sm leading-none text-charcoal-muted" style={{ marginTop: '7px' }}>{h.wind} <span className="text-xs">{t('kmh')}</span></span>
+                        {h.precip > 0 && <span className="font-bebas-bold text-sm leading-none" style={{ marginTop: '7px', letterSpacing: '0.04em', color: '#7dd3c6' }}>{h.precip < 1 ? h.precip.toFixed(1) : Math.round(h.precip)} <span className="text-xs">MM</span></span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// Ajout manuel d'une destination (Nom + Adresse géocodée), sous la liste de shootings
+const ManualDestForm = ({ onAdd }) => {
+  const [name, setName] = useState('');
+  const addrRef = useRef(null);
+  const acRef = useRef(null);
+  const dataRef = useRef({ address: '', lat: null, lng: null });
+  useEffect(() => {
+    if (!addrRef.current || acRef.current || !window.google) return;
+    acRef.current = new google.maps.places.Autocomplete(addrRef.current, { types: ['address'], componentRestrictions: { country: 'ca' }, fields: ['formatted_address', 'geometry'] });
+    acRef.current.addListener('place_changed', () => {
+      const p = acRef.current.getPlace();
+      if (p && p.geometry) { addrRef.current.value = p.formatted_address; dataRef.current = { address: p.formatted_address, lat: p.geometry.location.lat(), lng: p.geometry.location.lng() }; }
+    });
+  }, []);
+  const submit = async () => {
+    let d = dataRef.current;
+    const typed = ((addrRef.current && addrRef.current.value) || '').trim();
+    if (typed && typed !== d.address) {
+      try { const r = await geocodeAddress(typed); d = { address: r.formattedAddress, lat: r.lat, lng: r.lng }; } catch (e) { d = { address: typed, lat: null, lng: null }; }
+    }
+    if (!name.trim() && !d.address) return;
+    onAdd({ name: name.trim() || d.address, address: d.address, lat: d.lat, lng: d.lng });
+    setName(''); if (addrRef.current) addrRef.current.value = ''; dataRef.current = { address: '', lat: null, lng: null };
+  };
+  return (
+    <div style={{ marginTop: 12, borderTop: '1px solid #2E3437', paddingTop: 10 }}>
+      <div className="font-bebas-regular" style={{ fontSize: 13, color: '#7D8C8A', letterSpacing: '0.04em', marginBottom: 6 }}>OU SAISIR UNE ADRESSE</div>
+      <input value={name} onChange={e => setName(e.target.value)} placeholder="Nom" style={{ ...RT_FIELD, marginBottom: 6 }} />
+      <input ref={addrRef} placeholder="Adresse..." style={{ ...RT_FIELD, marginBottom: 8 }} />
+      <button onClick={submit} className="font-bebas-regular" style={{ width: '100%', textAlign: 'center', background: '#2A2F32', border: '1px solid #3A4143', borderRadius: 8, color: '#EDEDE9', padding: '8px', cursor: 'pointer', fontSize: 15, letterSpacing: '0.04em' }}>AJOUTER</button>
+    </div>
+  );
+};
+
+const RouteDestinationCard = ({ dest, index, leg, onUpdate, onRemove, onMove, canUp, canDown, innerRef }) => {
+  const { projects } = useStore();
+  const proj = projects.find(p => p.id === dest.projectId);
+  const displayName = (proj && proj.name) || dest.name || 'Sans nom';
+  const pastel = RT_PASTELS[index % RT_PASTELS.length];
+  const [weather, setWeather] = useState(null);
+  const [editDate, setEditDate] = useState(false);
+  const [editNote, setEditNote] = useState(false);
+  const [wxMode, setWxMode] = useState('days');
+  useEffect(() => {
+    if (dest.lat == null || dest.lng == null) { setWeather(null); return; }
+    let alive = true;
+    fetchWeather(dest.lat, dest.lng).then(res => { if (alive) setWeather(res && res.data ? res.data : null); }).catch(() => { if (alive) setWeather(null); });
+    return () => { alive = false; };
+  }, [dest.lat, dest.lng]);
+
+  const dStart = dest.dateStart || dest.date || '';
+  const dEnd = dest.dateEnd || '';
+  const dayList = (() => {
+    if (!dStart) return [];
+    const end = (dEnd && dEnd > dStart) ? dEnd : dStart;
+    const out = [];
+    const e = new Date(end + 'T12:00');
+    for (let dt = new Date(dStart + 'T12:00'); dt <= e && out.length < 90; dt.setDate(dt.getDate() + 1)) {
+      out.push(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`);
+    }
+    return out;
+  })();
+  const chip = { fontSize: 17, color: '#C9D2D0', background: '#191D1F', border: '1px solid #333A3C', borderRadius: 20, padding: '5px 15px', cursor: 'pointer' };
+  const addBtn = { fontSize: 16, color: '#7D8C8A', background: 'none', border: '1px dashed #3A4143', borderRadius: 20, padding: '5px 14px', cursor: 'pointer' };
+
+  return (
+    <div ref={innerRef} style={{ ...RT_CARD, marginBottom: 20 }}>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ flex: '0 0 auto', width: 33, height: 33, borderRadius: '50%', background: pastel, color: '#181b1e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 700, marginTop: 2 }}>{index + 1}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="font-bebas-regular" style={{ fontSize: 30, color: '#EDEDE9', letterSpacing: '0.03em', lineHeight: 1.05 }}>{displayName}</div>
+          {dest.address && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
+              <span style={{ fontSize: 17, color: '#7D8C8A' }}>{dest.address}</span>
+              <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest.address)}`} target="_blank" rel="noopener noreferrer"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); const tmp = document.createElement('a'); tmp.href = e.currentTarget.href; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); }}
+                title="Ouvrir dans Google Maps" style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+              </a>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
+            {editDate ? (
+              <div style={{ display: 'inline-flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 16, color: '#7D8C8A', width: 26, textAlign: 'right' }}>Du</span>
+                  <RouteDateSelects value={dStart} onChange={v => onUpdate({ dateStart: v })} />
+                  <button onClick={() => onUpdate({ dateStart: rtToday() })} className="font-bebas-regular" style={{ background: 'none', border: 'none', color: '#8FA09E', cursor: 'pointer', fontSize: 14, letterSpacing: '0.03em', textDecoration: 'underline', textUnderlineOffset: '3px' }}>aujourd'hui</button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 16, color: '#7D8C8A', width: 26, textAlign: 'right' }}>au</span>
+                  <RouteDateSelects value={dEnd || dStart} onChange={v => onUpdate({ dateEnd: v })} />
+                  <button onClick={() => setEditDate(false)} style={{ ...chip, background: '#2A2F32', marginLeft: 4 }}>OK</button>
+                </div>
+              </div>
+            ) : (
+              dStart ? dayList.map(dstr => <span key={dstr} style={chip} onClick={() => setEditDate(true)}>{rtFmtDateFR(dstr)}</span>) : <button style={addBtn} onClick={() => setEditDate(true)}>+ date</button>
+            )}
+            {leg && <span style={{ fontSize: 16, color: '#7D8C8A' }}>{index === 0 ? 'depuis le départ' : "depuis l'arrêt précédent"} : <b className="font-bebas-regular" style={{ color: '#C9D2D0', fontSize: 20 }}>{formatDuration(leg.durationSeconds)}</b> &middot; {leg.distanceText}</span>}
+          </div>
+
+          <div style={{ marginTop: 8 }}>
+            {editNote ? (
+              <textarea autoFocus style={{ ...RT_FIELD, resize: 'vertical', minHeight: 48, fontSize: 17 }} rows="2" value={dest.note || ''} onChange={e => onUpdate({ note: e.target.value })} onBlur={() => setEditNote(false)} placeholder="Note (accès, contact, repérage, matériel...)" />
+            ) : (
+              dest.note ? <div onClick={() => setEditNote(true)} style={{ fontSize: 17, color: '#8FA09E', fontStyle: 'italic', cursor: 'pointer' }}>{dest.note}</div> : <button style={addBtn} onClick={() => setEditNote(true)}>+ note</button>
+            )}
+          </div>
+
+          {dest.lat != null && dest.lng != null && (
+            <div style={{ marginTop: 10 }}>
+              {weather ? (
+                <div>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                    {[['days', '5 JOURS'], ['hours', 'PAR HEURE']].map(([m, label]) => (
+                      <button key={m} onClick={() => setWxMode(m)} className="font-bebas-regular" style={{ fontSize: 13, letterSpacing: '0.05em', padding: '3px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (wxMode === m ? '#4A5453' : '#2E3437'), background: wxMode === m ? '#2A2F32' : 'transparent', color: wxMode === m ? '#EDEDE9' : '#7D8C8A' }}>{label}</button>
+                    ))}
+                  </div>
+                  {wxMode === 'hours'
+                    ? <RouteHourly weather={weather} />
+                    : <div style={{ zoom: 1.1 }}><WeatherRow daily={weather.daily} hourly={weather.hourly} maxDays={5} orientation={[]} onDayClick={() => {}} /></div>}
+                </div>
+              ) : <span style={{ fontSize: 11, color: '#5A6B69' }}>Météo en cours...</span>}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 2, marginTop: 8 }}>
+            <button onClick={() => onMove(-1)} disabled={!canUp} style={{ background: 'none', border: 'none', padding: 4, cursor: canUp ? 'pointer' : 'default', opacity: canUp ? 1 : 0.3 }}><RtChevron dir="up"/></button>
+            <button onClick={() => onMove(1)} disabled={!canDown} style={{ background: 'none', border: 'none', padding: 4, cursor: canDown ? 'pointer' : 'default', opacity: canDown ? 1 : 0.3 }}><RtChevron dir="down"/></button>
+            <button onClick={onRemove} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer' }}><RtTrash c="#d83152"/></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const RT_PASTELS = ['#D0A9B4', '#A9BCD0', '#A9C6B2', '#D0C6A6', '#BEB2CC', '#A8C6C2', '#D0B4A6', '#BAC4A6'];
+const RT_MAP_STYLE = [
+  { elementType: 'geometry', stylers: [{ color: '#2d2d2d' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#2d2d2d' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
+  { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#b0b0b0' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
+  { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#333333' }] },
+  { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#6b8a6b' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#3a3a3a' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#252525' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9a9a9a' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#4a4a4a' }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#2a2a2a' }] },
+  { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#b0b0b0' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#353535' }] },
+  { featureType: 'transit.station', elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
+  { featureType: 'transit', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4a4a4a' }] },
+  { featureType: 'water', elementType: 'labels.text.stroke', stylers: [{ color: '#1a1a1a' }] },
+];
+
+// Carte d'un trajet : départ + destinations reliées dans l'ordre (Google Maps sombre)
+// Gélule (pilule) flottante au-dessus d'un point cliqué sur la carte
+const makeRoutePill = (map) => {
+  const div = document.createElement('div');
+  div.style.cssText = 'position:absolute;transform:translate(-50%,-150%);background:rgba(18,22,25,0.72);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);color:#EDEDE9;border:1px solid rgba(255,255,255,0.14);font-family:Montserrat,sans-serif;font-weight:700;font-size:15px;letter-spacing:0.01em;padding:5px 13px;border-radius:999px;white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,0.45);pointer-events:none;display:none;';
+  const ov = new google.maps.OverlayView();
+  ov.onAdd = function () { this.getPanes().floatPane.appendChild(div); };
+  ov.draw = function () { if (div.style.display === 'none' || !this.__pos) return; const p = this.getProjection().fromLatLngToDivPixel(this.__pos); if (p) { div.style.left = p.x + 'px'; div.style.top = p.y + 'px'; } };
+  ov.onRemove = function () { if (div.parentNode) div.parentNode.removeChild(div); };
+  ov.showPill = function (latLng, text) { this.__pos = latLng; div.textContent = text; div.style.display = 'block'; this.draw(); };
+  ov.hidePill = function () { div.style.display = 'none'; };
+  ov.setMap(map);
+  return ov;
+};
+
+// Voile translucide sur les tuiles seulement (pane sous les tracés) : la carte
+// s'estompe mais marqueurs, route et gélule restent nets.
+const makeMapDim = (map, color, opacity) => {
+  const div = document.createElement('div');
+  div.style.cssText = `position:absolute;background:${color};opacity:${opacity};pointer-events:none;`;
+  const ov = new google.maps.OverlayView();
+  ov.onAdd = function () { this.getPanes().mapPane.appendChild(div); };
+  ov.draw = function () {
+    const proj = this.getProjection(); if (!proj) return;
+    const b = map.getBounds(); if (!b) return;
+    const ne = proj.fromLatLngToDivPixel(b.getNorthEast());
+    const sw = proj.fromLatLngToDivPixel(b.getSouthWest());
+    const pad = 300;
+    div.style.left = (Math.min(sw.x, ne.x) - pad) + 'px';
+    div.style.top = (Math.min(ne.y, sw.y) - pad) + 'px';
+    div.style.width = (Math.abs(ne.x - sw.x) + pad * 2) + 'px';
+    div.style.height = (Math.abs(sw.y - ne.y) + pad * 2) + 'px';
+  };
+  ov.onRemove = function () { if (div.parentNode) div.parentNode.removeChild(div); };
+  ov.setMap(map);
+  return ov;
+};
+
+// Contrôle de zoom custom (deux fois plus petit, fond blanc 40%)
+const makeZoomControl = (map) => {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;gap:4px;margin:8px;';
+  const mk = (label, fn) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = label;
+    b.style.cssText = 'width:22px;height:22px;border:none;border-radius:5px;background:rgba(255,255,255,0.4);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);color:#181b1e;font-size:17px;font-weight:700;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.3);';
+    b.addEventListener('click', fn);
+    return b;
+  };
+  wrap.appendChild(mk('+', () => map.setZoom((map.getZoom() || 8) + 1)));
+  wrap.appendChild(mk('−', () => map.setZoom((map.getZoom() || 8) - 1)));
+  map.controls[google.maps.ControlPosition.RIGHT_BOTTOM].push(wrap);
+  return wrap;
+};
+
+// Décale une trajectoire perpendiculairement à son sens de circulation (vers sa droite),
+// en mètres, pour que deux routes empruntant la même voie (typiquement un aller et un
+// retour, donc en sens opposés) se retrouvent de chaque côté plutôt que superposées, et
+// restent ainsi cliquables individuellement.
+const rtOffsetPath = (path, offMeters) => {
+  if (!offMeters || !path || path.length < 2) return path;
+  const R = 111320;
+  const toLL = (p) => ({ lat: (typeof p.lat === 'function' ? p.lat() : p.lat), lng: (typeof p.lng === 'function' ? p.lng() : p.lng) });
+  const ll = path.map(toLL);
+  const out = [];
+  for (let i = 0; i < ll.length; i++) {
+    const cur = ll[i];
+    const a = ll[Math.max(0, i - 1)];
+    const b = ll[Math.min(ll.length - 1, i + 1)];
+    const cosLat = Math.cos(cur.lat * Math.PI / 180) || 1e-6;
+    let east = (b.lng - a.lng) * R * cosLat;
+    let north = (b.lat - a.lat) * R;
+    const len = Math.hypot(east, north) || 1;
+    east /= len; north /= len;
+    // perpendiculaire droite (rotation -90°): (est, nord) -> (nord, -est)
+    const rE = north, rN = -east;
+    out.push({
+      lat: cur.lat + (rN * offMeters) / R,
+      lng: cur.lng + (rE * offMeters) / (R * cosLat),
+    });
+  }
+  return out;
+};
+
+const RouteMiniMap = ({ depLat, depLng, destinations, legs, height = 340 }) => {
+  const ref = useRef(null);
+  const mapRef = useRef(null);
+  const pillRef = useRef(null);
+  const dirRef = useRef(null);
+  const geo = (destinations || []).filter(d => d.lat != null && d.lng != null);
+  const key = JSON.stringify([depLat, depLng, ...geo.map(d => [d.lat, d.lng, d.name])]);
+  useEffect(() => {
+    if (!ref.current || !window.google) return;
+    let alive = true;
+    const pts = [];
+    if (depLat != null && depLng != null) pts.push({ lat: depLat, lng: depLng, dep: true });
+    geo.forEach((d, i) => pts.push({ lat: d.lat, lng: d.lng, n: i + 1, leg: (legs || {})[d.id], color: RT_PASTELS[i % RT_PASTELS.length] }));
+    if (pts.length === 0) return;
+    // Décalage latéral proportionnel à l'étendue de la route: l'écart à l'écran reste
+    // à peu près constant à l'échelle d'ajustement (fitBounds). Facteur calibrable.
+    let mnLa = 90, mxLa = -90, mnLo = 180, mxLo = -180;
+    pts.forEach(p => { mnLa = Math.min(mnLa, p.lat); mxLa = Math.max(mxLa, p.lat); mnLo = Math.min(mnLo, p.lng); mxLo = Math.max(mxLo, p.lng); });
+    const midLa = (mnLa + mxLa) / 2;
+    const spanM = Math.max((mxLa - mnLa) * 111320, (mxLo - mnLo) * 111320 * Math.cos(midLa * Math.PI / 180), 1);
+    const offMeters = Math.min(1200, Math.max(15, spanM * 0.004));
+    if (!mapRef.current) {
+      mapRef.current = new google.maps.Map(ref.current, {
+        disableDefaultUI: true, zoomControl: false,
+        gestureHandling: 'greedy', scrollwheel: false, keyboardShortcuts: false,
+        clickableIcons: false, backgroundColor: '#181b1e', styles: RT_MAP_STYLE, mapTypeId: 'roadmap',
+      });
+      pillRef.current = makeRoutePill(mapRef.current);
+      mapRef.current.addListener('click', () => { if (pillRef.current) pillRef.current.hidePill(); });
+      makeMapDim(mapRef.current, '#15191B', 0.7);
+      makeZoomControl(mapRef.current);
+      dirRef.current = new google.maps.DirectionsService();
+    }
+    const map = mapRef.current;
+    (map.__ov || []).forEach(o => o.setMap(null));
+    const ov = [];
+    const showInfo = (latLng, durText, distText) => {
+      if (!pillRef.current) return;
+      const txt = (durText || distText) ? `${durText || ''}${durText && distText ? ' · ' : ''}${distText || ''}` : 'Distance...';
+      pillRef.current.showPill(latLng, txt);
+    };
+    const addSeg = (path, durText, distText, color) => {
+      const seg = new google.maps.Polyline({ path: rtOffsetPath(path, offMeters), map, clickable: true, strokeColor: color || '#A7B7B4', strokeOpacity: 0.95, strokeWeight: 4 });
+      seg.addListener('click', (e) => showInfo(e.latLng, durText, distText));
+      ov.push(seg);
+    };
+    const drawStraight = () => {
+      for (let k = 0; k < pts.length - 1; k++) {
+        const a = pts[k], b = pts[k + 1];
+        const lg = b.leg;
+        addSeg([{ lat: a.lat, lng: a.lng }, { lat: b.lat, lng: b.lng }], lg ? formatDuration(lg.durationSeconds) : '', lg ? lg.distanceText : '', b.color);
+      }
+    };
+    // Marqueurs
+    pts.forEach(p => {
+      if (p.dep) ov.push(new google.maps.Marker({ position: { lat: p.lat, lng: p.lng }, map, zIndex: 10, icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: '#EDEDE9', fillOpacity: 1, strokeColor: '#181b1e', strokeWeight: 2.5 } }));
+      else ov.push(new google.maps.Marker({ position: { lat: p.lat, lng: p.lng }, map, zIndex: 11, label: { text: String(p.n), color: '#181b1e', fontSize: '12px', fontWeight: '700' }, icon: { path: google.maps.SymbolPath.CIRCLE, scale: 13, fillColor: p.color || '#EDEDE9', fillOpacity: 1, strokeColor: '#181b1e', strokeWeight: 2 } }));
+    });
+    map.__ov = ov;
+    if (pts.length === 1) { map.setCenter({ lat: pts[0].lat, lng: pts[0].lng }); map.setZoom(11); }
+    else { const bnds = new google.maps.LatLngBounds(); pts.forEach(p => bnds.extend({ lat: p.lat, lng: p.lng })); map.fitBounds(bnds, 44); }
+
+    // Vraie route routière (Directions), un tronçon cliquable par segment
+    if (pts.length >= 2) {
+      const origin = { lat: pts[0].lat, lng: pts[0].lng };
+      const destination = { lat: pts[pts.length - 1].lat, lng: pts[pts.length - 1].lng };
+      const waypoints = pts.slice(1, -1).map(p => ({ location: { lat: p.lat, lng: p.lng }, stopover: true }));
+      dirRef.current.route({ origin, destination, waypoints, travelMode: google.maps.TravelMode.DRIVING }, (res, status) => {
+        if (!alive) return;
+        if (status === 'OK' && res.routes && res.routes[0] && res.routes[0].legs) {
+          res.routes[0].legs.forEach((lg, i) => {
+            const path = [];
+            (lg.steps || []).forEach(s => (s.path || []).forEach(pt => path.push(pt)));
+            if (path.length > 1) addSeg(path, lg.duration ? formatDuration(lg.duration.value) : '', lg.distance ? lg.distance.text : '', pts[i + 1] && pts[i + 1].color);
+          });
+          map.__ov = ov;
+          if (res.routes[0].bounds) map.fitBounds(res.routes[0].bounds, 44);
+        } else {
+          drawStraight();
+          map.__ov = ov;
+        }
+      });
+    }
+    return () => { alive = false; };
+  }, [key]);
+  return <div ref={ref} style={{ height, borderRadius: 12, overflow: 'hidden', border: '1px solid #2A2F32', background: '#15191B' }} />;
+};
+
+// Ouvre un lien Google Maps dans un nouvel onglet (contourne le blocage PWA standalone)
+const rtOpenMap = (e) => { e.preventDefault(); e.stopPropagation(); const tmp = document.createElement('a'); tmp.href = e.currentTarget.href; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); };
+
+// Boîte hôtel : une nuitée glissée entre deux destinations d'une route.
+const RouteHotelBox = ({ hotel, hostName, nextName, fromLabel, legs, onEdit, onRemove, collapsible }) => {
+  const [open, setOpen] = useState(false);
+  const expanded = !collapsible || open;
+  const to = legs && legs.to, from = legs && legs.from;
+  const legRow = (lbl, leg) => (
+    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+      <span style={{ fontSize: 12.5, color: '#7D8C8A', textTransform: 'uppercase', letterSpacing: '0.04em', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lbl}</span>
+      <span style={{ fontSize: 13, color: '#7D8C8A', flexShrink: 0 }}>{leg ? <span><b className="font-bebas-regular" style={{ color: '#C9D2D0', fontSize: 18 }}>{formatDuration(leg.durationSeconds)}</b> &middot; {leg.distanceText}</span> : <span style={{ color: '#5A6B69' }}>…</span>}</span>
+    </div>
+  );
+  return (
+    <div style={RT_HOTEL_CARD}>
+      <div onClick={collapsible ? () => setOpen(o => !o) : undefined} style={{ display: 'flex', gap: 10, alignItems: 'center', cursor: collapsible ? 'pointer' : 'default' }}>
+        <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}><RtBed c="#C9D2D0" s={collapsible ? 18 : 20} /></span>
+        <div className="font-bebas-regular" style={{ flex: 1, minWidth: 0, fontSize: collapsible ? 20 : 23, color: '#EDEDE9', letterSpacing: '0.03em', lineHeight: 1.1, wordBreak: expanded ? 'break-word' : 'normal', whiteSpace: expanded ? 'normal' : 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hotel.name || 'Hôtel'}</div>
+        {collapsible && <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}><RtChevron dir={expanded ? 'up' : 'down'} c="#7D8C8A" /></span>}
+        {expanded && <button onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Retirer l'hôtel" style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', flexShrink: 0 }}><RtTrash c="#5A6B69" /></button>}
+      </div>
+      {expanded && (
+        <React.Fragment>
+          {hotel.address && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+              <span style={{ fontSize: 15, color: '#7D8C8A', minWidth: 0 }}>{hotel.address}</span>
+              <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(hotel.address)}`} target="_blank" rel="noopener noreferrer" onClick={rtOpenMap} title="Ouvrir dans Google Maps" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', position: 'relative', top: '1px' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+              </a>
+            </div>
+          )}
+          <div style={{ marginTop: 12, borderTop: '1px solid #3E4749', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {legRow(fromLabel || `De ${hostName}`, to)}
+            {nextName ? legRow(`Vers ${nextName}`, from) : null}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+            <button onClick={(e) => { e.stopPropagation(); onEdit(); }} className="font-bebas-regular" style={{ background: 'none', border: 'none', color: '#7D8C8A', cursor: 'pointer', fontSize: 13, letterSpacing: '0.05em', textDecoration: 'underline', textUnderlineOffset: '3px' }}>MODIFIER</button>
+          </div>
+        </React.Fragment>
+      )}
+    </div>
+  );
+};
+
+// Formulaire d'ajout / modification d'un hôtel (nom + adresse via Google Places).
+const RouteHotelForm = ({ initial, onSave, onCancel }) => {
+  const [name, setName] = useState((initial && initial.name) || '');
+  const addrRef = useRef(null);
+  const acRef = useRef(null);
+  const dataRef = useRef({ address: (initial && initial.address) || '', lat: (initial && initial.lat) ?? null, lng: (initial && initial.lng) ?? null });
+  useEffect(() => {
+    if (!addrRef.current) return;
+    if (initial && initial.address) addrRef.current.value = initial.address;
+    if (acRef.current || !window.google) return;
+    acRef.current = new google.maps.places.Autocomplete(addrRef.current, { componentRestrictions: { country: 'ca' }, fields: ['name', 'formatted_address', 'geometry'] });
+    acRef.current.addListener('place_changed', () => {
+      const p = acRef.current.getPlace();
+      if (p && p.geometry) {
+        dataRef.current = { address: p.formatted_address || addrRef.current.value, lat: p.geometry.location.lat(), lng: p.geometry.location.lng() };
+        addrRef.current.value = p.formatted_address || addrRef.current.value;
+        if (p.name) setName(prev => prev.trim() ? prev : p.name);
+      }
+    });
+  }, []);
+  const submit = async () => {
+    let d = dataRef.current;
+    const typed = ((addrRef.current && addrRef.current.value) || '').trim();
+    if (typed && typed !== d.address) {
+      try { const r = await geocodeAddress(typed); d = { address: r.formattedAddress, lat: r.lat, lng: r.lng }; } catch (e) { d = { address: typed, lat: null, lng: null }; }
+    }
+    if (!name.trim() && !d.address) return;
+    onSave({ name: name.trim() || 'Hôtel', address: d.address, lat: d.lat, lng: d.lng });
+  };
+  return (
+    <div style={RT_HOTEL_CARD}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <RtBed c="#B9C6C3" s={17} />
+        <span className="font-bebas-regular" style={{ fontSize: 15, color: '#C9D2D0', letterSpacing: '0.06em', position: 'relative', top: '1px' }}>{initial ? 'MODIFIER L\'HÔTEL' : 'AJOUTER UN HÔTEL'}</span>
+      </div>
+      <input value={name} onChange={e => setName(e.target.value)} placeholder="Nom de l'hôtel" style={{ ...RT_FIELD, marginBottom: 6 }} />
+      <input ref={addrRef} placeholder="Adresse ou nom (Google)..." style={{ ...RT_FIELD, marginBottom: 10 }} />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={onCancel} className="font-bebas-regular" style={{ flex: '0 0 auto', background: 'none', border: '1px solid #3A4143', borderRadius: 8, color: '#8FA09E', padding: '8px 14px', cursor: 'pointer', fontSize: 14, letterSpacing: '0.04em' }}>ANNULER</button>
+        <button onClick={submit} className="font-bebas-regular" style={{ flex: 1, background: '#2A2F32', border: '1px solid #3A4143', borderRadius: 8, color: '#EDEDE9', padding: '8px', cursor: 'pointer', fontSize: 15, letterSpacing: '0.04em' }}>ENREGISTRER</button>
+      </div>
+    </div>
+  );
+};
+
+// Bouton d'ajout d'un hôtel (état vide d'un tronçon) : gros + blanc + icône lit seule.
+const RouteHotelAdd = ({ onClick }) => (
+  <button onClick={onClick} title="Ajouter un hôtel" style={{ width: '100%', border: '1px dashed #3A4143', borderRadius: 14, background: 'rgba(35,40,42,0.35)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '18px 0 16px' }}>
+    <span style={{ fontFamily: "'Avenir','Montserrat',sans-serif", fontWeight: 300, fontSize: 40, lineHeight: 0.7, color: '#EDEDE9' }}>+</span>
+    <RtBed c="#EDEDE9" s={22} />
+  </button>
+);
+
+const RouteDetail = ({ route, onBack, embedded, railMode }) => {
+  const { projects, updateRoute, deleteRoute, prefs } = useStore();
+  const [name, setName] = useState(route.name || '');
+  const [dests, setDestsLocal] = useState(route.destinations || []);
+  const [depAddr, setDepAddr] = useState(route.departureAddress || '');
+  const [legs, setLegs] = useState({});
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [search, setSearch] = useState('');
+  const commitTimer = useRef(null);
+  const rootRef = useRef(null);
+  const cardRefs = useRef([]);
+  const [junctions, setJunctions] = useState([]);
+  const [hotelLegs, setHotelLegs] = useState({});
+  const [editHotelFor, setEditHotelFor] = useState(null);
+
+  const depLat = route.useHome ? prefs.homeLat : route.departureLat;
+  const depLng = route.useHome ? prefs.homeLng : route.departureLng;
+  const depLabel = route.useHome ? (prefs.homeAddress || 'Ma résidence') : (route.departureAddress || 'Point de départ');
+
+  const commit = (next) => { setDestsLocal(next); clearTimeout(commitTimer.current); commitTimer.current = setTimeout(() => updateRoute(route.id, { destinations: next }), 600); };
+  const addFromProject = (p) => { commit([...dests, { id: `d_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, projectId: p.id, name: p.name, address: p.address || '', lat: p.lat ?? null, lng: p.lng ?? null, dateStart: '', dateEnd: '', note: '' }]); setPicking(false); setSearch(''); };
+  const projectChoices = (projects || []).filter(p => { const q = search.trim().toLowerCase(); if (!q) return true; return (p.name || '').toLowerCase().includes(q) || (p.address || '').toLowerCase().includes(q); });
+  const addManual = (data) => { commit([...dests, { id: `d_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, projectId: null, name: data.name || '', address: data.address || '', lat: data.lat ?? null, lng: data.lng ?? null, dateStart: '', dateEnd: '', note: '' }]); setPicking(false); setSearch(''); };
+  const updateDest = (id, u) => commit(dests.map(d => d.id === id ? { ...d, ...u } : d));
+  // La nuitée « avant le premier arrêt » (hotelBefore) reste accrochée à l'arrêt en tête de liste,
+  // même quand on réordonne les arrêts ou qu'on retire le premier.
+  const keepStartHotelFirst = (list) => {
+    const i = list.findIndex(d => d.hotelBefore);
+    if (i <= 0) return list;
+    const n = list.map(d => ({ ...d }));
+    const h = n[i].hotelBefore; n[i].hotelBefore = null;
+    if (!n[0].hotelBefore) n[0].hotelBefore = h;
+    return n;
+  };
+  const removeDest = (id) => {
+    const gone = dests.find(d => d.id === id);
+    let n = dests.filter(d => d.id !== id);
+    if (gone && gone.hotelBefore && n.length > 0 && !n[0].hotelBefore) n = n.map((d, i) => i === 0 ? { ...d, hotelBefore: gone.hotelBefore } : d);
+    commit(n);
+  };
+  const moveDest = (idx, dir) => { const j = idx + dir; if (j < 0 || j >= dests.length) return; const n = [...dests]; [n[idx], n[j]] = [n[j], n[idx]]; commit(keepStartHotelFirst(n)); };
+
+  const depGeocode = async () => {
+    const a = depAddr.trim();
+    if (!a) return;
+    try { const r = await geocodeAddress(a); setDepAddr(r.formattedAddress); updateRoute(route.id, { departureAddress: r.formattedAddress, departureLat: r.lat, departureLng: r.lng }); } catch (e) { updateRoute(route.id, { departureAddress: a }); }
+  };
+
+  const geoKey = JSON.stringify([depLat, depLng, ...dests.map(d => [d.id, d.lat, d.lng])]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const next = {};
+      let p = (depLat != null && depLng != null) ? { lat: depLat, lng: depLng } : null;
+      for (const d of dests) {
+        if (d.lat != null && d.lng != null && p) { try { const r = await getTravelTime(p.lat, p.lng, d.lat, d.lng); if (r) next[d.id] = r; } catch (e) {} }
+        if (d.lat != null && d.lng != null) p = { lat: d.lat, lng: d.lng };
+      }
+      if (alive) setLegs(next);
+    })();
+    return () => { alive = false; };
+  }, [geoKey]);
+
+  // Temps de trajet propres aux hôtels : arrêt -> hôtel -> arrêt suivant.
+  const startHotel = (dests[0] && dests[0].hotelBefore) || null;
+  const hotelGeoKey = JSON.stringify([depLat, depLng, startHotel && startHotel.lat, startHotel && startHotel.lng, ...dests.map(d => [d.id, d.lat, d.lng, d.hotel && d.hotel.lat, d.hotel && d.hotel.lng])]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const next = {};
+      // Nuitée avant le premier arrêt : départ -> hôtel -> premier arrêt.
+      if (startHotel && startHotel.lat != null && startHotel.lng != null) {
+        const entry = {}, d0 = dests[0];
+        if (depLat != null && depLng != null) { try { entry.to = await getTravelTime(depLat, depLng, startHotel.lat, startHotel.lng); } catch (e) {} }
+        if (d0 && d0.lat != null && d0.lng != null) { try { entry.from = await getTravelTime(startHotel.lat, startHotel.lng, d0.lat, d0.lng); } catch (e) {} }
+        next.start = entry;
+      }
+      for (let i = 0; i < dests.length; i++) {
+        const d = dests[i], nd = dests[i + 1];
+        const h = d.hotel;
+        if (h && h.lat != null && h.lng != null) {
+          const entry = {};
+          if (d.lat != null && d.lng != null) { try { entry.to = await getTravelTime(d.lat, d.lng, h.lat, h.lng); } catch (e) {} }
+          if (nd && nd.lat != null && nd.lng != null) { try { entry.from = await getTravelTime(h.lat, h.lng, nd.lat, nd.lng); } catch (e) {} }
+          next[d.id] = entry;
+        }
+      }
+      if (alive) setHotelLegs(next);
+    })();
+    return () => { alive = false; };
+  }, [hotelGeoKey]);
+
+  // Mesure la position verticale des jonctions entre cartes pour aligner la colonne hôtels (desktop large).
+  React.useLayoutEffect(() => {
+    if (!railMode) { setJunctions([]); return; }
+    const measure = () => {
+      if (!rootRef.current) return;
+      const rootTop = rootRef.current.getBoundingClientRect().top;
+      const js = [];
+      // Nuitée avant le premier arrêt : ancrée juste au-dessus de la première carte.
+      if (dests.length > 0 && cardRefs.current[0]) js.push({ destId: 'start', y: (cardRefs.current[0].getBoundingClientRect().top - rootTop) - 10 });
+      for (let i = 0; i < dests.length; i++) {
+        const a = cardRefs.current[i];
+        if (!a) continue;
+        const ar = a.getBoundingClientRect();
+        const b = cardRefs.current[i + 1];
+        // Dernier arrêt : pas de jonction, on ancre la nuitée sous la carte (moitié de sa marge basse).
+        const y = b ? ((ar.bottom - rootTop) + (b.getBoundingClientRect().top - rootTop)) / 2 : (ar.bottom - rootTop) + 10;
+        js.push({ destId: dests[i].id, y });
+      }
+      setJunctions(js);
+    };
+    measure();
+    let ro;
+    if (window.ResizeObserver) {
+      ro = new ResizeObserver(measure);
+      if (rootRef.current) ro.observe(rootRef.current);
+      cardRefs.current.forEach(el => el && ro.observe(el));
+    }
+    window.addEventListener('resize', measure);
+    return () => { if (ro) ro.disconnect(); window.removeEventListener('resize', measure); };
+  }, [railMode, dests, legs, hotelLegs, editHotelFor]);
+
+  const setHotel = (destId, hotel) => updateDest(destId, { hotel });
+  const removeHotel = (destId) => { updateDest(destId, { hotel: null }); setEditHotelFor(null); };
+  const destName = (d) => { if (!d) return ''; const p = (projects || []).find(pp => pp.id === d.projectId); return (p && p.name) || d.name || 'l\'arrêt'; };
+  const renderHotelSlot = (d, nd, collapsible) => {
+    if (editHotelFor === d.id) return <RouteHotelForm initial={d.hotel || null} onSave={h => { setHotel(d.id, h); setEditHotelFor(null); }} onCancel={() => setEditHotelFor(null)} />;
+    if (d.hotel) return <RouteHotelBox hotel={d.hotel} hostName={destName(d)} nextName={destName(nd)} legs={hotelLegs[d.id]} collapsible={collapsible} onEdit={() => setEditHotelFor(d.id)} onRemove={() => removeHotel(d.id)} />;
+    return <RouteHotelAdd onClick={() => setEditHotelFor(d.id)} />;
+  };
+  const setStartHotel = (hotel) => { commit(dests.map((d, i) => i === 0 ? { ...d, hotelBefore: hotel } : d)); setEditHotelFor(null); };
+  const renderStartHotelSlot = (collapsible) => {
+    if (editHotelFor === 'start') return <RouteHotelForm initial={startHotel} onSave={setStartHotel} onCancel={() => setEditHotelFor(null)} />;
+    if (startHotel) return <RouteHotelBox hotel={startHotel} hostName={depLabel} fromLabel="Depuis le départ" nextName={destName(dests[0])} legs={hotelLegs.start} collapsible={collapsible} onEdit={() => setEditHotelFor('start')} onRemove={() => setStartHotel(null)} />;
+    return <RouteHotelAdd onClick={() => setEditHotelFor('start')} />;
+  };
+
+  const totalSec = Object.values(legs).reduce((s, l) => s + (l.durationSeconds || 0), 0);
+  const totalKm = Math.round(Object.values(legs).reduce((s, l) => s + (l.distanceMeters || 0), 0) / 1000);
+
+  return (
+    <div ref={rootRef} style={{ position: railMode ? 'relative' : undefined }}>
+      {!embedded && (
+        <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#7D8C8A', cursor: 'pointer', fontSize: 13, padding: '4px 0', marginBottom: 8 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="#7D8C8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span className="font-bebas-regular" style={{ letterSpacing: '0.06em' }}>ROUTES</span>
+        </button>
+      )}
+
+      <input className="font-bebas-regular" style={{ background: 'transparent', border: 'none', color: '#EDEDE9', fontSize: 27, letterSpacing: '0.04em', width: '100%', outline: 'none', padding: 0, marginBottom: 4 }}
+        value={name} onChange={e => setName(e.target.value)} onBlur={() => { if (name !== route.name) updateRoute(route.id, { name }); }} placeholder="NOM DE LA ROUTE" />
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#7D8C8A', fontSize: 11, marginBottom: 4 }}>
+        <RtPin /><span>DÉPART &middot; {depLabel}</span>
+      </div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: '#8FA09E', marginBottom: route.useHome ? 16 : 6, cursor: 'pointer' }}>
+        <input type="checkbox" checked={route.useHome !== false} onChange={e => updateRoute(route.id, { useHome: e.target.checked })} style={{ position: 'relative', top: '-1px', accentColor: '#8B9B99' }} />
+        Partir de ma résidence
+      </label>
+      {route.useHome === false && <input style={{ ...RT_FIELD, marginBottom: 16 }} value={depAddr} onChange={e => setDepAddr(e.target.value)} onBlur={depGeocode} placeholder="Adresse de départ..." />}
+
+      {((depLat != null && depLng != null) || dests.some(d => d.lat != null && d.lng != null)) && (
+        <div style={{ marginBottom: 12 }}>
+          <RouteMiniMap depLat={depLat} depLng={depLng} destinations={dests} legs={legs} />
+        </div>
+      )}
+
+      {!railMode && dests.length > 0 && (
+        <div style={{ marginBottom: 20 }}>{renderStartHotelSlot(true)}</div>
+      )}
+      {dests.map((d, i) => (
+        <React.Fragment key={d.id}>
+          <RouteDestinationCard innerRef={el => { cardRefs.current[i] = el; }} dest={d} index={i} leg={legs[d.id]}
+            onUpdate={u => updateDest(d.id, u)} onRemove={() => removeDest(d.id)}
+            onMove={dir => moveDest(i, dir)} canUp={i > 0} canDown={i < dests.length - 1} />
+          {!railMode && (
+            <div style={{ marginBottom: 20 }}>{renderHotelSlot(d, dests[i + 1], true)}</div>
+          )}
+        </React.Fragment>
+      ))}
+
+      {railMode && (
+        <div style={{ position: 'absolute', top: 0, left: 'calc(100% + 34px)', width: 300 }} aria-hidden={junctions.length === 0}>
+          {junctions.map(j => {
+            const isStart = j.destId === 'start';
+            const i = isStart ? -1 : dests.findIndex(x => x.id === j.destId);
+            if (!isStart && i < 0) return null;
+            const d = isStart ? null : dests[i], nd = isStart ? null : dests[i + 1];
+            const linked = isStart ? !!startHotel : !!d.hotel;
+            return (
+              <div key={j.destId} style={{ position: 'absolute', top: j.y, right: 0, width: 300, transform: 'translateY(-50%)' }}>
+                <div style={{ position: 'absolute', left: -38, top: '50%', transform: 'translateY(-50%)', width: 38, height: 2, display: 'flex', alignItems: 'center' }}>
+                  <span style={{ flex: 1, height: 2, background: `linear-gradient(90deg, rgba(74,84,83,0), ${linked ? '#4A5453' : '#3A4143'})` }} />
+                  <span style={{ position: 'absolute', left: -3, width: 9, height: 9, borderRadius: '50%', background: '#23282A', border: `2px solid ${linked ? '#7dd3c6' : '#4A5453'}` }} />
+                </div>
+                {isStart ? renderStartHotelSlot(false) : renderHotelSlot(d, nd, false)}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {picking ? (
+        <div style={{ ...RT_CARD, marginBottom: 12, padding: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span className="font-bebas-regular" style={{ fontSize: 15, color: '#C9D2D0', letterSpacing: '0.04em' }}>CHOISIR UN SHOOTING</span>
+            <button onClick={() => { setPicking(false); setSearch(''); }} style={{ background: 'none', border: 'none', color: '#7D8C8A', cursor: 'pointer', fontSize: 12 }}>Annuler</button>
+          </div>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un shooting..." style={{ ...RT_FIELD, marginBottom: 8 }} autoFocus />
+          <div style={{ maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {projectChoices.length === 0 ? (
+              <div style={{ fontSize: 12, color: '#7D8C8A', padding: 8, textAlign: 'center' }}>Aucun shooting trouvé.</div>
+            ) : projectChoices.map(p => (
+              <button key={p.id} onClick={() => addFromProject(p)} style={{ background: '#191D1F', border: '1px solid #2E3437', borderRadius: 8, padding: '8px 10px', textAlign: 'left', cursor: 'pointer' }}>
+                <span className="font-bebas-regular" style={{ display: 'block', fontSize: 15, color: '#EDEDE9', letterSpacing: '0.03em' }}>{p.name || 'Sans nom'}</span>
+                {p.address && <span style={{ fontSize: 10.5, color: '#7D8C8A' }}>{p.address}</span>}
+              </button>
+            ))}
+          </div>
+          <ManualDestForm onAdd={addManual} />
+        </div>
+      ) : (
+        <button onClick={() => setPicking(true)} style={{ width: '100%', textAlign: 'center', border: '1px dashed #3A4143', borderRadius: 12, padding: 10, background: 'none', color: '#8B9B99', cursor: 'pointer', fontSize: 13, marginBottom: 12 }}>+ Ajouter une destination</button>
+      )}
+
+      {totalSec > 0 && (
+        <div style={{ ...RT_CARD, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <span style={{ fontSize: 11, color: '#7D8C8A', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total du trajet</span>
+          <span className="font-bebas-regular" style={{ fontSize: 19, color: '#EDEDE9', letterSpacing: '0.03em' }}>{formatDuration(totalSec)} &middot; {totalKm} KM</span>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button onClick={() => { if (confirmDel) { deleteRoute(route.id); onBack(); } else { setConfirmDel(true); setTimeout(() => setConfirmDel(false), 3000); } }}
+          className="font-bebas-regular" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: confirmDel ? '#d83152' : '#5A6B69', cursor: 'pointer', fontSize: 14, letterSpacing: '0.04em' }}>
+          <RtTrash c={confirmDel ? '#d83152' : '#5A6B69'} />{confirmDel ? 'CONFIRMER LA SUPPRESSION' : 'SUPPRIMER LA ROUTE'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const RT_PANEL = { background: '#1B1F21', border: '1px solid #2A2F32', borderRadius: 16 };
+
+const RouteView = () => {
+  const { routes, addRoute, prefs } = useStore();
+  const isMobile = useIsMobile();
+  const [openId, setOpenId] = useState(null);
+  const [winW, setWinW] = useState(window.innerWidth);
+  useEffect(() => { const on = () => setWinW(window.innerWidth); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
+  const active = routes.filter(r => !r.archived);
+  // Desktop: si rien de sélectionné, on ouvre la première route (jamais de panneau vide).
+  const effectiveId = openId || (!isMobile && active[0] ? active[0].id : null);
+  const current = routes.find(r => r.id === effectiveId);
+
+  const create = () => {
+    const id = addRoute({ useHome: true, departureAddress: prefs.homeAddress, departureLat: prefs.homeLat, departureLng: prefs.homeLng, destinations: [] });
+    setOpenId(id);
+  };
+
+  const listPanel = (
+    <div style={{ ...RT_PANEL, padding: isMobile ? 14 : 16, ...(isMobile ? {} : { width: 320, flexShrink: 0, position: 'sticky', top: 100 }) }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <span className="font-bebas-regular" style={{ fontSize: 30, color: '#EDEDE9', letterSpacing: '0.04em' }}>ROUTES</span>
+        <button onClick={create} style={{ width: 30, height: 30, borderRadius: '50%', background: '#2A2F32', color: '#EDEDE9', border: 'none', fontSize: 22, lineHeight: 0.7, cursor: 'pointer' }}>+</button>
+      </div>
+      {active.length === 0 ? (
+        <div style={{ color: '#7D8C8A', fontSize: 13, padding: '20px 4px', textAlign: 'center' }}>Aucune route. Touche « + » pour en créer une.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {active.map(r => {
+            const ds = r.destinations || [];
+            const dated = ds.flatMap(d => [d.dateStart || d.date, d.dateEnd]).filter(Boolean).sort();
+            const sel = r.id === effectiveId;
+            return (
+              <button key={r.id} onClick={() => setOpenId(r.id)} style={{ background: '#23282A', border: `1px solid ${sel ? '#4A5453' : '#2E3437'}`, borderRadius: 12, padding: 12, width: '100%', textAlign: 'left', cursor: 'pointer' }}>
+                <span className="font-bebas-regular" style={{ display: 'block', fontSize: 19, color: '#EDEDE9', letterSpacing: '0.03em' }}>{r.name || 'ROUTE SANS NOM'}</span>
+                <span style={{ fontSize: 11, color: '#7D8C8A' }}>{ds.length} destination{ds.length > 1 ? 's' : ''}{dated.length > 0 ? ` · ${rtFmtDateFR(dated[0])}${dated.length > 1 ? ' au ' + rtFmtDateFR(dated[dated.length - 1]) : ''}` : ''}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  // iPhone : une colonne — liste, puis détail plein écran avec retour.
+  if (isMobile) {
+    return (
+      <div style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 90, paddingTop: 'calc(16px + env(safe-area-inset-top))' }}>
+        {openId && current
+          ? <div style={{ ...RT_PANEL, padding: 14 }}><RouteDetail key={current.id} route={current} onBack={() => setOpenId(null)} /></div>
+          : listPanel}
+      </div>
+    );
+  }
+
+  // Desktop : routes à gauche, détail au centre. Sur écran large, une 3e colonne
+  // « hôtels » (nuitées entre deux arrêts) apparaît à droite ; sinon les hôtels
+  // s'affichent en ligne dans le détail, sans toucher à la largeur centrale.
+  const railMode = !isMobile && winW >= 1300 && !!current && (current.destinations || []).length >= 2;
+  return (
+    <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', maxWidth: railMode ? 1300 : 980, margin: '0 auto', paddingLeft: 16, paddingRight: 16, paddingBottom: 90, paddingTop: 100 }}>
+      {listPanel}
+      <div style={{ ...RT_PANEL, flex: 1, minWidth: 0, maxWidth: 620, padding: 18 }}>
+        {current
+          ? <RouteDetail key={current.id} route={current} embedded railMode={railMode} onBack={() => setOpenId(null)} />
+          : <div style={{ color: '#7D8C8A', fontSize: 14, textAlign: 'center', padding: '60px 20px' }}>Sélectionne une route à gauche, ou crée-en une avec « + ».</div>}
+      </div>
+      {railMode && <div style={{ width: 300, flexShrink: 0 }} aria-hidden="true" />}
+    </div>
+  );
+};
+
+const App = () => {
+  const { view, setView, selectedId, setSelectedId, prefs, lastDeleted, undoDelete, addProject, synced } = useStore();
+  const { t } = useLang();
+  const [showNew, setShowNew] = useState(false);
+  const plusRef = React.useRef(null);
+  const [plusRect, setPlusRect] = useState(null);
+  const isMobile = useIsMobile();
+  const [glowReady, setGlowReady] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setGlowReady(true), 800); return () => clearTimeout(t); }, []);
+  const [displayedProjectId, setDisplayedProjectId] = useState(null);
+  const detailScrollRef = React.useRef(null);
+
+  // Ajout direct depuis un lien externe (ex: BudgetShoot) : ?prefill=<JSON>
+  // Attend que la liste soit chargée (synced) pour ne pas se faire écraser.
+  const externalAddDone = React.useRef(false);
+  useEffect(() => {
+    if (!synced || externalAddDone.current) return;
+    externalAddDone.current = true;
+    let parsed;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const raw = params.get('prefill');
+      if (!raw) return;
+      params.delete('prefill');
+      const qs = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
+      parsed = JSON.parse(raw);
+    } catch (err) { console.warn('Ajout externe: lecture impossible', err); return; }
+    if (!parsed || !(parsed.name || parsed.address)) return;
+    setView('todo');
+    (async () => {
+      const data = {
+        name: parsed.name || '',
+        address: parsed.address || '',
+        mandates: Array.isArray(parsed.mandates) ? parsed.mandates : [],
+        orientation: [], isContest: false, lat: null, lng: null
+      };
+      if (data.address) {
+        try { const r = await geocodeAddress(data.address); data.lat = r.lat; data.lng = r.lng; data.address = r.formattedAddress; } catch (e) { console.warn('Géocodage:', e); }
+      }
+      if (data.lat && data.lng && prefs.homeLat && prefs.homeLng) {
+        try { const travel = await getTravelTime(prefs.homeLat, prefs.homeLng, data.lat, data.lng); data.travelTime = travel; data.departureAddress = prefs.homeAddress; data.departureLat = prefs.homeLat; data.departureLng = prefs.homeLng; } catch (e) { console.warn('Trajet:', e); }
+      }
+      const result = addProject(data);
+      if (result && result.error === 'limit_reached') {
+        window.alert('Limite de projets atteinte sur ton forfait MétéoShoot.');
+      }
+    })();
+  }, [synced]);
+
+  // Cmd+Z undo delete (desktop) + shake-to-undo (mobile)
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && lastDeleted) {
+        e.preventDefault();
+        undoDelete();
+      }
+    };
+    window.addEventListener('keydown', handler);
+
+    // Shake detection for mobile
+    let lastShake = 0;
+    let lastX = null, lastY = null, lastZ = null;
+    const shakeThreshold = 25;
+    const onMotion = (e) => {
+      if (!lastDeleted) return;
+      const { x, y, z } = e.accelerationIncludingGravity || {};
+      if (x == null) return;
+      if (lastX !== null) {
+        const delta = Math.abs(x - lastX) + Math.abs(y - lastY) + Math.abs(z - lastZ);
+        if (delta > shakeThreshold && Date.now() - lastShake > 1000) {
+          lastShake = Date.now();
+          undoDelete();
+        }
+      }
+      lastX = x; lastY = y; lastZ = z;
+    };
+    window.addEventListener('devicemotion', onMotion);
+
+    return () => {
+      window.removeEventListener('keydown', handler);
+      window.removeEventListener('devicemotion', onMotion);
+    };
+  }, [lastDeleted, undoDelete]);
+
+  // Pull-to-refresh (Safari-style)
+  useEffect(() => {
+    if (!isMobile) return;
+    let startY = 0, pulling = false, ready = false, indicator = null;
+    const threshold = 220;
+    const createIndicator = () => {
+      if (indicator) return;
+      indicator = document.createElement('div');
+      indicator.style.cssText = 'position:fixed;top:80px;left:50%;width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,0.3);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;z-index:9999;opacity:0;transition:opacity 0.2s;pointer-events:none;transform:translateX(-50%)';
+      indicator.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(125,211,198,0.8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.5s"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>';
+      document.body.appendChild(indicator);
+    };
+    const removeIndicator = () => {
+      if (indicator) { indicator.remove(); indicator = null; }
+    };
+    const onStart = (e) => {
+      if (window.scrollY <= 0) {
+        startY = e.touches[0].clientY;
+        pulling = true;
+        ready = false;
+      }
+    };
+    const onMove = (e) => {
+      if (!pulling) return;
+      const dy = e.touches[0].clientY - startY;
+      if (dy < 0) { pulling = false; removeIndicator(); return; }
+      if (dy > 20) {
+        createIndicator();
+        const progress = Math.min(dy / threshold, 1);
+        indicator.style.opacity = progress;
+        const svg = indicator.querySelector('svg');
+        if (svg) svg.style.transform = `rotate(${progress * 540}deg)`;
+        ready = progress >= 1;
+        if (ready) {
+          indicator.style.background = 'rgba(125,211,198,0.15)';
+          indicator.style.boxShadow = '0 0 12px rgba(125,211,198,0.3)';
+        } else {
+          indicator.style.background = 'rgba(0,0,0,0.3)';
+          indicator.style.boxShadow = 'none';
+        }
+      }
+    };
+    const onEnd = () => {
+      if (ready) {
+        if (indicator) {
+          indicator.style.transition = 'opacity 0.4s';
+          indicator.style.opacity = '0';
+        }
+        setTimeout(() => window.location.reload(), 500);
+      } else {
+        if (indicator) {
+          indicator.style.transition = 'opacity 0.2s';
+          indicator.style.opacity = '0';
+          setTimeout(() => removeIndicator(), 250);
+        }
+      }
+      pulling = false;
+      ready = false;
+    };
+    window.addEventListener('touchstart', onStart, { passive: true });
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('touchend', onEnd, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', onStart);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
+      removeIndicator();
+    };
+  }, [isMobile]);
+  
+  useEffect(() => {
+    if (selectedId) {
+      setDisplayedProjectId(selectedId);
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+    } else {
+      setDisplayedProjectId(null);
+      document.documentElement.style.overflow = '';
+      document.body.style.overflow = '';
+    }
+    return () => { document.documentElement.style.overflow = ''; document.body.style.overflow = ''; };
+  }, [selectedId]);
+
+  // Scroll fluide (amorti) du détail, au survol de la zone autour de la carte (desktop, molette).
+  // La carte garde son zoom molette: son propre handler fait stopPropagation, donc ce
+  // gestionnaire ne se déclenche jamais au-dessus d'elle.
+  useEffect(() => {
+    if (isMobile || !displayedProjectId) return;
+    const el = detailScrollRef.current;
+    if (!el) return;
+    return attachSmoothWheel(el, el);
+  }, [displayedProjectId, isMobile]);
+
+  // Même défilement fluide pour les vues principales (listing projets, édition, préférences),
+  // qui défilent la fenêtre (html overflow-y:scroll). Desktop uniquement; inactif quand un
+  // détail est ouvert (la fenêtre est alors figée par overflow:hidden). Exactement le même
+  // mécanisme et les mêmes réglages que le détail.
+  useEffect(() => {
+    if (isMobile || displayedProjectId) return;
+    return attachSmoothWheel(window, document.scrollingElement || document.documentElement);
+  }, [displayedProjectId, isMobile]);
+
+  // Track plus button position
+  useEffect(() => {
+    const update = () => {
+      if (plusRef.current) {
+        const r = plusRef.current.getBoundingClientRect();
+        setPlusRect({ x: r.left, y: r.top, w: r.width, h: r.height, cx: r.left + r.width/2, cy: r.top + r.height/2 });
+      }
+    };
+    update();
+    // Recalculate after fonts/content load
+    const t1 = setTimeout(update, 100);
+    const t2 = setTimeout(update, 500);
+    const t3 = setTimeout(update, 1500);
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update);
+    document.fonts?.ready?.then(update);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); window.removeEventListener('resize', update); window.removeEventListener('scroll', update); };
+  }, [view]);
+
+  // Browser history management
+  const openProject = (p) => {
+    const f = document.getElementById('persistentFlare');
+    if (f) { f.style.display = 'none'; f.style.animation = 'none'; f.style.opacity = '0'; }
+    setShowNew(false);
+    setSelectedId(p.id);
+    window.scrollTo(0, 0);
+    history.pushState({ projectId: p.id, view }, '', `#project/${p.id}`);
+  };
+  
+  const closeProject = () => {
+    setSelectedId(null);
+    window.scrollTo(0, 0);
+    history.pushState({ view }, '', `#${view}`);
+  };
+
+  const changeView = (v) => {
+    const f = document.getElementById('persistentFlare');
+    if (f) { f.style.display = 'none'; f.style.animation = 'none'; f.style.opacity = '0'; }
+    setView(v);
+    setSelectedId(null);
+    window.scrollTo(0, 0);
+    history.pushState({ view: v }, '', `#${v}`);
+  };
+
+  useEffect(() => {
+    // Set initial state
+    history.replaceState({ view }, '', `#${view}`);
+    
+    const onPopState = (e) => {
+      const state = e.state;
+      window.scrollTo(0, 0);
+      if (state?.projectId) {
+        setSelectedId(state.projectId);
+        if (state.view) setView(state.view);
+      } else {
+        setSelectedId(null);
+        if (state?.view) setView(state.view);
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  // Logo fade when overlapping content
+  useEffect(() => {
+    // Track mouse direction for day-popup slide
+    let lastMouseX = 0;
+    let hideTimeout = null;
+    const handleMouseMove = (e) => { lastMouseX = e.clientX; };
+    const handleMouseEnter = (e) => {
+      if (hideTimeout) { clearTimeout(hideTimeout); hideTimeout = null; }
+      const cell = e.currentTarget;
+      const rect = cell.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const dir = lastMouseX < centerX ? -8 : 8;
+      // Hide all other popups instantly
+      document.querySelectorAll('.day-popup.popup-active').forEach(p => {
+        p.style.transition = 'none';
+        p.classList.remove('popup-active');
+      });
+      const popup = cell.querySelector('.day-popup');
+      if (popup) {
+        popup.style.setProperty('--slide-from', dir + 'px');
+        // Force reflow then animate in
+        void popup.offsetWidth;
+        popup.style.transition = '';
+        popup.classList.add('popup-active');
+      }
+    };
+    const handleMouseLeave = (e) => {
+      hideTimeout = setTimeout(() => {
+        document.querySelectorAll('.day-popup.popup-active').forEach(p => {
+          p.style.transition = '';
+          p.classList.remove('popup-active');
+        });
+      }, 80);
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    // Touch support for day popups (desktop touch only, disabled on mobile <768px)
+    const handleTouch = (e) => {
+      if (window.innerWidth <= 768) return; // Skip on mobile
+      const cell = e.target.closest('.day-cell');
+      if (!cell) {
+        // Tap outside: close all popups
+        document.querySelectorAll('.day-popup.popup-active').forEach(p => {
+          p.style.transition = '';
+          p.classList.remove('popup-active');
+        });
+        return;
+      }
+      e.preventDefault();
+      const popup = cell.querySelector('.day-popup');
+      if (!popup) return;
+      const wasActive = popup.classList.contains('popup-active');
+      // Close all
+      document.querySelectorAll('.day-popup.popup-active').forEach(p => {
+        p.style.transition = 'none';
+        p.classList.remove('popup-active');
+      });
+      // Toggle the tapped one
+      if (!wasActive) {
+        popup.style.setProperty('--slide-from', '0px');
+        void popup.offsetWidth;
+        popup.style.transition = '';
+        popup.classList.add('popup-active');
+      }
+    };
+    document.addEventListener('touchstart', handleTouch, { passive: false });
+    // Disable CSS hover during scroll
+    let scrollTimer;
+    const onWheel = () => {
+      document.body.classList.add('is-scrolling');
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => document.body.classList.remove('is-scrolling'), 150);
+    };
+    window.addEventListener('wheel', onWheel, { passive: true });
+    const attach = () => {
+      document.querySelectorAll('.day-cell').forEach(c => {
+        c.removeEventListener('mouseenter', handleMouseEnter);
+        c.addEventListener('mouseenter', handleMouseEnter);
+        c.removeEventListener('mouseleave', handleMouseLeave);
+        c.addEventListener('mouseleave', handleMouseLeave);
+      });
+    };
+    attach();
+    const obs = new MutationObserver(attach);
+    obs.observe(document.body, { childList: true, subtree: true });
+    return () => { document.removeEventListener('mousemove', handleMouseMove); document.removeEventListener('touchstart', handleTouch); obs.disconnect(); };
+  });
+
+  return (
+    <div className="min-h-screen bg-cream" style={{ position: 'relative', ...(isMobile ? { background: 'transparent' } : {}) }}>
+      {/* Soft radial gradient background */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', opacity: isMobile && !glowReady ? 0 : 1, transition: 'opacity 0.8s ease', background: `radial-gradient(ellipse 60% 40% at ${plusRect ? plusRect.cx : window.innerWidth * 0.5}px ${plusRect && !selectedId ? plusRect.cy : 120}px, rgba(45,80,70,0.35) 0%, rgba(44,44,44,0) 70%)` }}/>
+      {/* Top blur overlay — desktop only, full width */}
+      {!isMobile && <div style={{ 
+        position: 'fixed', top: 0, left: 0, right: 0, 
+        height: '72px',
+        backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+        WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 35%, transparent 100%)',
+        maskImage: 'linear-gradient(to bottom, black 0%, black 35%, transparent 100%)',
+        zIndex: 39, pointerEvents: 'none'
+      }}/>}
+      {/* Top content fade — bg color to transparent */}
+      {!isMobile && <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0,
+        height: '50px',
+        background: 'linear-gradient(to bottom, #181b1e 0%, transparent 100%)',
+        zIndex: 38, pointerEvents: 'none'
+      }}/>}
+      {/* Page titles — rendered at App level ABOVE blur */}
+      {!isMobile && displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{t('projectDetailsTitle')}</h1>}
+      {!isMobile && !displayedProjectId && view !== 'routes' && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{view === 'todo' ? t('projects') : view === 'retouching' ? t('editing') : t('preferences')}</h1>}
+      {!(isMobile && showNew) && <Header onChangeView={changeView} onAddProject={() => { const f = document.getElementById('persistentFlare'); if (f) { f.style.display = 'none'; f.style.animation = 'none'; } setShowNew(true); }}/>}
+      <div style={{ 
+        display: isMobile && showNew ? 'none' : 'block'
+      }}>
+      <main className="animate-fade-in" style={{ position: 'relative', zIndex: 1 }}>
+        <div style={{
+          pointerEvents: selectedId ? 'none' : 'auto',
+          position: 'relative',
+          width: '100%'
+        }}>
+          {view === 'todo' && <TodoView onSelect={openProject} onAddProject={() => { const f = document.getElementById('persistentFlare'); if (f) { f.style.display = 'none'; f.style.animation = 'none'; } setShowNew(true); }} addingProject={showNew} plusRef={plusRef}/>}
+          {view === 'retouching' && <RetouchingView onSelect={openProject}/>}
+          {view === 'routes' && <RouteView/>}
+          {view === 'preferences' && <PreferencesView/>}
+        </div>
+        {displayedProjectId && <div ref={detailScrollRef} className="detail-scroll" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          overflowX: 'hidden',
+          overflowY: 'auto',
+          zIndex: 10,
+          background: '#181b1e'
+        }}>
+          <ProjectDetail projectId={displayedProjectId} onClose={closeProject}/>
+        </div>}
+      </main>
+      </div>
+      {/* Mobile slide-in new project screen */}
+      {isMobile && <MobileNewProjectScreen isOpen={showNew} onClose={() => setShowNew(false)} onCreated={() => setShowNew(false)} />}
+      {/* Desktop modal */}
+      {!isMobile && view === 'todo' && !selectedId && plusRect && <NewProjectModal isOpen={showNew} origin={plusRect} onClose={() => { setShowNew(false); }} onCreated={() => { setShowNew(false); }} onOpen={() => setShowNew(true)}/>}
+      {/* Undo delete toast */}
+      {lastDeleted && <UndoToast key={lastDeleted.id} onUndo={undoDelete} projectName={lastDeleted.name} />}
+    </div>
+  );
+};
+
+const AppWithAuth = () => {
+  const { user, loading } = useAuth();
+  
+  if (loading) return <div style={{ position: 'fixed', inset: 0, background: '#181b1e' }}/>;
+  
+  if (!user) return <LoginScreen/>;
+
+  return <SubscriptionProvider><StoreProvider><WeatherStatusProvider><App/></WeatherStatusProvider></StoreProvider></SubscriptionProvider>;
+};
+
+createRoot(document.getElementById('root')).render(<AuthProvider><LangProvider><AppWithAuth/></LangProvider></AuthProvider>);
