@@ -9,4 +9,9 @@ import '@fontsource/oswald/300.css';
 import '@fontsource/oswald/400.css';
 import '@fontsource/oswald/500.css';
 import '@fontsource/oswald/600.css';
-import './app.jsx';
+import { createRoot } from 'react-dom/client';
+import { AuthProvider } from './auth/AuthProvider.jsx';
+import { LangProvider } from './i18n/LangProvider.jsx';
+import { AppWithAuth } from './components/App.jsx';
+
+createRoot(document.getElementById('root')).render(<AuthProvider><LangProvider><AppWithAuth/></LangProvider></AuthProvider>);
