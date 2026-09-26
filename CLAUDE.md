@@ -12,8 +12,13 @@
   - `src/shared/` configuration Supabase et Lemon Squeezy, traductions (partagé avec les pages)
   - `src/pages/` code des pages `site/login.html`, `signup.html`, `account.html`, `dieu.html`
   - `src/styles/app.css` styles de l'application (ancien bloc `<style>`), suivi des directives Tailwind
+  - `src/native/` détection de la plateforme, géolocalisation Capacitor (natif seulement), réglages natifs au démarrage
+- `ios/` et `android/` projets Capacitor 8 (iOS avec Swift Package Manager, signature automatique équipe 89HN379C53, appId `com.meteoshoot.app`). `npm run ios` compile, synchronise et ouvre Xcode; `npm run android` idem pour Android Studio (SDK Android et JDK à installer). Le contenu web des apps vient de `dist/`, jamais modifié à la main.
+- `tools/baseline/` harnais de mesure et de comparaison visuelle (voir `verification_etape0/` dans le dossier parent pour les captures et mesures).
+- `docs/tests-appareil-iphone.md` procédure de tests sur iPhone réel.
 - `public/` fichiers servis tels quels à la racine: icônes, `manifest.json`, `sw.js`, `fonts/`, `imgProjet/`.
-- Commandes: `npm install` (une fois), `npm run dev` (serveur de développement sur le port 5173), `npm run build` (produit `dist/`), `npx eslint src/` (variables non déclarées: à lancer après tout déplacement de code).
+- Commandes: `npm install` (une fois), `npm run dev` (serveur de développement sur le port 5173), `npm run build` (produit `dist/`), `npm run lint` (variables non déclarées: à lancer après tout déplacement de code), `npm run cap:sync` (recompile et synchronise les apps natives).
+- Dans l'app native, `isDev` est faux (données de production) même si l'origine est `capacitor://localhost`.
 
 ## Workflow de déploiement
 
