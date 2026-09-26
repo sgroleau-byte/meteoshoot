@@ -1,10 +1,21 @@
+import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { defineConfig } from 'vite';
+
+// Clé Google Maps selon la cible: 'web' (site) ou 'native' (apps Capacitor, MS_TARGET=native).
+// Les deux valeurs vivent dans google-maps-keys.json (clés publiques, restreintes côté Google).
+const mapsKeys = JSON.parse(readFileSync(resolve(__dirname, 'google-maps-keys.json'), 'utf8'));
+const target = process.env.MS_TARGET === 'native' ? 'native' : 'web';
+const mapsKey = mapsKeys[target];
 import react from '@vitejs/plugin-react';
 
 // Compilation de production de MeteoShoot (React précompilé, Tailwind compilé, dépendances embarquées).
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    { name: 'meteoshoot-google-maps-key', transformIndexHtml: (html) => html.replace(/__GOOGLE_MAPS_KEY__/g, mapsKey) },
+  ],
+  define: { __GOOGLE_MAPS_KEY__: JSON.stringify(mapsKey), __MS_TARGET__: JSON.stringify(target) },
   server: { port: 5173, strictPort: true },
   build: {
     // Compatibilité large (Safari 14, Chrome 87...): l'ancienne page transpilait tout avec Babel.

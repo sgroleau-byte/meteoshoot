@@ -405,6 +405,9 @@
     .gm-style a[href*="google"], .gm-style .gm-style-cc a { color: rgba(255,255,255,0.3) !important; font-size: 9px !important; }
     .gm-style .gm-style-cc div { background: transparent !important; }
 
+    /* App native (Capacitor) seulement: bande opaque sous la barre de statut, sans effet sur le web. */
+    .native-status-bar-mask { position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top, 0px); background: #181b1e; z-index: 2147483000; pointer-events: none; }
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

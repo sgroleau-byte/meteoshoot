@@ -20,8 +20,10 @@
   window.Date = FakeDate;
   const FREEZE = /open-meteo\.com|geo\.weather\.gc\.ca|swpc\.noaa\.gov|open-elevation\.com|maps\.googleapis\.com\/maps\/api\//;
   const realFetch = window.fetch;
+  Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => !window.__blOffline });
   window.fetch = async function (input, init) {
     const url = typeof input === 'string' ? input : (input && input.url) || String(input);
+    if (window.__blOffline && (FREEZE.test(url) || /supabase\.co/.test(url))) throw new TypeError('Failed to fetch (simulation hors ligne)');
     if (!FREEZE.test(url)) return realFetch.apply(this, arguments);
     const hit = store.entries[url];
     if (hit) return new Response(hit.body, { status: hit.status, headers: { 'Content-Type': hit.ct } });
@@ -39,6 +41,9 @@
   const mo = new MutationObserver(() => {
     const now = performance.now();
     if (!marks.rootRendered) { const r = document.getElementById('root'); if (r && r.children.length) marks.rootRendered = now; }
+    const sp = document.getElementById('splashScreen');
+    if (!marks.splashHidden && sp && sp.classList.contains('splash-hidden')) marks.splashHidden = now;
+    if (!marks.splashRemoved && !sp && marks.rootRendered) marks.splashRemoved = now;
     const n = document.querySelectorAll('.day-cell').length;
     if (n && !marks.firstDayCell) marks.firstDayCell = now;
     if (n !== marks.dayCells) { marks.dayCells = n; marks.lastDayCellChange = now; }

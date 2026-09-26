@@ -59,6 +59,9 @@ const useIsMobile = () => {
   return isMobile;
 };
 
+// Parcours « mot de passe oublié »: le lien du courriel ramène ici avec type=recovery dans l'URL.
+const RECOVERY_FLOW = /type=recovery/.test(window.location.hash) || /type=recovery/.test(window.location.search);
+
 // ===== LOGIN SCREEN =====
 const LoginScreen = () => {
   const { t, lang } = useLang();
@@ -66,22 +69,54 @@ const LoginScreen = () => {
   const [password, setPassword] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(false);
-  const [view, setView] = useState('login'); // 'login' | 'forgot'
+  const [view, setView] = useState(RECOVERY_FLOW ? 'recovery' : 'login'); // 'login' | 'forgot' | 'recovery'
   const [resetEmail, setResetEmail] = useState('');
   const [resetSending, setResetSending] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [resetError, setResetError] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [pwSending, setPwSending] = useState(false);
+  const [pwUpdated, setPwUpdated] = useState(false);
+  const [pwError, setPwError] = useState(false);
 
   const isMob = useIsMobile();
 
   // Check if already authenticated on load
   useEffect(() => {
+    if (RECOVERY_FLOW) return; // session de récupération: on reste ici pour saisir le nouveau mot de passe
     supabaseClient.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         window.location.href = getRedirectUrl();
       }
     });
   }, []);
+
+  // Supabase signale l'arrivée par un lien de réinitialisation (même sans fragment lisible).
+  useEffect(() => {
+    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setView('recovery');
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleUpdatePassword = async () => {
+    if (!newPassword) return;
+    if (newPassword.length < 6) { setPwError('short'); return; }
+    setPwSending(true);
+    setPwError(false);
+    try {
+      const { error: err } = await supabaseClient.auth.updateUser({ password: newPassword });
+      if (err) {
+        setPwError(true);
+      } else {
+        setPwUpdated(true);
+        setTimeout(() => { window.location.href = getRedirectUrl(); }, 1200);
+      }
+    } catch (e) {
+      setPwError(true);
+    }
+    setPwSending(false);
+  };
 
   const handleSubmit = async () => {
     if (!email || !password) return;
@@ -108,7 +143,7 @@ const LoginScreen = () => {
     setResetSent(false);
     try {
       const { error: err } = await supabaseClient.auth.resetPasswordForEmail(resetEmail, {
-        redirectTo: publicOrigin() + '/index.html'
+        redirectTo: publicOrigin() + '/site/login.html'
       });
       if (err) {
         setResetError(true);
@@ -120,6 +155,96 @@ const LoginScreen = () => {
     }
     setResetSending(false);
   };
+
+  // Vue « nouveau mot de passe » (arrivée par le lien du courriel de réinitialisation)
+  if (view === 'recovery') {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: '#181b1e', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        {/* Halo glow */}
+        <div className="splash-halo-el" style={{
+          position: 'absolute', top: isMob ? 'calc(46% - 80px)' : 'calc(46% - 150px)', left: isMob ? 'calc(50% - 100px)' : 'calc(50% - 200px)', transform: 'translate(-50%, -50%) translateZ(0)',
+          width: isMob ? '900px' : '1800px', height: isMob ? '900px' : '1800px', borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(170,215,208,0.4) 0%, rgba(150,200,195,0.08) 30%, transparent 55%)',
+          filter: 'blur(60px)', pointerEvents: 'none', zIndex: 1,
+          animation: 'splashHaloOrg 20s ease-in-out infinite'
+        }}/>
+        {/* Logo + Form */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+          {/* Logo + flare */}
+          <div className="splash-logo-area" style={{ marginBottom: '25px' }}>
+            <img className="splash-flare" src="../imgProjet/splash-o.png" alt="" />
+            <img className="splash-logo-img" src="../imgProjet/splash-typoMeteoshoot.png" alt="meteoshoot" />
+          </div>
+          {/* Reset Form */}
+          <div style={{ width: isMob ? '300px' : '360px', position: 'relative', zIndex: 10 }}>
+            <div style={{
+              position: 'relative', overflow: 'hidden',
+              backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+              border: 'none',
+              borderRadius: '0', padding: '2px', marginBottom: '13px'
+            }}>
+              <div style={{ position: 'absolute', top: '-200px', left: '-600px', width: '800px', height: '800px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0.08) 40%, transparent 70%)', pointerEvents: 'none' }} />
+              <input
+                type="password"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleUpdatePassword()}
+                placeholder={t('newPassword')}
+                autoComplete="new-password"
+                style={{ background: 'transparent', border: 'none', outline: 'none', color: '#ffffff', fontSize: '21px', width: '100%', padding: '6px 14px', fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, boxSizing: 'border-box', position: 'relative', zIndex: 1 }}
+                className="login-input"
+              />
+            </div>
+
+            {pwUpdated && (
+              <div style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '14px', color: 'rgba(170,215,208,0.6)', whiteSpace: 'nowrap', padding: '0 14px', marginBottom: '8px' }}>
+                {t('passwordUpdated')}
+              </div>
+            )}
+            {pwError && (
+              <div style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '14px', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap', padding: '0 14px', marginBottom: '8px' }}>
+                {pwError === 'short' ? t('passwordTooShort') : t('loginError')}
+              </div>
+            )}
+
+            <button
+              onClick={handleUpdatePassword}
+              disabled={pwSending || !newPassword}
+              className="login-btn"
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px',
+                width: '100%', padding: '4px 2px',
+                opacity: 1,
+                transition: 'opacity 0.2s, text-shadow 0.3s'
+              }}
+            >
+              <span style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '21px', color: '#ffffff', letterSpacing: '0.02em' }}>
+                {pwSending ? '...' : t('savePassword')}
+              </span>
+              <span style={{ color: '#ffffff', fontSize: '21px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif", fontWeight: 300, position: 'relative', top: '2px' }}>{'\u2192'}</span>
+            </button>
+
+            {/* Back to login */}
+            <div style={{ marginTop: '20px', padding: '0 2px' }}>
+              <button
+                onClick={() => { setView('login'); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '13px', color: 'rgba(255,255,255,0.3)', padding: 0, transition: 'color 0.2s' }}
+                onMouseEnter={e => e.target.style.color = 'rgba(255,255,255,0.5)'}
+                onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.3)'}
+              >
+                {t('backToLogin')}
+              </button>
+            </div>
+          </div>
+        </div>
+        {/* Dev indicator */}
+        <div style={{ position: 'absolute', bottom: '40px', left: '50%', transform: 'translateX(-50%)', zIndex: 2, textAlign: 'center' }}>
+          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.2)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>{window.isDev ? 'DEV' : ''}</div>
+        </div>
+      </div>
+    );
+  }
 
   if (view === 'forgot') {
     return (

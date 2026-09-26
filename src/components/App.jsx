@@ -26,6 +26,8 @@ export const App = () => {
   const [plusRect, setPlusRect] = useState(null);
   const isMobile = useIsMobile();
   const [glowReady, setGlowReady] = useState(false);
+  // Retire le splash de index.html dès que l'interface est peinte (plus d'attente fixe).
+  useEffect(() => { if (typeof window.__meteoshootReady === 'function') requestAnimationFrame(() => window.__meteoshootReady()); }, []);
   useEffect(() => { const t = setTimeout(() => setGlowReady(true), 800); return () => clearTimeout(t); }, []);
   const [displayedProjectId, setDisplayedProjectId] = useState(null);
   const detailScrollRef = React.useRef(null);

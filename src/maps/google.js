@@ -1,7 +1,7 @@
 import { formatDuration } from '../utils/dates.js';
 
 // ===== GOOGLE MAPS API =====
-export const GOOGLE_API_KEY = 'AIzaSyCgOyu05taIWv2-LcfHM_B8okQ_D7gks8U';
+export const GOOGLE_API_KEY = __GOOGLE_MAPS_KEY__; // injectée à la compilation (google-maps-keys.json, web ou native)
 
 // === API Call Caches (reduce Google Maps billing) ===
 export const _geocodeCache = {};

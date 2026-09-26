@@ -37,7 +37,7 @@
   <title>MeteoShoot | Shooting Planner</title>
   <script>if (isDev) document.title = "DEV DEV DEV DEV DEV | Shooting Planner";</script>
   <!-- Google Maps API -->
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCgOyu05taIWv2-LcfHM_B8okQ_D7gks8U&libraries=places"></script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=__GOOGLE_MAPS_KEY__&libraries=places"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
@@ -65,29 +65,38 @@
   </div>
 </div>
 <script>
-  setTimeout(function() {
-    var splash = document.getElementById('splashScreen');
-    var flare = document.querySelector('.splash-flare');
-    // Move flare out of splash before removing it
-    if (flare) {
-      flare.id = 'persistentFlare';
-      var rect = flare.getBoundingClientRect();
-      flare.dataset.splashWidth = rect.width + 'px';
-      flare.style.position = 'fixed';
-      flare.style.zIndex = '30';
-      flare.style.pointerEvents = 'none';
-      flare.style.mixBlendMode = 'color-dodge';
-      flare.style.opacity = '0';
-      flare.style.width = rect.width + 'px';
-      flare.style.transform = 'none';
-      flare.style.animation = 'none';
-      flare.style.transition = 'opacity 1s ease';
-      document.body.appendChild(flare);
+  // Le splash se retire dès que l'interface est affichée (signal envoyé par l'application, voir App.jsx),
+  // avec un filet de sécurité à 5 s. Le halo (flare) est conservé hors du splash pour l'effet de la liste.
+  (function () {
+    var done = false;
+    function hideSplash() {
+      if (done) return;
+      done = true;
+      var splash = document.getElementById('splashScreen');
+      if (!splash) return;
+      var flare = document.querySelector('.splash-flare');
+      if (flare) {
+        flare.id = 'persistentFlare';
+        var rect = flare.getBoundingClientRect();
+        flare.dataset.splashWidth = rect.width + 'px';
+        flare.style.position = 'fixed';
+        flare.style.zIndex = '30';
+        flare.style.pointerEvents = 'none';
+        flare.style.mixBlendMode = 'color-dodge';
+        flare.style.opacity = '0';
+        flare.style.width = rect.width + 'px';
+        flare.style.transform = 'none';
+        flare.style.animation = 'none';
+        flare.style.transition = 'opacity 1s ease';
+        document.body.appendChild(flare);
+      }
+      splash.classList.add('splash-hidden');
+      document.getElementById('themeColor').setAttribute('content', '#181b1e');
+      setTimeout(function() { splash.remove(); }, 900);
     }
-    splash.classList.add('splash-hidden');
-    document.getElementById('themeColor').setAttribute('content', '#181b1e');
-    setTimeout(function() { splash.remove(); }, 900);
-  }, 2500);
+    window.__meteoshootReady = hideSplash;
+    setTimeout(hideSplash, 5000);
+  })();
 </script>
 <script>
   // Drag-to-scroll with momentum, bounce & motion blur for .hour-scroll containers

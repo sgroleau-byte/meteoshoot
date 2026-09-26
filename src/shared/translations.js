@@ -24,6 +24,9 @@ export const TRANSLATIONS = {
     resetPassword: 'Réinitialiser le mot de passe',
     resetSent: 'Lien de réinitialisation envoyé par courriel.',
     backToLogin: 'Retour à la connexion',
+    newPassword: 'Nouveau mot de passe',
+    savePassword: 'Enregistrer',
+    passwordUpdated: 'Mot de passe modifié. Connexion...',
 
     // Subscription tiers
     plan: 'ABONNEMENT',
@@ -223,6 +226,9 @@ export const TRANSLATIONS = {
     resetPassword: 'Reset password',
     resetSent: 'Reset link sent by email.',
     backToLogin: 'Back to sign in',
+    newPassword: 'New password',
+    savePassword: 'Save',
+    passwordUpdated: 'Password updated. Signing in...',
 
     // Subscription tiers
     plan: 'SUBSCRIPTION',

@@ -8,9 +8,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src/",
-    "cap:sync": "vite build && cap sync",
-    "ios": "vite build && cap sync ios && cap open ios",
-    "android": "vite build && cap sync android && cap open android"
+    "cap:sync": "MS_TARGET=native vite build && cap sync",
+    "ios": "MS_TARGET=native vite build && cap sync ios && cap open ios",
+    "android": "MS_TARGET=native vite build && cap sync android && cap open android",
+    "build:native": "MS_TARGET=native vite build"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",
