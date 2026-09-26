@@ -1,0 +1,19 @@
+{
+  "appId": "com.meteoshoot.app",
+  "appName": "MeteoShoot",
+  "webDir": "dist",
+  "backgroundColor": "#181b1e",
+  "ios": {
+    "backgroundColor": "#181b1e"
+  },
+  "android": {
+    "backgroundColor": "#181b1e"
+  },
+  "plugins": {
+    "StatusBar": {
+      "style": "DARK",
+      "overlaysWebView": true,
+      "backgroundColor": "#181b1e"
+    }
+  }
+}

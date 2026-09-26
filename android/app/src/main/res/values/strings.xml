@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MeteoShoot</string>
+    <string name="title_activity_main">MeteoShoot</string>
+    <string name="package_name">com.meteoshoot.app</string>
+    <string name="custom_url_scheme">com.meteoshoot.app</string>
+</resources>

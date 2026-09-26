@@ -7,6 +7,8 @@ export default defineConfig({
   plugins: [react()],
   server: { port: 5173, strictPort: true },
   build: {
+    // Compatibilité large (Safari 14, Chrome 87...): l'ancienne page transpilait tout avec Babel.
+    target: ['es2019', 'safari14', 'chrome87', 'firefox78', 'edge88'],
     outDir: 'dist',
     emptyOutDir: true,
     // Application multi-pages: l'application principale et les pages de compte.

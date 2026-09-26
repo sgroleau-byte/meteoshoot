@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { isNative } from '../native/platform.js';
+import { checkLocationPermission, getCurrentPosition } from '../native/geolocation.js';
 import { useLang } from '../i18n/LangProvider.jsx';
 import { reverseGeocode } from '../maps/google.js';
 import { formatTime } from '../utils/dates.js';
@@ -72,7 +74,8 @@ export const GeoHourColumn = ({ h, dailyMap }) => {
 export const GeoWeatherCard = () => {
   const { t } = useLang();
   const [geoData, setGeoData] = useState(null);
-  const [status, setStatus] = useState(() => localStorage.getItem('geo-permission') === 'granted' ? 'loading' : 'prompt');
+  // Web: comportement inchangé (drapeau local). Natif: 'checking' le temps de lire la permission système.
+  const [status, setStatus] = useState(() => isNative ? 'checking' : (localStorage.getItem('geo-permission') === 'granted' ? 'loading' : 'prompt'));
   // Indice Kp (activité géomagnétique), chargé une fois la météo affichée.
   const [kp, setKp] = useState(null);
   useEffect(() => {
@@ -94,8 +97,7 @@ export const GeoWeatherCard = () => {
 
   const requestGeo = () => {
     setStatus('loading');
-    if (!navigator.geolocation) { setStatus('error'); return; }
-    navigator.geolocation.getCurrentPosition(
+    getCurrentPosition({ enableHighAccuracy: false, timeout: 10000 }).then(
       async (pos) => {
         try {
           localStorage.setItem('geo-permission', 'granted');
@@ -129,13 +131,24 @@ export const GeoWeatherCard = () => {
           setStatus('done');
         } catch(e) { console.error('GeoWeather error', e); setStatus('error'); }
       },
-      (err) => { console.error('Geolocation denied', err); setStatus('denied'); },
-      { enableHighAccuracy: false, timeout: 10000 }
+      (err) => { if (err && err.code === 'unsupported') { setStatus('error'); return; } console.error('Geolocation denied', err); setStatus('denied'); }
     );
   };
 
   useEffect(() => {
     if (status === 'loading' && localStorage.getItem('geo-permission') === 'granted') requestGeo();
+  }, []);
+  // Natif (Capacitor): la permission « Lorsque l'app est active » déjà accordée est réutilisée sans
+  // redemander; refusée: message d'aide; jamais demandée: bouton, comme sur le web.
+  useEffect(() => {
+    if (!isNative) return;
+    let alive = true;
+    checkLocationPermission().then((p) => {
+      if (!alive) return;
+      if (p === 'granted') requestGeo();
+      else setStatus(p === 'denied' ? 'denied' : 'prompt');
+    });
+    return () => { alive = false; };
   }, []);
 
   if (status === 'prompt') return (
@@ -145,7 +158,7 @@ export const GeoWeatherCard = () => {
       <button onClick={requestGeo} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: '20px', color: '#FAF9F7', fontSize: '16px', padding: '8px 24px', cursor: 'pointer', textShadow: '0 0 12px rgba(255,255,255,0.3)' }}>{t('enableLocation')}</button>
     </div>
   );
-  if (status === 'loading') return (
+  if (status === 'loading' || status === 'checking') return (
     <div style={{ margin: '0 12px', marginBottom: '35px', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', overflow: 'hidden', padding: '24px 28px', textAlign: 'center' }}>
       <div className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '13px', color: '#424a48' }}>Chargement météo...</div>
     </div>
@@ -153,7 +166,7 @@ export const GeoWeatherCard = () => {
   if (status === 'denied') return (
     <div style={{ margin: '0 12px', marginBottom: '15px', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', overflow: 'hidden', padding: '24px 28px', textAlign: 'center' }}>
       <div className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>{t('locationDenied')}</div>
-      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>{t('locationHelp')}</div>
+      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>{t(isNative ? 'locationHelpNative' : 'locationHelp')}</div>
       <button onClick={() => { localStorage.removeItem('geo-permission'); requestGeo(); }} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: '20px', color: 'rgba(255,255,255,0.5)', fontSize: '14px', padding: '6px 20px', cursor: 'pointer' }}>{t('retry')}</button>
     </div>
   );

@@ -120,7 +120,7 @@ export const getElevationProfile = async (lat, lng) => {
   try {
     await supabase.from(TBL_ELEVATION).upsert({
       grid_lat: gLat, grid_lng: gLng, profile, observer_elevation: observerElev, version: ELEV_PROFILE_VERSION
-    }, { onConflict: 'grid_lat,grid_lng' });
+    }, { onConflict: 'grid_lat,grid_lng', ignoreDuplicates: true }); // insertion seulement: le client n'a plus le droit d'écraser une entrée
   } catch(e) { console.warn('Elevation cache write error:', e); }
   
   return profile;

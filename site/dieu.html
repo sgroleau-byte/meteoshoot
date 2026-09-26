@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#e8e6e1">
   <meta name="robots" content="noindex, nofollow">
   <title>MeteoShoot</title>
-  <script>var isDev = !location.hostname.match(/^(meteoshoot\.vercel\.app|meteoshoot\.com|www\.meteoshoot\.com)$/);</script>
+  <script>var isDev = !(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) && !location.hostname.match(/^(meteoshoot\.vercel\.app|meteoshoot\.com|www\.meteoshoot\.com)$/);</script>
 </head>
 <body>
 

@@ -1,0 +1,493 @@
+{
+ "fixedNow": 1790418563207,
+ "localStorage": {
+  "sp-projects": [
+   {
+    "id": "p_1770000000001_bl01",
+    "name": "Casino Mont-Tremblant",
+    "address": "300 Chem. des Pléiades, Mont-Tremblant, QC J8E 0A7, Canada",
+    "lat": 46.2009244,
+    "lng": -74.5686373,
+    "status": "todo",
+    "mandates": [
+     "EXT",
+     "DRONE"
+    ],
+    "orientation": [
+     "PM"
+    ],
+    "isContest": false,
+    "notes": "",
+    "links": [],
+    "departureAddress": null,
+    "departureLat": null,
+    "departureLng": null,
+    "travelTime": {
+     "durationSeconds": 7380,
+     "durationText": "123 minutes",
+     "distanceMeters": 123000,
+     "distanceText": "123 km"
+    },
+    "sortOrder": 1,
+    "createdAt": "2026-09-18T10:29:23.000Z",
+    "shotAt": null,
+    "completedAt": null,
+    "buildings": [],
+    "clientFolder": "Loto-Québec",
+    "tag": null,
+    "onHold": false
+   },
+   {
+    "id": "p_1770000000002_bl02",
+    "name": "Château Frontenac | Terrasse",
+    "address": "1 Rue des Carrières, Québec, QC G1R 4P5, Canada",
+    "lat": 46.8119,
+    "lng": -71.2049,
+    "status": "todo",
+    "mandates": [
+     "EXT"
+    ],
+    "orientation": [
+     "AM",
+     "PM"
+    ],
+    "isContest": false,
+    "notes": "",
+    "links": [],
+    "departureAddress": null,
+    "departureLat": null,
+    "departureLng": null,
+    "travelTime": {
+     "durationSeconds": 1560,
+     "durationText": "26 minutes",
+     "distanceMeters": 21000,
+     "distanceText": "21 km"
+    },
+    "sortOrder": 2,
+    "createdAt": "2026-09-21T10:29:23.000Z",
+    "shotAt": null,
+    "completedAt": null,
+    "buildings": [],
+    "clientFolder": "Fairmont",
+    "tag": null,
+    "onHold": false
+   },
+   {
+    "id": "p_1770000000003_bl03",
+    "name": "Pont de Québec",
+    "address": "Pont de Québec, Québec, QC, Canada",
+    "lat": 46.747,
+    "lng": -71.288,
+    "status": "todo",
+    "mandates": [
+     "DRONE"
+    ],
+    "orientation": [
+     "AM"
+    ],
+    "isContest": false,
+    "notes": "",
+    "links": [],
+    "departureAddress": null,
+    "departureLat": null,
+    "departureLng": null,
+    "travelTime": {
+     "durationSeconds": 1740,
+     "durationText": "29 minutes",
+     "distanceMeters": 24000,
+     "distanceText": "24 km"
+    },
+    "sortOrder": 3,
+    "createdAt": "2026-09-14T10:29:23.000Z",
+    "shotAt": null,
+    "completedAt": null,
+    "buildings": [],
+    "clientFolder": null,
+    "tag": null,
+    "onHold": false
+   },
+   {
+    "id": "p_1770000000004_bl04",
+    "name": "Chalet du Lac-Beauport",
+    "address": "1000 Boulevard du Lac, Lac-Beauport, QC G3B 0X6, Canada",
+    "lat": 46.953,
+    "lng": -71.287,
+    "status": "retouching",
+    "mandates": [
+     "INT",
+     "EXT"
+    ],
+    "orientation": [
+     "PM"
+    ],
+    "isContest": false,
+    "notes": "",
+    "links": [],
+    "departureAddress": null,
+    "departureLat": null,
+    "departureLng": null,
+    "travelTime": null,
+    "sortOrder": 4,
+    "createdAt": "2026-09-06T10:29:23.000Z",
+    "shotAt": "2026-09-14T10:29:23.000Z",
+    "completedAt": null,
+    "buildings": [],
+    "clientFolder": "Résidentiel",
+    "tag": null,
+    "onHold": false
+   },
+   {
+    "id": "p_1770000000005_bl05",
+    "name": "Maison Sainte-Foy",
+    "address": "2600 Boulevard Laurier, Québec, QC G1V 4T3, Canada",
+    "lat": 46.7797,
+    "lng": -71.2855,
+    "status": "retouching",
+    "mandates": [
+     "INT"
+    ],
+    "orientation": [
+     "AM"
+    ],
+    "isContest": false,
+    "notes": "",
+    "links": [],
+    "departureAddress": null,
+    "departureLat": null,
+    "departureLng": null,
+    "travelTime": null,
+    "sortOrder": 5,
+    "createdAt": "2026-08-27T10:29:23.000Z",
+    "shotAt": "2026-09-04T10:29:23.000Z",
+    "completedAt": null,
+    "buildings": [],
+    "clientFolder": "Résidentiel",
+    "tag": null,
+    "onHold": false
+   },
+   {
+    "id": "p_1770000000006_bl06",
+    "name": "Condo Griffintown",
+    "address": "1000 Rue Wellington, Montréal, QC H3C 1T4, Canada",
+    "lat": 45.4921,
+    "lng": -73.559,
+    "status": "retouching",
+    "mandates": [
+     "INT",
+     "EXT",
+     "VID"
+    ],
+    "orientation": [
+     "PM"
+    ],
+    "isContest": false,
+    "notes": "",
+    "links": [],
+    "departureAddress": null,
+    "departureLat": null,
+    "departureLng": null,
+    "travelTime": null,
+    "sortOrder": 6,
+    "createdAt": "2026-08-12T10:29:23.000Z",
+    "shotAt": "2026-08-22T10:29:23.000Z",
+    "completedAt": null,
+    "buildings": [],
+    "clientFolder": null,
+    "tag": null,
+    "onHold": false
+   },
+   {
+    "id": "p_1770000000007_bl07",
+    "name": "Bureaux Lévis",
+    "address": "5700 Rue J.-B.-Michaud, Lévis, QC G6V 0B1, Canada",
+    "lat": 46.762,
+    "lng": -71.152,
+    "status": "done",
+    "mandates": [
+     "INT"
+    ],
+    "orientation": [
+     "AM"
+    ],
+    "isContest": false,
+    "notes": "",
+    "links": [],
+    "departureAddress": null,
+    "departureLat": null,
+    "departureLng": null,
+    "travelTime": null,
+    "sortOrder": 7,
+    "createdAt": "2026-07-28T10:29:23.000Z",
+    "shotAt": "2026-08-07T10:29:23.000Z",
+    "completedAt": "2026-08-17T10:29:23.000Z",
+    "buildings": [],
+    "clientFolder": null,
+    "tag": null,
+    "onHold": false
+   },
+   {
+    "id": "p_1770000000008_bl08",
+    "name": "Rocher Percé",
+    "address": "Rocher Percé, Percé, QC, Canada",
+    "lat": 48.524,
+    "lng": -64.205,
+    "status": "todo",
+    "mandates": [
+     "DRONE+C"
+    ],
+    "orientation": [
+     "AM"
+    ],
+    "isContest": false,
+    "notes": "",
+    "links": [],
+    "departureAddress": null,
+    "departureLat": null,
+    "departureLng": null,
+    "travelTime": {
+     "durationSeconds": 26400,
+     "durationText": "440 minutes",
+     "distanceMeters": 705000,
+     "distanceText": "705 km"
+    },
+    "sortOrder": 8,
+    "createdAt": "2026-09-22T10:29:23.000Z",
+    "shotAt": null,
+    "completedAt": null,
+    "buildings": [],
+    "clientFolder": "Tourisme Gaspésie",
+    "tag": null,
+    "onHold": false
+   },
+   {
+    "id": "p_1770000000009_bl09",
+    "name": "Phare de Cap-des-Rosiers",
+    "address": "Cap-des-Rosiers, Gaspé, QC, Canada",
+    "lat": 48.858,
+    "lng": -64.202,
+    "status": "todo",
+    "mandates": [
+     "EXT"
+    ],
+    "orientation": [
+     "PM"
+    ],
+    "isContest": false,
+    "notes": "",
+    "links": [],
+    "departureAddress": null,
+    "departureLat": null,
+    "departureLng": null,
+    "travelTime": {
+     "durationSeconds": 27600,
+     "durationText": "460 minutes",
+     "distanceMeters": 740000,
+     "distanceText": "740 km"
+    },
+    "sortOrder": 9,
+    "createdAt": "2026-09-22T10:29:23.000Z",
+    "shotAt": null,
+    "completedAt": null,
+    "buildings": [],
+    "clientFolder": "Tourisme Gaspésie",
+    "tag": null,
+    "onHold": false
+   },
+   {
+    "id": "p_1770000000010_bl10",
+    "name": "Baie-Saint-Paul | Centre-ville",
+    "address": "2 Rue Saint-Jean-Baptiste, Baie-Saint-Paul, QC G3Z 1L7, Canada",
+    "lat": 47.441,
+    "lng": -70.506,
+    "status": "todo",
+    "mandates": [
+     "INT",
+     "EXT"
+    ],
+    "orientation": [
+     "AM"
+    ],
+    "isContest": false,
+    "notes": "",
+    "links": [],
+    "departureAddress": null,
+    "departureLat": null,
+    "departureLng": null,
+    "travelTime": {
+     "durationSeconds": 4980,
+     "durationText": "83 minutes",
+     "distanceMeters": 95000,
+     "distanceText": "95 km"
+    },
+    "sortOrder": 10,
+    "createdAt": "2026-09-20T10:29:23.000Z",
+    "shotAt": null,
+    "completedAt": null,
+    "buildings": [],
+    "clientFolder": "Charlevoix",
+    "tag": null,
+    "onHold": false
+   },
+   {
+    "id": "p_1770000000011_bl11",
+    "name": "Le Massif de Charlevoix",
+    "address": "1350 Rue Principale, Petite-Rivière-Saint-François, QC G0A 2L0, Canada",
+    "lat": 47.288,
+    "lng": -70.625,
+    "status": "todo",
+    "mandates": [
+     "EXT",
+     "DRONE"
+    ],
+    "orientation": [
+     "PM"
+    ],
+    "isContest": false,
+    "notes": "",
+    "links": [],
+    "departureAddress": null,
+    "departureLat": null,
+    "departureLng": null,
+    "travelTime": {
+     "durationSeconds": 5400,
+     "durationText": "90 minutes",
+     "distanceMeters": 100000,
+     "distanceText": "100 km"
+    },
+    "sortOrder": 11,
+    "createdAt": "2026-09-20T10:29:23.000Z",
+    "shotAt": null,
+    "completedAt": null,
+    "buildings": [],
+    "clientFolder": "Charlevoix",
+    "tag": null,
+    "onHold": true
+   },
+   {
+    "id": "p_1770000000012_bl12",
+    "name": "Chute-Montmorency",
+    "address": "5300 Boulevard Sainte-Anne, Québec, QC G1C 1S1, Canada",
+    "lat": 46.89,
+    "lng": -71.147,
+    "status": "todo",
+    "mandates": [
+     "EXT",
+     "DRONE"
+    ],
+    "orientation": [
+     "AM",
+     "PM"
+    ],
+    "isContest": true,
+    "notes": "",
+    "links": [],
+    "departureAddress": null,
+    "departureLat": null,
+    "departureLng": null,
+    "travelTime": {
+     "durationSeconds": 1500,
+     "durationText": "25 minutes",
+     "distanceMeters": 19000,
+     "distanceText": "19 km"
+    },
+    "sortOrder": 12,
+    "createdAt": "2026-09-24T10:29:23.000Z",
+    "shotAt": null,
+    "completedAt": null,
+    "buildings": [],
+    "clientFolder": null,
+    "tag": null,
+    "onHold": false
+   }
+  ],
+  "sp-prefs": {
+   "homeAddress": "116 Chem. des Affluents, Stoneham-et-Tewkesbury, QC G3C 1R1, Canada",
+   "homeLat": 47.0105351,
+   "homeLng": -71.3736634,
+   "prepTime": 60,
+   "darkMode": true
+  },
+  "sp-routes": [
+   {
+    "id": "r_1770000000000_bl01",
+    "name": "Gaspésie automne",
+    "useHome": true,
+    "departureAddress": "",
+    "departureLat": null,
+    "departureLng": null,
+    "archived": false,
+    "sortOrder": 0,
+    "createdAt": "2026-09-23T10:29:23.000Z",
+    "destinations": [
+     {
+      "id": "d_1770000000001",
+      "projectId": "p_1770000000010_bl10",
+      "name": "Baie-Saint-Paul | Centre-ville",
+      "address": "2 Rue Saint-Jean-Baptiste, Baie-Saint-Paul, QC G3Z 1L7, Canada",
+      "lat": 47.441,
+      "lng": -70.506
+     },
+     {
+      "id": "d_1770000000002",
+      "projectId": "p_1770000000008_bl08",
+      "name": "Rocher Percé",
+      "address": "Rocher Percé, Percé, QC, Canada",
+      "lat": 48.524,
+      "lng": -64.205,
+      "hotel": {
+       "name": "Hôtel Riôtel Percé",
+       "address": "261 Route 132 Ouest, Percé, QC G0C 2L0, Canada",
+       "lat": 48.5205,
+       "lng": -64.221
+      }
+     },
+     {
+      "id": "d_1770000000003",
+      "projectId": "p_1770000000009_bl09",
+      "name": "Phare de Cap-des-Rosiers",
+      "address": "Cap-des-Rosiers, Gaspé, QC, Canada",
+      "lat": 48.858,
+      "lng": -64.202
+     }
+    ]
+   }
+  ],
+  "sp-folder-states": {
+   "Loto-Québec": true,
+   "Fairmont": true,
+   "Résidentiel": true,
+   "Tourisme Gaspésie": true,
+   "Charlevoix": true
+  },
+  "sp-user-id": "b1000000-0000-4000-8000-000000000001",
+  "sp-migrated-to-supabase": "true",
+  "sp-lang": "fr",
+  "geo-permission": "granted",
+  "sp-edit-alert30": "1",
+  "sb-mioiieshhjqpakdlsfzw-auth-token": {
+   "access_token": "bl.fake.token",
+   "refresh_token": "bl-fake-refresh",
+   "token_type": "bearer",
+   "expires_in": 864000,
+   "expires_at": 1791282563,
+   "user": {
+    "id": "b1000000-0000-4000-8000-000000000001",
+    "aud": "authenticated",
+    "role": "authenticated",
+    "email": "baseline@meteoshoot.local",
+    "email_confirmed_at": "2026-06-18T10:29:23.000Z",
+    "app_metadata": {
+     "provider": "email",
+     "providers": [
+      "email"
+     ]
+    },
+    "user_metadata": {
+     "full_name": "Référence Visuelle"
+    },
+    "created_at": "2026-06-18T10:29:23.000Z",
+    "updated_at": "2026-06-18T10:29:23.000Z"
+   }
+  }
+ }
+}

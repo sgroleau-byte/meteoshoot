@@ -7,7 +7,7 @@ import '@fontsource/montserrat/700.css';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_KEY } from '../shared/config.js';
+import { SUPABASE_URL, SUPABASE_KEY, publicOrigin } from '../shared/config.js';
 import { TRANSLATIONS, getDefaultLang } from '../shared/translations.js';
 
 
@@ -142,7 +142,7 @@ const SignupScreen = () => {
         email,
         password,
         options: {
-          emailRedirectTo: window.location.origin + '/index.html',
+          emailRedirectTo: publicOrigin() + '/index.html',
           data: {
             full_name: fullName || null,
             organization: organization || null,

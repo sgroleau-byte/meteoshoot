@@ -7,7 +7,7 @@ import '@fontsource/montserrat/700.css';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_KEY } from '../shared/config.js';
+import { SUPABASE_URL, SUPABASE_KEY, publicOrigin } from '../shared/config.js';
 import { TRANSLATIONS, getDefaultLang } from '../shared/translations.js';
 
 
@@ -108,7 +108,7 @@ const LoginScreen = () => {
     setResetSent(false);
     try {
       const { error: err } = await supabaseClient.auth.resetPasswordForEmail(resetEmail, {
-        redirectTo: window.location.origin + '/index.html'
+        redirectTo: publicOrigin() + '/index.html'
       });
       if (err) {
         setResetError(true);

@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { isNative } from '../native/platform.js';
 import ReactDOM from 'react-dom';
 import { useIsMobile } from '../hooks/useIsMobile.js';
 import { useLang } from '../i18n/LangProvider.jsx';
@@ -181,7 +183,7 @@ export const useFolderDnD = ({ listRef, groupedItems, applyTodoOrder, moveToFold
       document.body.style.cursor = 'grabbing';
       if (isTouch) list.style.touchAction = 'none';
       blockEl.style.opacity = '0.35';
-      if (isTouch && navigator.vibrate) navigator.vibrate(20);
+      if (isTouch) { if (isNative) Haptics.impact({ style: ImpactStyle.Light }).catch(() => {}); else if (navigator.vibrate) navigator.vibrate(20); }
       update(startY);
     };
     const onMove = (ev) => {
