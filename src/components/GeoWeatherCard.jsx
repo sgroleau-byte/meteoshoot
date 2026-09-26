@@ -154,7 +154,7 @@ export const GeoWeatherCard = () => {
   if (status === 'prompt') return (
     <div style={{ margin: '0 12px', marginBottom: '15px', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', overflow: 'hidden', padding: '24px 28px', textAlign: 'center' }}>
       <div className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>{t('currentLocationWeather')}</div>
-      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>{t('browserLocationPermission')}</div>
+      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>{t(isNative ? 'browserLocationPermissionNative' : 'browserLocationPermission')}</div>
       <button onClick={requestGeo} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: '20px', color: '#FAF9F7', fontSize: '16px', padding: '8px 24px', cursor: 'pointer', textShadow: '0 0 12px rgba(255,255,255,0.3)' }}>{t('enableLocation')}</button>
     </div>
   );
