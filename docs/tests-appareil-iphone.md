@@ -11,12 +11,19 @@ doigt, retour haptique, clavier physique iOS, mise en veille réelle, fournisseu
 ## Installation sur ton iPhone
 
 1. Brancher l'iPhone au Mac, le déverrouiller, accepter « Se fier à cet ordinateur » si demandé.
-2. Sur le Mac, dans le dossier `repo`: `npm run ios` (compile le site, synchronise et ouvre Xcode).
-3. Dans Xcode: choisir ton iPhone dans la liste des appareils (en haut), puis Run (triangle).
-   La signature est automatique avec ton équipe Apple Developer (89HN379C53). Au premier lancement,
-   iOS demande d'approuver le développeur: Réglages > Général > VPN et gestion de l'appareil.
-4. Se connecter avec ton compte MeteoShoot habituel (l'app native utilise les données de production,
+2. Me le dire: je lance `tools/iphone-install.sh` (compilation signée avec ton équipe, installation et
+   lancement sur le téléphone). Variante manuelle: `npm run ios` puis Run dans Xcode avec l'iPhone choisi.
+   Au premier lancement, iOS peut demander d'approuver le développeur: Réglages > Général > VPN et
+   gestion de l'appareil.
+3. Se connecter avec ton compte MeteoShoot habituel (l'app native utilise les données de production,
    comme le site).
+
+## Mot de passe oublié depuis l'app
+
+Le formulaire « Mot de passe oublié? » de l'app envoie le courriel. Le lien du courriel ouvre le site
+(meteoshoot.com/site/login.html) dans Safari, qui demande le nouveau mot de passe et connecte. Revenir
+ensuite dans l'app et se connecter avec le nouveau mot de passe. (Ouvrir directement l'app depuis le
+lien demandera des « liens universels », prévus plus tard.)
 
 ## Vérifications à faire (dans l'ordre)
 
