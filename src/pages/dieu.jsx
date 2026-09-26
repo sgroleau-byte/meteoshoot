@@ -1,0 +1,345 @@
+import './dieu.css';
+import '@fontsource/montserrat/300.css';
+import '@fontsource/montserrat/400.css';
+import '@fontsource/montserrat/500.css';
+import '@fontsource/montserrat/600.css';
+import '@fontsource/montserrat/700.css';
+import React, { useEffect, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { createClient } from '@supabase/supabase-js';
+import { SUPABASE_URL, SUPABASE_KEY } from '../shared/config.js';
+import { TRANSLATIONS } from '../shared/translations.js';
+
+
+const ADMIN_EMAIL = 'sgroleau@me.com';
+const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ===== TIER COLORS =====
+const tierColors = { free: '#666', shooter: '#7dd3c6', god: '#E07A2B' };
+const sectorColors = ['#7dd3c6', '#E07A2B', '#d83152', '#ffe26b', '#9b59b6', '#3498db', '#e67e22', '#1abc9c', '#95a5a6', '#e74c3c'];
+
+// ===== STAT CARD =====
+const StatCard = ({ value, label }) => (
+  <div className="stat-card">
+    <div className="stat-number">{value}</div>
+    <div className="stat-label">{label}</div>
+  </div>
+);
+
+// ===== STATS PANEL =====
+const StatsPanel = ({ stats }) => {
+  if (!stats) return null;
+  const tiers = stats.users_by_tier || {};
+  const sectors = stats.users_by_sector || {};
+  const maxSector = Math.max(...Object.values(sectors), 1);
+
+  return (
+    <div style={{ marginBottom: '40px' }}>
+      <div style={{
+        fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '20px',
+        color: '#555', letterSpacing: '0.1em', marginBottom: '16px'
+      }}>STATISTIQUES</div>
+
+      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '24px' }}>
+        <StatCard value={stats.total_users || 0} label="UTILISATEURS" />
+        <StatCard value={stats.total_projects || 0} label="PROJETS" />
+        <StatCard
+          value={`${tiers.free || 0} / ${tiers.shooter || 0} / ${tiers.god || 0}`}
+          label="FREE / SHOOTER / GOD"
+        />
+      </div>
+
+      <div style={{
+        fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '16px',
+        color: '#555', letterSpacing: '0.08em', marginBottom: '10px'
+      }}>PAR SECTEUR</div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {Object.entries(sectors).sort((a, b) => b[1] - a[1]).map(([name, count], i) => (
+          <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '140px', fontSize: '13px', color: '#333',
+              fontFamily: "'Avenir Next', 'Avenir', 'Montserrat', sans-serif", fontWeight: 300,
+              textAlign: 'right', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+            }}>{name}</div>
+            <div style={{ flex: 1, background: 'rgba(0,0,0,0.06)', borderRadius: '3px', height: '6px' }}>
+              <div className="sector-bar" style={{
+                width: `${(count / maxSector) * 100}%`,
+                background: sectorColors[i % sectorColors.length]
+              }} />
+            </div>
+            <div style={{ width: '28px', fontSize: '13px', color: '#555', fontFamily: 'monospace' }}>{count}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ===== REVENUE PANEL =====
+const RevenuePanel = ({ revenue }) => {
+  if (!revenue) return null;
+
+  const formatMoney = (amount) => {
+    return new Intl.NumberFormat('fr-CA', { style: 'currency', currency: revenue.currency || 'CAD' }).format(amount);
+  };
+  const formatDate = (d) => {
+    if (!d) return '—';
+    const date = new Date(d);
+    return `${date.getDate()} ${TRANSLATIONS.fr.monthAbbrev[date.getMonth()]} ${date.getFullYear()}`;
+  };
+
+  return (
+    <div style={{ marginBottom: '40px' }}>
+      <div style={{
+        fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '20px',
+        color: '#1a1a1a', letterSpacing: '0.1em', marginBottom: '16px'
+      }}>REVENUS</div>
+
+      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '20px' }}>
+        <StatCard value={formatMoney(revenue.total_revenue)} label="REVENU TOTAL" />
+        <StatCard value={revenue.active_subscriptions || 0} label="ABONNEMENTS ACTIFS" />
+        <StatCard value={revenue.total_orders || 0} label="COMMANDES" />
+      </div>
+
+      {revenue.orders && revenue.orders.length > 0 && (
+        <div>
+          <div style={{
+            fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '16px',
+            color: '#1a1a1a', letterSpacing: '0.08em', marginBottom: '10px'
+          }}>DERNIÈRES COMMANDES</div>
+          <div style={{
+            display: 'grid', gridTemplateColumns: '1.5fr 0.8fr 0.8fr 0.8fr',
+            gap: '12px', fontSize: '14px', padding: '10px 0',
+            borderBottom: '1px solid rgba(0,0,0,0.1)',
+            fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400,
+            color: '#555', letterSpacing: '0.08em'
+          }}>
+            <div>EMAIL</div>
+            <div>MONTANT</div>
+            <div>STATUT</div>
+            <div>DATE</div>
+          </div>
+          {revenue.orders.slice(0, 20).map((o, i) => (
+            <div key={i} style={{
+              display: 'grid', gridTemplateColumns: '1.5fr 0.8fr 0.8fr 0.8fr',
+              gap: '12px', fontSize: '15px', padding: '12px 0',
+              borderBottom: '1px solid rgba(0,0,0,0.06)'
+            }}>
+              <div style={{ color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.email}</div>
+              <div style={{ color: '#1a1a1a', fontFamily: 'monospace' }}>{formatMoney(o.total)}</div>
+              <div style={{ color: o.status === 'paid' ? '#3a9a8a' : '#c4611a', fontSize: '13px' }}>{o.status?.toUpperCase()}</div>
+              <div style={{ color: '#555', fontSize: '13px' }}>{formatDate(o.created_at)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ===== USERS TABLE =====
+const UsersTable = ({ users, onTierChange }) => {
+  const formatDate = (d) => {
+    if (!d) return '—';
+    const date = new Date(d);
+    return `${date.getDate()} ${TRANSLATIONS.fr.monthAbbrev[date.getMonth()]} ${date.getFullYear()}`;
+  };
+
+  return (
+    <div>
+      <div style={{
+        fontFamily: "'Bebas Neue', sans-serif", fontWeight: 400, fontSize: '20px',
+        color: '#555', letterSpacing: '0.1em', marginBottom: '12px'
+      }}>UTILISATEURS ({users.length})</div>
+
+      <div className="user-header">
+        <div>EMAIL</div>
+        <div className="hide-mobile">NOM</div>
+        <div className="hide-mobile">SECTEUR</div>
+        <div>TIER</div>
+        <div>PROJ.</div>
+        <div className="hide-mobile">DATE</div>
+      </div>
+
+      {users.map(u => (
+        <div key={u.user_id} className="user-row">
+          <div style={{ color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {u.email}
+            {!u.confirmed_at && (
+              <span style={{ marginLeft: '6px', fontSize: '11px', color: '#E07A2B', letterSpacing: '0.05em' }}>
+                (En attente)
+              </span>
+            )}
+          </div>
+          <div className="hide-mobile" style={{ color: '#333' }}>
+            {u.full_name || '—'}
+          </div>
+          <div className="hide-mobile" style={{ color: '#555', fontSize: '13px' }}>
+            {u.sector || '—'}
+          </div>
+          <div>
+            <select
+              className="tier-select"
+              value={u.subscription_tier || 'free'}
+              onChange={e => onTierChange(u.user_id, e.target.value)}
+            >
+              <option value="free">FREE</option>
+              <option value="shooter">SHOOTER</option>
+              <option value="god">GOD</option>
+            </select>
+          </div>
+          <div style={{ color: '#1a1a1a', fontFamily: 'monospace', fontSize: '15px' }}>
+            {u.project_count}
+          </div>
+          <div className="hide-mobile" style={{ color: '#666', fontSize: '13px' }}>
+            {formatDate(u.created_at)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ===== ADMIN DASHBOARD =====
+const AdminDashboard = () => {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [revenue, setRevenue] = useState(null);
+  const [toast, setToast] = useState('');
+
+  useEffect(() => {
+    // Use onAuthStateChange to wait for session restoration
+    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION') {
+        if (!session?.user || session.user.email !== ADMIN_EMAIL) {
+          window.location.href = '/site/login.html?redirect=/site/dieu.html';
+          return;
+        }
+        setUser(session.user);
+        setLoading(false);
+        loadData();
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const loadData = async () => {
+    const [usersRes, statsRes] = await Promise.all([
+      supabaseClient.rpc('admin_get_all_users'),
+      supabaseClient.rpc('admin_get_stats')
+    ]);
+    if (usersRes.data) setUsers(usersRes.data);
+    if (statsRes.data) setStats(statsRes.data);
+    if (usersRes.error) console.error('Users error:', usersRes.error);
+    if (statsRes.error) console.error('Stats error:', statsRes.error);
+
+    // Load revenue from Edge Function (non-blocking)
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session?.access_token) {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/admin-revenue`, {
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setRevenue(data);
+        } else {
+          console.error('Revenue fetch failed:', res.status, await res.text());
+          // Show empty revenue panel even if API fails
+          setRevenue({ total_revenue: 0, currency: 'CAD', active_subscriptions: 0, total_orders: 0, total_subscriptions: 0, orders: [] });
+        }
+      } else {
+        console.warn('No session for revenue fetch');
+      }
+    } catch (e) {
+      console.error('Revenue fetch error:', e);
+      setRevenue({ total_revenue: 0, currency: 'CAD', active_subscriptions: 0, total_orders: 0, total_subscriptions: 0, orders: [] });
+    }
+  };
+
+  const handleTierChange = async (userId, newTier) => {
+    const { error } = await supabaseClient.rpc('admin_set_tier', {
+      target_user_id: userId,
+      new_tier: newTier
+    });
+    if (error) {
+      console.error('Tier change error:', error);
+    } else {
+      setUsers(prev => prev.map(u =>
+        u.user_id === userId ? { ...u, subscription_tier: newTier } : u
+      ));
+      setToast('Tier modifié');
+      setTimeout(() => setToast(''), 2000);
+    }
+  };
+
+  if (loading) {
+    return <div style={{ position: 'fixed', inset: 0, background: '#e8e6e1' }} />;
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#e8e6e1', padding: '40px 24px' }}>
+      <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
+          <div style={{
+            fontFamily: "'Bebas Neue', sans-serif", fontWeight: 300, fontSize: '34px',
+            color: '#1a1a1a', letterSpacing: '0.1em'
+          }}>
+            METEOSHOOT <span style={{ color: '#c0bcb5' }}>|</span> ADMIN
+          </div>
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+            <button
+              onClick={loadData}
+              style={{
+                background: 'none', border: '1px solid rgba(0,0,0,0.12)',
+                color: '#555', padding: '8px 16px', cursor: 'pointer',
+                fontFamily: "'Avenir Next', 'Avenir', 'Montserrat', sans-serif", fontSize: '14px', letterSpacing: '0.05em'
+              }}
+            >↻ REFRESH</button>
+            <a href="/index.html" style={{
+              color: '#555', textDecoration: 'none',
+              fontFamily: "'Avenir Next', 'Avenir', 'Montserrat', sans-serif", fontSize: '14px'
+            }}>← APP</a>
+            <button
+              onClick={async () => {
+                await supabaseClient.auth.signOut();
+                window.location.href = '/site/login.html';
+              }}
+              style={{
+                background: 'none', border: '1px solid rgba(0,0,0,0.12)',
+                color: '#555', padding: '8px 16px', cursor: 'pointer',
+                fontFamily: "'Avenir Next', 'Avenir', 'Montserrat', sans-serif", fontSize: '14px', letterSpacing: '0.05em'
+              }}
+            >DÉCONNEXION</button>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <StatsPanel stats={stats} />
+
+        {/* Revenue */}
+        <RevenuePanel revenue={revenue} />
+
+        {/* Users table */}
+        <UsersTable users={users} onTierChange={handleTierChange} />
+      </div>
+
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: '30px', left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(80,170,155,0.12)', border: '1px solid rgba(80,170,155,0.25)',
+          color: '#3a9a8a', padding: '10px 24px', fontSize: '13px',
+          fontFamily: "'Avenir Next', 'Avenir', 'Montserrat', sans-serif", fontWeight: 300,
+          letterSpacing: '0.03em', zIndex: 100
+        }}>{toast}</div>
+      )}
+    </div>
+  );
+};
+
+createRoot(document.getElementById('root')).render(<AdminDashboard />);

@@ -1,0 +1,71 @@
+/* Styles de la page (ancien bloc <style>), puis Tailwind, comme dans la page d'origine. */
+    @font-face { font-family: 'Bebas Neue'; font-weight: 100; src: url('/fonts/BebasNeue Thin.ttf') format('truetype'); }
+    @font-face { font-family: 'Bebas Neue'; font-weight: 300; src: url('/fonts/BebasNeue Light.ttf') format('truetype'); }
+    @font-face { font-family: 'Bebas Neue'; font-weight: 400; src: url('/fonts/BebasNeue Regular.ttf') format('truetype'); }
+    @font-face { font-family: 'Bebas Neue'; font-weight: 500; src: url('/fonts/BebasNeue Book.ttf') format('truetype'); }
+    @font-face { font-family: 'Bebas Neue'; font-weight: 700; src: url('/fonts/BebasNeue Bold.ttf') format('truetype'); }
+    @font-face { font-family: 'Avenir'; font-weight: 300; src: url('/fonts/Avenir-Light.ttf') format('truetype'); }
+    @font-face { font-family: 'Avenir'; font-weight: 400; src: url('/fonts/Avenir-Book.ttf') format('truetype'); }
+    @font-face { font-family: 'Avenir'; font-weight: 700; src: url('/fonts/Avenir-Medium.ttf') format('truetype'); }
+
+    html { overflow-x: hidden; }
+    body { font-family: 'Avenir Next', 'Avenir', 'Montserrat', -apple-system, sans-serif; margin: 0; padding: 0; background: #e8e6e1; color: #1a1a1a; }
+
+    .tier-badge {
+      display: inline-block; padding: 2px 8px; font-size: 11px; letter-spacing: 0.08em;
+      font-family: 'Bebas Neue', sans-serif; font-weight: 400; border-radius: 2px;
+    }
+    .tier-free { background: rgba(0,0,0,0.05); color: #888; }
+    .tier-shooter { background: rgba(80,170,155,0.12); color: #3a9a8a; }
+    .tier-god { background: rgba(224,122,43,0.12); color: #c4611a; }
+
+    .stat-card {
+      background: rgba(255,255,255,0.5); border: 1px solid rgba(0,0,0,0.06);
+      padding: 24px; text-align: center; flex: 1; min-width: 140px;
+    }
+    .stat-number {
+      font-family: 'Bebas Neue', sans-serif; font-weight: 300; font-size: 54px;
+      color: #1a1a1a; letter-spacing: 0.02em; line-height: 1;
+    }
+    .stat-label {
+      font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 16px;
+      color: #555; letter-spacing: 0.08em; margin-top: 8px;
+    }
+
+    .user-row {
+      border-bottom: 1px solid rgba(0,0,0,0.06); padding: 14px 0;
+      display: grid; grid-template-columns: 1.5fr 1fr 1fr 0.8fr 0.6fr 0.8fr;
+      align-items: center; gap: 12px; font-size: 15px;
+    }
+    .user-row:hover { background: rgba(255,255,255,0.4); }
+
+    .user-header {
+      border-bottom: 1px solid rgba(0,0,0,0.1); padding: 10px 0;
+      display: grid; grid-template-columns: 1.5fr 1fr 1fr 0.8fr 0.6fr 0.8fr;
+      gap: 12px; font-size: 14px; letter-spacing: 0.08em;
+      font-family: 'Bebas Neue', sans-serif; font-weight: 400;
+      color: #555;
+    }
+
+    .sector-bar {
+      height: 6px; border-radius: 3px; transition: width 0.5s ease;
+    }
+
+    select.tier-select {
+      background: rgba(255,255,255,0.6); border: 1px solid rgba(0,0,0,0.1);
+      color: #1a1a1a; font-size: 14px; padding: 6px 10px;
+      font-family: 'Avenir Next', 'Avenir', 'Montserrat', sans-serif; cursor: pointer; outline: none;
+      appearance: none; -webkit-appearance: none;
+    }
+    select.tier-select option { background: #fff; color: #1a1a1a; }
+
+    @media (max-width: 768px) {
+      .user-row, .user-header {
+        grid-template-columns: 1fr 0.7fr 0.5fr;
+      }
+      .hide-mobile { display: none; }
+    }
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

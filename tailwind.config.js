@@ -1,7 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 // Reprend exactement la configuration inline de l'ancien index.html (Tailwind Play CDN).
 export default {
-  content: ['./index.html', './src/**/*.{js,jsx}'],
+  content: ['./index.html', './site/*.html', './src/**/*.{js,jsx}'],
   theme: {
     extend: {
       colors: {
