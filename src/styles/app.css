@@ -140,10 +140,11 @@
       display: block;
     }
     .splash-flare {
+      --flare-dx: 50px;
       position: absolute;
       top: 50%;
       left: 80%;
-      transform: translate(calc(-50% + 50px), -50%);
+      transform: translate(calc(-50% + var(--flare-dx)), -50%);
       width: 88%;
       max-width: 440px;
       height: auto;
@@ -174,6 +175,13 @@
       z-index: 3;
       animation: splashHaloOrg 7s ease-in-out infinite, splashHaloBreathe 2.8s ease-in-out infinite;
     }
+    /* Ligne du bas: version en blanc et signature en gris teinté, une seule ligne, majuscules, tracking large
+       (maquette Photoshop 3x: 39 pt = 13 px, tracking 540 = 0,54 em).
+       Centrée en bas sur grand écran; collée en bas à gauche sur téléphone (maquette du 28 septembre 2026). */
+    .splash-version { position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); z-index: 2; display: flex; gap: 14px; white-space: nowrap;
+      font-family: 'Avenir Next', 'Avenir', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 400; font-size: 13px; letter-spacing: 0.54em; text-transform: uppercase; }
+    .splash-version-num { color: #ffffff; }
+    .splash-version-by { color: #445654; }
     @media (max-width: 768px) {
       .splash-halo {
         width: 900px;
@@ -181,6 +189,13 @@
         top: calc(46% - 80px);
         left: calc(50% - 100px);
       }
+      /* Typo pleine largeur, les deux bouts collés aux bords de l'écran: l'image a 8 px de marge à gauche et
+         12 px à droite sur 1250 px, d'où la largeur et le décalage. Le rond turquoise se centre à 75 % de la
+         largeur (sur « shoo »), comme sur la maquette. */
+      .splash-logo-area { width: 100vw; }
+      .splash-logo-img { width: calc(100vw * 1250 / 1230); max-width: none; margin-left: calc(-100vw * 8 / 1230); }
+      .splash-flare { --flare-dx: -5vw; }
+      .splash-version { left: 7vw; transform: none; bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); }
     }
     .login-input::placeholder { color: #ffffff !important; opacity: 1 !important; }
     .login-input::-webkit-input-placeholder { color: #ffffff !important; opacity: 1 !important; }
@@ -220,17 +235,17 @@
       100% { opacity: 1; transform: translateZ(0) scale(1); }
     }
     @keyframes splashFlareReveal {
-      0% { opacity: 0; transform: translate(calc(-50% + 50px), -50%) scale(0.8); }
-      100% { opacity: 1; transform: translate(calc(-50% + 50px), -50%) scale(1); }
+      0% { opacity: 0; transform: translate(calc(-50% + var(--flare-dx)), -50%) scale(0.8); }
+      100% { opacity: 1; transform: translate(calc(-50% + var(--flare-dx)), -50%) scale(1); }
     }
     @keyframes splashFlareOrg {
-      0%   { transform: translate(calc(-50% + 50px), -50%) scale(1, 1) rotate(0deg); }
-      15%  { transform: translate(calc(-50% + 52px), -51%) scale(1.04, 0.97) rotate(1.5deg); }
-      30%  { transform: translate(calc(-50% + 47px), -49%) scale(0.97, 1.03) rotate(-1deg); }
-      50%  { transform: translate(calc(-50% + 53px), -52%) scale(1.03, 0.96) rotate(2deg); }
-      70%  { transform: translate(calc(-50% + 48px), -50%) scale(0.98, 1.04) rotate(-1.5deg); }
-      85%  { transform: translate(calc(-50% + 51px), -51%) scale(1.02, 0.98) rotate(0.5deg); }
-      100% { transform: translate(calc(-50% + 50px), -50%) scale(1, 1) rotate(0deg); }
+      0%   { transform: translate(calc(-50% + var(--flare-dx)), -50%) scale(1, 1) rotate(0deg); }
+      15%  { transform: translate(calc(-50% + var(--flare-dx) + 2px), -51%) scale(1.04, 0.97) rotate(1.5deg); }
+      30%  { transform: translate(calc(-50% + var(--flare-dx) - 3px), -49%) scale(0.97, 1.03) rotate(-1deg); }
+      50%  { transform: translate(calc(-50% + var(--flare-dx) + 3px), -52%) scale(1.03, 0.96) rotate(2deg); }
+      70%  { transform: translate(calc(-50% + var(--flare-dx) - 2px), -50%) scale(0.98, 1.04) rotate(-1.5deg); }
+      85%  { transform: translate(calc(-50% + var(--flare-dx) + 1px), -51%) scale(1.02, 0.98) rotate(0.5deg); }
+      100% { transform: translate(calc(-50% + var(--flare-dx)), -50%) scale(1, 1) rotate(0deg); }
     }
     @keyframes flareOrgFloat {
       0%   { transform: translate(0, 0) scale(1) rotate(0deg); }

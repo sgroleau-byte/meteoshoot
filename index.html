@@ -60,10 +60,7 @@
     <img class="splash-logo-img" src="/imgProjet/splash-typoMeteoshoot.png" alt="meteoshoot" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div class="splash-version" style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
-    <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.121</div>
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
-  </div>
+  <div class="splash-version"><span class="splash-version-num">v633.121</span><span class="splash-version-by">BY DRIFT&amp;GRAIN</span></div>
 </div>
 <script>
   // Séquence d'ouverture: le splash reste au moins 2 s (logo et halo animés). Quand l'interface est prête,
@@ -130,10 +127,12 @@
       var far = Math.sqrt(Math.pow(Math.max(cx, window.innerWidth - cx), 2) + Math.pow(Math.max(cy, window.innerHeight - cy), 2));
       var end = Math.max(8, (far * 1.1) / (0.12 * r.width));
       splash.classList.add('splash-grow');
+      // Décalage horizontal du rond sur la typo (variable CSS, différente sur téléphone), repris tel quel.
+      var dx = (getComputedStyle(flare).getPropertyValue('--flare-dx') || '50px').trim() || '50px';
       var frames = [];
       for (var i = 0; i <= 40; i++) {
         var t = i / 40, p = (Math.exp(GROW_K * t) - 1) / (Math.exp(GROW_K) - 1);
-        frames.push({ transform: 'translate(calc(-50% + 50px), -50%) scale(' + (1 + (end - 1) * p).toFixed(3) + ')' });
+        frames.push({ transform: 'translate(calc(-50% + ' + dx + '), -50%) scale(' + (1 + (end - 1) * p).toFixed(3) + ')' });
       }
       growAnim = flare.animate(frames, { duration: GROW_MS, easing: 'linear', fill: 'forwards' });
       growAnim.onfinish = reveal;
