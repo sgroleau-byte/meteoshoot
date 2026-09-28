@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MeteoShoot">
-  <script>var isDev = !(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) && !location.hostname.match(/^(meteoshoot\.vercel\.app|meteoshoot\.com|www\.meteoshoot\.com)$/);</script>
+  <script>var isNativeApp = location.protocol === 'capacitor:' || (location.protocol === 'https:' && location.hostname === 'localhost' && !location.port) || !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); var isDev = !isNativeApp && !location.hostname.match(/^(meteoshoot\.vercel\.app|meteoshoot\.com|www\.meteoshoot\.com)$/);</script>
   <link rel="preload" href="/imgProjet/splash-o.png" as="image">
   <link rel="preload" href="/imgProjet/splash-typoMeteoshoot.png" as="image">
   <link rel="manifest" id="manifest-link">

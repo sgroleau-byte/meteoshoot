@@ -52,3 +52,15 @@ Deux jeux de chiffres sont à distinguer: les mesures automatiques faites avec d
 rejouées (voir `verification_etape0/`), et le comportement avec les fournisseurs réels (Open-Meteo,
 Environnement Canada, Google). Sur l'iPhone, noter pour trois lancements: heure du toucher, apparition
 de la liste, apparition des prévisions, en wifi puis en cellulaire.
+
+## Android (émulateur, 28 septembre 2026)
+
+Compilé (JDK 21, SDK 36, Gradle 8.14) et testé dans l'émulateur Pixel 7 virtuel (Android 16): démarrage,
+liste, fiche projet, carte « météo de votre position » avec le dialogue de permission Android
+(« Lorsque vous utilisez l'app »), permission réutilisée au relancement, retrait de la permission, bouton
+Retour du système qui ferme la fiche. L'écran de l'émulateur montre des colonnes fantômes dans les rangées
+météo: la capture prise par le moteur de rendu lui-même est propre et le DOM ne contient aucune
+duplication, c'est un artefact de l'émulateur. À confirmer sur un téléphone Android réel.
+
+Lancer: `tools/android-run.sh` (émulateur + installation + lancement). APK de débogage:
+`verification_etape0/android/meteoshoot-debug.apk` (installable sur un téléphone en mode développeur).

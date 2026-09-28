@@ -9,14 +9,26 @@
         <item name="colorAccent">@color/colorAccent</item>
     </style>
 
-    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+            <!-- MeteoShoot: fond sombre derrière la vue web et les barres système (bord à bord), icônes claires -->
+        <item name="android:windowBackground">@color/meteoshoot_background</item>
+        <item name="android:statusBarColor">@color/meteoshoot_background</item>
+        <item name="android:navigationBarColor">@color/meteoshoot_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
     </style>
 
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
+            <!-- MeteoShoot: fond sombre derrière la vue web et les barres système (bord à bord), icônes claires -->
+        <item name="android:windowBackground">@color/meteoshoot_background</item>
+        <item name="android:statusBarColor">@color/meteoshoot_background</item>
+        <item name="android:navigationBarColor">@color/meteoshoot_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
     </style>
 </resources>

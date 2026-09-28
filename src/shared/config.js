@@ -7,7 +7,8 @@ export const SUPABASE_KEY = 'sb_publishable__6Z9fMxmUTmIieh5ABFBEQ_sHKygy2S';
 export const SITE_ORIGIN = 'https://meteoshoot.com';
 export function publicOrigin() {
   const c = window.Capacitor;
-  return (c && c.isNativePlatform && c.isNativePlatform()) ? SITE_ORIGIN : window.location.origin;
+  const native = window.location.protocol === 'capacitor:' || (window.location.protocol === 'https:' && window.location.hostname === 'localhost' && !window.location.port) || !!(c && c.isNativePlatform && c.isNativePlatform());
+  return native ? SITE_ORIGIN : window.location.origin;
 }
 
 // Lemon Squeezy (abonnement web)

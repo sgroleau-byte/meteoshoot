@@ -21,7 +21,14 @@ export function getCurrentPosition(options) {
       let s = await Geolocation.checkPermissions();
       if (s.location !== 'granted') s = await Geolocation.requestPermissions({ permissions: ['location'] });
       if (s.location !== 'granted') { const err = new Error('Geolocation permission denied'); err.code = 1; throw err; }
-      return Geolocation.getCurrentPosition(options);
+      try {
+        return await Geolocation.getCurrentPosition(options);
+      } catch (e) {
+        // Le fournisseur « économie d'énergie » peut échouer (délai dépassé) là où le GPS répond:
+        // une seconde tentative en haute précision avant d'abandonner.
+        if (options && options.enableHighAccuracy) throw e;
+        return await Geolocation.getCurrentPosition({ ...(options || {}), enableHighAccuracy: true });
+      }
     })();
   }
   return new Promise((resolve, reject) => {
