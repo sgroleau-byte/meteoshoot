@@ -102,6 +102,8 @@
     function maybeHide() { if (ready && minElapsed) hideSplash(); }
     window.__meteoshootReady = function () { ready = true; maybeHide(); };
     setTimeout(function () { minElapsed = true; maybeHide(); }, MIN_SPLASH_MS);
+    // L'épanouissement du halo commence 0,4 s avant la sortie du splash, voile encore opaque.
+    setTimeout(function () { var sp = document.getElementById('splashScreen'); if (sp) sp.classList.add('splash-leaving'); }, MIN_SPLASH_MS - 400);
     setTimeout(hideSplash, 6000);
   })();
 </script>
