@@ -55,27 +55,26 @@
 <div id="msMist"></div>
 <div class="splash-overlay" id="splashScreen">
   <div class="splash-halo"></div>
-  <div class="splash-wave"></div>
   <div class="splash-logo-area" style="opacity:0">
     <img class="splash-flare" src="/imgProjet/splash-o.png" alt="" style="opacity:0" />
     <img class="splash-logo-img" src="/imgProjet/splash-typoMeteoshoot.png" alt="meteoshoot" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
+  <div class="splash-version" style="position: absolute; bottom: 140px; left: 50%; transform: translateX(-50%); text-align: center; z-index: 2">
     <div style="font-size: 14px; color: rgba(255,255,255,0.35); font-family: monospace; letter-spacing: 0.05em">v633.121</div>
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; font-weight: 500; font-size: 11px; color: rgba(120,128,135,0.28); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 12px">BY DRIFT &amp; GRAIN</div>
   </div>
 </div>
 <script>
   // Séquence d'ouverture: le splash reste au moins 2 s (logo et halo animés). Quand l'interface est prête,
-  // une onde part du halo: un anneau de lumière qui s'élargit, lentement puis très vite (1,5 s), avec un
-  // intérieur sombre qui avale le logo, jusqu'à sortir de l'écran. Pendant l'onde, l'interface (retenue
-  // jusque-là par #root.ms-hold) se met en place sous le voile; puis le voile sombre se dissout (0,5 s) sur
-  // l'interface déjà en place. Filet de sécurité à 6 s. Le halo (flare) est conservé hors du splash pour
-  // l'effet de la liste.
+  // le rond turquoise derrière « shoot » (le flare, déjà animé) grandit, lentement puis très vite (1,4 s),
+  // jusqu'à sortir de l'écran; pendant ce temps le reste du splash (typo, sous-titre, version, halo) s'efface
+  // et l'interface, retenue jusque-là par #root.ms-hold, se met en place sous le voile sombre. Ensuite le
+  // voile se dissout (0,5 s) sur l'interface déjà en place. Filet de sécurité à 6 s. Le flare est ensuite
+  // conservé hors du splash pour l'effet de la liste.
   (function () {
-    var done = false, ready = false, minElapsed = false, revealed = false;
-    var MIN_SPLASH_MS = 2000, WAVE_MS = 1500;
+    var done = false, ready = false, minElapsed = false, revealed = false, growAnim = null;
+    var MIN_SPLASH_MS = 2000, GROW_MS = 1400;
     // L'interface se met en place (animations d'entrée libérées), encore cachée par le voile.
     function release() {
       var root = document.getElementById('root');
@@ -93,6 +92,7 @@
       var mist = document.getElementById('msMist');
       if (mist) { mist.classList.add('lifted'); setTimeout(function() { mist.remove(); }, 1800); }
       if (!splash) return;
+      if (growAnim) { try { growAnim.cancel(); } catch (e) {} growAnim = null; }
       var flare = document.querySelector('.splash-flare');
       if (flare) {
         flare.id = 'persistentFlare';
@@ -113,35 +113,33 @@
       document.getElementById('themeColor').setAttribute('content', '#181b1e');
       setTimeout(function() { splash.remove(); }, 600);
     }
-    // L'onde: anneau centré sur la position actuelle du halo; échelle finale calculée pour que l'intérieur
-    // sombre dépasse le coin le plus éloigné de l'écran; progression en t³ (tranquillement, puis très vite).
-    function wave() {
+    // Le flare grandit depuis sa position: échelle finale calculée pour que le bord intérieur de son anneau
+    // (12 % de sa largeur) dépasse le coin d'écran le plus éloigné; progression en t³ (tranquillement, puis
+    // très vite). Le reste du splash s'efface pendant ce temps (classe splash-grow, voir app.css).
+    function grow() {
       var splash = document.getElementById('splashScreen');
-      var ring = splash && splash.querySelector('.splash-wave');
-      var halo = splash && splash.querySelector('.splash-halo');
+      var flare = splash && splash.querySelector('.splash-flare');
       var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (!splash || !ring || !halo || !ring.animate || reduce) { reveal(); return; }
+      if (!splash || !flare || !flare.animate || reduce) { reveal(); return; }
       release();
-      var r = halo.getBoundingClientRect();
+      var r = flare.getBoundingClientRect();
       var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
       var far = Math.sqrt(Math.pow(Math.max(cx, window.innerWidth - cx), 2) + Math.pow(Math.max(cy, window.innerHeight - cy), 2));
-      var end = (far * 1.15) / (0.84 * ring.offsetWidth / 2);
-      ring.style.left = cx + 'px';
-      ring.style.top = cy + 'px';
-      ring.style.opacity = '1';
+      var end = Math.max(8, (far * 1.1) / (0.12 * r.width));
+      splash.classList.add('splash-grow');
       var frames = [];
       for (var i = 0; i <= 24; i++) {
         var t = i / 24;
-        frames.push({ transform: 'translate(-50%, -50%) scale(' + (0.02 + (end - 0.02) * t * t * t).toFixed(4) + ')' });
+        frames.push({ transform: 'translate(calc(-50% + 50px), -50%) scale(' + (1 + (end - 1) * t * t * t).toFixed(3) + ')' });
       }
-      var anim = ring.animate(frames, { duration: WAVE_MS, easing: 'linear', fill: 'forwards' });
-      anim.onfinish = reveal;
-      setTimeout(reveal, WAVE_MS + 150);
+      growAnim = flare.animate(frames, { duration: GROW_MS, easing: 'linear', fill: 'forwards' });
+      growAnim.onfinish = reveal;
+      setTimeout(reveal, GROW_MS + 150);
     }
     function hideSplash() {
       if (done) return;
       done = true;
-      wave();
+      grow();
     }
     function maybeHide() { if (ready && minElapsed) hideSplash(); }
     window.__meteoshootReady = function () { ready = true; maybeHide(); };
