@@ -156,9 +156,9 @@
     /* Pendant que le flare grandit (classe splash-grow), le reste du splash s'efface: typo, sous-titre, version,
        halo (ses animations de dérive et de respiration continuent, la disparition s'ajoute par-dessus). */
     @keyframes splashFadeOut { to { opacity: 0; } }
-    .splash-overlay.splash-grow .splash-logo-img, .splash-overlay.splash-grow .splash-version { animation: splashFadeOut 0.5s ease-out 0.5s forwards; }
-    .splash-overlay.splash-grow .splash-subtitle { animation: splashSubFade 0.5s ease-out 0.1s forwards, splashFadeOut 0.5s ease-out 0.5s forwards; }
-    .splash-overlay.splash-grow .splash-halo { animation: splashHaloOrg 7s ease-in-out infinite, splashHaloBreathe 2.8s ease-in-out infinite, splashFadeOut 0.5s ease-out 0.5s forwards; }
+    .splash-overlay.splash-grow .splash-logo-img, .splash-overlay.splash-grow .splash-version { animation: splashFadeOut 0.35s ease-out 0.9s forwards; }
+    .splash-overlay.splash-grow .splash-subtitle { animation: splashSubFade 0.5s ease-out 0.1s forwards, splashFadeOut 0.35s ease-out 0.9s forwards; }
+    .splash-overlay.splash-grow .splash-halo { animation: splashHaloOrg 7s ease-in-out infinite, splashHaloBreathe 2.8s ease-in-out infinite, splashFadeOut 0.35s ease-out 0.9s forwards; }
     .splash-halo {
       position: absolute;
       top: calc(46% - 150px);
