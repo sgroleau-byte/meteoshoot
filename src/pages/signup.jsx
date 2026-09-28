@@ -193,7 +193,7 @@ const SignupScreen = () => {
           borderRadius: '50%',
           background: 'radial-gradient(circle, rgba(170,215,208,0.4) 0%, rgba(150,200,195,0.08) 30%, transparent 55%)',
           filter: 'blur(60px)', pointerEvents: 'none', zIndex: 1,
-          animation: 'splashHaloOrg 20s ease-in-out infinite'
+          animation: 'splashHaloOrg 7s ease-in-out infinite, splashHaloBreathe 2.8s ease-in-out infinite'
         }} />
 
         <div style={{
@@ -262,7 +262,7 @@ const SignupScreen = () => {
         borderRadius: '50%',
         background: 'radial-gradient(circle, rgba(170,215,208,0.4) 0%, rgba(150,200,195,0.08) 30%, transparent 55%)',
         filter: 'blur(60px)', pointerEvents: 'none', zIndex: 1,
-        animation: 'splashHaloOrg 20s ease-in-out infinite'
+        animation: 'splashHaloOrg 7s ease-in-out infinite, splashHaloBreathe 2.8s ease-in-out infinite'
       }} />
 
       {/* Logo + Form wrapper -- left-aligned together */}

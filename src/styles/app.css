@@ -163,7 +163,7 @@
       pointer-events: none;
       will-change: transform;
       z-index: 3;
-      animation: splashHaloOrg 20s ease-in-out infinite;
+      animation: splashHaloOrg 7s ease-in-out infinite, splashHaloBreathe 2.8s ease-in-out infinite;
     }
     @media (max-width: 768px) {
       .splash-halo {
@@ -232,6 +232,7 @@
       85%  { transform: translate(1px, -1px) scale(1.02, 0.98) rotate(0.5deg); }
       100% { transform: translate(0, 0) scale(1) rotate(0deg); }
     }
+    @keyframes splashHaloBreathe { 0%, 100% { opacity: 0.72; } 50% { opacity: 1; } }
     @keyframes splashHaloOrg {
       0%   { left: calc(50% - 200px); top: calc(46% - 150px); transform: translate(-50%, -50%) translateZ(0) scale(1, 1) rotate(0deg); }
       15%  { left: calc(50% - 155px); top: calc(44% - 150px); transform: translate(-50%, -51%) translateZ(0) scale(1.06, 0.94) rotate(2deg); }
