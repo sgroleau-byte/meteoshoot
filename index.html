@@ -66,16 +66,20 @@
   </div>
 </div>
 <script>
-  // Le splash reste au moins 2 s (le logo et son halo jouent leur animation en entier), puis se retire
-  // dès que l'interface est affichée (signal envoyé par l'application, voir App.jsx); filet de sécurité
-  // à 6 s. Le halo (flare) est conservé hors du splash pour l'effet de la liste.
+  // Séquence d'ouverture: le splash reste au moins 2 s (logo et halo animés). Quand l'interface est prête,
+  // le halo s'épanouit jusqu'à remplir l'écran (lentement puis très vite, 1,3 s, fond encore opaque, logo qui
+  // s'efface); ensuite seulement le voile se dissout et l'interface, retenue jusque-là (#root.ms-hold), émerge.
+  // Filet de sécurité à 7 s. Le halo (flare) est conservé hors du splash pour l'effet de la liste.
   (function () {
     var done = false, ready = false, minElapsed = false;
-    var MIN_SPLASH_MS = 2000;
-    function hideSplash() {
-      if (done) return;
-      done = true;
+    var MIN_SPLASH_MS = 2000, BLOOM_MS = 1300;
+    function reveal() {
       var splash = document.getElementById('splashScreen');
+      var root = document.getElementById('root');
+      if (root) root.classList.remove('ms-hold');
+      try { window.dispatchEvent(new Event('meteoshoot:reveal')); } catch (e) {}
+      var mist = document.getElementById('msMist');
+      if (mist) { mist.classList.add('lifted'); setTimeout(function() { mist.remove(); }, 1800); }
       if (!splash) return;
       var flare = document.querySelector('.splash-flare');
       if (flare) {
@@ -93,16 +97,22 @@
         flare.style.transition = 'opacity 1s ease';
         document.body.appendChild(flare);
       }
-      splash.classList.add('splash-hidden', 'splash-leaving');
+      splash.classList.add('splash-hidden');
       document.getElementById('themeColor').setAttribute('content', '#181b1e');
-      setTimeout(function() { splash.remove(); }, 1700);
-      var mist = document.getElementById('msMist');
-      if (mist) { mist.classList.add('lifted'); setTimeout(function() { mist.remove(); }, 1800); }
+      setTimeout(function() { splash.remove(); }, 700);
+    }
+    function hideSplash() {
+      if (done) return;
+      done = true;
+      var splash = document.getElementById('splashScreen');
+      if (!splash) { reveal(); return; }
+      splash.classList.add('splash-bloom');
+      setTimeout(reveal, BLOOM_MS);
     }
     function maybeHide() { if (ready && minElapsed) hideSplash(); }
     window.__meteoshootReady = function () { ready = true; maybeHide(); };
     setTimeout(function () { minElapsed = true; maybeHide(); }, MIN_SPLASH_MS);
-    setTimeout(hideSplash, 6000);
+    setTimeout(hideSplash, 7000);
   })();
 </script>
 <script>
@@ -175,7 +185,7 @@
     document.addEventListener('mouseup', onUp);
   });
 </script>
-  <div id="root"></div>
+  <div id="root" class="ms-hold"></div>
 
   <script src="https://app.lemonsqueezy.com/js/lemon.js" defer></script>
 

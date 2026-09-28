@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useIsMobile } from '../hooks/useIsMobile.js';
+import { afterEntrance } from '../utils/entrance.js';
 import { useSwipeActions } from '../hooks/useSwipeActions.js';
 import { useLang } from '../i18n/LangProvider.jsx';
 import { MandateType, renderMandate } from '../projects/constants.js';
@@ -94,10 +95,7 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
   useSwipeActions({ cardRef, contentRef, actionsRef, haloWhiteRef, scrollRef, actionW, isMobile, setActionsOpen, syncHalo: false });
 
   const isFirstMount = useRef(true);
-  useEffect(() => { 
-    const timer = setTimeout(() => { isFirstMount.current = false; }, 600);
-    return () => clearTimeout(timer);
-  }, []);
+  useEffect(() => afterEntrance(() => { isFirstMount.current = false; }), []);
 
   if (isMobile) {
     const tx = actionsOpen ? actionW : 0;

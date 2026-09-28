@@ -6,6 +6,7 @@ import { useLang } from '../i18n/LangProvider.jsx';
 import { EDIT_GAUGE_MAX_DAYS, EDIT_LIST_DEFAULTS, editDaysFrozen, editStatusFor } from '../projects/helpers.js';
 import { useStore } from '../projects/StoreProvider.jsx';
 import { formatDateShort } from '../utils/dates.js';
+import { afterEntrance } from '../utils/entrance.js';
 import { StarIcon, TrashIcon } from './icons/misc.jsx';
 import { DateWheelPicker } from './pickers.jsx';
 
@@ -133,10 +134,7 @@ export const RetouchingCard = ({ project, onSelect, index = 0, openActionsId, se
   useSwipeActions({ cardRef, contentRef, actionsRef, haloWhiteRef, actionW, isMobile, setActionsOpen, syncHalo: true });
 
   const isFirstMount = useRef(true);
-  useEffect(() => {
-    const timer = setTimeout(() => { isFirstMount.current = false; }, 600);
-    return () => clearTimeout(timer);
-  }, []);
+  useEffect(() => afterEntrance(() => { isFirstMount.current = false; }), []);
 
   if (isMobile) {
     const tx = actionsOpen ? actionW : 0;
