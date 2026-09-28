@@ -55,6 +55,7 @@
 <div id="msMist"></div>
 <div class="splash-overlay" id="splashScreen">
   <div class="splash-halo"></div>
+  <div class="splash-wave"></div>
   <div class="splash-logo-area" style="opacity:0">
     <img class="splash-flare" src="/imgProjet/splash-o.png" alt="" style="opacity:0" />
     <img class="splash-logo-img" src="/imgProjet/splash-typoMeteoshoot.png" alt="meteoshoot" />
@@ -66,17 +67,29 @@
   </div>
 </div>
 <script>
-  // Le splash reste au moins 2 s (logo et halo animés). Quand l'interface est prête, le voile se retire en
-  // fondu (0,6 s) et l'interface, retenue jusque-là (#root.ms-hold, événement meteoshoot:reveal), apparaît.
-  // Filet de sécurité à 6 s. Le halo (flare) est conservé hors du splash pour l'effet de la liste.
+  // Séquence d'ouverture: le splash reste au moins 2 s (logo et halo animés). Quand l'interface est prête,
+  // une onde part du halo: un anneau de lumière qui s'élargit, lentement puis très vite (1,5 s), avec un
+  // intérieur sombre qui avale le logo, jusqu'à sortir de l'écran. Pendant l'onde, l'interface (retenue
+  // jusque-là par #root.ms-hold) se met en place sous le voile; puis le voile sombre se dissout (0,5 s) sur
+  // l'interface déjà en place. Filet de sécurité à 6 s. Le halo (flare) est conservé hors du splash pour
+  // l'effet de la liste.
   (function () {
-    var done = false, ready = false, minElapsed = false;
-    var MIN_SPLASH_MS = 2000;
-    function reveal() {
-      var splash = document.getElementById('splashScreen');
+    var done = false, ready = false, minElapsed = false, revealed = false;
+    var MIN_SPLASH_MS = 2000, WAVE_MS = 1500;
+    // L'interface se met en place (animations d'entrée libérées), encore cachée par le voile.
+    function release() {
       var root = document.getElementById('root');
-      if (root) root.classList.remove('ms-hold');
-      try { window.dispatchEvent(new Event('meteoshoot:reveal')); } catch (e) {}
+      if (root && root.classList.contains('ms-hold')) {
+        root.classList.remove('ms-hold');
+        try { window.dispatchEvent(new Event('meteoshoot:reveal')); } catch (e) {}
+      }
+    }
+    // Le voile sombre se dissout sur l'interface.
+    function reveal() {
+      if (revealed) return;
+      revealed = true;
+      release();
+      var splash = document.getElementById('splashScreen');
       var mist = document.getElementById('msMist');
       if (mist) { mist.classList.add('lifted'); setTimeout(function() { mist.remove(); }, 1800); }
       if (!splash) return;
@@ -98,12 +111,37 @@
       }
       splash.classList.add('splash-hidden');
       document.getElementById('themeColor').setAttribute('content', '#181b1e');
-      setTimeout(function() { splash.remove(); }, 700);
+      setTimeout(function() { splash.remove(); }, 600);
+    }
+    // L'onde: anneau centré sur la position actuelle du halo; échelle finale calculée pour que l'intérieur
+    // sombre dépasse le coin le plus éloigné de l'écran; progression en t³ (tranquillement, puis très vite).
+    function wave() {
+      var splash = document.getElementById('splashScreen');
+      var ring = splash && splash.querySelector('.splash-wave');
+      var halo = splash && splash.querySelector('.splash-halo');
+      var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!splash || !ring || !halo || !ring.animate || reduce) { reveal(); return; }
+      release();
+      var r = halo.getBoundingClientRect();
+      var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      var far = Math.sqrt(Math.pow(Math.max(cx, window.innerWidth - cx), 2) + Math.pow(Math.max(cy, window.innerHeight - cy), 2));
+      var end = (far * 1.15) / (0.84 * ring.offsetWidth / 2);
+      ring.style.left = cx + 'px';
+      ring.style.top = cy + 'px';
+      ring.style.opacity = '1';
+      var frames = [];
+      for (var i = 0; i <= 24; i++) {
+        var t = i / 24;
+        frames.push({ transform: 'translate(-50%, -50%) scale(' + (0.02 + (end - 0.02) * t * t * t).toFixed(4) + ')' });
+      }
+      var anim = ring.animate(frames, { duration: WAVE_MS, easing: 'linear', fill: 'forwards' });
+      anim.onfinish = reveal;
+      setTimeout(reveal, WAVE_MS + 150);
     }
     function hideSplash() {
       if (done) return;
       done = true;
-      reveal();
+      wave();
     }
     function maybeHide() { if (ready && minElapsed) hideSplash(); }
     window.__meteoshootReady = function () { ready = true; maybeHide(); };
