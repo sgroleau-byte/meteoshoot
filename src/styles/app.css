@@ -136,8 +136,12 @@
     .splash-logo-img {
       width: clamp(224px, 44vw, 464px);
       height: auto;
-      opacity: 0.8;
       display: block;
+      /* Choix de Stéphane (28 septembre 2026): typo en fusion overlay, opacité 1, lettres foncées à #161616
+         (l'image est à #1b1b1b, le filtre l'assombrit de 20 %, sans retoucher le fichier). */
+      opacity: 1;
+      mix-blend-mode: overlay;
+      filter: brightness(0.8);
     }
     .splash-flare {
       --flare-dx: 50px;
