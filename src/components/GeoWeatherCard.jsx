@@ -202,7 +202,7 @@ export const GeoWeatherCard = () => {
   // Marges négatives: la carte se cale sur le haut de la zone sûre (le conteneur ajoute 16 px) et
   // annule les 16 px de la liste en dessous; les 25 px de padding sont la respiration demandée (v633.118).
   return (
-    <div style={{ position: 'relative', zIndex: 2, marginTop: '-16px', marginBottom: '-16px', paddingTop: 25, paddingBottom: 25, width: '100%', overflow: 'hidden' }}>
+    <div className="ms-enter-geo" style={{ position: 'relative', zIndex: 2, marginTop: '-16px', marginBottom: '-16px', paddingTop: 25, paddingBottom: 25, width: '100%', overflow: 'hidden' }}>
       <div style={{ zoom: scale, width: GEO_CARD_W, height: GEO_CARD_H }}>
         <div className="hour-scroll" style={{ width: GEO_CARD_W, height: GEO_CARD_H, overflowX: 'auto', overflowY: 'hidden' }}>
           <div style={{ display: 'flex', width: 'max-content', height: GEO_CARD_H }}>

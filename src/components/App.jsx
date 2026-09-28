@@ -31,6 +31,9 @@ export const App = () => {
   useEffect(() => { const t = setTimeout(() => setGlowReady(true), 800); return () => clearTimeout(t); }, []);
   const [displayedProjectId, setDisplayedProjectId] = useState(null);
   const detailScrollRef = React.useRef(null);
+  // Fermeture animée de la fiche: la fiche reste montée le temps du fondu de sortie.
+  const [detailClosing, setDetailClosing] = useState(false);
+  const closeTimer = React.useRef(null);
 
   // Ajout direct depuis un lien externe (ex: BudgetShoot) : ?prefill=<JSON>
   // Attend que la liste soit chargée (synced) pour ne pas se faire écraser.
@@ -177,11 +180,17 @@ export const App = () => {
   
   useEffect(() => {
     if (selectedId) {
+      if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null; }
+      setDetailClosing(false);
       setDisplayedProjectId(selectedId);
       document.documentElement.style.overflow = 'hidden';
       document.body.style.overflow = 'hidden';
+    } else if (displayedProjectId) {
+      // Fondu de sortie (220 ms) avant de retirer la fiche, sauf si l'utilisateur réduit les animations.
+      const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const finish = () => { closeTimer.current = null; setDisplayedProjectId(null); setDetailClosing(false); document.documentElement.style.overflow = ''; document.body.style.overflow = ''; };
+      if (reduce) finish(); else { setDetailClosing(true); closeTimer.current = setTimeout(finish, 220); }
     } else {
-      setDisplayedProjectId(null);
       document.documentElement.style.overflow = '';
       document.body.style.overflow = '';
     }
@@ -395,7 +404,7 @@ export const App = () => {
           {view === 'routes' && <RouteView/>}
           {view === 'preferences' && <PreferencesView/>}
         </div>
-        {displayedProjectId && <div ref={detailScrollRef} className="detail-scroll" style={{
+        {displayedProjectId && <div ref={detailScrollRef} className={"detail-scroll " + (detailClosing ? "ms-detail-leave" : "ms-detail-enter")} style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
           overflowX: 'hidden',
           overflowY: 'auto',

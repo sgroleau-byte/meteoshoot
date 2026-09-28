@@ -128,7 +128,16 @@ const LoginScreen = () => {
         setError(true);
         setSending(false);
       } else {
-        window.location.href = getRedirectUrl();
+        // Fondu de sortie avant le changement de page (le fond reste sombre), sauf animations réduites.
+        const root = document.getElementById('root');
+        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (root && !reduce) {
+          root.style.transition = 'opacity 0.25s ease';
+          root.style.opacity = '0';
+          setTimeout(() => { window.location.href = getRedirectUrl(); }, 260);
+        } else {
+          window.location.href = getRedirectUrl();
+        }
       }
     } catch (e) {
       setError(true);

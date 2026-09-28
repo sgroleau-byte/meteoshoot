@@ -143,7 +143,7 @@ export const Header = ({ onChangeView, onAddProject }) => {
 
   if (isMobile) {
     return (
-      <nav className="mobile-bottom-nav fixed bottom-0 left-0 right-0 z-40" 
+      <nav className="mobile-bottom-nav ms-enter-nav fixed bottom-0 left-0 right-0 z-40" 
         style={{ 
           height: 'calc(120px + env(safe-area-inset-bottom))',
           visibility: kbOpen ? 'hidden' : 'visible',
@@ -228,7 +228,7 @@ export const Header = ({ onChangeView, onAddProject }) => {
 
   return (
     <header 
-      className="fixed top-0 right-0 z-40"
+      className="ms-enter-nav fixed top-0 right-0 z-40"
       style={{ paddingTop: '10px', paddingRight: '13px' }}
     >
       <div ref={navContainerRef} className="flex gap-6" style={{ position: 'relative', paddingBottom: '5px' }}>
