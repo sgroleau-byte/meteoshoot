@@ -66,10 +66,12 @@
   </div>
 </div>
 <script>
-  // Le splash se retire dès que l'interface est affichée (signal envoyé par l'application, voir App.jsx),
-  // avec un filet de sécurité à 5 s. Le halo (flare) est conservé hors du splash pour l'effet de la liste.
+  // Le splash reste au moins 2 s (le logo et son halo jouent leur animation en entier), puis se retire
+  // dès que l'interface est affichée (signal envoyé par l'application, voir App.jsx); filet de sécurité
+  // à 6 s. Le halo (flare) est conservé hors du splash pour l'effet de la liste.
   (function () {
-    var done = false;
+    var done = false, ready = false, minElapsed = false;
+    var MIN_SPLASH_MS = 2000;
     function hideSplash() {
       if (done) return;
       done = true;
@@ -97,8 +99,10 @@
       var mist = document.getElementById('msMist');
       if (mist) { mist.classList.add('lifted'); setTimeout(function() { mist.remove(); }, 1800); }
     }
-    window.__meteoshootReady = hideSplash;
-    setTimeout(hideSplash, 5000);
+    function maybeHide() { if (ready && minElapsed) hideSplash(); }
+    window.__meteoshootReady = function () { ready = true; maybeHide(); };
+    setTimeout(function () { minElapsed = true; maybeHide(); }, MIN_SPLASH_MS);
+    setTimeout(hideSplash, 6000);
   })();
 </script>
 <script>
