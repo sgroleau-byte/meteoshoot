@@ -115,10 +115,10 @@
       align-items: center;
       justify-content: center;
       background: #181b1e;
-      transition: opacity 0.4s ease-out;
+      transition: opacity 0.3s ease-out;
       padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
-    /* Sortie du splash (voir index.html): le flare grandit et le reste s'efface, puis le voile sombre se dissout en 0,4 s. */
+    /* Sortie du splash (voir index.html): le flare grandit et le reste s'efface, puis le voile sombre se dissout en 0,3 s. */
     .splash-overlay.splash-hidden {
       opacity: 0;
       pointer-events: none;
@@ -156,9 +156,9 @@
     /* Pendant que le flare grandit (classe splash-grow), le reste du splash s'efface: typo, sous-titre, version,
        halo (ses animations de dérive et de respiration continuent, la disparition s'ajoute par-dessus). */
     @keyframes splashFadeOut { to { opacity: 0; } }
-    .splash-overlay.splash-grow .splash-logo-img, .splash-overlay.splash-grow .splash-version { animation: splashFadeOut 0.3s ease-out 0.45s forwards; }
-    .splash-overlay.splash-grow .splash-subtitle { animation: splashSubFade 0.5s ease-out 0.1s forwards, splashFadeOut 0.3s ease-out 0.45s forwards; }
-    .splash-overlay.splash-grow .splash-halo { animation: splashHaloOrg 7s ease-in-out infinite, splashHaloBreathe 2.8s ease-in-out infinite, splashFadeOut 0.3s ease-out 0.45s forwards; }
+    .splash-overlay.splash-grow .splash-logo-img, .splash-overlay.splash-grow .splash-version { animation: splashFadeOut 0.2s ease-out 0.7s forwards; }
+    .splash-overlay.splash-grow .splash-subtitle { animation: splashSubFade 0.5s ease-out 0.1s forwards, splashFadeOut 0.2s ease-out 0.7s forwards; }
+    .splash-overlay.splash-grow .splash-halo { animation: splashHaloOrg 7s ease-in-out infinite, splashHaloBreathe 2.8s ease-in-out infinite, splashFadeOut 0.2s ease-out 0.7s forwards; }
     .splash-halo {
       position: absolute;
       top: calc(46% - 150px);

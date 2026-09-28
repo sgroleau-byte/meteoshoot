@@ -71,11 +71,11 @@
   // vite jusqu'à une fin explosive (1,0 s),
   // jusqu'à sortir de l'écran; pendant ce temps le reste du splash (typo, sous-titre, version, halo) s'efface
   // et l'interface, retenue jusque-là par #root.ms-hold, se met en place sous le voile sombre. Ensuite le
-  // voile se dissout (0,4 s) sur l'interface déjà en place. Filet de sécurité à 6 s. Le flare est ensuite
+  // voile se dissout (0,3 s) sur l'interface déjà en place. Filet de sécurité à 6 s. Le flare est ensuite
   // conservé hors du splash pour l'effet de la liste.
   (function () {
     var done = false, ready = false, minElapsed = false, revealed = false, growAnim = null;
-    var MIN_SPLASH_MS = 2000, GROW_MS = 1000, GROW_K = 5;
+    var MIN_SPLASH_MS = 2000, GROW_MS = 1000, GROW_K = 10;
     // L'interface se met en place (animations d'entrée libérées), encore cachée par le voile.
     function release() {
       var root = document.getElementById('root');
@@ -116,9 +116,9 @@
     }
     // Le flare grandit depuis sa position: échelle finale calculée pour que le bord intérieur de son anneau
     // (12 % de sa largeur) dépasse le coin d'écran le plus éloigné; progression exponentielle
-    // (e^(K·t) - 1) / (e^K - 1), K = 5, la courbe dessinée par Stéphane: un départ doux mais visible dès le
-    // début, une accélération continue et une fin quasi verticale. Le reste du splash s'efface quand le rond
-    // le traverse (classe splash-grow, voir app.css).
+    // (e^(K·t) - 1) / (e^K - 1), K = 10 (forme dessinée par Stéphane, raidie à sa demande): le rond reste
+    // presque immobile les deux premiers tiers, puis passe de 2 à 24 fois sa taille dans le dernier quart de
+    // seconde. Le reste du splash s'efface quand le rond le traverse (classe splash-grow, voir app.css).
     function grow() {
       var splash = document.getElementById('splashScreen');
       var flare = splash && splash.querySelector('.splash-flare');
