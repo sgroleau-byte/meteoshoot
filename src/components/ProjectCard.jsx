@@ -104,7 +104,7 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
     const ease = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
     return (
       <div ref={cardRef} data-open={actionsOpen} data-project-id={project.id} className={isFirstMount.current ? 'animate-card-in' : ''}
-        style={{ position: 'relative', margin: '0 12px', marginBottom: '40px', ...(isFirstMount.current ? { animationDelay: `${0.15 + index * 0.06}s` } : {}), WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
+        style={{ position: 'relative', margin: '0 12px', marginBottom: '40px', ...(isFirstMount.current ? { animationDelay: `${0.05 + index * 0.05}s` } : {}), WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
       >
         {/* Layer 2 — fond (coins droits) + halos + contours flous */}
         <div style={{ position: 'absolute', top: 0, left: '-40px', right: 0, bottom: '-15px', borderRadius: '0px', overflow: 'hidden', background: 'rgba(0,0,0,0.14)', WebkitMaskImage: 'linear-gradient(to right, black, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', WebkitMaskComposite: 'destination-in', maskImage: 'linear-gradient(to right, black, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', maskComposite: 'intersect', pointerEvents: 'none' }}>
@@ -171,7 +171,7 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
     <div className="card-glow-wrap">
     <div 
       className={`project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden animate-card-in border-b border-adaptive`}
-      style={{ animationDelay: `${0.15 + index * 0.06}s` }}
+      style={{ animationDelay: `${0.05 + index * 0.05}s` }}
       onMouseDown={onMouseDownDrag ? (e) => onMouseDownDrag(e, project.id, index) : undefined}
     >
       <div onClick={() => onSelect(project)} className="cursor-pointer" onMouseEnter={() => { if (weatherRowDismiss.current) { weatherRowDismiss.current(); weatherRowDismiss.current = null; } }}>

@@ -151,6 +151,8 @@ export const GeoWeatherCard = () => {
     return () => { alive = false; };
   }, []);
 
+  const scale = vw >= 320 ? vw / GEO_CARD_W : 1;
+
   if (status === 'prompt') return (
     <div style={{ margin: '0 12px', marginBottom: '15px', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', overflow: 'hidden', padding: '24px 28px', textAlign: 'center' }}>
       <div className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '15px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>{t('currentLocationWeather')}</div>
@@ -158,9 +160,12 @@ export const GeoWeatherCard = () => {
       <button onClick={requestGeo} className="font-bebas-bold" style={{ letterSpacing: '0.04em', background: 'none', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: '20px', color: '#FAF9F7', fontSize: '16px', padding: '8px 24px', cursor: 'pointer', textShadow: '0 0 12px rgba(255,255,255,0.3)' }}>{t('enableLocation')}</button>
     </div>
   );
+  // Pendant le chargement, l'espace final de la carte est réservé: la liste ne saute pas quand elle apparaît.
   if (status === 'loading' || status === 'checking') return (
-    <div style={{ margin: '0 12px', marginBottom: '35px', borderRadius: '37px', background: 'rgba(0,0,0,0.14)', overflow: 'hidden', padding: '24px 28px', textAlign: 'center' }}>
-      <div className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '13px', color: '#424a48' }}>Chargement météo...</div>
+    <div style={{ position: 'relative', zIndex: 2, marginTop: '-16px', marginBottom: '-16px', paddingTop: 25, paddingBottom: 25, width: '100%', overflow: 'hidden' }}>
+      <div style={{ height: GEO_CARD_H * scale, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '13px', color: '#424a48' }}>Chargement météo...</div>
+      </div>
     </div>
   );
   if (status === 'denied') return (
@@ -179,7 +184,6 @@ export const GeoWeatherCard = () => {
   const showBall = dayFrac !== null && dayFrac >= 0 && dayFrac <= 1;
   const ballX = showBall ? GEO_BALL_X0 + dayFrac * (GEO_BALL_X1 - GEO_BALL_X0) : 0;
   const ballY = showBall ? geoCurveY(ballX) : 0;
-  const scale = vw >= 320 ? vw / GEO_CARD_W : 1;
   const hours = geoData.hours || [];
   const fmt2 = (v) => v == null ? '--' : String(v).padStart(2, '0');
   // Séparateurs verticaux: trait d'un tiers de px CSS (1 px physique à 3x) à 27 % de blanc, dessinés en SVG

@@ -115,7 +115,7 @@
       align-items: center;
       justify-content: center;
       background: #181b1e;
-      transition: opacity 0.8s ease-out;
+      transition: opacity 0.9s cubic-bezier(0.4, 0, 0.2, 1);
       padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
     .splash-overlay.splash-hidden {
@@ -260,7 +260,7 @@
     @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; } }
     .animate-fade-in { animation: fadeIn 0.3s ease-out; }
     .animate-slide-up { animation: slideUp 0.4s ease-out; }
-    .animate-card-in { opacity: 0; animation: msRise 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+    .animate-card-in { opacity: 0; animation: msRise 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
     /* Hover popup pour les jours météo */
     .day-cell .day-popup { opacity: 0; visibility: hidden; pointer-events: none; transform: translateX(var(--slide-from, -8px)); transition: opacity 0.18s ease, visibility 0.18s ease, transform 0.2s ease; }
     .day-cell .day-popup.popup-active { opacity: 1; visibility: visible; pointer-events: auto; transform: translateX(0); }
@@ -406,18 +406,25 @@
     .gm-style .gm-style-cc div { background: transparent !important; }
 
     /* Animations d'entrée subtiles (interface, prévisions, fiche): opacité et déplacement seulement, courbes douces. */
-    @keyframes msRise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    @keyframes msRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+    @keyframes msRiseSmall { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
     @keyframes msFade { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes msGeoIn { from { opacity: 0; transform: scale(0.985); } to { opacity: 1; transform: none; } }
-    @keyframes msDetailIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-    @keyframes msDetailOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(12px); } }
-    .ms-enter-nav { animation: msFade 0.25s ease-out both; }
-    .ms-enter-geo { animation: msGeoIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) 0.1s both; }
-    .day-cell, .hour-scroll { animation: msFade 0.2s ease-out both; }
-    .ms-detail-enter { animation: msDetailIn 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-    .ms-detail-leave { animation: msDetailOut 0.22s ease-in both; pointer-events: none; }
+    @keyframes msGeoIn { from { opacity: 0; transform: scale(0.985); filter: blur(6px); } 60% { filter: blur(0); } to { opacity: 1; transform: none; filter: blur(0); } }
+    @keyframes msDetailIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    @keyframes msDetailOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(14px); } }
+    .ms-enter-nav { animation: msFade 0.6s cubic-bezier(0.4, 0, 0.2, 1) both; }
+    .ms-enter-geo { animation: msGeoIn 0.9s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    .day-cell, .hour-scroll { animation: msRiseSmall 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    .ms-detail-enter { animation: msDetailIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    .ms-detail-leave { animation: msDetailOut 0.25s cubic-bezier(0.4, 0, 1, 1) both; pointer-events: none; }
+    /* Brume: voile léger aux teintes de l'app, présent sous le splash, qui se dissipe pendant que l'interface émerge. */
+    #msMist { position: fixed; inset: 0; z-index: 9998; pointer-events: none; opacity: 1;
+      background: radial-gradient(120% 70% at 50% 22%, rgba(170, 215, 208, 0.16) 0%, rgba(170, 215, 208, 0.05) 42%, rgba(24, 27, 30, 0) 78%);
+      transition: opacity 1.6s cubic-bezier(0.4, 0, 0.2, 1); }
+    #msMist.lifted { opacity: 0; }
     @media (prefers-reduced-motion: reduce) {
-      .animate-card-in, .animate-fade-in, .animate-slide-up, .ms-enter-nav, .ms-enter-geo, .day-cell, .hour-scroll, .ms-detail-enter, .ms-detail-leave { animation: none !important; opacity: 1 !important; transform: none !important; }
+      .animate-card-in, .animate-fade-in, .animate-slide-up, .ms-enter-nav, .ms-enter-geo, .day-cell, .hour-scroll, .ms-detail-enter, .ms-detail-leave { animation: none !important; opacity: 1 !important; transform: none !important; filter: none !important; }
+      #msMist { display: none; }
     }
 
     /* App native (Capacitor) seulement: bande opaque sous la barre de statut, sans effet sur le web. */

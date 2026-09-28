@@ -52,6 +52,7 @@
 </script>
 
 <!-- ── Splash Screen ── -->
+<div id="msMist"></div>
 <div class="splash-overlay" id="splashScreen">
   <div class="splash-halo"></div>
   <div class="splash-logo-area" style="opacity:0">
@@ -92,7 +93,9 @@
       }
       splash.classList.add('splash-hidden');
       document.getElementById('themeColor').setAttribute('content', '#181b1e');
-      setTimeout(function() { splash.remove(); }, 900);
+      setTimeout(function() { splash.remove(); }, 1000);
+      var mist = document.getElementById('msMist');
+      if (mist) { mist.classList.add('lifted'); setTimeout(function() { mist.remove(); }, 1800); }
     }
     window.__meteoshootReady = hideSplash;
     setTimeout(hideSplash, 5000);
