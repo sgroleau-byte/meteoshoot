@@ -197,11 +197,11 @@ export const NewProjectModal = ({ isOpen, onClose, onCreated, origin, onOpen }) 
           <div className={`newproj-panel ${animated ? 'open' : ''}`} style={{ left: panelX, top: panelY, width: panelW, padding: '28px 32px' }} onClick={e => e.stopPropagation()}>
             <div className="mb-5">
               <label className="newproj-label font-bebas-book">{t('projectName')}</label>
-              <input ref={nameInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder={t('projectNamePlaceholder')}/>
+              <input ref={nameInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" value={form.name} onChange={e => setForm({...form, name: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder={t('projectNamePlaceholder')}/>
             </div>
             <div className="mb-5">
               <label className="newproj-label font-bebas-book">{t('projectAddress')}</label>
-              <input ref={addressInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder={t('enterAddress')}/>
+              <input ref={addressInputRef} type="text" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-1p-ignore="true" data-lpignore="true" data-form-type="other" defaultValue={form.address} placeholder={t('enterAddress')}/>
             </div>
             <div className="mb-5">
               <label className="newproj-label font-bebas-book">MANDAT</label>
