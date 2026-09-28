@@ -124,7 +124,7 @@
       pointer-events: none;
     }
     /* Interface retenue tant que le splash est là: les animations d'entrée attendent la révélation. */
-    #root.ms-hold .animate-card-in, #root.ms-hold .ms-enter-geo, #root.ms-hold .ms-enter-nav, #root.ms-hold .day-cell, #root.ms-hold .hour-scroll { animation-play-state: paused; }
+    #root.ms-hold .animate-card-in, #root.ms-hold .ms-enter-geo, #root.ms-hold .ms-enter-nav, #root.ms-hold .day-cell, #root.ms-hold .hour-scroll, #root.ms-hold .edit-gauge-fill { animation-play-state: paused; }
     .splash-logo-area {
       position: relative;
       opacity: 0;
@@ -437,6 +437,10 @@
     /* Animations d'entrée subtiles (interface, prévisions, fiche): opacité et déplacement seulement, courbes douces. */
     @keyframes msRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
     @keyframes msRiseSmall { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+    /* Liste Édition: la barre de couleur (jauge) se remplit de gauche à droite à l'apparition, un projet après
+       l'autre (délai posé en ligne selon l'index de la carte). */
+    .edit-gauge-fill { transform-origin: 0 50%; animation: msGaugeFill 0.8s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    @keyframes msGaugeFill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
     @keyframes msFade { from { opacity: 0; } to { opacity: 1; } }
     @keyframes msGeoIn { from { opacity: 0; transform: scale(0.985); filter: blur(6px); } 60% { filter: blur(0); } to { opacity: 1; transform: none; filter: blur(0); } }
     @keyframes msDetailIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
@@ -452,7 +456,7 @@
       transition: opacity 1.6s cubic-bezier(0.4, 0, 0.2, 1); }
     #msMist.lifted { opacity: 0; }
     @media (prefers-reduced-motion: reduce) {
-      .animate-card-in, .animate-fade-in, .animate-slide-up, .ms-enter-nav, .ms-enter-geo, .day-cell, .hour-scroll, .ms-detail-enter, .ms-detail-leave { animation: none !important; opacity: 1 !important; transform: none !important; filter: none !important; }
+      .animate-card-in, .animate-fade-in, .animate-slide-up, .ms-enter-nav, .ms-enter-geo, .day-cell, .hour-scroll, .ms-detail-enter, .ms-detail-leave, .edit-gauge-fill { animation: none !important; opacity: 1 !important; transform: none !important; filter: none !important; }
       #msMist { display: none; }
     }
 

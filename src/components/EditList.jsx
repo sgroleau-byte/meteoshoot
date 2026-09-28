@@ -44,13 +44,14 @@ export const EditDaysFigure = ({ days, status, compact, tone }) => {
   );
 };
 
-// Jauge : remplissage = jours / échelle (60 j, plafonné), repère vertical au seuil d'alerte.
-export const EditGauge = ({ days, status, editPrefs, tone }) => {
+// Jauge : remplissage = jours / échelle (60 j, plafonné), repère vertical au seuil d'alerte. À l'apparition, le
+// remplissage grandit de gauche à droite (classe edit-gauge-fill, app.css), un projet après l'autre selon index.
+export const EditGauge = ({ days, status, editPrefs, tone, index = 0 }) => {
   const pct = days === null ? 0 : Math.min(100, (days / EDIT_GAUGE_MAX_DAYS) * 100);
   const thr = Math.min(100, (editPrefs.editAlertDays / EDIT_GAUGE_MAX_DAYS) * 100);
   return (
     <div style={{ position: 'relative', height: '4px', background: 'rgba(255,255,255,0.06)', borderRadius: '2px', marginTop: '9px' }}>
-      {pct > 0 && <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct}%`, background: (tone || EDIT_STATUS_COLORS[status]).gauge, borderRadius: '2px' }}/>}
+      {pct > 0 && <div className="edit-gauge-fill" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct}%`, background: (tone || EDIT_STATUS_COLORS[status]).gauge, borderRadius: '2px', animationDelay: `${0.25 + index * 0.12}s` }}/>}
       {editPrefs.editShowThreshold && <div style={{ position: 'absolute', top: '-3px', bottom: '-3px', left: `${thr}%`, width: '1px', background: 'rgba(232,236,233,0.35)' }}/>}
     </div>
   );
@@ -58,11 +59,11 @@ export const EditGauge = ({ days, status, editPrefs, tone }) => {
 
 // Rangée 2a, contenu seul (sans la coque de carte) : partagée par les projets en retouche et les archives.
 // compact = mobile (chiffre, puis nom, ligne tags + date, jauge); sinon chiffre | nom + tags + jauge | date.
-export const EditRow = ({ project, days, status, editPrefs, dateLabel, compact, onClick, onDateClick, dateActive }) => {
+export const EditRow = ({ project, days, status, editPrefs, dateLabel, compact, onClick, onDateClick, dateActive, index = 0 }) => {
   const tags = editTagsLabel(project.mandates);
   const tone = editToneFor(days, status, editPrefs);
   const name = <span style={{ color: '#e8ece9', fontSize: compact ? '15px' : '17px', letterSpacing: '0.04em', textTransform: 'uppercase', lineHeight: 1.2, minWidth: 0 }}>{project.name} {project.isContest && <StarIcon/>}</span>;
-  const gauge = editPrefs.editShowGauge && <EditGauge days={days} status={status} editPrefs={editPrefs} tone={tone}/>;
+  const gauge = editPrefs.editShowGauge && <EditGauge days={days} status={status} editPrefs={editPrefs} tone={tone} index={index}/>;
   if (compact) {
     return (
       <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '10px 8px 12px 4px', fontFamily: EDIT_FONT }}>
@@ -141,7 +142,7 @@ export const RetouchingCard = ({ project, onSelect, index = 0, openActionsId, se
     const ease = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
     return (
       <div ref={cardRef} data-open={actionsOpen} data-project-id={project.id} className={isFirstMount.current ? 'animate-card-in' : ''}
-        style={{ position: 'relative', margin: '0 12px', marginBottom: '40px', ...(isFirstMount.current ? { animationDelay: `${0.05 + index * 0.05}s` } : {}), WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
+        style={{ position: 'relative', margin: '0 12px', marginBottom: '40px', ...(isFirstMount.current ? { animationDelay: `${0.05 + index * 0.12}s` } : {}), WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
       >
         {/* Layer 2 — fond (coins droits) + halos + contours flous */}
         <div style={{ position: 'absolute', top: 0, left: '-40px', right: 0, bottom: '-15px', borderRadius: '0px', overflow: 'hidden', background: 'rgba(0,0,0,0.14)', WebkitMaskImage: 'linear-gradient(to right, black, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', WebkitMaskComposite: 'destination-in', maskImage: 'linear-gradient(to right, black, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', maskComposite: 'intersect', pointerEvents: 'none' }}>
@@ -159,7 +160,7 @@ export const RetouchingCard = ({ project, onSelect, index = 0, openActionsId, se
               onClick={() => { setActionsOpen(false); }}
             />
           )}
-          <EditRow compact project={project} days={days} status={status} editPrefs={editPrefs} dateLabel={dateLabel} onClick={() => { if (!actionsOpen) onSelect(project); }}/>
+          <EditRow index={index} compact project={project} days={days} status={status} editPrefs={editPrefs} dateLabel={dateLabel} onClick={() => { if (!actionsOpen) onSelect(project); }}/>
         </div>
         <div ref={actionsRef} style={{
           position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW}px`,
@@ -181,9 +182,9 @@ export const RetouchingCard = ({ project, onSelect, index = 0, openActionsId, se
   return (
     <div className="card-glow-wrap">
     <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden animate-card-in border-b border-adaptive"
-      style={{ animationDelay: `${0.05 + index * 0.05}s` }}>
+      style={{ animationDelay: `${0.05 + index * 0.12}s` }}>
       <div className="card-info-flare" style={{ left: '-350px', top: '0px', background: 'radial-gradient(circle, rgba(216,175,76,1) 0%, rgba(216,175,76,0.5) 35%, transparent 65%)' }}></div>
-      <EditRow project={project} days={days} status={status} editPrefs={editPrefs} dateLabel={dateLabel} onClick={() => onSelect(project)} dateActive={editingShotDate}
+      <EditRow index={index} project={project} days={days} status={status} editPrefs={editPrefs} dateLabel={dateLabel} onClick={() => onSelect(project)} dateActive={editingShotDate}
         onDateClick={(e) => { if (!project.shotAt) return; e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setPickerPos({ top: r.bottom + 4, left: r.left }); originalDateRef.current = project.shotAt; setEditingShotDate(p => !p); }}/>
     </div>
     <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
@@ -204,7 +205,7 @@ export const RetouchingCard = ({ project, onSelect, index = 0, openActionsId, se
   );
 };
 
-export const DoneCard = ({ project, editPrefs = EDIT_LIST_DEFAULTS }) => {
+export const DoneCard = ({ project, index = 0, editPrefs = EDIT_LIST_DEFAULTS }) => {
   const { revertProject, deleteProject, prefs } = useStore();
   const { t } = useLang();
   const [confirmRevert, setConfirmRevert] = useState(false);
@@ -276,7 +277,7 @@ export const DoneCard = ({ project, editPrefs = EDIT_LIST_DEFAULTS }) => {
         {/* Layer 1 — contenu */}
         <div ref={contentRef2} style={{ transform: `translateX(${-tx2}px)`, transition: ease2, padding: '5px 5px', position: 'relative', zIndex: 1, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
           {actionsOpen2 && <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} onClick={() => setActionsOpen2(false)}/>}
-          <EditRow compact project={project} days={frozenDays} status='normal' editPrefs={editPrefs} dateLabel={doneDateLabel}/>
+          <EditRow index={index} compact project={project} days={frozenDays} status='normal' editPrefs={editPrefs} dateLabel={doneDateLabel}/>
         </div>
         {/* Swipe actions */}
         <div ref={actionsRef2} style={{
@@ -296,7 +297,7 @@ export const DoneCard = ({ project, editPrefs = EDIT_LIST_DEFAULTS }) => {
   return (
     <div className="card-glow-wrap">
     <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden border-b border-adaptive" style={{ opacity: 0.5 }}>
-      <EditRow project={project} days={frozenDays} status='normal' editPrefs={editPrefs} dateLabel={doneDateLabel}/>
+      <EditRow index={index} project={project} days={frozenDays} status='normal' editPrefs={editPrefs} dateLabel={doneDateLabel}/>
     </div>
     <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
       <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? t('reactivateConfirm') : t('reactivate')}</button>

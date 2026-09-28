@@ -43,7 +43,7 @@ export const RetouchingView = ({ onSelect }) => {
         </div>}
       {done.length > 0 && <>
         <div className={isMobile ? 'px-6' : 'px-4'} style={{ paddingTop: '16px', paddingBottom: '16px', marginTop: '32px', }}><h2 className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '28px', color: '#8B9B99' }}>{t('archived')}</h2></div>
-        <div style={{ paddingBottom: '80px' }}>{done.map(p => <DoneCard key={p.id} project={p} editPrefs={editPrefs}/>)}</div>
+        <div style={{ paddingBottom: '80px' }}>{done.map((p, i) => <DoneCard key={p.id} project={p} editPrefs={editPrefs} index={retouching.length + i}/>)}</div>
       </>}
     </div>
   );
