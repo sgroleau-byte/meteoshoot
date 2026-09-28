@@ -115,7 +115,7 @@
       align-items: center;
       justify-content: center;
       background: #181b1e;
-      transition: opacity 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1);
       padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
     .splash-overlay.splash-hidden {
@@ -150,6 +150,10 @@
       animation: splashFlareReveal 0.6s ease-out 0.1s forwards, splashFlareOrg 12s ease-in-out 0.7s infinite;
       will-change: transform;
     }
+    /* Enveloppe du halo: à la sortie du splash, le halo s'épanouit (scale) pendant que le voile s'estompe. */
+    .splash-halo-wrap { position: absolute; inset: 0; pointer-events: none; z-index: 3; transform-origin: calc(50% - 200px) calc(46% - 150px); will-change: transform; }
+    .splash-overlay.splash-leaving .splash-halo-wrap { animation: splashHaloBloom 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    @keyframes splashHaloBloom { from { transform: scale(1); } to { transform: scale(2.6); } }
     .splash-halo {
       position: absolute;
       top: calc(46% - 150px);
@@ -166,6 +170,7 @@
       animation: splashHaloOrg 7s ease-in-out infinite, splashHaloBreathe 2.8s ease-in-out infinite;
     }
     @media (max-width: 768px) {
+      .splash-halo-wrap { transform-origin: calc(50% - 100px) calc(46% - 80px); }
       .splash-halo {
         width: 900px;
         height: 900px;

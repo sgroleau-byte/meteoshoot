@@ -54,7 +54,7 @@
 <!-- ── Splash Screen ── -->
 <div id="msMist"></div>
 <div class="splash-overlay" id="splashScreen">
-  <div class="splash-halo"></div>
+  <div class="splash-halo-wrap"><div class="splash-halo"></div></div>
   <div class="splash-logo-area" style="opacity:0">
     <img class="splash-flare" src="/imgProjet/splash-o.png" alt="" style="opacity:0" />
     <img class="splash-logo-img" src="/imgProjet/splash-typoMeteoshoot.png" alt="meteoshoot" />
@@ -93,9 +93,9 @@
         flare.style.transition = 'opacity 1s ease';
         document.body.appendChild(flare);
       }
-      splash.classList.add('splash-hidden');
+      splash.classList.add('splash-hidden', 'splash-leaving');
       document.getElementById('themeColor').setAttribute('content', '#181b1e');
-      setTimeout(function() { splash.remove(); }, 1000);
+      setTimeout(function() { splash.remove(); }, 1300);
       var mist = document.getElementById('msMist');
       if (mist) { mist.classList.add('lifted'); setTimeout(function() { mist.remove(); }, 1800); }
     }
