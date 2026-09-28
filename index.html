@@ -127,14 +127,21 @@
       var far = Math.sqrt(Math.pow(Math.max(cx, window.innerWidth - cx), 2) + Math.pow(Math.max(cy, window.innerHeight - cy), 2));
       var end = Math.max(8, (far * 1.1) / (0.12 * r.width));
       splash.classList.add('splash-grow');
-      // Décalage horizontal du rond sur la typo (variable CSS, différente sur téléphone), repris tel quel.
+      // Le grossissement se compose par-dessus le flottement du rond (composite « add »): aucun à-coup au
+      // départ, le rond continue de flotter en grandissant. Sans ce mode (vieux navigateurs), on remplace la
+      // transformation entière, en reprenant le décalage horizontal du rond (variable CSS --flare-dx).
+      var additive = false;
+      try { additive = typeof KeyframeEffect !== 'undefined' && ('composite' in KeyframeEffect.prototype); } catch (e) {}
       var dx = (getComputedStyle(flare).getPropertyValue('--flare-dx') || '50px').trim() || '50px';
       var frames = [];
       for (var i = 0; i <= 40; i++) {
         var t = i / 40, p = (Math.exp(GROW_K * t) - 1) / (Math.exp(GROW_K) - 1);
-        frames.push({ transform: 'translate(calc(-50% + ' + dx + '), -50%) scale(' + (1 + (end - 1) * p).toFixed(3) + ')' });
+        var sc = 'scale(' + (1 + (end - 1) * p).toFixed(3) + ')';
+        frames.push({ transform: additive ? sc : 'translate(calc(-50% + ' + dx + '), -50%) ' + sc });
       }
-      growAnim = flare.animate(frames, { duration: GROW_MS, easing: 'linear', fill: 'forwards' });
+      var opts = { duration: GROW_MS, easing: 'linear', fill: 'forwards' };
+      if (additive) opts.composite = 'add';
+      growAnim = flare.animate(frames, opts);
       growAnim.onfinish = reveal;
       setTimeout(reveal, GROW_MS + 150);
     }
