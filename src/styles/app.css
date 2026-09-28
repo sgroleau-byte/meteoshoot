@@ -118,14 +118,11 @@
       transition: opacity 0.6s ease-out;
       padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
-    /* Sortie du splash en deux temps: 1) .splash-bloom: le halo remplit l'écran, lentement puis très vite,
-       fond opaque, logo qui s'efface; 2) .splash-hidden: le voile se dissout et l'interface émerge. */
+    /* Sortie du splash: le voile se retire en fondu (voir index.html). */
     .splash-overlay.splash-hidden {
       opacity: 0;
       pointer-events: none;
     }
-    .splash-overlay.splash-bloom > *:not(.splash-halo-wrap) { animation: splashFadeOut 0.6s ease-out forwards; }
-    @keyframes splashFadeOut { from { opacity: 1; } to { opacity: 0; } }
     /* Interface retenue tant que le splash est là: les animations d'entrée attendent la révélation. */
     #root.ms-hold .animate-card-in, #root.ms-hold .ms-enter-geo, #root.ms-hold .ms-enter-nav, #root.ms-hold .day-cell, #root.ms-hold .hour-scroll { animation-play-state: paused; }
     .splash-logo-area {
@@ -156,15 +153,6 @@
       animation: splashFlareReveal 0.6s ease-out 0.1s forwards, splashFlareOrg 12s ease-in-out 0.7s infinite;
       will-change: transform;
     }
-    /* Enveloppe du halo: à la sortie du splash, le halo s'épanouit (scale) pendant que le voile s'estompe. */
-    .splash-halo-wrap { position: absolute; inset: 0; pointer-events: none; z-index: 3; transform-origin: calc(50% - 200px) calc(46% - 150px); will-change: transform; }
-    .splash-overlay.splash-bloom .splash-halo-wrap { animation: splashHaloFill 1.3s cubic-bezier(0.7, 0, 1, 0.45) forwards; }
-    @keyframes splashHaloFill { from { transform: scale(1); filter: brightness(1); } to { transform: scale(6); filter: brightness(1.35); } }
-    /* Couche « chargée » du halo, invisible au repos, qui monte pendant l'épanouissement pour que le vert
-       remplisse vraiment l'écran (le halo de repos est trop diffus une fois agrandi). */
-    .splash-halo::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle, rgba(170, 215, 208, 1) 0%, rgba(150, 200, 195, 0.55) 30%, transparent 55%); opacity: 0; }
-    .splash-overlay.splash-bloom .splash-halo::after { animation: splashHaloCharge 1.3s cubic-bezier(0.7, 0, 1, 0.45) forwards; }
-    @keyframes splashHaloCharge { from { opacity: 0; } to { opacity: 0.75; } }
     .splash-halo {
       position: absolute;
       top: calc(46% - 150px);
@@ -181,7 +169,6 @@
       animation: splashHaloOrg 7s ease-in-out infinite, splashHaloBreathe 2.8s ease-in-out infinite;
     }
     @media (max-width: 768px) {
-      .splash-halo-wrap { transform-origin: calc(50% - 100px) calc(46% - 80px); }
       .splash-halo {
         width: 900px;
         height: 900px;
