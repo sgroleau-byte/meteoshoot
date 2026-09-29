@@ -36,11 +36,17 @@ API autorisées) et les plafonds de quota.
   locale (`capacitor://localhost` sur iOS, `https://localhost` sur Android) que la restriction par sites ne
   filtre pas de façon fiable; la protection est la limitation aux cinq API et les plafonds de quota.
 
+## Garde-fous en place (29 septembre 2026)
+
+- Facturation: 0 $ de septembre 2025 à septembre 2026, aucun abus de l'ancienne clé. Alerte budgétaire
+  « Alerte 10$ » (mensuelle, courriels à 50 %, 90 % et 100 %) sur le compte de facturation.
+- Plafonds journaliers (Google Maps Platform > Quotas): Directions 500, Distance Matrix 500 éléments,
+  Geocoding (v3) 500, Maps JavaScript 1 000 chargements de carte, Places 1 000. À relever si l'usage grandit.
+- GitGuardian: incident laissé ouvert volontairement (installation de leur application GitHub refusée; la
+  détection de secrets de GitHub couvre déjà le dépôt). Sans conséquence, la clé étant révoquée.
+
 ## Reste à faire
 
-- Facturation > Rapports (filtre Maps): vérifier qu'aucun usage anormal n'a eu lieu depuis février 2026.
-  APIs et services > Quotas: fixer un plafond journalier par API.
-- GitGuardian: fermer l'incident en « Revoked » (dashboard.gitguardian.com > Incidents).
 - Recompiler les apps de test (`npm run ios`, `npm run android`): les paquets installés avant le
   29 septembre contiennent l'ancienne clé, désormais refusée. Les projets iOS et Android sont déjà
   synchronisés avec la clé native.
