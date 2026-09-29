@@ -26,9 +26,14 @@ La marque est propre à l'appareil (`localStorage`, `src/native/shootOfDay.js`),
    Distance Matrix en REST (clé native, en-tête `X-Ios-Bundle-Identifier: com.meteoshoot.app`) pour le
    trajet en direct; sinon le trajet planifié. Rafraîchissement demandé toutes les 15 minutes (iOS décide).
 
-Formats: ligne au-dessus de l'heure (« 06:41 · 18:28 · 98% · 0H26 »), rond (lever ou coucher selon
-l'orientation du projet, sinon le prochain), rectangle (soleil en gros, nom, nuages et trajet), et en
-bonus petit et moyen sur l'écran d'accueil. Sans projet marqué: « Aucun shooting marqué ».
+Formats (version du 29 septembre, après le retour de Stéphane « moins d'informations, plus gros »): deux
+widgets dans le lot. « Soleil du shooting »: la ligne au-dessus de l'heure porte le nom du projet, le rectangle
+montre le lever et le coucher sur deux lignes en gros (30 pt), le rond montre le lever ou le coucher selon
+l'orientation du projet (sinon le prochain). « Météo et trajet »: rectangle avec les nuages sur une ligne et le
+temps de trajet sur l'autre, en gros; rond avec les nuages. Sur l'écran verrouillé, on met les deux rectangles
+côte à côte (la rangée est pleine). En bonus, petit et moyen sur l'écran d'accueil (vue complète). Sans projet
+marqué: « Aucun shooting marqué ». Apple limite un rectangle à 160 par 72 points, en monochrome teinté; une
+surface plus grande et en couleurs demanderait une activité en direct (étape suivante possible).
 
 ## Projet Xcode
 
@@ -48,7 +53,6 @@ bonus petit et moyen sur l'écran d'accueil. Sans projet marqué: « Aucun shoot
 - Installer sur l'iPhone de Stéphane (câble) et tester le geste, le buzz, les trois formats sur l'écran
   verrouillé et le trajet en direct (position: l'app doit avoir la permission « Lorsque l'app est active »
   et avoir été utilisée récemment pour que le widget y ait droit).
-- Décider si le nom du projet reste dans le rectangle ou si on l'enlève pour agrandir encore les heures.
 - Console Google: restreindre la clé « MeteoShoot natif » à l'identifiant d'app iOS `com.meteoshoot.app`
   (elle est appelée en REST par le widget avec cet en-tête).
 - Plus tard: activité en direct (Dynamic Island) le jour du shooting; synchronisation de la marque entre

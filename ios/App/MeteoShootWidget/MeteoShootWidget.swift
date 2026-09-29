@@ -220,20 +220,38 @@ extension ShootEntry {
 
 // MARK: - Vues
 
-struct ShootWidgetView: View {
+// Écran verrouillé: une seule information par widget, en gros (Apple limite le rectangle à 160 par 72 points,
+// en monochrome). Le nom du projet va sur la ligne au-dessus de l'heure, le soleil dans un rectangle, la
+// météo et le trajet dans un second rectangle; l'écran d'accueil garde une vue complète.
+
+struct SunWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: ShootEntry
 
     var body: some View {
         switch family {
         case .accessoryInline:
-            InlineView(entry: entry).containerBackground(for: .widget) { Color.clear }
+            InlineNameView(entry: entry).containerBackground(for: .widget) { Color.clear }
         case .accessoryCircular:
-            CircularView(entry: entry).containerBackground(for: .widget) { Color.clear }
+            SunCircularView(entry: entry).containerBackground(for: .widget) { Color.clear }
         case .accessoryRectangular:
-            RectangularView(entry: entry).containerBackground(for: .widget) { Color.clear }
+            SunRectangularView(entry: entry).containerBackground(for: .widget) { Color.clear }
         default:
             HomeView(entry: entry, compact: family == .systemSmall).containerBackground(for: .widget) { Fmt.background }
+        }
+    }
+}
+
+struct WeatherWidgetView: View {
+    @Environment(\.widgetFamily) private var family
+    let entry: ShootEntry
+
+    var body: some View {
+        switch family {
+        case .accessoryCircular:
+            WeatherCircularView(entry: entry).containerBackground(for: .widget) { Color.clear }
+        default:
+            WeatherRectangularView(entry: entry).containerBackground(for: .widget) { Color.clear }
         }
     }
 }
@@ -248,19 +266,19 @@ struct EmptyText: View {
     }
 }
 
-struct InlineView: View {
+// Ligne au-dessus de l'heure: le nom du projet, seul.
+struct InlineNameView: View {
     let entry: ShootEntry
     var body: some View {
-        if let day = entry.day, entry.snapshot != nil {
-            let parts = [(day.sunriseText ?? "--:--") + " · " + (day.sunsetText ?? "--:--"), Fmt.cloud(day.cloudcover), entry.travelText].compactMap { $0 }
-            Label(parts.joined(separator: " · "), systemImage: Fmt.symbol(day.icon))
+        if let s = entry.snapshot {
+            Label(s.project.name.uppercased(), systemImage: Fmt.symbol(entry.day?.icon))
         } else {
             Text("METEOSHOOT · aucun shooting")
         }
     }
 }
 
-struct CircularView: View {
+struct SunCircularView: View {
     let entry: ShootEntry
     var body: some View {
         ZStack {
@@ -278,28 +296,57 @@ struct CircularView: View {
     }
 }
 
-struct RectangularView: View {
+// Rectangle « Soleil »: le lever et le coucher, deux lignes, le plus gros possible.
+struct SunRectangularView: View {
     let entry: ShootEntry
     var body: some View {
-        if let s = entry.snapshot {
-            VStack(alignment: .leading, spacing: 0) {
-                // Le lever et le coucher du soleil, en gros: l'information cherchée le plus souvent. Un seul
-                // texte (icônes incluses) pour qu'il rétrécisse d'un bloc au lieu de se tronquer.
-                let big = Font.system(size: 22, weight: .heavy, design: .rounded)
-                let small = Font.system(size: 11, weight: .semibold)
-                (Text(Image(systemName: "sunrise.fill")).font(small) + Text(" " + (entry.day?.sunriseText ?? "--:--") + "   ").font(big)
-                    + Text(Image(systemName: "sunset.fill")).font(small) + Text(" " + (entry.day?.sunsetText ?? "--:--")).font(big))
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.6)
-                    .lineLimit(1)
-                    .widgetAccentable()
-                Text(s.project.name.uppercased()).font(.system(size: 11, weight: .bold)).lineLimit(1).padding(.top, 1)
-                HStack(spacing: 4) {
-                    Image(systemName: Fmt.symbol(entry.day?.icon)); Text(Fmt.cloud(entry.day?.cloudcover))
-                    if let t = entry.travelText { Text("·").foregroundStyle(.secondary); Text(t) }
-                    if let k = entry.kmText { Text(k).foregroundStyle(.secondary) }
-                }.font(.system(size: 11, weight: .semibold)).lineLimit(1)
+        if entry.snapshot != nil {
+            VStack(alignment: .leading, spacing: -6) {
+                sunLine("sunrise.fill", entry.day?.sunriseText)
+                sunLine("sunset.fill", entry.day?.sunsetText)
             }
+            .widgetAccentable()
+        } else {
+            EmptyText()
+        }
+    }
+    private func sunLine(_ symbol: String, _ text: String?) -> some View {
+        (Text(Image(systemName: symbol)).font(.system(size: 14, weight: .semibold)) + Text(" " + (text ?? "--:--")).font(.system(size: 30, weight: .heavy, design: .rounded)))
+            .monospacedDigit()
+            .minimumScaleFactor(0.6)
+            .lineLimit(1)
+    }
+}
+
+struct WeatherCircularView: View {
+    let entry: ShootEntry
+    var body: some View {
+        ZStack {
+            AccessoryWidgetBackground()
+            if entry.snapshot != nil {
+                VStack(spacing: 1) {
+                    Image(systemName: Fmt.symbol(entry.day?.icon)).font(.system(size: 17, weight: .semibold))
+                    Text(Fmt.cloud(entry.day?.cloudcover)).font(.system(size: 13, weight: .bold, design: .rounded))
+                }.widgetAccentable()
+            } else {
+                Image(systemName: "cloud.fill").font(.system(size: 18, weight: .semibold))
+            }
+        }
+    }
+}
+
+// Rectangle « Météo et trajet »: les nuages sur une ligne, le temps de trajet sur l'autre, en gros.
+struct WeatherRectangularView: View {
+    let entry: ShootEntry
+    var body: some View {
+        if entry.snapshot != nil {
+            VStack(alignment: .leading, spacing: -6) {
+                (Text(Image(systemName: Fmt.symbol(entry.day?.icon))).font(.system(size: 14, weight: .semibold)) + Text(" " + Fmt.cloud(entry.day?.cloudcover)).font(.system(size: 30, weight: .heavy, design: .rounded)))
+                    .monospacedDigit().minimumScaleFactor(0.6).lineLimit(1)
+                (Text(Image(systemName: "car.fill")).font(.system(size: 14, weight: .semibold)) + Text(" " + (entry.travelText ?? "--")).font(.system(size: 30, weight: .heavy, design: .rounded)) + Text(entry.kmText.map { "  " + $0 } ?? "").font(.system(size: 13, weight: .semibold)))
+                    .monospacedDigit().minimumScaleFactor(0.6).lineLimit(1)
+            }
+            .widgetAccentable()
         } else {
             EmptyText()
         }
@@ -357,21 +404,36 @@ struct HomeView: View {
     }
 }
 
-// MARK: - Déclaration du widget
+// MARK: - Déclaration des widgets
 
-struct ShootWidget: Widget {
+struct SunWidget: Widget {
     let kind = "MeteoShootShootOfDay"
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
-            ShootWidgetView(entry: entry)
+            SunWidgetView(entry: entry)
         }
-        .configurationDisplayName("Shooting du jour")
-        .description("Soleil, météo et trajet du projet marqué dans MeteoShoot.")
+        .configurationDisplayName("Soleil du shooting")
+        .description("Lever et coucher du soleil au lieu du projet marqué; le nom du projet au-dessus de l'heure.")
         .supportedFamilies([.accessoryInline, .accessoryCircular, .accessoryRectangular, .systemSmall, .systemMedium])
+    }
+}
+
+struct WeatherWidget: Widget {
+    let kind = "MeteoShootWeatherTravel"
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: Provider()) { entry in
+            WeatherWidgetView(entry: entry)
+        }
+        .configurationDisplayName("Météo et trajet")
+        .description("Nuages au lieu du projet marqué et temps de trajet depuis votre position.")
+        .supportedFamilies([.accessoryCircular, .accessoryRectangular])
     }
 }
 
 @main
 struct MeteoShootWidgetBundle: WidgetBundle {
-    var body: some Widget { ShootWidget() }
+    var body: some Widget {
+        SunWidget()
+        WeatherWidget()
+    }
 }
