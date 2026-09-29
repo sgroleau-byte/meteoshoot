@@ -39,9 +39,12 @@
   <!-- Google Maps API -->
   <script src="https://maps.googleapis.com/maps/api/js?key=__GOOGLE_MAPS_KEY__&libraries=places"></script>
   <script>
+    // Plus de service worker depuis la v633.124 (ni le site, ni l'app Mac, ni l'app native n'en ont besoin).
+    // Ce nettoyage désinscrit celui que les navigateurs avaient installé et vide son cache; à retirer avec
+    // public/sw.js après quelques versions (voir CLAUDE.md).
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
-      navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());
+      navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister())).catch(() => {});
+      if (window.caches) caches.keys().then((ks) => ks.forEach((k) => caches.delete(k))).catch(() => {});
     }
   </script>
 </head>
@@ -60,7 +63,7 @@
     <img class="splash-logo-img" src="/imgProjet/splash-typoMeteoshoot.png" alt="meteoshoot" />
   </div>
   <div class="splash-subtitle" style="opacity:0">Weather-based shooting planner</div>
-  <div class="splash-version"><span class="splash-version-num">v633.123</span><span class="splash-version-by">BY DRIFT&amp;GRAIN</span></div>
+  <div class="splash-version"><span class="splash-version-num">v633.124</span><span class="splash-version-by">BY DRIFT&amp;GRAIN</span></div>
 </div>
 <script>
   // Séquence d'ouverture: le splash reste au moins 2 s (logo et halo animés). Quand l'interface est prête,

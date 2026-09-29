@@ -901,7 +901,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
 
   // Copie l'adresse du projet dans le presse-papiers (bouton à côté de la flèche Google Maps).
   // Le repli par textarea + execCommand couvre les contextes où navigator.clipboard est absent ou refusé
-  // (application installée sur iPhone, page servie sans HTTPS).
+  // (site installé en app, page servie sans HTTPS, permission refusée).
   const copyProjectAddress = async () => {
     const text = project?.address;
     if (!text) return;

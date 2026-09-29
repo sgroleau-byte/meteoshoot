@@ -464,7 +464,8 @@ export const RouteMiniMap = ({ depLat, depLng, destinations, legs, height = 340 
   return <div ref={ref} style={{ height, borderRadius: 12, overflow: 'hidden', border: '1px solid #2A2F32', background: '#15191B' }} />;
 };
 
-// Ouvre un lien Google Maps dans un nouvel onglet (contourne le blocage PWA standalone)
+// Ouvre un lien externe (Google Maps, Google Earth) dans une nouvelle fenêtre: dans le site installé en app
+// (Mac, iPhone) et dans l'app native, un simple target=_blank sur le lien est bloqué.
 export const rtOpenMap = (e) => { e.preventDefault(); e.stopPropagation(); const tmp = document.createElement('a'); tmp.href = e.currentTarget.href; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); };
 
 // Boîte hôtel : une nuitée glissée entre deux destinations d'une route.

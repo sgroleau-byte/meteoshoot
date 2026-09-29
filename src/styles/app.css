@@ -420,14 +420,6 @@
       .action-pill svg { width: 18px; height: 18px; }
     }
 
-    /* Safe area for notch iPhones */
-    @supports (padding: env(safe-area-inset-bottom)) {
-      @media (max-width: 768px) {
-        .mobile-bottom-nav {
-          /* safe area handled in inline styles */
-        }
-      }
-    }
     /* Google Maps attribution bar — transparent background */
     .gm-style > div:last-child { background: transparent !important; }
     .gm-style .gmnoprint, .gm-style .gm-style-cc { background: transparent !important; }
