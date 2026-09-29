@@ -1,55 +1,54 @@
-# Clé Google Maps: régénération, restrictions et emplacement
+# Clé Google Maps: état, restrictions et emplacement
 
-## État au 29 septembre 2026
+## Historique (29 septembre 2026)
 
-- Une seule clé Maps JavaScript, non restreinte, sert au site et aux apps natives.
-- Cette clé a été publiée dans le dépôt GitHub public depuis février 2026 (dans la page, puis dans
-  `google-maps-keys.json` à partir du 26 septembre). GitGuardian et GitHub (Sécurité > Secret scanning,
-  alerte 1) l'ont signalée le 28 septembre.
-- Depuis la v633.123, `google-maps-keys.json` n'est plus suivi par git (`.gitignore`). La compilation lit
-  d'abord les variables d'environnement `GOOGLE_MAPS_KEY_WEB` (site) et `GOOGLE_MAPS_KEY_NATIVE`
-  (apps), puis le fichier local en secours; sans l'un ni l'autre, `npm run build` échoue avec un message
-  clair. Modèle du fichier: `google-maps-keys.example.json`.
-- Sur Vercel (projets `meteoshoot` et `meteoshoot-dev`), `GOOGLE_MAPS_KEY_WEB` est définie pour la
-  production, les aperçus et le développement. Les apps natives se compilent en local, avec le fichier.
+- L'ancienne clé unique « Maps Platform API Key » (3 février 2026), sans restriction de site, a été publiée
+  dans le dépôt GitHub public depuis février 2026 (dans la page, puis dans `google-maps-keys.json` à partir
+  du 26 septembre). Signalée par GitGuardian et par GitHub (Sécurité > Secret scanning, alerte 1) le
+  28 septembre.
+- Le 29 septembre: fichier sorti du dépôt (v633.123), deux nouvelles clés créées et vérifiées, ancienne clé
+  supprimée dans la console (confirmée expirée par Google), alerte GitHub fermée en « revoked ».
+- Réécriture de l'historique git écartée (décision de Stéphane): la valeur restée dans les anciens commits
+  est inerte.
 
-Une clé Maps JavaScript est de toute façon visible dans la page servie (le navigateur en a besoin pour
-charger la carte). Sa protection n'est pas le secret mais les restrictions appliquées dans la console
-Google Cloud: référents autorisés, API autorisées, plafonds de quota. La clé exposée n'étant pas
-restreinte, elle doit être régénérée.
+## Où vivent les clés
 
-## À faire dans la console Google Cloud (par Stéphane)
+- Site (Vercel, projets `meteoshoot` et `meteoshoot-dev`): variable d'environnement `GOOGLE_MAPS_KEY_WEB`
+  (production, aperçus, développement). Après un changement de valeur: redéployer (Deployments > Redeploy
+  sur le dernier déploiement, ou un push).
+- En local: `google-maps-keys.json` à la racine, ignoré par git (modèle: `google-maps-keys.example.json`),
+  champs `web` et `native`. `vite.config.js` lit d'abord `GOOGLE_MAPS_KEY_WEB` ou `GOOGLE_MAPS_KEY_NATIVE`,
+  sinon le fichier; sans l'un ni l'autre, `npm run build` échoue avec un message clair.
+- Apps natives: `npm run build:native`, `cap:sync`, `ios`, `android` injectent le champ `native`.
 
-Console: https://console.cloud.google.com/apis/credentials (choisir le projet qui porte la clé).
+Une clé Maps JavaScript est visible dans la page servie (le navigateur en a besoin pour charger la carte).
+Sa protection n'est pas le secret mais les restrictions dans la console Google Cloud (sites autorisés,
+API autorisées) et les plafonds de quota.
 
-1. Ouvrir la clé actuelle, bouton « Régénérer la clé ». Google fournit une nouvelle valeur; l'ancienne
-   reste acceptée 24 heures, ou peut être coupée tout de suite par « Supprimer l'ancienne clé » (à faire
-   dès que le site et le fichier local sont à jour, étape 3).
-2. Coller la nouvelle valeur dans `google-maps-keys.json` (champs `web` et, pour l'instant, `native`) et
-   dans la variable `GOOGLE_MAPS_KEY_WEB` des deux projets Vercel (Settings > Environment Variables),
-   puis redéployer (Deployments > Redeploy sur le dernier déploiement, ou un push).
-3. Vérifier le site (carte d'une fiche, carte de route, autocomplétion d'adresse, géocodage d'une adresse
-   tapée, temps de trajet), puis « Supprimer l'ancienne clé » dans la console.
-4. Créer une seconde clé « MeteoShoot natif » et la coller dans le champ `native` du fichier local; les
-   apps se recompilent avec `npm run ios` et `npm run android`.
-5. Clé web, restriction « Sites web » (référents HTTP): `https://meteoshoot.com/*`,
-   `https://www.meteoshoot.com/*`, `https://meteoshoot.vercel.app/*`, `https://*.vercel.app/*` (aperçus),
-   `http://localhost:5173/*` (développement).
-6. Clé native, restriction « Sites web »: `capacitor://localhost/*` (iOS) et `https://localhost/*` (Android).
-7. Les deux clés, « Restreindre la clé » aux API utilisées: Maps JavaScript API, Places API, Geocoding
-   API, Directions API, Distance Matrix API.
-8. Facturation > Rapports, filtré sur Maps: vérifier qu'aucun usage anormal n'a eu lieu depuis
-   février 2026. APIs et services > Quotas: fixer un plafond journalier par API.
-9. Revérifier dans l'app iOS (simulateur suffit) et Android: carte, autocomplétion, géocodage, trajet.
-10. Une fois l'ancienne clé supprimée: fermer l'alerte GitHub (Sécurité > Secret scanning, alerte 1,
-    « Close as: Revoked ») et l'incident GitGuardian (« Revoked »).
+## Clés en place (console Google Cloud, projet « My First Project », APIs et services > Identifiants)
 
-Note: une restriction par référents protège contre l'usage depuis d'autres sites; elle n'empêche pas
-un usage depuis une autre app native imitant l'origine `capacitor://localhost`. D'où les plafonds.
+- « MeteoShoot web »: limitée aux cinq API utilisées (Maps JavaScript, Places, Geocoding, Directions,
+  Distance Matrix) et aux sites `https://meteoshoot.com/*`, `https://www.meteoshoot.com/*`,
+  `https://meteoshoot-dev.vercel.app/*`, `https://*.vercel.app/*` (aperçus), `http://localhost:5173/*`
+  (développement). Vérifiée le 29 septembre depuis www.meteoshoot.com et depuis localhost:5173: carte,
+  géocodage, itinéraire, temps de trajet, autocomplétion.
+- « MeteoShoot natif »: mêmes cinq API, sans restriction d'application. Les apps passent par une origine
+  locale (`capacitor://localhost` sur iOS, `https://localhost` sur Android) que la restriction par sites ne
+  filtre pas de façon fiable; la protection est la limitation aux cinq API et les plafonds de quota.
 
-## Historique git
+## Reste à faire
 
-L'ancienne clé reste dans l'historique des commits (février à septembre 2026). Réécrire l'historique
-(git filter-repo, push forcé, purge par le support GitHub) est lourd et ne retire pas les copies déjà
-faites ailleurs; la régénération rend cette valeur inerte, ce qui suffit. Décision de Stéphane le
-29 septembre 2026.
+- Facturation > Rapports (filtre Maps): vérifier qu'aucun usage anormal n'a eu lieu depuis février 2026.
+  APIs et services > Quotas: fixer un plafond journalier par API.
+- GitGuardian: fermer l'incident en « Revoked » (dashboard.gitguardian.com > Incidents).
+- Recompiler les apps de test (`npm run ios`, `npm run android`): les paquets installés avant le
+  29 septembre contiennent l'ancienne clé, désormais refusée. Les projets iOS et Android sont déjà
+  synchronisés avec la clé native.
+
+## Si une clé doit changer à nouveau
+
+1. Créer la nouvelle clé dans la console (mêmes cinq API; pour la clé web, mêmes sites), avant de
+   supprimer l'ancienne.
+2. Site: mettre à jour `GOOGLE_MAPS_KEY_WEB` sur les deux projets Vercel et redéployer. Local: mettre à jour
+   `google-maps-keys.json`. Apps: `npm run cap:sync`, puis recompiler.
+3. Vérifier (carte, autocomplétion, géocodage, trajet), puis supprimer l'ancienne clé.
