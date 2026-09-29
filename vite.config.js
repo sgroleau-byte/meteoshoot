@@ -1,13 +1,29 @@
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 // Clé Google Maps selon la cible: 'web' (site) ou 'native' (apps Capacitor, MS_TARGET=native).
-// Les deux valeurs vivent dans google-maps-keys.json (clés publiques, restreintes côté Google).
-const mapsKeys = JSON.parse(readFileSync(resolve(__dirname, 'google-maps-keys.json'), 'utf8'));
+// La valeur vient d'abord de l'environnement (GOOGLE_MAPS_KEY_WEB ou GOOGLE_MAPS_KEY_NATIVE, définies
+// sur Vercel), sinon du fichier local google-maps-keys.json, ignoré par git (modèle:
+// google-maps-keys.example.json). Une clé Maps JavaScript est visible dans la page servie: sa protection
+// est la restriction par référents et par API dans la console Google (docs/cle-google-maps.md).
 const target = process.env.MS_TARGET === 'native' ? 'native' : 'web';
-const mapsKey = mapsKeys[target];
-import react from '@vitejs/plugin-react';
+const mapsKey = readMapsKey(target);
+
+function readMapsKey(target) {
+  const envName = target === 'native' ? 'GOOGLE_MAPS_KEY_NATIVE' : 'GOOGLE_MAPS_KEY_WEB';
+  if (process.env[envName]) return process.env[envName];
+  const file = resolve(__dirname, 'google-maps-keys.json');
+  if (existsSync(file)) {
+    const key = JSON.parse(readFileSync(file, 'utf8'))[target];
+    if (key) return key;
+  }
+  throw new Error(
+    `Clé Google Maps introuvable pour la cible « ${target} »: définir la variable ${envName} ` +
+      'ou créer google-maps-keys.json à la racine (modèle: google-maps-keys.example.json).',
+  );
+}
 
 // Compilation de production de MeteoShoot (React précompilé, Tailwind compilé, dépendances embarquées).
 export default defineConfig({

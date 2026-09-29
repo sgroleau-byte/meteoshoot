@@ -7,3 +7,6 @@ supabase/.temp/
 
 # Données dérivées des compilations iPhone (tools/iphone-install.sh)
 build/
+
+# Clés Google Maps locales (valeurs réelles; modèle: google-maps-keys.example.json)
+google-maps-keys.json
