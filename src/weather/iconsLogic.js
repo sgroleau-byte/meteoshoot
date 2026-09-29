@@ -67,3 +67,20 @@ export const SHOOT_OPP_MIN = 50;
 // Fenetres de shoot (def. Stephane), en minutes autour du lever / coucher.
 // AM = 1h avant le lever a 1h apres; PM = 1h30 avant le coucher a 1h apres.
 export const SHOOT_WINDOWS = { am: { before: 60, after: 60 }, pm: { before: 90, after: 60 } };
+
+// Icône d'un jour de la bande météo (et du widget iPhone) à partir du résumé quotidien: la pluie, la neige
+// et l'orage priment; sans donnée horaire, l'icône du code météo; sinon voile ou niveau de nuages.
+export const dayIcon = (day) => {
+  const { cloudcover, icon: originalIcon, sunFraction = null, cloudLow = null } = day || {};
+  if (originalIcon === 'thunderstorm') return 'thunderstorm';
+  if (originalIcon === 'snow') return 'snow';
+  if (originalIcon === 'rain') return 'rain';
+  if (cloudcover === null || cloudcover === undefined) {
+    if (originalIcon === 'sunny') return 'sunny';
+    if (originalIcon === 'partly-cloudy') return 'partly-cloudy';
+    return originalIcon || 'cloudy';
+  }
+  const veil = veilIcon(cloudcover, cloudLow, sunFraction);
+  if (veil) return veil;
+  return cloudcoverToIcon(cloudcover);
+};

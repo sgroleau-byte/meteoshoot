@@ -12,8 +12,8 @@
   - `src/shared/` configuration Supabase et Lemon Squeezy, traductions (partagé avec les pages)
   - `src/pages/` code des pages `site/login.html`, `signup.html`, `account.html`, `dieu.html`
   - `src/styles/app.css` styles de l'application (ancien bloc `<style>`), suivi des directives Tailwind
-  - `src/native/` détection de la plateforme, géolocalisation Capacitor (natif seulement), réglages natifs au démarrage
-- `ios/` et `android/` projets Capacitor 8 (iOS avec Swift Package Manager, signature automatique équipe 89HN379C53, appId `com.meteoshoot.app`). `npm run ios` compile, synchronise et ouvre Xcode; `npm run android` idem pour Android Studio (SDK Android et JDK à installer). Le contenu web des apps vient de `dist/`, jamais modifié à la main.
+  - `src/native/` détection de la plateforme, géolocalisation Capacitor (natif seulement), réglages natifs au démarrage, shooting du jour (`shootOfDay.js`) et pont vers le widget iPhone (`widget.js`)
+- `ios/` et `android/` projets Capacitor 8 (iOS avec Swift Package Manager, signature automatique équipe 89HN379C53, appId `com.meteoshoot.app`). Côté iOS, `SceneDelegate` crée `MeteoShootViewController` (Capacitor plus le pont `WidgetBridgePlugin`) et l'extension `MeteoShootWidget` affiche le shooting du jour sur l'écran verrouillé (`docs/widget-ecran-verrouille.md`). `npm run ios` compile, synchronise et ouvre Xcode; `npm run android` idem pour Android Studio (SDK Android et JDK à installer). Le contenu web des apps vient de `dist/`, jamais modifié à la main.
 - `tools/baseline/` harnais de mesure et de comparaison visuelle (voir `verification_etape0/` dans le dossier parent pour les captures et mesures).
 - `docs/tests-appareil-iphone.md` procédure de tests sur iPhone réel.
 - `public/` fichiers servis tels quels à la racine: icônes (180, 192, 512, version DEV rose), `manifest.json`, `fonts/`, `imgProjet/`. `public/sw.js` n'est plus un service worker: depuis la v633.124 c'est un fichier de désinstallation qui, avec le nettoyage dans `index.html` et la règle d'en-têtes `/sw.js` de `vercel.json`, retire l'ancien service worker chez ceux qui l'avaient; supprimer ces trois choses vers décembre 2026.

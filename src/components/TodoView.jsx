@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { isNative } from '../native/platform.js';
+import { toggleShootOfDay } from '../native/shootOfDay.js';
+import { clearWidgetSnapshot } from '../native/widget.js';
 import ReactDOM from 'react-dom';
 import { useIsMobile } from '../hooks/useIsMobile.js';
 import { useLang } from '../i18n/LangProvider.jsx';
@@ -43,8 +45,9 @@ export const FolderAccordion = ({ name, count, isOpen, onToggle, children }) => 
 //  - SORTIR une carte de son dossier (la tirer au-dessus de l'en-tête ou sous la dernière
 //    carte): elle redevient une carte sans dossier, posée au premier niveau à l'endroit visé.
 // Tactile: appui long (380 ms) pour armer; tout mouvement avant l'armement laisse le scroll/swipe.
+// Relâcher sans bouger après l'armement (sur une carte) appelle onCardHold: le shooting du jour.
 // Souris: on arme dès 5 px. Visuel sobre: le bloc tiré est atténué + une fine ligne rouge marque la cible.
-export const useFolderDnD = ({ listRef, groupedItems, applyTodoOrder, moveToFolder, setFolderState }) => {
+export const useFolderDnD = ({ listRef, groupedItems, applyTodoOrder, moveToFolder, setFolderState, onCardHold }) => {
   const [dropLine, setDropLine] = useState(null);
   const st = useRef(null);
 
@@ -74,7 +77,7 @@ export const useFolderDnD = ({ listRef, groupedItems, applyTodoOrder, moveToFold
 
     const isTouch = e.pointerType === 'touch';
     const startX = e.clientX, startY = e.clientY;
-    let armed = false, timer = null;
+    let armed = false, moved = false, timer = null;
     // Empêche la sélection de texte native (surlignage bleu) pendant tout le geste de glisser.
     const preventSelect = (ev) => ev.preventDefault();
 
@@ -195,6 +198,7 @@ export const useFolderDnD = ({ listRef, groupedItems, applyTodoOrder, moveToFold
         if (!armed) { cleanup(); return; }
       } else {
         ev.preventDefault();
+        if (Math.abs(dx) > 6 || Math.abs(dy) > 6) moved = true;
         update(ev.clientY);
       }
     };
@@ -250,7 +254,8 @@ export const useFolderDnD = ({ listRef, groupedItems, applyTodoOrder, moveToFold
     const onUp = () => {
       cleanup();
       if (armed && st.current) {
-        commit();
+        if (isTouch && !moved && dragType !== 'folder' && onCardHold) onCardHold(blockEl.dataset.dragCard);
+        else commit();
         const blocker = (ce) => { ce.stopPropagation(); ce.preventDefault(); };
         list.addEventListener('click', blocker, { capture: true, once: true });
         setTimeout(() => { try { list.removeEventListener('click', blocker, { capture: true }); } catch (e) {} }, 80);
@@ -295,7 +300,15 @@ export const TodoView = ({ onSelect, onAddProject, addingProject, plusRef }) => 
   const [openActionsId, setOpenActionsId] = useState(null);
   const [showUpgradeFromTodo, setShowUpgradeFromTodo] = useState(false);
   const listRef = useRef(null);
-  const { onListPointerDown, dropLine } = useFolderDnD({ listRef, groupedItems, applyTodoOrder, moveToFolder, setFolderState });
+  // Appui long relâché sans bouger sur une carte (téléphone): le projet devient, ou cesse d'être, le shooting
+  // du jour, avec un retour haptique distinct de celui du glisser-déposer.
+  const onCardHold = (projectId) => {
+    const marked = toggleShootOfDay(projectId);
+    if (!marked) clearWidgetSnapshot();
+    if (isNative) Haptics.notification({ type: marked ? NotificationType.Success : NotificationType.Warning }).catch(() => {});
+    else if (navigator.vibrate) navigator.vibrate(marked ? [30, 40, 30] : 40);
+  };
+  const { onListPointerDown, dropLine } = useFolderDnD({ listRef, groupedItems, applyTodoOrder, moveToFolder, setFolderState, onCardHold });
   // Tick chaque minute pour faire avancer le compteur "il y a 3H45" de la banniere.
   // 60s suffit: la precision affichee est la minute.
   const [now, setNow] = useState(() => Date.now());

@@ -9,8 +9,12 @@ import { daysSince, formatDateShort, formatDuration, formatTime } from '../utils
 import { fetchWeather } from '../weather/api.js';
 import { calcDeparture } from '../weather/departure.js';
 import { useWeatherStatus } from '../weather/WeatherStatusProvider.jsx';
-import { StarIcon, TrashIcon } from './icons/misc.jsx';
+import { ShootCheckIcon, StarIcon, TrashIcon } from './icons/misc.jsx';
 import { WeatherRow, weatherRowDismiss } from './WeatherRow.jsx';
+import { GOOGLE_API_KEY } from '../maps/google.js';
+import { useShootOfDay } from '../native/shootOfDay.js';
+import { pushWidgetSnapshot } from '../native/widget.js';
+import { SHOOT_OPP_MIN, dayIcon } from '../weather/iconsLogic.js';
 
 export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, openActionsId, setOpenActionsId }) => {
   const { advanceProject, deleteProject } = useStore();
@@ -48,6 +52,30 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
   const sun = weather?.daily?.[0];
   const departAM = calcDeparture(sun?.sunrise, project.travelTime?.durationSeconds);
   const departPM = calcDeparture(sun?.sunset, project.travelTime?.durationSeconds);
+
+  // Shooting du jour (appui long dans la liste): le nom porte une coche dorée et, dans l'app iPhone, la carte dépose
+  // pour le widget un instantané des trois prochains jours (soleil, icône et nuages comme la bande météo,
+  // départs) avec la clé Maps native pour le temps de trajet en direct.
+  const shootOfDay = useShootOfDay();
+  const isShootOfDay = shootOfDay?.projectId === project.id;
+  useEffect(() => {
+    if (!isShootOfDay || !weather?.daily?.length) return;
+    const travel = project.travelTime?.durationSeconds || null;
+    const good = (w) => !!(w && !w.precip && w.frac != null && Math.round(w.frac * 100) >= SHOOT_OPP_MIN);
+    const departText = (sunEvent) => { const d = calcDeparture(sunEvent, travel); return d ? formatTime(d).replace(':', 'H') : null; };
+    pushWidgetSnapshot({
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      mapsKey: GOOGLE_API_KEY,
+      project: { id: project.id, name: project.name, address: project.address || null, lat: project.lat, lng: project.lng, am: !!project.orientation?.includes('AM'), pm: !!project.orientation?.includes('PM') },
+      planned: { durationSeconds: travel, distanceMeters: project.travelTime?.distanceMeters || null },
+      days: weather.daily.slice(0, 3).map((d) => ({
+        date: d.date, sunriseText: formatTime(d.sunrise), sunsetText: formatTime(d.sunset),
+        icon: dayIcon(d), cloudcover: d.cloudcover ?? null, amGood: good(d.am), pmGood: good(d.pm),
+        departAMText: departText(d.sunrise), departPMText: departText(d.sunset),
+      })),
+    });
+  }, [isShootOfDay, weather, project.id, project.name, project.address, project.lat, project.lng, project.orientation, project.travelTime]);
 
   // Couleurs adaptées au mode sombre/clair
   const colorActive = '#FAF9F7';
@@ -131,7 +159,7 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
             )}
             <div style={{ flex: 1, textAlign: 'left', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start' }}>
               <span className="font-bebas-book text-charcoal" style={{ letterSpacing: '0.04em', fontSize: '24px', lineHeight: '0.9', opacity: project.onHold ? 0.4 : 1, transition: 'opacity 0.3s' }}>
-                {project.name} {project.isContest && <StarIcon/>}
+                {project.name} {project.isContest && <StarIcon/>}{isShootOfDay && <ShootCheckIcon/>}
               </span>
             </div>
           </div>

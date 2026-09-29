@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		08A7C59000F1247C1B549B3A /* MeteoShootViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC9C618CDAC7F9E485E609E9 /* MeteoShootViewController.swift */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
@@ -15,11 +16,45 @@
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
+		93AB1C75410886DABAD4FB41 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76A4311BF6B99442CC5E446E /* WidgetKit.framework */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
+		AA4283246930BABBB781B6DB /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EC875D1B45B9ED788EABC20B /* Foundation.framework */; };
+		D06BF33327EF35B7A616C0D3 /* MeteoShootWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F6420D1F2FBC0A67C8B036B8 /* MeteoShootWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		DD9EE58856029AB6C349F26C /* WidgetBridgePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8760BAE25AD92B14989A911 /* WidgetBridgePlugin.swift */; };
+		E254F3542692F9121FD65A70 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 368C56AC945E4D2E545ABDC5 /* SwiftUI.framework */; };
+		E734AF4CB760CECA979CE52C /* MeteoShootWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 176D1ED8461DE079A5757ED7 /* MeteoShootWidget.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		CB08D22D04C6A3F8AA8D7BC7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F85D417820123AB0721562D4;
+			remoteInfo = MeteoShootWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		E6E648030B941BB4613848E5 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D06BF33327EF35B7A616C0D3 /* MeteoShootWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		176D1ED8461DE079A5757ED7 /* MeteoShootWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeteoShootWidget.swift; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
+		368C56AC945E4D2E545ABDC5 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/SwiftUI.framework; sourceTree = DEVELOPER_DIR; };
+		4A9F63CBF43AA482F8F9F48E /* MeteoShootWidget.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = MeteoShootWidget.entitlements; sourceTree = "<group>"; };
+		4E900DD001C47A04E730DF87 /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -28,8 +63,14 @@
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
+		76A4311BF6B99442CC5E446E /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/WidgetKit.framework; sourceTree = DEVELOPER_DIR; };
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
+		9B26C9F0E178D8141529F0B9 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C8760BAE25AD92B14989A911 /* WidgetBridgePlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetBridgePlugin.swift; sourceTree = "<group>"; };
+		CC9C618CDAC7F9E485E609E9 /* MeteoShootViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeteoShootViewController.swift; sourceTree = "<group>"; };
+		EC875D1B45B9ED788EABC20B /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		F6420D1F2FBC0A67C8B036B8 /* MeteoShootWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MeteoShootWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -38,6 +79,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8C418B5BC2CCFC8CF9AE6AA3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA4283246930BABBB781B6DB /* Foundation.framework in Frameworks */,
+				93AB1C75410886DABAD4FB41 /* WidgetKit.framework in Frameworks */,
+				E254F3542692F9121FD65A70 /* SwiftUI.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -50,6 +101,8 @@
 				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
 				504EC3061FED79650016851F /* App */,
 				504EC3051FED79650016851F /* Products */,
+				7481F97B95593A86DF235D6B /* Frameworks */,
+				FB0E5B74A279EEBF4DA102AA /* MeteoShootWidget */,
 			);
 			sourceTree = "<group>";
 		};
@@ -57,6 +110,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3041FED79650016851F /* App.app */,
+				F6420D1F2FBC0A67C8B036B8 /* MeteoShootWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -73,8 +127,40 @@
 				504EC3131FED79650016851F /* Info.plist */,
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
+				C8760BAE25AD92B14989A911 /* WidgetBridgePlugin.swift */,
+				CC9C618CDAC7F9E485E609E9 /* MeteoShootViewController.swift */,
+				4E900DD001C47A04E730DF87 /* App.entitlements */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		659915CF3C469D64546DD305 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				EC875D1B45B9ED788EABC20B /* Foundation.framework */,
+				76A4311BF6B99442CC5E446E /* WidgetKit.framework */,
+				368C56AC945E4D2E545ABDC5 /* SwiftUI.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		7481F97B95593A86DF235D6B /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				659915CF3C469D64546DD305 /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		FB0E5B74A279EEBF4DA102AA /* MeteoShootWidget */ = {
+			isa = PBXGroup;
+			children = (
+				176D1ED8461DE079A5757ED7 /* MeteoShootWidget.swift */,
+				9B26C9F0E178D8141529F0B9 /* Info.plist */,
+				4A9F63CBF43AA482F8F9F48E /* MeteoShootWidget.entitlements */,
+			);
+			name = MeteoShootWidget;
+			path = MeteoShootWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -87,10 +173,12 @@
 				504EC3001FED79650016851F /* Sources */,
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
+				E6E648030B941BB4613848E5 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				BD72FFF4934B8A3BC2A30E20 /* PBXTargetDependency */,
 			);
 			name = App;
 			packageProductDependencies = (
@@ -99,6 +187,23 @@
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
+		};
+		F85D417820123AB0721562D4 /* MeteoShootWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F9E444B3D12AAA962CFB3754 /* Build configuration list for PBXNativeTarget "MeteoShootWidget" */;
+			buildPhases = (
+				16BB5A21E330DE5BA690EE49 /* Sources */,
+				8C418B5BC2CCFC8CF9AE6AA3 /* Frameworks */,
+				BD76F58AB0C10CF31232AD29 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MeteoShootWidget;
+			productName = MeteoShootWidget;
+			productReference = F6420D1F2FBC0A67C8B036B8 /* MeteoShootWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -133,6 +238,7 @@
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				F85D417820123AB0721562D4 /* MeteoShootWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -151,19 +257,45 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BD76F58AB0C10CF31232AD29 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		16BB5A21E330DE5BA690EE49 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E734AF4CB760CECA979CE52C /* MeteoShootWidget.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		504EC3001FED79650016851F /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
+				DD9EE58856029AB6C349F26C /* WidgetBridgePlugin.swift in Sources */,
+				08A7C59000F1247C1B549B3A /* MeteoShootViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		BD72FFF4934B8A3BC2A30E20 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = MeteoShootWidget;
+			target = F85D417820123AB0721562D4 /* MeteoShootWidget */;
+			targetProxy = CB08D22D04C6A3F8AA8D7BC7 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		504EC30B1FED79650016851F /* Main.storyboard */ = {
@@ -299,9 +431,10 @@
 			baseConfigurationReference = 958DCC722DB07C7200EA8C5F /* debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 89HN379C53;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 89HN379C53;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -322,9 +455,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 89HN379C53;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 89HN379C53;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -337,6 +471,63 @@
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		AF5D608BBFED8D686CFA3B38 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = MeteoShootWidget/MeteoShootWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 89HN379C53;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MeteoShootWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MeteoShoot;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meteoshoot.app.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		BB0EC1FB7DBFFD303DFBE8F8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = MeteoShootWidget/MeteoShootWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 89HN379C53;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MeteoShootWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MeteoShoot;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meteoshoot.app.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
@@ -357,6 +548,15 @@
 			buildConfigurations = (
 				504EC3171FED79650016851F /* Debug */,
 				504EC3181FED79650016851F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F9E444B3D12AAA962CFB3754 /* Build configuration list for PBXNativeTarget "MeteoShootWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB0EC1FB7DBFFD303DFBE8F8 /* Release */,
+				AF5D608BBFED8D686CFA3B38 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { useIsMobile } from '../hooks/useIsMobile.js';
 import { useLang } from '../i18n/LangProvider.jsx';
 import { formatTime, getDayAbbrev, getDayMonth, isToday } from '../utils/dates.js';
-import { SHOOT_OPP_MIN, SUN_DIRECT_COLOR, cloudcoverToIcon, veilIcon } from '../weather/iconsLogic.js';
+import { SHOOT_OPP_MIN, SUN_DIRECT_COLOR, cloudcoverToIcon, dayIcon, veilIcon } from '../weather/iconsLogic.js';
 import { SMOKE_TINT, WeatherIcon } from './icons/WeatherIcon.jsx';
 
 // ===== COMPONENTS =====
@@ -56,28 +56,9 @@ export const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9, orientation
   const startIndex = todayIndex >= 0 ? todayIndex : 0;
   const sortedDaily = daily.slice(startIndex, startIndex + maxDays);
   
-  const getIconFromCloudcover = (cloudcover, originalIcon, sunFraction = null, cloudLow = null, smoke = 0) => {
-    // Precipitation from hourly data takes priority
-    if (originalIcon === 'thunderstorm') return 'thunderstorm';
-    if (originalIcon === 'snow') return 'snow';
-    if (originalIcon === 'rain') return 'rain';
-
-    // Fumee de feux: signalee par la teinte de fond (SMOKE_TINT) seulement; l'icone reste la vraie meteo.
-
-    // No hourly data at all? Use daily weathercode icon
-    if (cloudcover === null || cloudcover === undefined) {
-      if (originalIcon === 'sunny') return 'sunny';
-      if (originalIcon === 'partly-cloudy') return 'partly-cloudy';
-      return originalIcon || 'cloudy';
-    }
-
-    // Couvert en altitude mais soleil qui filtre (voile): icone soleil voile. La regle interne
-    // de veilIcon laisse l'opaque (nuages bas) reprendre le dessus si besoin.
-    const veil = veilIcon(cloudcover, cloudLow, sunFraction);
-    if (veil) return veil;
-    // Use cloudcover for sun/cloud level (hourly data available)
-    return cloudcoverToIcon(cloudcover);
-  };
+  // Choix de l'icône du jour: logique partagée avec le widget iPhone (iconsLogic.dayIcon). La fumée de feux
+  // est signalée par la teinte de fond (SMOKE_TINT) seulement; l'icône reste la vraie météo.
+  const getIconFromCloudcover = (cloudcover, icon, sunFraction = null, cloudLow = null) => dayIcon({ cloudcover, icon, sunFraction, cloudLow });
 
   const handleCellEnter = (i, e) => {
     if (window.__isDragging) return;
