@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-// LoginScreen — moved to /site/login.html, this redirects there
+// LoginScreen: moved to /site/login.html, this redirects there
 export const LoginScreen = () => {
   useEffect(() => {
     const here = window.location.pathname + window.location.search;

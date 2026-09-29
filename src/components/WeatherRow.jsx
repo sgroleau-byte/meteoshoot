@@ -253,7 +253,7 @@ export const DayPeriodIcon = ({ label, period, icon, day, hourly, sunriseHour, s
         else if (precipIcons.includes('rain')) dominantIcon = 'rain';
       }
     } else {
-      // No hourly data for this period — fallback to daily
+      // No hourly data for this period: fallback to daily
       avgCloud = day.cloudcover;
     }
   } else {

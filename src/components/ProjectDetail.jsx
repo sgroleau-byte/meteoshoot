@@ -194,11 +194,11 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     return () => { if (weatherAnimRef.current) cancelAnimationFrame(weatherAnimRef.current); };
   }, [sunHour, sunDate, weather]);
 
-  // Lens flare — 35mm prime style
+  // Lens flare: 35mm prime style
   const drawLensFlare = React.useCallback((sunScreenX, sunScreenY, canvasW, canvasH, sunAltitude) => {
     const canvas = flareCanvasRef.current;
     if (!canvas) return;
-    // Don't set canvas.width/height here — already set by caller
+    // Don't set canvas.width/height here: already set by caller
     const ctx = canvas.getContext('2d');
     
     // No flare if sun well below horizon
@@ -225,7 +225,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     
     ctx.globalCompositeOperation = 'screen';
     
-    // 1. Main sun glow — large warm bloom
+    // 1. Main sun glow: large warm bloom
     const mainR = Math.min(canvasW, canvasH) * 0.375 * intensity;
     const grad1 = ctx.createRadialGradient(sx, sy, 0, sx, sy, mainR);
     grad1.addColorStop(0, `rgba(255, 250, 230, ${0.9 * intensity})`);
@@ -404,7 +404,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     return () => { if (buildingsSaveTimer.current) clearTimeout(buildingsSaveTimer.current); };
   }, [buildings]);
 
-  // Drawing mode — add click listener on map
+  // Drawing mode: add click listener on map
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
@@ -470,7 +470,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
         clickable: false
       });
       drawingMarkersRef.current.push(glow); // reuse array for cleanup
-      // Main polygon — clickable: false so clicks pass through to the map
+      // Main polygon, with clickable: false so clicks pass through to the map
       // (otherwise concave shapes like an L are impossible: clicks inside the
       // current preview are absorbed by the polygon and never reach the map)
       drawingPolygonRef.current = new google.maps.Polygon({
@@ -725,7 +725,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       const n = bldg.polygon.length;
       if (n < 3) return;
 
-      // Draw building footprint — per-shape color
+      // Draw building footprint: per-shape color
       const shapeColor = BUILDING_COLORS[idx % BUILDING_COLORS.length];
       // Glow behind
       const glowPoly = new google.maps.Polygon({
@@ -1036,7 +1036,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     });
     mapInstanceRef.current = map;
     
-    // Reveal animation — start after tiles load
+    // Reveal animation: start after tiles load
     if (!mapRevealedRef.current) {
       google.maps.event.addListenerOnce(map, 'tilesloaded', () => {
         if (mapRevealedRef.current) return;
@@ -1091,7 +1091,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     // wheel, le survol de la carte fait défiler la page comme partout ailleurs dans le détail.
     // Le zoom natif de la carte reste neutralisé par scrollwheel: false; le drag pour déplacer
     // la carte demeure actif.
-    // No panBy — center pin is at visual center
+    // No panBy: center pin is at visual center
     map.addListener('idle', () => { const z = map.getZoom(); if (z !== mapZoom) setMapZoom(z); });
 
     // Keep center anchored during scroll-zoom (not drag)
@@ -1118,7 +1118,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       }
     });
 
-    // Night overlay — inserted into mapPane so it's BELOW polylines
+    // Night overlay: inserted into mapPane so it's BELOW polylines
     class NightOverlay extends google.maps.OverlayView {
       constructor() { super(); this.div = null; }
       onAdd() {
@@ -1142,7 +1142,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     nightOverlayRef.current = new NightOverlay();
     nightOverlayRef.current.setMap(map);
 
-    // Fixed center pin — map pans behind it
+    // Fixed center pin: map pans behind it
     if (markerRef.current) markerRef.current.setMap(null);
     markerRef.current = null;
     // Detect map pan → update adjustedPos (exploratoire, ne modifie PAS le projet)
@@ -1165,7 +1165,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     // divs, so they remain visually pinned during map movement.
 
     return () => {
-      // When skipping (drag-reposition), don't clean up anything — everything persists
+      // When skipping (drag-reposition), don't clean up anything: everything persists
       if (skipMapRecreateRef.current) return;
       sunLinesRef.current.forEach(l => l.setMap(null));
       sunLinesRef.current = [];
@@ -1182,7 +1182,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     };
   }, [project?.lat, project?.lng]);
 
-  // Switch map type without recreating — preserves overlays & zoom
+  // Switch map type without recreating: preserves overlays & zoom
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
@@ -1248,7 +1248,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
 
     // sr/ss lines drawn on canvas (below: halos, above: lines)
     
-    // Shadow pie wedge — dark gradient opposite to sun
+    // Shadow pie wedge: dark gradient opposite to sun
     const simDatePie = new Date(sunDate);
     simDatePie.setHours(Math.floor(sunHour), Math.round((sunHour % 1) * 60), 0);
     const sunPosPie = SunCalc.getPosition(simDatePie, eLat, eLng);
@@ -1320,7 +1320,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     return () => { cancelled = true; };
   }, [elevGridLat, elevGridLng]);
 
-  // Separate effect for sun position line (slider) — lightweight update
+  // Separate effect for sun position line (slider): lightweight update
   // All dynamic sun elements (yellow line, glow, current time line, sun/moon
   // dot) are drawn either on the flareCanvas or as fixed-viewport divs,
   // mutated DIRECTLY via refs (no setState, no Google Maps Polyline). They
@@ -1363,7 +1363,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     const inTerrainShadow = isTerrainShadow(terrainProfileRef.current, bearing, sunAltDeg);
     setTerrainShadow(inTerrainShadow);
 
-    // Lens flare + shadow wedge — project to screen
+    // Lens flare + shadow wedge: project to screen
     const overlay = nightOverlayRef.current;
     if (overlay && overlay.getProjection() && flareCanvasRef.current) {
       const proj = overlay.getProjection();
@@ -1380,7 +1380,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
         sunTimePillsRef.current.forEach(el => el.remove());
         sunTimePillsRef.current = [];
 
-        // Compute line length in pixels — used by sr/ss white lines AND by
+        // Compute line length in pixels: used by sr/ss white lines AND by
         // the yellow sun line + current time line + sun/moon dot below.
         // Same formula as before, sorti du block sr/ss pour partage.
         const rDeg = (() => {
@@ -1401,7 +1401,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
           y: centerPx.y + Math.sin(sunScrAngle) * wLinePx
         };
 
-        // Sunrise & Sunset line halos — drawn first (behind white lines)
+        // Sunrise & Sunset line halos: drawn first (behind white lines)
         if (sunTimes.sunrise && sunTimes.sunset) {
           const srAzH = SunCalc.getPosition(sunTimes.sunrise, eLat, eLng).azimuth;
           const ssAzH = SunCalc.getPosition(sunTimes.sunset, eLat, eLng).azimuth;
@@ -1446,7 +1446,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
           drawLineHalo(ssScrH, 30, 47, 63);
         }
         
-        // Shadow wedge — smooth radial gradient clamped to sunrise/sunset
+        // Shadow wedge: smooth radial gradient clamped to sunrise/sunset
         const altDeg = sunPos.altitude * 180 / Math.PI;
         if (altDeg > 0 && !isNight) {
           const sunBearingDeg = (sunPos.azimuth * 180 / Math.PI + 180) % 360;
@@ -1482,9 +1482,9 @@ export const ProjectDetail = ({ projectId, onClose }) => {
           const distRightToSr = angleDist(rightEdge, srScreenAngle);
           const distRightToSs = angleDist(rightEdge, ssScreenAngle);
           
-          // Compute how close shadow center is to sr/ss — fade opacity
+          // Compute how close shadow center is to sr/ss: fade opacity
           const minDist = Math.min(distToSr, distToSs);
-          const fadeZone = 45 * Math.PI / 180; // fade over 45 degrees — very gradual
+          const fadeZone = 45 * Math.PI / 180; // fade over 45 degrees: very gradual
           const edgeFade = minDist < fadeZone ? Math.pow(minDist / fadeZone, 0.7) : 1;
           const baseOpacity = 0.5 * edgeFade;
           
@@ -1508,7 +1508,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
           ctx.closePath();
           ctx.clip();
           
-          // Smooth radial gradient — soft and blurry
+          // Smooth radial gradient: soft and blurry
           const grad = ctx.createRadialGradient(centerPx.x, centerPx.y, circleR, centerPx.x, centerPx.y, maxR);
           grad.addColorStop(0, `rgba(0,0,0,${0.40 * edgeFade})`);
           grad.addColorStop(0.1, `rgba(0,0,0,${0.28 * edgeFade})`);
@@ -1539,7 +1539,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
           ctx.restore();
         }
         
-        // White sr/ss lines — on top of shadow + halos
+        // White sr/ss lines: on top of shadow + halos
         // (uses wLinePx + circOff already computed at top of block)
         if (sunTimes.sunrise && sunTimes.sunset) {
           const srAzW = SunCalc.getPosition(sunTimes.sunrise, eLat, eLng).azimuth;
@@ -1579,7 +1579,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
           if (sunTimes.sunset) drawTimePill(ssScrW, formatHM(sunTimes.sunset), 2, -3);
         }
 
-        // === Dynamic sun overlays — drawn on the SAME canvas, fixed to viewport ===
+        // === Dynamic sun overlays: drawn on the SAME canvas, fixed to viewport ===
         // Yellow line glow (or moon glow)
         ctx.save();
         ctx.lineCap = 'round';
@@ -1598,7 +1598,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
         ctx.stroke();
         ctx.restore();
 
-        // Yellow line (or blue at night) — main sun position line at current sunHour
+        // Yellow line (or blue at night): main sun position line at current sunHour
         ctx.save();
         ctx.strokeStyle = lineColor;
         ctx.globalAlpha = lineOpacity;
@@ -1628,7 +1628,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
           }
         }
 
-        // === Sun/Moon dot — positioned in pixels, fixed to viewport ===
+        // === Sun/Moon dot: positioned in pixels, fixed to viewport ===
         // Mutates refs.current.style directly, no React re-render.
         if (sunDotContainerRef.current && sunDotInnerRef.current && sunDotHaloRef.current) {
           const dotContainer = sunDotContainerRef.current;
@@ -1671,7 +1671,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
             dotInner.style.boxShadow = '0 0 6px 2px rgba(255,226,107,0.9), 0 0 14px 4px rgba(255,226,107,0.5), 0 0 3px 1px rgba(255,255,255,0.8)';
             dotInner.style.border = '2px solid rgba(255,255,255,0.6)';
           }
-          // Motion blur — applied instantly, cleared instantly by JS.
+          // Motion blur: applied instantly, cleared instantly by JS.
           // No CSS transition: the blur tracks the dot position frame by
           // frame (visible while moving, gone at rest), no lag, no smear.
           if (!isNaN(prevLeft) && !isNaN(prevTop)) {
@@ -1859,7 +1859,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
 
   return (
     <div className="pt-6 animate-fade-in" style={isMobile ? { paddingTop: 'calc(24px + 25px)', paddingBottom: 'calc(130px + env(safe-area-inset-bottom))' } : { paddingTop: '75px', paddingBottom: '32px' }}>
-      {/* Bande météo + infos — même layout que l'accueil */}
+      {/* Bande météo + infos: même layout que l'accueil */}
       <div className={`border-b border-adaptive py-4 ${isMobile ? 'px-4' : 'px-8'} overflow-hidden`}>
         <button onClick={onClose} className="text-charcoal-muted hover:text-charcoal transition-colors mb-4" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -1892,21 +1892,21 @@ export const ProjectDetail = ({ projectId, onClose }) => {
               <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
                 <span style={{ color: colorInactive }}>{t('sun')}</span>
                 <span style={{ color: project.orientation?.includes('AM') ? colorActive : colorInactive }}>
-                  AM {sun ? formatTime(sun.sunrise) : '—'}
+                  AM {sun ? formatTime(sun.sunrise) : '-'}
                 </span>
                 <span style={{ color: project.orientation?.includes('PM') ? colorActive : colorInactive }}>
-                  PM {sun ? formatTime(sun.sunset) : '—'}
+                  PM {sun ? formatTime(sun.sunset) : '-'}
                 </span>
               </div>
               <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
                 <span style={{ color: colorInactive }}>{t('travel')}</span>
-                <span style={{ color: project.travelTime?.durationSeconds ? colorActive : colorInactive }}>{project.travelTime?.durationSeconds ? formatDuration(project.travelTime.durationSeconds) : '—'}</span>
+                <span style={{ color: project.travelTime?.durationSeconds ? colorActive : colorInactive }}>{project.travelTime?.durationSeconds ? formatDuration(project.travelTime.durationSeconds) : '-'}</span>
                 {project.travelTime?.distanceMeters > 0 ? <span style={{ color: colorCharcoal, letterSpacing: "0.1em", marginTop: "-3px", fontSize: "inherit" }}>{Math.round(project.travelTime.distanceMeters / 1000)} KM</span> : <span style={{ color: 'transparent' }}>&nbsp;</span>}
               </div>
               <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
                 <span style={{ color: colorInactive }}>{t('depart')}</span>
-                <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '—'}</span>
-                <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '—'}</span>
+                <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '-'}</span>
+                <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '-'}</span>
               </div>
               <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
                 <span style={{ color: colorInactive }}>{t('created')}</span>
@@ -1947,13 +1947,13 @@ export const ProjectDetail = ({ projectId, onClose }) => {
               </div>
               <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
                 <span style={{ color: colorInactive }}>{t('travel')}</span>
-                <span style={{ color: project.travelTime?.durationSeconds ? colorActive : colorInactive }}>{project.travelTime?.durationSeconds ? formatDuration(project.travelTime.durationSeconds) : '—'}</span>
+                <span style={{ color: project.travelTime?.durationSeconds ? colorActive : colorInactive }}>{project.travelTime?.durationSeconds ? formatDuration(project.travelTime.durationSeconds) : '-'}</span>
                 {project.travelTime?.distanceMeters > 0 ? <span style={{ color: colorCharcoal, letterSpacing: '0.1em', marginTop: '-5px' }} className="text-lg">{Math.round(project.travelTime.distanceMeters / 1000)} KM</span> : <span style={{ color: 'transparent' }}>&nbsp;</span>}
               </div>
               <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
                 <span style={{ color: colorInactive }}>{t('depart')}</span>
-                <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '—'}</span>
-                <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '—'}</span>
+                <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '-'}</span>
+                <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '-'}</span>
               </div>
               <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive">
                 <span style={{ color: colorInactive }}>{t('created')}</span>
@@ -1984,7 +1984,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
         )}
       </div>
 
-      {/* Météo horaire — redesigned */}
+      {/* Météo horaire: redesigned */}
       {(!isMobile || (project?.lat && project?.lng)) && <div className={`${isMobile ? 'pl-4 pr-0' : 'px-8 md:px-12'} border-b border-adaptive`}>
         <div className="pt-3 pb-1">
           <span className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('hourlyWeather')}</span>
@@ -1992,11 +1992,11 @@ export const ProjectDetail = ({ projectId, onClose }) => {
         {renderHourlyWeather()}
       </div>}
 
-      {/* Édition + Carte — layout with map bottom-right */}
+      {/* Édition + Carte: layout with map bottom-right */}
       <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} pt-6`} style={{ position: 'relative' }}>
         <div className={`flex gap-8 ${isMobile ? 'flex-col' : 'flex-nowrap'} items-start`} style={isMobile ? {} : {}}>
           
-          {/* Colonne gauche — Édition */}
+          {/* Colonne gauche: Édition */}
           <div style={isMobile ? {} : { width: '700px', flexShrink: 0 }} className={`${isMobile ? 'w-full' : ''} space-y-5`}>
             {/* Address inputs with box style like modal */}
             <div>
@@ -2125,7 +2125,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
             </div>
           </div>
 
-          {/* Colonne droite — Carte Google Maps interactive, square, bottom-right */}
+          {/* Colonne droite: Carte Google Maps interactive, square, bottom-right */}
           <div className={`${isMobile ? 'w-full' : ''} flex flex-col`} style={{ minHeight: isMobile ? '450px' : undefined, height: isMobile ? undefined : '800px', order: isMobile ? -1 : 0, flex: isMobile ? undefined : '1 0 auto', position: isMobile ? undefined : 'sticky', top: isMobile ? undefined : '20px', alignSelf: isMobile ? undefined : 'flex-start' }}>
             {project.lat && project.lng ? (
               <>
@@ -2197,7 +2197,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                     return segments;
                   })();
 
-                  // Glow color logic — smooth morphing
+                  // Glow color logic: smooth morphing
                   const lerp = (a, b, t) => a + (b - a) * Math.max(0, Math.min(1, t));
                   const hexLerp = (hex1, hex2, t) => {
                     const r1 = parseInt(hex1.slice(1,3),16), g1 = parseInt(hex1.slice(3,5),16), b1 = parseInt(hex1.slice(5,7),16);
@@ -2240,7 +2240,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                   }
                   
                   const thumbLeft = `${((sunHourDisplay - sliderMin) / sliderRange) * 100}%`;
-                  // Lines stay at fixed 20% / 80% — the slider range
+                  // Lines stay at fixed 20% / 80%: the slider range
                   // computed above already maps srTime exactly to 20% and
                   // ssTime to 80%.
                   const srLeft = '20%';
@@ -2298,7 +2298,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                       pointerEvents: 'none'
                     }}>
                       
-                      {/* Slider track area — centered vertically in 172px zone */}
+                      {/* Slider track area: centered vertically in 172px zone */}
                       {isMobile && <div
                         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'auto', zIndex: 3, touchAction: 'none', padding: '0 16px' }}
                         onTouchStart={e => {
@@ -2316,7 +2316,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                           setSunHour(magneticSunHour(sliderMin + pct * sliderRange));
                         }}
                       />}
-                      {/* z:1 — Glow + wisps (back) */}
+                      {/* z:1 (back): glow + wisps */}
                       <div style={{
                         position: 'absolute',
                         top: '50%',
@@ -2337,7 +2337,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                         <div style={{ position: 'absolute', top: '50%', left: '10%', width: '100px', height: '30px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}28 0%, ${glowColor}0a 50%, transparent 75%)`, filter: 'blur(8px)', animation: 'vaporDrift1 6s ease-in-out infinite', animationDelay: '-2s', opacity: 0.4 }}/>
                         <div style={{ position: 'absolute', top: '50%', left: '70%', width: '130px', height: '45px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}1a 0%, ${glowColor}08 50%, transparent 75%)`, filter: 'blur(16px)', animation: 'vaporDrift2 16s ease-in-out infinite', animationDelay: '-5s', opacity: 0.35 }}/>
                       </div>}
-                      {/* z:4 — Slider thumb (front) */}
+                      {/* z:4 (front): slider thumb */}
                       <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, transform: 'translateY(-50%)', zIndex: 4, padding: isMobile ? '0 16px' : 0 }}>
                         <input
                           type="range"
@@ -2378,9 +2378,9 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                           {t('monthAbbrev')[sunDate.getMonth()]} {sunDate.getDate()}
                         </span>
                       </div>
-                      {/* Terrain shadow alert — text top-left + red band on filet */}
+                      {/* Terrain shadow alert: text top-left + red band on filet */}
                       {shadowSegments.length > 0 && showSunLines && <>
-                        {/* Label top-left — only when slider is in shadow zone */}
+                        {/* Label top-left: only when slider is in shadow zone */}
                         {terrainShadow && <div style={{
                           position: 'absolute', top: `${Math.round(8 * S)}px`, left: 0, right: 0,
                           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: `${Math.round(6 * S)}px`,
@@ -2393,7 +2393,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                             OMBRE TERRAIN POSSIBLE
                           </span>
                         </div>}
-                        {/* Red band(s) on filet line — clamped between sunrise (20%) and sunset (80%) */}
+                        {/* Red band(s) on filet line: clamped between sunrise (20%) and sunset (80%) */}
                         {shadowSegments.map((seg, i) => {
                           const clampStart = Math.max(seg.startPct, 20);
                           const clampEnd = Math.min(seg.endPct, 80);
@@ -2442,12 +2442,12 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                 <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 5, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'transparent', border: '4px solid #ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.5)' }}/>
                 </div>
-                {/* Sun/Moon dot — fixed to viewport, mutated via refs (no React re-render) */}
+                {/* Sun/Moon dot: fixed to viewport, mutated via refs (no React re-render) */}
                 <div ref={sunDotContainerRef} style={{ position: 'absolute', pointerEvents: 'none', zIndex: 4, display: 'none' }}>
                   <div ref={sunDotHaloRef} style={{ position: 'absolute', borderRadius: '50%', display: 'none' }}/>
                   <div ref={sunDotInnerRef} style={{ position: 'absolute', borderRadius: '50%' }}/>
                 </div>
-                {/* Update address button — visible only when map has been dragged */}
+                {/* Update address button: visible only when map has been dragged */}
                 {adjustedPos && (
                   <div style={{ position: 'absolute', bottom: `${isMobile ? 40 : 200}px`, left: '50%', transform: 'translateX(-50%)', zIndex: 15 }}>
                     <button onClick={async () => {
@@ -2539,7 +2539,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                 {/* Mobile: small round pill top-right, opens menu on click */}
                 {isMobile && <>
                     {/* Small trigger pill */}
-                    {/* Small trigger pill — hidden when menu open */}
+                    {/* Small trigger pill: hidden when menu open */}
                     {!mapMenuOpen && <div onClick={() => setMapMenuOpen(true)} style={{
                       position: 'absolute', top: `${Math.round(88 * 0.75) + 21}px`, right: '12px', zIndex: 14,
                       backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
@@ -2657,7 +2657,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                     </div>
                   );
                 })()}
-                {/* Drawing mode hint — near the polygon */}
+                {/* Drawing mode hint: near the polygon */}
                 {drawingMode && (
                   <div style={{ position: 'absolute', 
                     bottom: '14px', left: '50%', transform: 'translateX(-50%)',
@@ -2680,7 +2680,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                 )}
                 {/* Date wheel picker */}
                 {showDatePicker && <DateWheelPicker date={sunDate} onChange={setSunDate} onClose={() => setShowDatePicker(false)} />}
-                {/* Position auto-updates on map pan — no button needed */}
+                {/* Position auto-updates on map pan: no button needed */}
               </div>
               </>
             ) : (
@@ -2697,7 +2697,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
         <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('files')}</label>
         {projectFiles.length > 0 && <span className="font-bebas-light" style={{ fontSize: '14px', color: '#404A48', letterSpacing: '0.04em', marginLeft: '12px' }}>{totalFilesMB.toFixed(1)} / {MAX_PROJECT_FILES_MB} MB</span>}
 
-        {/* Upload zone — desktop only, before files */}
+        {/* Upload zone: desktop only, before files */}
         {!isMobile && project?.status !== 'done' && (
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -2728,7 +2728,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
           </div>
         )}
 
-        {/* Files list — below upload zone */}
+        {/* Files list: below upload zone */}
         {projectFiles.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '12px' }}>
             {projectFiles.map(f => {

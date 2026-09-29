@@ -30,7 +30,7 @@ export const SubscriptionProvider = ({ children }) => {
         .single();
 
       if (error && error.code === 'PGRST116') {
-        // No profile found — create one (fallback for users created before trigger).
+        // No profile found: create one (fallback for users created before trigger).
         // Les colonnes d'abonnement ne sont plus modifiables par le client (droits par colonne):
         // elles prennent leurs valeurs par défaut en base (free / active).
         const { data: newProfile } = await supabase

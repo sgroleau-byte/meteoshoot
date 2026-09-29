@@ -10,7 +10,7 @@ import { SMOKE_TINT, WeatherIcon } from '../icons/WeatherIcon.jsx';
 import { WeatherRow } from '../WeatherRow.jsx';
 
 // ============================================================
-// ROUTE — planification de déplacements (maison canonique)
+// ROUTE: planification de déplacements (maison canonique)
 // ============================================================
 export const RT_CARD = { background: '#23282A', border: '1px solid #2E3437', borderRadius: 14, padding: 14 };
 // Carte hôtel : fond plus clair que les arrêts pour la repérer d'un coup d'œil dans la liste.
@@ -44,7 +44,7 @@ export const RouteDateSelects = ({ value, onChange }) => {
   );
 };
 
-// Bande météo horaire — exactement le même rendu que le détail d'un projet.
+// Bande météo horaire: exactement le même rendu que le détail d'un projet.
 export const RouteHourly = ({ weather }) => {
   const { t } = useLang();
   const getIconFromCloudcover = (cc, origIcon, isNight = false, sunFraction = null, cloudLow = null, smoke = 0) => {
@@ -851,7 +851,7 @@ export const RouteView = () => {
     </div>
   );
 
-  // iPhone : une colonne — liste, puis détail plein écran avec retour.
+  // iPhone : une colonne (liste, puis détail plein écran avec retour).
   if (isMobile) {
     return (
       <div style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 90, paddingTop: 'calc(16px + env(safe-area-inset-top))' }}>

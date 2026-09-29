@@ -90,7 +90,7 @@ export const Header = ({ onChangeView, onAddProject }) => {
     return () => window.removeEventListener('scroll', onScroll);
   }, [isMobile]);
 
-  // Desktop nav bar — hooks must be before any conditional return
+  // Desktop nav bar: hooks must be before any conditional return
   const navContainerRef = useRef(null);
   const navSpanRefs = useRef({});
   const [barStyle, setBarStyle] = useState({ left: 0, width: 0 });
@@ -122,7 +122,7 @@ export const Header = ({ onChangeView, onAddProject }) => {
     // FOUT: au reload, la largeur du souligné était mesurée avec la police de
     // secours (plus large) avant que Bebas soit appliquée, d'où un souligné
     // trop large jusqu'au premier clic. On ne mesure qu'une fois les polices
-    // prêtes ET la police du nav (Bebas Neue) réellement chargée — plus fiable
+    // prêtes ET la police du nav (Bebas Neue) réellement chargée: plus fiable
     // que document.fonts.ready seul sur WebKit quand la police est en cache.
     // Même fonction measure() que le repositionnement au clic.
     const initial = () => {

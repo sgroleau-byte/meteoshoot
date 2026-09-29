@@ -84,7 +84,7 @@ const RevenuePanel = ({ revenue }) => {
     return new Intl.NumberFormat('fr-CA', { style: 'currency', currency: revenue.currency || 'CAD' }).format(amount);
   };
   const formatDate = (d) => {
-    if (!d) return '—';
+    if (!d) return '-';
     const date = new Date(d);
     return `${date.getDate()} ${TRANSLATIONS.fr.monthAbbrev[date.getMonth()]} ${date.getFullYear()}`;
   };
@@ -141,7 +141,7 @@ const RevenuePanel = ({ revenue }) => {
 // ===== USERS TABLE =====
 const UsersTable = ({ users, onTierChange }) => {
   const formatDate = (d) => {
-    if (!d) return '—';
+    if (!d) return '-';
     const date = new Date(d);
     return `${date.getDate()} ${TRANSLATIONS.fr.monthAbbrev[date.getMonth()]} ${date.getFullYear()}`;
   };
@@ -173,10 +173,10 @@ const UsersTable = ({ users, onTierChange }) => {
             )}
           </div>
           <div className="hide-mobile" style={{ color: '#333' }}>
-            {u.full_name || '—'}
+            {u.full_name || '-'}
           </div>
           <div className="hide-mobile" style={{ color: '#555', fontSize: '13px' }}>
-            {u.sector || '—'}
+            {u.sector || '-'}
           </div>
           <div>
             <select

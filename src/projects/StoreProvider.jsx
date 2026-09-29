@@ -179,7 +179,7 @@ export const StoreProvider = ({ children }) => {
     syncData();
   }, [user]);
 
-  // Realtime subscription — sync across devices
+  // Realtime subscription: sync across devices
   useEffect(() => {
     if (!user || !synced) return;
     const channel = supabase.channel('projects-realtime')

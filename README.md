@@ -1,19 +1,25 @@
 # MeteoShoot
 
-Weather-based shooting planner for photographers and videographers.
+Weather-based shooting planner for photographers and videographers: www.meteoshoot.com, plus native iPhone and Android apps.
 
 ## Deployment
 
-- **Production**: `main` branch → auto-deploys to Vercel
-- **Preview**: `dev` branch → generates preview URL for testing
+- Production: the `main` branch is deployed automatically to Vercel.
+- Preview: the `dev` branch gets preview deployments on Vercel.
 
-## Files
+## Structure
 
-- `index.html` — Main application
-- `sw.js` — Service worker for PWA/caching
-- `manifest.json` — PWA manifest
-- `icon-*.png` — App icons
+- `index.html` and `site/`: application shell and account pages (login, signup, account).
+- `src/`: application code (React, compiled with Vite).
+- `public/`: static files served as is (icons, manifest, fonts, images).
+- `ios/` and `android/`: native apps (Capacitor).
+- `docs/`: project notes, in French.
+
+## Commands
+
+- `npm install`, then `npm run dev` (port 5173), `npm run build`, `npm run lint`.
+- `npm run ios` and `npm run android`: native builds.
 
 ## Version
 
-Current: v633.37
+Shown on the splash screen and in Preferences; see `CLAUDE.md` for the versioning rule.

@@ -156,7 +156,7 @@ const SignupScreen = () => {
         setError(signUpError.message || t('signupError'));
         setSending(false);
       } else if (data?.user?.identities?.length === 0) {
-        // Email already exists — Supabase returns empty identities
+        // Email already exists: Supabase returns empty identities
         setError(t('emailAlreadyExists'));
         setSending(false);
       } else {
@@ -307,7 +307,7 @@ const SignupScreen = () => {
               style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', cursor: 'pointer', color: sector ? '#ffffff' : 'rgba(255,255,255,0.5)' }}
               className="login-input"
             >
-              <option value="" style={{ background: '#1e2224', color: 'rgba(255,255,255,0.5)' }}>—</option>
+              <option value="" style={{ background: '#1e2224', color: 'rgba(255,255,255,0.5)' }}>-</option>
               {t('sectorOptions').map(opt => (
                 <option key={opt} value={opt} style={{ background: '#1e2224', color: '#ffffff' }}>{opt}</option>
               ))}

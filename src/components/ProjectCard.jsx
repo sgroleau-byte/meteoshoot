@@ -104,16 +104,16 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
       <div ref={cardRef} data-open={actionsOpen} data-project-id={project.id} className={isFirstMount.current ? 'animate-card-in' : ''}
         style={{ position: 'relative', margin: '0 12px', marginBottom: '40px', ...(isFirstMount.current ? { animationDelay: `${0.05 + index * 0.05}s` } : {}), WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
       >
-        {/* Layer 2 — fond (coins droits) + halos + contours flous */}
+        {/* Layer 2: fond (coins droits) + halos + contours flous */}
         <div style={{ position: 'absolute', top: 0, left: '-40px', right: 0, bottom: '-15px', borderRadius: '0px', overflow: 'hidden', background: 'rgba(0,0,0,0.14)', WebkitMaskImage: 'linear-gradient(to right, black, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', WebkitMaskComposite: 'destination-in', maskImage: 'linear-gradient(to right, black, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', maskComposite: 'intersect', pointerEvents: 'none' }}>
           <div style={{ position: 'absolute', left: '50%', bottom: '-350px', width: '700px', height: '500px', borderRadius: '50%', background: 'radial-gradient(ellipse 60% 45%, rgba(100,200,190,0.6) 0%, rgba(100,200,190,0.3) 40%, rgba(100,200,190,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translateX(-50%)' }}/>
           <div style={{ position: 'absolute', left: '-400px', bottom: '-400px', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(251,227,127,0.4) 0%, rgba(251,227,127,0.1) 40%, rgba(251,227,127,0) 70%)', pointerEvents: 'none' }}/>
         </div>
-        {/* Layer 1.5 — masque (coins droits) + halo blanc central */}
+        {/* Layer 1.5: masque (coins droits) + halo blanc central */}
         <div ref={haloWhiteRef} style={{ position: 'absolute', top: '-5px', left: '-40px', right: 0, bottom: '-5px', borderRadius: '0px', overflow: 'hidden', pointerEvents: 'none' }}>
           <div style={{ position: 'absolute', left: '-500px', top: '50%', transform: 'translateY(-50%)', width: '660px', height: '660px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 40%, rgba(255,255,255,0) 70%)', pointerEvents: 'none' }}/>
         </div>
-        {/* Layer 1 — contenu */}
+        {/* Layer 1: contenu */}
         <div ref={contentRef} style={{ transform: `translateX(${-tx}px)`, transition: ease, padding: '5px 5px', position: 'relative', zIndex: 1, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
           {actionsOpen && (
             <div style={{ position: 'absolute', inset: 0, zIndex: 10 }}
@@ -197,22 +197,22 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
           <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive" style={{ minWidth: '85px' }}>
             <span style={{ color: colorInactive }}>{t('sun')}</span>
             <span style={{ color: (project.orientation?.includes('AM') && sun) ? colorActive : colorInactive }}>
-              AM {sun ? formatTime(sun.sunrise) : '—'}
+              AM {sun ? formatTime(sun.sunrise) : '-'}
             </span>
             <span style={{ color: (project.orientation?.includes('PM') && sun) ? colorActive : colorInactive }}>
-              PM {sun ? formatTime(sun.sunset) : '—'}
+              PM {sun ? formatTime(sun.sunset) : '-'}
             </span>
           </div>
           <div className="flex flex-col justify-center pl-2 ml-6 border-l border-adaptive" style={{ minWidth: '80px' }}>
             <span style={{ color: colorInactive }}>{t('travel')}</span>
-            <span style={{ color: project.travelTime?.durationSeconds ? colorActive : colorInactive }}>{project.travelTime?.durationSeconds ? formatDuration(project.travelTime.durationSeconds) : '—'}</span>
+            <span style={{ color: project.travelTime?.durationSeconds ? colorActive : colorInactive }}>{project.travelTime?.durationSeconds ? formatDuration(project.travelTime.durationSeconds) : '-'}</span>
             {project.travelTime?.distanceMeters > 0 ? <span style={{ color: colorCharcoal, letterSpacing: '0.1em', marginTop: '-5px' }} className="text-lg">{Math.round(project.travelTime.distanceMeters / 1000)} KM</span> : <span style={{ color: 'transparent' }}>&nbsp;</span>}
           </div>
           <div className="flex flex-col justify-center pl-2 ml-6 border-l border-adaptive" style={{ minWidth: '75px' }}>
             {/* Deux lignes comme la colonne SOLEIL: départ du matin (lever) puis du soir (coucher), atténuées selon l'orientation. */}
             <span style={{ color: colorInactive }}>{t('depart')}</span>
-            <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '—'}</span>
-            <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '—'}</span>
+            <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '-'}</span>
+            <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '-'}</span>
           </div>
           <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive" style={{ minWidth: '120px' }}>
             <span style={{ color: colorInactive }}>{t('created')}</span>

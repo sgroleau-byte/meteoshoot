@@ -371,7 +371,7 @@
 
     /* ===== MOBILE RESPONSIVE ===== */
     @media (max-width: 768px) {
-      /* Bottom tab bar spacing — extra for browser chrome */
+      /* Bottom tab bar spacing: extra for browser chrome */
       body { padding-bottom: 120px; }
       
       /* Info panel: horizontal scroll on mobile */
@@ -420,7 +420,7 @@
       .action-pill svg { width: 18px; height: 18px; }
     }
 
-    /* Google Maps attribution bar — transparent background */
+    /* Google Maps attribution bar: transparent background */
     .gm-style > div:last-child { background: transparent !important; }
     .gm-style .gmnoprint, .gm-style .gm-style-cc { background: transparent !important; }
     .gm-style a[href*="google"], .gm-style .gm-style-cc a { color: rgba(255,255,255,0.3) !important; font-size: 9px !important; }

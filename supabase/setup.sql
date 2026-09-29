@@ -163,7 +163,7 @@ CREATE POLICY "Users insert own files dev" ON project_files_dev FOR INSERT WITH 
 CREATE POLICY "Users update own files dev" ON project_files_dev FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Users delete own files dev" ON project_files_dev FOR DELETE USING (auth.uid() = user_id);
 
--- 13. Admin RPC functions (SECURITY DEFINER — bypass RLS, admin email check inside)
+-- 13. Admin RPC functions (SECURITY DEFINER: bypass RLS, admin email check inside)
 
 -- List all users with profile + project count
 CREATE OR REPLACE FUNCTION admin_get_all_users()
