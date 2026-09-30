@@ -8,7 +8,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         guard let windowScene = scene as? UIWindowScene else { return }
 
         window = UIWindow(windowScene: windowScene)
-        // Contrôleur Capacitor de l'app, qui enregistre en plus le pont vers le widget (WidgetBridgePlugin).
+        // Contrôleur Capacitor de l'app, qui enregistre en plus le pont vers l'activité en direct (ShootActivityPlugin).
         window?.rootViewController = MeteoShootViewController()
         window?.makeKeyAndVisible()
 

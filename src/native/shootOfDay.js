@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 
 // Shooting du jour: un seul projet, marqué par appui long sur sa carte dans la liste (téléphone).
-// Rangé sur l'appareil seulement (localStorage): le widget iPhone affiche ce que l'app lui dépose
-// (voir widget.js). Pas de synchronisation entre appareils pour l'instant.
+// Rangé sur l'appareil seulement (localStorage): dans l'app iPhone, le projet marqué alimente l'activité en
+// direct (voir liveActivity.js). Pas de synchronisation entre appareils pour l'instant.
 const KEY = 'ms-shoot-of-day';
 const listeners = new Set();
 

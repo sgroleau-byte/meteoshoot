@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		08A7C59000F1247C1B549B3A /* MeteoShootViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC9C618CDAC7F9E485E609E9 /* MeteoShootViewController.swift */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
+		31F295CA3ABD12AC7E8688A0 /* ShootActivityPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFA21F786442B2EB6C97DDAA /* ShootActivityPlugin.swift */; };
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
@@ -16,11 +17,14 @@
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
+		568315351192F75F3ACC7395 /* BebasNeue Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 3CB7E885899B6FA212087994 /* BebasNeue Bold.ttf */; };
+		8D977AF59B1E79AB12D0E9B9 /* BebasNeue Book.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CDFC7E57A5E38E6858F22B7F /* BebasNeue Book.ttf */; };
 		93AB1C75410886DABAD4FB41 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76A4311BF6B99442CC5E446E /* WidgetKit.framework */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
+		9B24234A1C116C75E41A9B04 /* ShootActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78458C2FF63E47ADB864A29 /* ShootActivityAttributes.swift */; };
 		AA4283246930BABBB781B6DB /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EC875D1B45B9ED788EABC20B /* Foundation.framework */; };
+		AFD539035F652B3B9CC55183 /* ShootActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78458C2FF63E47ADB864A29 /* ShootActivityAttributes.swift */; };
 		D06BF33327EF35B7A616C0D3 /* MeteoShootWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F6420D1F2FBC0A67C8B036B8 /* MeteoShootWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		DD9EE58856029AB6C349F26C /* WidgetBridgePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8760BAE25AD92B14989A911 /* WidgetBridgePlugin.swift */; };
 		E254F3542692F9121FD65A70 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 368C56AC945E4D2E545ABDC5 /* SwiftUI.framework */; };
 		E734AF4CB760CECA979CE52C /* MeteoShootWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 176D1ED8461DE079A5757ED7 /* MeteoShootWidget.swift */; };
 /* End PBXBuildFile section */
@@ -53,8 +57,7 @@
 		176D1ED8461DE079A5757ED7 /* MeteoShootWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeteoShootWidget.swift; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
 		368C56AC945E4D2E545ABDC5 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/SwiftUI.framework; sourceTree = DEVELOPER_DIR; };
-		4A9F63CBF43AA482F8F9F48E /* MeteoShootWidget.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = MeteoShootWidget.entitlements; sourceTree = "<group>"; };
-		4E900DD001C47A04E730DF87 /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		3CB7E885899B6FA212087994 /* BebasNeue Bold.ttf */ = {isa = PBXFileReference; includeInIndex = 1; path = "BebasNeue Bold.ttf"; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -67,8 +70,10 @@
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		9B26C9F0E178D8141529F0B9 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		C8760BAE25AD92B14989A911 /* WidgetBridgePlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetBridgePlugin.swift; sourceTree = "<group>"; };
 		CC9C618CDAC7F9E485E609E9 /* MeteoShootViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeteoShootViewController.swift; sourceTree = "<group>"; };
+		CDFC7E57A5E38E6858F22B7F /* BebasNeue Book.ttf */ = {isa = PBXFileReference; includeInIndex = 1; path = "BebasNeue Book.ttf"; sourceTree = "<group>"; };
+		CFA21F786442B2EB6C97DDAA /* ShootActivityPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShootActivityPlugin.swift; sourceTree = "<group>"; };
+		D78458C2FF63E47ADB864A29 /* ShootActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShootActivityAttributes.swift; sourceTree = "<group>"; };
 		EC875D1B45B9ED788EABC20B /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		F6420D1F2FBC0A67C8B036B8 /* MeteoShootWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MeteoShootWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -95,6 +100,16 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		43A8E911E5054C7083E09438 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				3CB7E885899B6FA212087994 /* BebasNeue Bold.ttf */,
+				CDFC7E57A5E38E6858F22B7F /* BebasNeue Book.ttf */,
+			);
+			name = Fonts;
+			path = Fonts;
+			sourceTree = "<group>";
+		};
 		504EC2FB1FED79650016851F = {
 			isa = PBXGroup;
 			children = (
@@ -127,9 +142,9 @@
 				504EC3131FED79650016851F /* Info.plist */,
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
-				C8760BAE25AD92B14989A911 /* WidgetBridgePlugin.swift */,
 				CC9C618CDAC7F9E485E609E9 /* MeteoShootViewController.swift */,
-				4E900DD001C47A04E730DF87 /* App.entitlements */,
+				CFA21F786442B2EB6C97DDAA /* ShootActivityPlugin.swift */,
+				D78458C2FF63E47ADB864A29 /* ShootActivityAttributes.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -157,7 +172,7 @@
 			children = (
 				176D1ED8461DE079A5757ED7 /* MeteoShootWidget.swift */,
 				9B26C9F0E178D8141529F0B9 /* Info.plist */,
-				4A9F63CBF43AA482F8F9F48E /* MeteoShootWidget.entitlements */,
+				43A8E911E5054C7083E09438 /* Fonts */,
 			);
 			name = MeteoShootWidget;
 			path = MeteoShootWidget;
@@ -261,6 +276,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				568315351192F75F3ACC7395 /* BebasNeue Bold.ttf in Resources */,
+				8D977AF59B1E79AB12D0E9B9 /* BebasNeue Book.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -272,6 +289,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E734AF4CB760CECA979CE52C /* MeteoShootWidget.swift in Sources */,
+				9B24234A1C116C75E41A9B04 /* ShootActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -281,8 +299,9 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
-				DD9EE58856029AB6C349F26C /* WidgetBridgePlugin.swift in Sources */,
 				08A7C59000F1247C1B549B3A /* MeteoShootViewController.swift in Sources */,
+				31F295CA3ABD12AC7E8688A0 /* ShootActivityPlugin.swift in Sources */,
+				AFD539035F652B3B9CC55183 /* ShootActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -431,7 +450,6 @@
 			baseConfigurationReference = 958DCC722DB07C7200EA8C5F /* debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 89HN379C53;
@@ -455,7 +473,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 89HN379C53;
@@ -478,7 +495,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_ENTITLEMENTS = MeteoShootWidget/MeteoShootWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 89HN379C53;
@@ -506,7 +522,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_ENTITLEMENTS = MeteoShootWidget/MeteoShootWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 89HN379C53;

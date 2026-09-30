@@ -32,9 +32,7 @@ API autorisées) et les plafonds de quota.
   `https://meteoshoot-dev.vercel.app/*`, `https://*.vercel.app/*` (aperçus), `http://localhost:5173/*`
   (développement). Vérifiée le 29 septembre depuis www.meteoshoot.com et depuis localhost:5173: carte,
   géocodage, itinéraire, temps de trajet, autocomplétion.
-- « MeteoShoot natif »: mêmes cinq API, sans restriction d'application. Aussi appelée en REST (Distance Matrix) par
-  le widget iPhone, avec l'en-tête `X-Ios-Bundle-Identifier: com.meteoshoot.app`: à restreindre un jour à cet
-  identifiant d'app iOS. Les apps passent par une origine
+- « MeteoShoot natif »: mêmes cinq API, sans restriction d'application. Les apps passent par une origine
   locale (`capacitor://localhost` sur iOS, `https://localhost` sur Android) que la restriction par sites ne
   filtre pas de façon fiable; la protection est la limitation aux cinq API et les plafonds de quota.
 

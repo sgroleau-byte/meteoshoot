@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { isNative } from '../native/platform.js';
 import { toggleShootOfDay } from '../native/shootOfDay.js';
-import { clearWidgetSnapshot } from '../native/widget.js';
+import { endShootActivity } from '../native/liveActivity.js';
 import ReactDOM from 'react-dom';
 import { useIsMobile } from '../hooks/useIsMobile.js';
 import { useLang } from '../i18n/LangProvider.jsx';
@@ -304,7 +304,7 @@ export const TodoView = ({ onSelect, onAddProject, addingProject, plusRef }) => 
   // du jour, avec un retour haptique distinct de celui du glisser-déposer.
   const onCardHold = (projectId) => {
     const marked = toggleShootOfDay(projectId);
-    if (!marked) clearWidgetSnapshot();
+    if (!marked) endShootActivity();
     if (isNative) Haptics.notification({ type: marked ? NotificationType.Success : NotificationType.Warning }).catch(() => {});
     else if (navigator.vibrate) navigator.vibrate(marked ? [30, 40, 30] : 40);
   };
