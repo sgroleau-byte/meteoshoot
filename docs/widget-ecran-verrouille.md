@@ -50,9 +50,9 @@ surface plus grande et en couleurs demanderait une activité en direct (étape s
 
 ## Reste à faire
 
-- Installer sur l'iPhone de Stéphane (câble) et tester le geste, le buzz, les trois formats sur l'écran
-  verrouillé et le trajet en direct (position: l'app doit avoir la permission « Lorsque l'app est active »
-  et avoir été utilisée récemment pour que le widget y ait droit).
+- (Fait le 30 septembre 2026) Installé sur l'iPhone de Stéphane par `tools/iphone-install.sh`; il a donné son
+  feu vert (« tu peux pousser »): v633.126 en production. Rappel pour le trajet en direct: l'app doit avoir
+  la permission de position « Lorsque l'app est active » et avoir été utilisée récemment.
 - Console Google: restreindre la clé « MeteoShoot natif » à l'identifiant d'app iOS `com.meteoshoot.app`
   (elle est appelée en REST par le widget avec cet en-tête).
 - Plus tard: activité en direct (Dynamic Island) le jour du shooting; synchronisation de la marque entre
