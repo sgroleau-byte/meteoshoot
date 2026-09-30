@@ -64,7 +64,7 @@ struct Stat: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Image(systemName: symbol).font(.system(size: 11, weight: .semibold)).foregroundStyle(Look.muted)
-                Text(value).font(Look.bebasBold(size)).foregroundStyle(Look.active).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7).fixedSize()
+                Text(value).font(Look.bebasBook(size)).foregroundStyle(Look.active).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7).fixedSize()
             }
             Caption(text: label)
         }
@@ -76,10 +76,10 @@ struct Countdown: View {
     var size: CGFloat = 18
     var body: some View {
         if state.targetIsAhead {
-            Text(timerInterval: Date()...state.targetDate, countsDown: true, showsHours: true)
-                .font(Look.bebasBold(size)).foregroundStyle(Look.active).monospacedDigit()
+            Text(state.targetDate, style: .relative)
+                .font(Look.bebasBook(size)).foregroundStyle(Look.active).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
         } else {
-            Text("MAINTENANT").font(Look.bebasBold(size)).foregroundStyle(Look.gold)
+            Text("MAINTENANT").font(Look.bebasBook(size)).foregroundStyle(Look.gold)
         }
     }
 }
@@ -114,10 +114,7 @@ struct LockScreenCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Caption(text: "SHOOTING DU JOUR", color: Look.gold)
-                    Text(state.name.uppercased()).font(Look.bebasBook(26)).foregroundStyle(Look.active).lineLimit(1)
-                }
+                Text(state.name.uppercased()).font(Look.bebasBook(26)).foregroundStyle(Look.active).lineLimit(1)
                 Spacer(minLength: 8)
                 Image(systemName: Look.symbol(state.icon)).font(.system(size: 24, weight: .regular)).foregroundStyle(Look.muted).padding(.top, 2)
             }
@@ -138,7 +135,7 @@ struct LockScreenCard: View {
                     Spacer()
                     if let depart = state.departText {
                         Caption(text: "DÉPART", color: Look.muted)
-                        Text(depart).font(Look.bebasBold(18)).foregroundStyle(Look.active)
+                        Text(depart).font(Look.bebasBook(18)).foregroundStyle(Look.active)
                     }
                 }
             }
@@ -155,7 +152,7 @@ struct ShootLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: ShootActivityAttributes.self) { context in
             LockScreenCard(state: context.state)
-                .activityBackgroundTint(Look.background.opacity(0.72))
+                .activityBackgroundTint(Look.background.opacity(0.85))
                 .activitySystemActionForegroundColor(Look.active)
         } dynamicIsland: { context in
             DynamicIsland {
@@ -176,10 +173,10 @@ struct ShootLiveActivity: Widget {
                             Countdown(state: context.state, size: 16)
                             Spacer()
                             Image(systemName: Look.symbol(context.state.icon)).font(.system(size: 11)).foregroundStyle(Look.muted)
-                            Text(context.state.cloudText).font(Look.bebasBold(16)).foregroundStyle(Look.active)
+                            Text(context.state.cloudText).font(Look.bebasBook(16)).foregroundStyle(Look.active)
                             if let travel = context.state.travelText {
                                 Image(systemName: "car.fill").font(.system(size: 11)).foregroundStyle(Look.muted)
-                                Text(travel).font(Look.bebasBold(16)).foregroundStyle(Look.active)
+                                Text(travel).font(Look.bebasBook(16)).foregroundStyle(Look.active)
                             }
                         }
                     }
@@ -188,7 +185,7 @@ struct ShootLiveActivity: Widget {
             } compactLeading: {
                 Image(systemName: context.state.targetIsSunrise ? "sunrise.fill" : "sunset.fill").foregroundStyle(Look.gold)
             } compactTrailing: {
-                Countdown(state: context.state, size: 15).frame(maxWidth: 64)
+                Countdown(state: context.state, size: 14).frame(maxWidth: 76)
             } minimal: {
                 Image(systemName: context.state.targetIsSunrise ? "sunrise.fill" : "sunset.fill").foregroundStyle(Look.gold)
             }
