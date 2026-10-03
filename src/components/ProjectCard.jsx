@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useIsMobile } from '../hooks/useIsMobile.js';
+import { useFitZoom } from '../hooks/useFitZoom.js';
+import { useViewportWidth } from '../hooks/useViewportWidth.js';
 import { afterEntrance } from '../utils/entrance.js';
 import { useSwipeActions } from '../hooks/useSwipeActions.js';
 import { useLang } from '../i18n/LangProvider.jsx';
@@ -137,6 +139,14 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
 
   useSwipeActions({ cardRef, contentRef, actionsRef, haloWhiteRef, scrollRef, actionW, isMobile, setActionsOpen, syncHalo: false });
 
+  // Rangée desktop sur iPad en portrait et dans les fenêtres étroites (sous 1024 px): la colonne CRÉÉ quitte la
+  // rangée (elle reste dans la fiche) et la rangée se réduit juste assez pour tenir dans la carte au lieu d'être
+  // coupée à droite.
+  const compactRow = useViewportWidth() < 1024;
+  const rowBoxRef = useRef(null);
+  const rowRef = useRef(null);
+  const rowZoom = useFitZoom(rowBoxRef, rowRef, !isMobile);
+
   const isFirstMount = useRef(true);
   useEffect(() => afterEntrance(() => { isFirstMount.current = false; }), []);
 
@@ -223,9 +233,11 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
         </div>
       </div>
       <div className="card-info-flare" style={{ left: '-350px', top: '-50px' }}></div>
-      <div style={{ position: 'relative' }}>
-      <div className="flex items-center gap-0" style={{ opacity: project.onHold ? 0.1 : 1, transition: 'opacity 0.3s' }}>
-        <div className="min-w-0" style={{ minWidth: '432px', overflow: "visible" }}>
+      <div ref={rowBoxRef} style={{ position: 'relative' }}>
+      <div ref={rowRef} className="flex items-center gap-0" style={{ width: 'max-content', zoom: rowZoom < 1 ? rowZoom : undefined, opacity: project.onHold ? 0.1 : 1, transition: 'opacity 0.3s' }}>
+        {/* Pendant le chargement, le squelette (plus large que les 9 jours) est rogné à leur largeur: la rangée
+            garde sa taille finale et sa réduction sur iPad ne saute pas à l'arrivée de la météo. */}
+        <div className="min-w-0" style={{ minWidth: '432px', overflow: "visible", ...(weather ? null : { width: '432px', overflow: 'hidden' }) }}>
           {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} orientation={project.orientation} onDayClick={() => onSelect(project)}/> : <p className="text-charcoal-muted text-sm italic py-2 cursor-pointer" onClick={() => onSelect(project)}>{t('weatherUnavailable')}</p>}
         </div>
         <div onMouseEnter={() => { if (weatherRowDismiss.current) { weatherRowDismiss.current(); weatherRowDismiss.current = null; } }} onClick={() => onSelect(project)} className="cursor-pointer flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
@@ -257,11 +269,11 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
             <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '-'}</span>
             <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '-'}</span>
           </div>
-          <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive" style={{ minWidth: '120px' }}>
+          {!compactRow && <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive" style={{ minWidth: '120px' }}>
             <span style={{ color: colorInactive }}>{t('created')}</span>
             <span style={{ color: colorActive }}>{formatDateShort(project.createdAt)}</span>
             <span style={{ color: colorCharcoal }}>{daysSince(project.createdAt)} {daysSince(project.createdAt) <= 1 ? t('day') : t('days')}</span>
-          </div>
+          </div>}
         </div>
       </div>
       {project.onHold && (

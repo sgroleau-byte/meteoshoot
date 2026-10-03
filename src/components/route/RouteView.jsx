@@ -867,7 +867,7 @@ export const RouteView = () => {
   // s'affichent en ligne dans le détail, sans toucher à la largeur centrale.
   const railMode = !isMobile && winW >= 1300 && !!current && (current.destinations || []).length >= 2;
   return (
-    <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', maxWidth: railMode ? 1300 : 980, margin: '0 auto', paddingLeft: 16, paddingRight: 16, paddingBottom: 90, paddingTop: 100 }}>
+    <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', maxWidth: railMode ? 1300 : 980, margin: '0 auto', paddingLeft: 16, paddingRight: 16, paddingBottom: 90, paddingTop: 'calc(100px + env(safe-area-inset-top))' }}>
       {listPanel}
       <div style={{ ...RT_PANEL, flex: 1, minWidth: 0, maxWidth: 620, padding: 18 }}>
         {current

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import SunCalc from 'suncalc';
 import { useAuth } from '../auth/AuthProvider.jsx';
 import { useIsMobile } from '../hooks/useIsMobile.js';
+import { useViewportWidth } from '../hooks/useViewportWidth.js';
 import { useLang } from '../i18n/LangProvider.jsx';
 import { getTravelTime, reverseGeocode } from '../maps/google.js';
 import { MandateType, renderMandate } from '../projects/constants.js';
@@ -84,6 +85,10 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   const autocompleteRef = React.useRef(null);
   const departureInputRef = React.useRef(null);
   const isMobile = useIsMobile();
+  // Sous 1100 px (iPad en portrait, fenêtre étroite), la colonne de la carte n'a plus de place à droite des
+  // champs de 700 px: la carte passe au-dessus, sur toute la largeur.
+  const viewportWidth = useViewportWidth();
+  const stackMap = !isMobile && viewportWidth < 1100;
   const departureAutocompleteRef = React.useRef(null);
   const mapContainerRef = React.useRef(null);
   const flareCanvasRef = React.useRef(null);
@@ -1027,7 +1032,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       disableDefaultUI: true,
       disableDoubleClickZoom: true,
       zoomControl: false,
-      gestureHandling: isMobile ? 'cooperative' : 'greedy',
+      gestureHandling: isMobile || stackMap ? 'cooperative' : 'greedy',
       scrollwheel: false,
       mapTypeControl: false,
       clickableIcons: false,
@@ -1204,6 +1209,13 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     ];
     map.setOptions({ styles: mapType === 'roadmap' ? darkStyle : satStyle });
   }, [mapType]);
+
+  // Rotation de l'iPad: carte au-dessus des champs (dans le défilement: un doigt fait défiler la page, deux
+  // doigts déplacent la carte) ou carte à droite (un doigt la déplace).
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (map && !isMobile) map.setOptions({ gestureHandling: stackMap ? 'cooperative' : 'greedy' });
+  }, [stackMap, isMobile]);
 
   // Redraw sun lines when sunDate or adjustedPos changes
   useEffect(() => {
@@ -1858,7 +1870,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   };
 
   return (
-    <div className="pt-6 animate-fade-in" style={isMobile ? { paddingTop: 'calc(24px + 25px)', paddingBottom: 'calc(130px + env(safe-area-inset-bottom))' } : { paddingTop: '75px', paddingBottom: '32px' }}>
+    <div className="pt-6 animate-fade-in" style={isMobile ? { paddingTop: 'calc(24px + 25px)', paddingBottom: 'calc(130px + env(safe-area-inset-bottom))' } : { paddingTop: 'calc(75px + env(safe-area-inset-top))', paddingBottom: '32px' }}>
       {/* Bande météo + infos: même layout que l'accueil */}
       <div className={`border-b border-adaptive py-4 ${isMobile ? 'px-4' : 'px-8'} overflow-hidden`}>
         <button onClick={onClose} className="text-charcoal-muted hover:text-charcoal transition-colors mb-4" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
@@ -1926,11 +1938,13 @@ export const ProjectDetail = ({ projectId, onClose }) => {
           </div>
         ) : (
           /* ===== DESKTOP: original horizontal ===== */
-          <div className="flex items-center gap-0" style={{ width: '100%' }}>
+          /* Quand la place manque (iPad en portrait, fenêtre étroite), les colonnes passent sous les jours au lieu
+             de les chevaucher; l'écart de 16 px entre les deux blocs est un gap pour que la 2e ligne parte du bord. */
+          <div className="flex items-center" style={{ width: '100%', flexWrap: 'wrap', columnGap: '16px', rowGap: '18px' }}>
             <div className="min-w-0">
               {project.lat && project.lng ? <div style={{ zoom: 1.15 }}><WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10} orientation={project.orientation}/></div> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
             </div>
-            <div className="flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
+            <div className="flex items-stretch flex-shrink-0 font-bebas-bold uppercase" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
               <div className="flex flex-col justify-center pl-2 border-l border-adaptive">
                 {Object.values(MandateType).filter(m => project.mandates?.includes(m)).map(m => {
                   return <React.Fragment key={m}>{renderMandate(m, colorActive)}</React.Fragment>;
@@ -1994,10 +2008,10 @@ export const ProjectDetail = ({ projectId, onClose }) => {
 
       {/* Édition + Carte: layout with map bottom-right */}
       <div className={`${isMobile ? 'px-4' : 'px-8 md:px-12'} pt-6`} style={{ position: 'relative' }}>
-        <div className={`flex gap-8 ${isMobile ? 'flex-col' : 'flex-nowrap'} items-start`} style={isMobile ? {} : {}}>
-          
+        <div className={`flex gap-8 ${isMobile || stackMap ? 'flex-col' : 'flex-nowrap'} items-start`} style={isMobile ? {} : {}}>
+
           {/* Colonne gauche: Édition */}
-          <div style={isMobile ? {} : { width: '700px', flexShrink: 0 }} className={`${isMobile ? 'w-full' : ''} space-y-5`}>
+          <div style={isMobile ? {} : stackMap ? { width: '100%', maxWidth: '700px' } : { width: '700px', flexShrink: 0 }} className={`${isMobile ? 'w-full' : ''} space-y-5`}>
             {/* Address inputs with box style like modal */}
             <div>
               <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('projectAddress')}</label>
@@ -2125,8 +2139,9 @@ export const ProjectDetail = ({ projectId, onClose }) => {
             </div>
           </div>
 
-          {/* Colonne droite: Carte Google Maps interactive, square, bottom-right */}
-          <div className={`${isMobile ? 'w-full' : ''} flex flex-col`} style={{ minHeight: isMobile ? '450px' : undefined, height: isMobile ? undefined : '800px', order: isMobile ? -1 : 0, flex: isMobile ? undefined : '1 0 auto', position: isMobile ? undefined : 'sticky', top: isMobile ? undefined : '20px', alignSelf: isMobile ? undefined : 'flex-start' }}>
+          {/* Colonne droite: Carte Google Maps interactive, square, bottom-right. Sans place à droite (iPad en
+              portrait, fenêtre étroite), elle passe au-dessus des champs sur toute la largeur, comme sur téléphone. */}
+          <div className={`${isMobile || stackMap ? 'w-full' : ''} flex flex-col`} style={stackMap ? { height: '640px', order: -1 } : { minHeight: isMobile ? '450px' : undefined, height: isMobile ? undefined : '800px', order: isMobile ? -1 : 0, flex: isMobile ? undefined : '1 0 auto', position: isMobile ? undefined : 'sticky', top: isMobile ? undefined : '20px', alignSelf: isMobile ? undefined : 'flex-start' }}>
             {project.lat && project.lng ? (
               <>
               {showMapFull && <div onClick={() => setShowMapFull(false)} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(30,30,30,0.88)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}/>}

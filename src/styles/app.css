@@ -334,7 +334,10 @@
     .newproj-actions button { font-size: 18px; color: rgba(255,255,255,0.6); background: none; border: none; cursor: pointer; transition: color 0.15s ease; }
     .newproj-actions button:hover { color: rgba(255,255,255,0.9); }
     .card-actions { opacity: 0; transform: translateX(20px); transition: opacity 0.3s ease, transform 0.3s ease; position: relative; }
-    .card-glow-wrap:hover .card-actions { opacity: 1; transform: translateX(0); }
+    /* Survol réservé aux souris et trackpads: sur iPad, le survol restait collé à la carte touchée (halo rouge et
+       actions), et les actions invisibles captaient les touchers au bord droit. Elles restent dans la fiche. */
+    @media (hover: hover) { .card-glow-wrap:hover .card-actions { opacity: 1; transform: translateX(0); } }
+    @media (hover: none) { .card-actions { display: none !important; } }
     .trash-btn { position: relative; transition: filter 0.3s ease; filter: drop-shadow(0 0 0px transparent); }
     .trash-btn:hover { filter: drop-shadow(0 0 8px rgba(216,49,82,0.6)) drop-shadow(0 0 16px rgba(216,49,82,0.3)) brightness(1.4); }
     .newproj-actions button:disabled { opacity: 0.3; cursor: default; }
@@ -361,7 +364,7 @@
     }
     .card-glow-wrap { position: relative; }
     .card-glow-wrap::after { content: ''; position: absolute; right: -450px; top: 50%; width: 550px; height: 550px; border-radius: 50%; background: radial-gradient(circle, rgba(216,49,82,0.7) 0%, rgba(216,49,82,0.25) 40%, transparent 70%); mix-blend-mode: color-dodge; pointer-events: none; opacity: 0; transition: opacity 0.3s ease; transform: translateY(-50%); z-index: 10; }
-    .card-glow-wrap:hover::after { opacity: 1; }
+    @media (hover: hover) { .card-glow-wrap:hover::after { opacity: 1; } }
     .project-card.is-being-dragged {
       transition: none !important;
       opacity: 0.6;

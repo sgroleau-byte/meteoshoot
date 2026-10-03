@@ -326,9 +326,11 @@ export const App = () => {
         });
         return;
       }
-      e.preventDefault();
+      // preventDefault seulement s'il y a une bulle à basculer: les cases n'en ont plus, et l'appel bloquait,
+      // sur iPad, le défilement de la page parti d'une case météo et le toucher qui ouvre la fiche.
       const popup = cell.querySelector('.day-popup');
       if (!popup) return;
+      e.preventDefault();
       const wasActive = popup.classList.contains('popup-active');
       // Close all
       document.querySelectorAll('.day-popup.popup-active').forEach(p => {
@@ -370,10 +372,12 @@ export const App = () => {
     <div className="min-h-screen bg-cream" style={{ position: 'relative', ...(isMobile ? { background: 'transparent' } : {}) }}>
       {/* Soft radial gradient background */}
       <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', opacity: isMobile && !glowReady ? 0 : 1, transition: 'opacity 0.8s ease', background: `radial-gradient(ellipse 60% 40% at ${plusRect ? plusRect.cx : window.innerWidth * 0.5}px ${plusRect && !selectedId ? plusRect.cy : 120}px, rgba(45,80,70,0.35) 0%, rgba(44,44,44,0) 70%)` }}/>
-      {/* Top blur overlay: desktop only, full width */}
-      {!isMobile && <div style={{ 
-        position: 'fixed', top: 0, left: 0, right: 0, 
-        height: '72px',
+      {/* Top blur overlay: desktop only, full width. Sur iPad (app web installée ou app native), la page passe
+          sous la barre de statut: le flou, le fondu, les titres et le menu descendent de la hauteur de la zone sûre
+          (env(safe-area-inset-top), nulle dans un navigateur ordinaire) et le fondu reste plein sous la barre. */}
+      {!isMobile && <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0,
+        height: 'calc(72px + env(safe-area-inset-top))',
         backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
         WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 35%, transparent 100%)',
         maskImage: 'linear-gradient(to bottom, black 0%, black 35%, transparent 100%)',
@@ -382,13 +386,13 @@ export const App = () => {
       {/* Top content fade: bg color to transparent */}
       {!isMobile && <div style={{
         position: 'fixed', top: 0, left: 0, right: 0,
-        height: '50px',
-        background: 'linear-gradient(to bottom, #181b1e 0%, transparent 100%)',
+        height: 'calc(50px + env(safe-area-inset-top))',
+        background: 'linear-gradient(to bottom, #181b1e env(safe-area-inset-top), transparent 100%)',
         zIndex: 38, pointerEvents: 'none'
       }}/>}
       {/* Page titles: rendered at App level ABOVE blur */}
-      {!isMobile && displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{t('projectDetailsTitle')}</h1>}
-      {!isMobile && !displayedProjectId && view !== 'routes' && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{view === 'todo' ? t('projects') : view === 'retouching' ? t('editing') : t('preferences')}</h1>}
+      {!isMobile && displayedProjectId && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: 'calc(7px + env(safe-area-inset-top))', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{t('projectDetailsTitle')}</h1>}
+      {!isMobile && !displayedProjectId && view !== 'routes' && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: 'calc(7px + env(safe-area-inset-top))', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 41, pointerEvents: 'none' }}>{view === 'todo' ? t('projects') : view === 'retouching' ? t('editing') : t('preferences')}</h1>}
       {!(isMobile && showNew) && <Header onChangeView={changeView} onAddProject={() => { const f = document.getElementById('persistentFlare'); if (f) { f.style.display = 'none'; f.style.animation = 'none'; } setShowNew(true); }}/>}
       <div style={{ 
         display: isMobile && showNew ? 'none' : 'block'

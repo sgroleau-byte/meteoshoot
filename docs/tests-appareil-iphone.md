@@ -64,3 +64,29 @@ duplication, c'est un artefact de l'émulateur. À confirmer sur un téléphone 
 
 Lancer: `tools/android-run.sh` (émulateur + installation + lancement). APK de débogage:
 `verification_etape0/android/meteoshoot-debug.apk` (installable sur un téléphone en mode développeur).
+
+## iPad (3 octobre 2026, v633.128)
+
+L'app iOS est universelle (projet Xcode réglé pour l'iPhone et l'iPad): une seule app, une seule fiche App Store
+et une seule mise à jour pour les deux. Sur iPad, l'interface est celle de l'ordinateur (plus de 768 px de large).
+
+Corrigé après le test de Stéphane sur iPad (app web installée sur l'écran d'accueil), vérifié dans le simulateur
+iPad Air 11 pouces (Safari, app web installée et app native, portrait et paysage):
+- Le menu du haut et le titre de page passaient sous l'heure et la batterie (zone sûre du haut ignorée), et les
+  onglets étaient presque impossibles à toucher: le système réserve cette bande. Le menu, le titre, le flou et
+  le fondu du haut descendent maintenant de `env(safe-area-inset-top)`, nul dans un navigateur ordinaire.
+- Un toucher sur une case météo était annulé (ancien code de bulles, `preventDefault` au `touchstart`): la page
+  ne défilait pas si le doigt partait des cases, et le toucher n'ouvrait pas la fiche.
+- Portrait (moins de 1024 px): la colonne CRÉÉ quitte les rangées de la liste (elle reste dans la fiche) et la
+  rangée se réduit juste assez pour tenir (environ 96 % sur un iPad 11 pouces) au lieu d'être coupée à droite.
+- Fiche en portrait (moins de 1100 px): les colonnes passent sous les jours au lieu de les chevaucher, et la
+  carte passe au-dessus des champs, sur toute la largeur (640 px de haut; un doigt fait défiler la page, deux
+  doigts déplacent la carte). En paysage, rien ne change: carte à droite.
+- Survol réservé aux souris et trackpads: le halo rouge et les actions de la carte restaient collés après un
+  toucher. Sur iPad, « Passer en édition » et la corbeille sont dans la fiche.
+- Ordinateur et téléphone: captures identiques au pixel près avant et après (1440 px et 393 px).
+
+Installer l'app native sur un iPad: le brancher au Mac, le déverrouiller, accepter « Se fier à cet ordinateur »,
+activer le mode développeur (Réglages > Confidentialité et sécurité > Mode développeur, redémarrage), puis
+`tools/iphone-install.sh` (le script trouve maintenant un iPhone ou un iPad). L'iPad mini en portrait (744 px)
+garde l'interface téléphone.

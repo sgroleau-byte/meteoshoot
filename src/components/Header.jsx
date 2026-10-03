@@ -226,10 +226,12 @@ export const Header = ({ onChangeView, onAddProject }) => {
     );
   }
 
+  // Le menu descend sous la barre de statut quand la page la recouvre (app web installée ou app native sur iPad):
+  // env(safe-area-inset-top) vaut 0 dans un navigateur ordinaire.
   return (
-    <header 
+    <header
       className="ms-enter-nav fixed top-0 right-0 z-40"
-      style={{ paddingTop: '10px', paddingRight: '13px' }}
+      style={{ paddingTop: 'calc(10px + env(safe-area-inset-top))', paddingRight: '13px' }}
     >
       <div ref={navContainerRef} className="flex gap-6" style={{ position: 'relative', paddingBottom: '5px' }}>
         {navItems.map(item => {

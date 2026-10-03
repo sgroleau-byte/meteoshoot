@@ -1,10 +1,11 @@
 #!/bin/bash
-# Compile l'app iOS pour un iPhone branché et l'installe dessus (signature automatique, équipe 89HN379C53).
-# Usage: tools/iphone-install.sh [identifiant devicectl]   (sans argument: premier iPhone disponible)
+# Compile l'app iOS pour un iPhone ou un iPad branché et l'installe dessus (signature automatique, équipe 89HN379C53).
+# Usage: tools/iphone-install.sh [identifiant devicectl]   (sans argument: premier iPhone ou iPad disponible)
 set -e
 cd "$(dirname "$0")/.."
-DEV=${1:-$(xcrun devicectl list devices 2>/dev/null | awk '/available|connected/ && /iPhone/ {print $(NF-3); exit}')}
-[ -z "$DEV" ] && { echo "Aucun iPhone disponible: brancher et déverrouiller l'iPhone, accepter « Se fier à cet ordinateur »."; xcrun devicectl list devices; exit 1; }
+# Identifiant devicectl (UUID) lu par motif: la colonne du modèle contient des espaces (« iPhone 15 Pro (iPhone16,1) »).
+DEV=${1:-$(xcrun devicectl list devices 2>/dev/null | awk '/available|connected/ && /iPhone|iPad/' | grep -oE '[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}' | head -1)}
+[ -z "$DEV" ] && { echo "Aucun iPhone ni iPad disponible: brancher et déverrouiller l'appareil, accepter « Se fier à cet ordinateur »."; xcrun devicectl list devices; exit 1; }
 NAME=$(xcrun devicectl list devices 2>/dev/null | awk -v d="$DEV" 'index($0, d) {sub(/ +[A-Za-z0-9.-]+\.coredevice\.local.*/, ""); print; exit}')
 echo "Appareil: $NAME ($DEV)"
 npm run build:native >/dev/null && npx cap sync ios >/dev/null
@@ -13,4 +14,4 @@ xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -dest
 APP=$(find build/ios-device/Build/Products/Debug-iphoneos -maxdepth 1 -name "App.app" | head -1)
 xcrun devicectl device install app --device "$DEV" "$APP"
 xcrun devicectl device process launch --device "$DEV" com.meteoshoot.app
-echo "Installée et lancée sur l'iPhone."
+echo "Installée et lancée sur l'appareil."

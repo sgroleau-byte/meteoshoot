@@ -328,8 +328,8 @@ export const TodoView = ({ onSelect, onAddProject, addingProject, plusRef }) => 
   
   
   return (
-    <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px', ...(isMobile ? { minHeight: '100vh', touchAction: 'pan-y', overflowX: 'clip' } : {}) }}>
-      {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>PROJETS</h1>}
+    <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : 'calc(100px + env(safe-area-inset-top))', ...(isMobile ? { minHeight: '100vh', touchAction: 'pan-y', overflowX: 'clip' } : {}) }}>
+      {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: 'calc(7px + env(safe-area-inset-top))', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>PROJETS</h1>}
       {(() => {
         const limit = getProjectLimit();
         const isLimited = limit !== Infinity;

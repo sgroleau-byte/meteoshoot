@@ -94,8 +94,8 @@ export const PreferencesView = () => {
   };
 
   return (
-    <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px' }}>
-      {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>{t('preferences')}</h1>}
+    <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : 'calc(100px + env(safe-area-inset-top))' }}>
+      {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: 'calc(7px + env(safe-area-inset-top))', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>{t('preferences')}</h1>}
       <div className={isMobile ? 'px-4' : 'pl-8 md:pl-12'}>
         {msg && <div className={`mb-6 p-3 rounded ${msg.type === "success" ? "bg-transparent" : "bg-red-50 text-red-700"}`} style={msg.type === "success" ? { color: "#7dd3c6" } : {}}>{msg.text}</div>}
         <div>
@@ -247,7 +247,7 @@ export const PreferencesView = () => {
 
           <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
             <div style={{ textAlign: 'center' }}>
-              <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.127</div>
+              <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.128</div>
               <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
             </div>
           </div>

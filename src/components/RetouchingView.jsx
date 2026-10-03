@@ -33,8 +33,8 @@ export const RetouchingView = ({ onSelect }) => {
   const done = projects.filter(p => p.status === ProjectStatus.DONE);
   const legend = t('editLegend').replace(/\{alert\}/g, editPrefs.editAlertDays).replace(/\{warn\}/g, editPrefs.editWarnDays);
   return (
-    <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : '100px', ...(isMobile ? { minHeight: '100vh', touchAction: 'pan-y', overflowX: 'clip' } : {}) }}>
-      {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: '7px', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>{t('editing')}</h1>}
+    <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : 'calc(100px + env(safe-area-inset-top))', ...(isMobile ? { minHeight: '100vh', touchAction: 'pan-y', overflowX: 'clip' } : {}) }}>
+      {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: 'calc(7px + env(safe-area-inset-top))', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>{t('editing')}</h1>}
       {retouching.length === 0 ? <div className="text-center py-16"><p className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '24px' }}>{t('noProjectsEditing')}</p></div>
       : <div style={{ paddingBottom: '80px' }}>
           {retouching.map(({ project, days }, i) => <RetouchingCard key={project.id} project={project} days={days} editPrefs={editPrefs} onSelect={onSelect} index={i} openActionsId={openActionsId} setOpenActionsId={setOpenActionsId}/>)}
