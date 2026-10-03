@@ -3,6 +3,10 @@
    en fin de <head>, donc APRÈS ce bloc. */
     html { overflow-x: hidden; overflow-y: scroll; scrollbar-width: none; -ms-overflow-style: none; }
     html::-webkit-scrollbar { display: none; }
+    /* iOS ignore overflow-x: hidden sur html au doigt: sur iPad, le halo rouge des cartes (450 px au-delà du bord
+       droit) élargissait la page et l'écran glissait de gauche à droite. Le débordement est coupé au bord de
+       l'écran, comme les vues téléphone (overflowX: 'clip'); clip ne crée pas de cadre de défilement. */
+    #root { overflow-x: clip; }
     /* Style detail scrollbar to match native thin look */
     .detail-scroll::-webkit-scrollbar { width: 8px; }
     .detail-scroll::-webkit-scrollbar-track { background: transparent; }
