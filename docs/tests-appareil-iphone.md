@@ -84,6 +84,9 @@ iPad Air 11 pouces (Safari, app web installée et app native, portrait et paysag
   doigts déplacent la carte). En paysage, rien ne change: carte à droite.
 - Survol réservé aux souris et trackpads: le halo rouge et les actions de la carte restaient collés après un
   toucher. Sur iPad, « Passer en édition » et la corbeille sont dans la fiche.
+- v633.129: l'écran glissait de gauche à droite (signalé par Stéphane sur son iPad). Le halo rouge des cartes, placé
+  450 px au-delà du bord droit, élargissait la page à 1270 px, et iOS ignore `overflow-x: hidden` sur html au doigt.
+  `#root { overflow-x: clip }` coupe le débordement au bord de l'écran (comme les vues téléphone).
 - Ordinateur et téléphone: captures identiques au pixel près avant et après (1440 px et 393 px).
 
 Installer l'app native sur un iPad: le brancher au Mac, le déverrouiller, accepter « Se fier à cet ordinateur »,
