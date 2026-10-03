@@ -87,6 +87,11 @@ iPad Air 11 pouces (Safari, app web installée et app native, portrait et paysag
 - Ordinateur et téléphone: captures identiques au pixel près avant et après (1440 px et 393 px).
 
 Installer l'app native sur un iPad: le brancher au Mac, le déverrouiller, accepter « Se fier à cet ordinateur »,
-activer le mode développeur (Réglages > Confidentialité et sécurité > Mode développeur, redémarrage), puis
-`tools/iphone-install.sh` (le script trouve maintenant un iPhone ou un iPad). L'iPad mini en portrait (744 px)
-garde l'interface téléphone.
+le jumeler avec Xcode (`xcrun devicectl manage pair --device <identifiant>`), puis activer le mode développeur
+(Réglages > Confidentialité et sécurité, tout en bas: le réglage n'apparaît qu'après le jumelage ou une première
+tentative d'installation; redémarrage puis confirmation) et lancer `tools/iphone-install.sh <identifiant>`. Le script
+lit l'identifiant matériel dans la sortie JSON de devicectl (le tableau retire les accents du nom, « Stéphane ») et
+s'arrête si la compilation échoue. Si Apple a mis à jour son contrat de licence développeur, Xcode ne peut plus
+ajouter d'appareil au compte (« PLA Update available »): Stéphane doit l'accepter sur developer.apple.com/account.
+Installée le 3 octobre 2026 sur l'iPad Pro 11 pouces (M5) de Stéphane (devicectl
+A9598395-4D8C-5FEE-A7EC-75B27F1C7FBE). L'iPad mini en portrait (744 px) garde l'interface téléphone.
