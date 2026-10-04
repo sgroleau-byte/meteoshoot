@@ -62,15 +62,31 @@ export const writeWeatherCache = (lat, lng, data) => {
 //   { error: 'network' }                 -> fetch a throw (offline, DNS, CORS bloquant, etc.)
 //   { error: 'api', status: <int> }      -> reponse non-OK (priorite aux 5xx et 429)
 //   { error: 'api', status: 'invalid' }  -> reponse 200 mais body invalide / sans hourly
-export const fetchOpenMeteoModel = async (endpoint, qs) => {
-  // Court-circuit de simulation pour QA en dev: on retourne directement l'erreur
-  // simulee sans appeler le reseau, pour reproduire bannieres et badges a la demande.
-  const sim = getWeatherSim();
-  if (sim === 'network') return { error: 'network' };
-  if (sim === 'api') return { error: 'api', status: 503 };
+// Open-Meteo refuse les appels trop nombreux en même temps depuis une même adresse (429 « Too many concurrent
+// requests »): mesuré le 3 octobre 2026, 5 ou 6 refus sur 24 appels simultanés, aucun à 8. Au chargement, chaque
+// projet lance deux appels (ICON et GFS): avec une dizaine de projets, plusieurs étaient refusés, et quand les deux
+// modèles d'un projet l'étaient, la bannière « API météo temporairement inaccessible » s'affichait alors que le service
+// fonctionnait. D'où une file (6 appels à la fois, dans l'ordre de la liste), un nouvel essai après une pause en cas
+// de refus, et le partage d'un appel identique déjà en cours.
+const OPEN_METEO_MAX_CONCURRENT = 6;
+const OPEN_METEO_RETRY_MS = [600, 1500, 3000];
+let openMeteoActive = 0;
+const openMeteoWaiting = [];
+const openMeteoInFlight = new Map(); // url -> Promise du résultat
+const withOpenMeteoSlot = async (task) => {
+  // Une place qui se libère passe directement au premier en attente (le compte ne bouge pas): aucun nouvel appel ne
+  // peut s'intercaler et dépasser la limite.
+  if (openMeteoActive >= OPEN_METEO_MAX_CONCURRENT) await new Promise((resolve) => openMeteoWaiting.push(resolve));
+  else openMeteoActive++;
+  try { return await task(); } finally {
+    const next = openMeteoWaiting.shift();
+    if (next) next(); else openMeteoActive--;
+  }
+};
+const fetchOpenMeteoOnce = async (url) => {
   let res;
   try {
-    res = await fetch(`https://api.open-meteo.com/v1/${endpoint}?${qs}`);
+    res = await fetch(url);
   } catch (e) {
     return { error: 'network' };
   }
@@ -87,6 +103,27 @@ export const fetchOpenMeteoModel = async (endpoint, qs) => {
     return { error: 'api', status: 'invalid' };
   }
   return { data: body };
+};
+
+export const fetchOpenMeteoModel = async (endpoint, qs) => {
+  // Court-circuit de simulation pour QA en dev: on retourne directement l'erreur
+  // simulee sans appeler le reseau, pour reproduire bannieres et badges a la demande.
+  const sim = getWeatherSim();
+  if (sim === 'network') return { error: 'network' };
+  if (sim === 'api') return { error: 'api', status: 503 };
+  const url = `https://api.open-meteo.com/v1/${endpoint}?${qs}`;
+  const pending = openMeteoInFlight.get(url);
+  if (pending) return pending;
+  const run = (async () => {
+    for (let attempt = 0; ; attempt++) {
+      // La pause se fait hors de la file, pour ne pas bloquer une place pendant l'attente.
+      const result = await withOpenMeteoSlot(() => fetchOpenMeteoOnce(url));
+      if (result.status !== 429 || attempt >= OPEN_METEO_RETRY_MS.length) return result;
+      await new Promise((resolve) => setTimeout(resolve, OPEN_METEO_RETRY_MS[attempt] + Math.random() * 400));
+    }
+  })();
+  openMeteoInFlight.set(url, run);
+  try { return await run; } finally { openMeteoInFlight.delete(url); }
 };
 
 // Cache mémoire (RAM) des dernières réponses météo fraîches, par (lat,lng). Sert quand un
@@ -337,6 +374,8 @@ export const fetchWeather = async (lat, lng) => {
   // Conserve la reponse pour servir de filet quand l'API retombera en panne.
   const fetchedAt = Date.now();
   writeWeatherCache(lat, lng, formatted);
-  weatherMemCache.set(memKey, { data: formatted, fetchedAt }); // resservi < 30 min sans rappeler l'API
+  // Resservi < 30 min sans rappeler l'API, mais seulement si les deux modèles ont répondu: avec un seul (l'autre refusé
+  // malgré les nouveaux essais), la prochaine ouverture retente plutôt que de garder 30 min des jours moins fiables.
+  if (iconOk && gfsOk) weatherMemCache.set(memKey, { data: formatted, fetchedAt });
   return { data: formatted, fromCache: false, cachedAt: fetchedAt };
 };
