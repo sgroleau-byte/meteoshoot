@@ -187,22 +187,25 @@ export const RetouchingCard = ({ project, onSelect, index = 0, openActionsId, se
 
   // Desktop layout : coque de carte inchangée (fond, halo, filet, survol), rangée 2a à l'intérieur.
   // Le padding interne (4 px / 18 px) s'ajoute à celui de la carte (16 px) pour donner 20 px / 34 px.
+  // iPad: mécanique du téléphone, la coque et son halo restent en place, seule la rangée glisse (contentRef).
+  const editRow = (
+      <EditRow index={index} project={project} days={days} status={status} editPrefs={editPrefs} dateLabel={dateLabel} onClick={() => { if (!actionsOpen) onSelect(project); }} dateActive={editingShotDate}
+        onDateClick={(e) => { if (!project.shotAt) return; e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setPickerPos({ top: r.bottom + 4, left: r.left }); originalDateRef.current = project.shotAt; setEditingShotDate(p => !p); }}/>
+  );
   const desktopCard = (
     <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden animate-card-in border-b border-adaptive"
       style={{ animationDelay: `${0.05 + index * 0.12}s` }}>
+      {/* Tiroir ouvert: toucher la carte le referme (niveau 1 comme le tiroir, qui reste par-dessus). */}
+      {swipeWide && actionsOpen && <div style={{ position: 'absolute', inset: 0, zIndex: 1 }} onClick={() => setActionsOpen(false)}/>}
       <div className="card-info-flare" style={{ left: '-350px', top: '0px', background: 'radial-gradient(circle, rgba(216,175,76,1) 0%, rgba(216,175,76,0.5) 35%, transparent 65%)' }}></div>
-      <EditRow index={index} project={project} days={days} status={status} editPrefs={editPrefs} dateLabel={dateLabel} onClick={() => { if (!actionsOpen) onSelect(project); }} dateActive={editingShotDate}
-        onDateClick={(e) => { if (!project.shotAt) return; e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setPickerPos({ top: r.bottom + 4, left: r.left }); originalDateRef.current = project.shotAt; setEditingShotDate(p => !p); }}/>
+      {swipeWide
+        ? <div ref={contentRef} style={{ transform: `translateX(${-tx}px)`, transition: ease, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>{editRow}</div>
+        : editRow}
     </div>
   );
   return (
     <div className="card-glow-wrap" ref={swipeWide ? cardRef : undefined} data-open={swipeWide ? actionsOpen : undefined}>
-    {swipeWide ? (
-      <div ref={contentRef} style={{ position: 'relative', zIndex: 1, transform: `translateX(${-tx}px)`, transition: ease, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
-        {actionsOpen && <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} onClick={() => setActionsOpen(false)}/>}
-        {desktopCard}
-      </div>
-    ) : desktopCard}
+    {desktopCard}
     {/* iPad: tiroir préparé d'avance pour la puce graphique, comme la carte qui glisse */}
     {swipeWide && React.cloneElement(drawer, { style: { ...drawer.props.style, willChange: 'transform' } })}
     <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
@@ -323,19 +326,19 @@ export const DoneCard = ({ project, index = 0, editPrefs = EDIT_LIST_DEFAULTS })
     );
   }
 
+  // iPad: comme au téléphone, la coque reste et seule la rangée glisse (contentRef2).
+  const editRow2 = <EditRow index={index} project={project} days={frozenDays} status='normal' editPrefs={editPrefs} dateLabel={doneDateLabel}/>;
   const desktopCard2 = (
     <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden border-b border-adaptive" style={{ opacity: 0.5 }}>
-      <EditRow index={index} project={project} days={frozenDays} status='normal' editPrefs={editPrefs} dateLabel={doneDateLabel}/>
+      {swipeWide2 && actionsOpen2 && <div style={{ position: 'absolute', inset: 0, zIndex: 1 }} onClick={() => setActionsOpen2(false)}/>}
+      {swipeWide2
+        ? <div ref={contentRef2} style={{ transform: `translateX(${-tx2}px)`, transition: ease2, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>{editRow2}</div>
+        : editRow2}
     </div>
   );
   return (
     <div className="card-glow-wrap" ref={swipeWide2 ? cardRef2 : undefined} data-open={swipeWide2 ? actionsOpen2 : undefined}>
-    {swipeWide2 ? (
-      <div ref={contentRef2} style={{ position: 'relative', zIndex: 1, transform: `translateX(${-tx2}px)`, transition: ease2, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
-        {actionsOpen2 && <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} onClick={() => setActionsOpen2(false)}/>}
-        {desktopCard2}
-      </div>
-    ) : desktopCard2}
+    {desktopCard2}
     {/* Atténué comme la carte, ainsi que l'est tout le tiroir du téléphone (opacité 0,5 de la carte) */}
     {swipeWide2 && React.cloneElement(drawer2, { style: { ...drawer2.props.style, opacity: 0.5, willChange: 'transform' } })}
     <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>

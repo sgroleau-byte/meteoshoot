@@ -1788,8 +1788,10 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       days[days.length - 1].hours.push(h);
     });
 
+    // Bloc entier non sélectionnable: sur iPad, le dégradé du bord droit (absent au téléphone) n'était pas protégé comme la
+    // bande, et iOS le sélectionnait (poignées bleues et menu Copier) quand le doigt partait du bord pour glisser à gauche.
     return (
-      <div className="relative">
+      <div className="relative" style={{ WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}>
         <div className="flex gap-0 pt-0 pb-2 overflow-x-auto hour-scroll items-start">
           {days.map((day, di) => {
             const sunriseH = day.sun?.sunrise ? new Date(day.sun.sunrise).getHours() : null;

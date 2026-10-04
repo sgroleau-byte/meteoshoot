@@ -285,8 +285,9 @@ export const HourlyWeather = ({ hourly, sunrise, sunset }) => {
     return cloudcoverToIcon(cc, isNight);
   };
   
+  // Bloc non sélectionnable, dégradé du bord droit compris (voir la bande horaire de la fiche).
   return (
-    <div className="relative">
+    <div className="relative" style={{ WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}>
       <div className="flex gap-2 py-4 overflow-x-auto hour-scroll">
         {filtered.map(h => {
           const hr = new Date(h.time).getHours();

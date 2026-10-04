@@ -171,7 +171,10 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
   const [touchOnly] = useState(() => window.matchMedia('(hover: none)').matches);
   const swipeWide = !isMobile && touchOnly;
 
-  useSwipeActions({ cardRef, contentRef, actionsRef, haloWhiteRef, scrollRef, actionW, isMobile: isMobile || swipeWide, setActionsOpen, syncHalo: false, variant: isMobile ? 'mobile' : 'wide', keepLayers: swipeWide });
+  // iPad: mécanique du téléphone. Le fond, le filet et le halo de la carte restent en place; seul le contenu glisse (le
+  // titre dans haloWhiteRef, sous le halo comme à la souris, et la rangée dans contentRef, par-dessus), avec le même
+  // ressort au relâchement. syncHalo: le titre suit aussi la fermeture quand une autre carte s'ouvre.
+  useSwipeActions({ cardRef, contentRef, actionsRef, haloWhiteRef, scrollRef, actionW, isMobile: isMobile || swipeWide, setActionsOpen, syncHalo: !isMobile, variant: isMobile ? 'mobile' : 'wide', keepLayers: swipeWide });
 
   // Rangée desktop sur iPad en portrait et dans les fenêtres étroites (sous 1024 px): la colonne CRÉÉ quitte la
   // rangée (elle reste dans la fiche) et la rangée se réduit juste assez pour tenir dans la carte au lieu d'être
@@ -251,16 +254,20 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
     );
   }
 
-  // Desktop layout (unchanged; sur iPad, enveloppé dans le calque qui glisse pour révéler le tiroir)
+  // Desktop layout (inchangé à la souris). Sur iPad, le titre et la rangée glissent, la coque de la carte reste.
   const txWide = swipeWide && actionsOpen ? actionW : 0;
   const easeWide = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
+  const slideWide = swipeWide ? { transform: `translateX(${-txWide}px)`, transition: easeWide, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' } : undefined;
   const desktopCard = (
     <div
       className={`project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden animate-card-in border-b border-adaptive`}
       style={{ animationDelay: `${0.05 + index * 0.05}s` }}
       onMouseDown={onMouseDownDrag ? (e) => onMouseDownDrag(e, project.id, index) : undefined}
     >
-      <div onClick={() => onSelect(project)} className="cursor-pointer" onMouseEnter={() => { if (weatherRowDismiss.current) { weatherRowDismiss.current(); weatherRowDismiss.current = null; } }}>
+      {/* Tiroir ouvert (iPad): toucher la carte le referme au lieu d'ouvrir la fiche. Niveau 1 comme le tiroir, qui vient
+          après dans la page et reste donc par-dessus (la corbeille reste touchable). */}
+      {swipeWide && actionsOpen && <div style={{ position: 'absolute', inset: 0, zIndex: 1 }} onClick={() => setActionsOpen(false)}/>}
+      <div ref={swipeWide ? haloWhiteRef : undefined} style={slideWide} onClick={() => onSelect(project)} className="cursor-pointer" onMouseEnter={() => { if (weatherRowDismiss.current) { weatherRowDismiss.current(); weatherRowDismiss.current = null; } }}>
         <div className="flex items-start justify-between gap-4" style={{ marginBottom: '-10px' }}>
           <h3 className="font-bebas-book text-charcoal flex items-center gap-2" style={{ letterSpacing: '0.04em', fontSize: '35px', opacity: project.onHold ? 0.4 : 1, transition: 'opacity 0.3s' }}>
             {project.name} {project.isContest && <StarIcon/>}
@@ -268,6 +275,7 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
         </div>
       </div>
       <div className="card-info-flare" style={{ left: '-350px', top: '-50px' }}></div>
+      <div ref={swipeWide ? contentRef : undefined} style={slideWide}>
       <div ref={rowBoxRef} style={{ position: 'relative' }}>
       <div ref={rowRef} className="flex items-center gap-0" style={{ width: 'max-content', zoom: rowZoom < 1 ? rowZoom : undefined, opacity: project.onHold ? 0.1 : 1, transition: 'opacity 0.3s' }}>
         {/* Pendant le chargement, le squelette (plus large que les 9 jours) est rogné à leur largeur: la rangée
@@ -321,16 +329,12 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
         </div>
       )}
       </div>
+      </div>
     </div>
   );
   return (
     <div className="card-glow-wrap" ref={swipeWide ? cardRef : undefined} data-open={swipeWide ? actionsOpen : undefined}>
-    {swipeWide ? (
-      <div ref={contentRef} style={{ position: 'relative', zIndex: 1, transform: `translateX(${-txWide}px)`, transition: easeWide, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
-        {actionsOpen && <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} onClick={() => setActionsOpen(false)}/>}
-        {desktopCard}
-      </div>
-    ) : desktopCard}
+    {desktopCard}
     {swipeWide && (
       <div ref={actionsRef} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW}px`, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '28px', transform: `translateX(${actionW - txWide}px)`, transition: easeWide, zIndex: 1, willChange: 'transform' }}>
         {/* Halo rouge du tiroir, comme sur téléphone (il suit le glissement). Halo et boutons descendent de 29 px: centrés
