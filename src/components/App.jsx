@@ -108,15 +108,18 @@ export const App = () => {
     };
   }, [lastDeleted, undoDelete]);
 
-  // Pull-to-refresh (Safari-style)
+  // Pull-to-refresh (Safari-style): téléphone, et iPad (écran tactile sans survol, interface large), où l'indicateur
+  // descend sous la barre de statut et le menu.
   useEffect(() => {
-    if (!isMobile) return;
+    const touchOnly = window.matchMedia('(hover: none)').matches;
+    if (!isMobile && !touchOnly) return;
+    const indicatorTop = isMobile ? '80px' : 'calc(80px + env(safe-area-inset-top))';
     let startY = 0, pulling = false, ready = false, indicator = null;
     const threshold = 220;
     const createIndicator = () => {
       if (indicator) return;
       indicator = document.createElement('div');
-      indicator.style.cssText = 'position:fixed;top:80px;left:50%;width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,0.3);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;z-index:9999;opacity:0;transition:opacity 0.2s;pointer-events:none;transform:translateX(-50%)';
+      indicator.style.cssText = 'position:fixed;top:' + indicatorTop + ';left:50%;width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,0.3);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;z-index:9999;opacity:0;transition:opacity 0.2s;pointer-events:none;transform:translateX(-50%)';
       indicator.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(125,211,198,0.8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.5s"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>';
       document.body.appendChild(indicator);
     };
@@ -124,7 +127,10 @@ export const App = () => {
       if (indicator) { indicator.remove(); indicator = null; }
     };
     const onStart = (e) => {
-      if (window.scrollY <= 0) {
+      // Fiche ouverte: la page ne défile pas (window.scrollY reste à 0), c'est la fiche qui défile. Sans ce test, un
+      // long glissement vers le bas pour remonter dans la fiche rechargeait l'app; il faut être en haut de la fiche.
+      const detail = e.target.closest && e.target.closest('.detail-scroll');
+      if (window.scrollY <= 0 && (!detail || detail.scrollTop <= 0)) {
         startY = e.touches[0].clientY;
         pulling = true;
         ready = false;
