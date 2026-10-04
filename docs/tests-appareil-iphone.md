@@ -87,6 +87,9 @@ iPad Air 11 pouces (Safari, app web installée et app native, portrait et paysag
 - v633.129: l'écran glissait de gauche à droite (signalé par Stéphane sur son iPad). Le halo rouge des cartes, placé
   450 px au-delà du bord droit, élargissait la page à 1270 px, et iOS ignore `overflow-x: hidden` sur html au doigt.
   `#root { overflow-x: clip }` coupe le débordement au bord de l'écran (comme les vues téléphone).
+- v633.130: sur iPad, glisser une carte vers la gauche révèle le tiroir de suppression (halo rouge, corbeille,
+  « Supprimer ? » pendant 3 s), comme sur téléphone; l'appui long déplace la carte (un écouteur touchmove non passif
+  sur la liste annule le défilement une fois la carte saisie). Le shooting du jour reste un geste du téléphone.
 - Ordinateur et téléphone: captures identiques au pixel près avant et après (1440 px et 393 px).
 
 Installer l'app native sur un iPad: le brancher au Mac, le déverrouiller, accepter « Se fier à cet ordinateur »,
