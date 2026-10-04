@@ -16,6 +16,7 @@ const write = (v) => {
 };
 
 export const getShootOfDay = read;
+export const clearShootOfDay = () => write(null);
 
 // Marque le projet; le marquer une seconde fois le démarque. Retourne true si le projet est marqué.
 export const toggleShootOfDay = (projectId) => {
@@ -36,7 +37,10 @@ export const setShootOfDayEnd = (projectId, endsAt, endsFor) => {
 };
 const expireShootOfDay = () => {
   const cur = read();
-  if (cur && cur.endsAt && Date.now() >= cur.endsAt) { write(null); endShootActivity(); }
+  // Filet pour une marque sans heure de fin (posée avant v633.134, ou dont la carte n'est pas affichée: dossier replié):
+  // au-delà de 30 h après le marquage, aucun shooting ne peut encore la concerner.
+  const stale = cur && !cur.endsAt && cur.markedAt && Date.now() - new Date(cur.markedAt).getTime() > 30 * 3600000;
+  if (cur && ((cur.endsAt && Date.now() >= cur.endsAt) || stale)) { write(null); endShootActivity(); }
   sweepShootActivities(); // côté iPhone: termine aussi une activité dont la fin est passée
 };
 if (typeof window !== 'undefined') {

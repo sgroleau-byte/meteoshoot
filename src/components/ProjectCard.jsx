@@ -15,8 +15,8 @@ import { ShootCheckIcon, StarIcon, TrashIcon } from './icons/misc.jsx';
 import { WeatherRow, weatherRowDismiss } from './WeatherRow.jsx';
 import { getTravelTime } from '../maps/google.js';
 import { checkLocationPermission, getCurrentPosition } from '../native/geolocation.js';
-import { liveActivityAvailable, pickSunTarget, shootEndTime, startShootActivity } from '../native/liveActivity.js';
-import { getShootOfDay, setShootOfDayEnd, useShootOfDay } from '../native/shootOfDay.js';
+import { endShootActivity, liveActivityAvailable, pickSunTarget, shootEndTime, startShootActivity } from '../native/liveActivity.js';
+import { clearShootOfDay, getShootOfDay, setShootOfDayEnd, useShootOfDay } from '../native/shootOfDay.js';
 import { dayIcon } from '../weather/iconsLogic.js';
 
 export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, openActionsId, setOpenActionsId }) => {
@@ -85,9 +85,22 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
       const mark = getShootOfDay();
       const orientationKey = [...(project.orientation || [])].sort().join(',');
       const frozen = mark?.endsAt && mark.endsFor === orientationKey;
-      const endsAt = frozen ? mark.endsAt : shootEndTime(target, project.orientation);
+      let endsAt = frozen ? mark.endsAt : null;
+      if (!endsAt) {
+        // Fin calculée depuis le moment du marquage, pas maintenant: une marque d'hier (dont celles d'avant v633.134,
+        // sans heure de fin) ne glisse pas au shooting d'aujourd'hui. Les jours passés ne sont pas dans les prévisions:
+        // hier = heures du soleil d'aujourd'hui moins 24 h (quelques minutes d'écart).
+        const markedMs = mark?.markedAt ? new Date(mark.markedAt).getTime() : Date.now();
+        const back = (iso) => new Date(new Date(iso).getTime() - 86400000).toISOString();
+        const d0 = weather.daily[0];
+        const days = d0?.sunrise && d0?.sunset ? [{ ...d0, sunrise: back(d0.sunrise), sunset: back(d0.sunset) }, ...weather.daily] : weather.daily;
+        const planned = pickSunTarget(days, project.orientation, markedMs) || target;
+        endsAt = shootEndTime(planned, project.orientation);
+        // Shooting déjà fini: la marque s'efface et l'activité se termine.
+        if (endsAt <= Date.now()) { clearShootOfDay(); endShootActivity(); return; }
+        setShootOfDayEnd(project.id, endsAt, orientationKey);
+      }
       if (target.date.getTime() > endsAt) return;
-      if (!frozen) setShootOfDayEnd(project.id, endsAt, orientationKey);
       // Heure du shooting entrée: départ = cette heure, le jour du shooting, moins le trajet; sinon calcul au soleil.
       const depart = project.shootTime
         ? calcDepartureFromShootTime(project.shootTime, travel?.durationSeconds, new Date(target.day.sunrise))

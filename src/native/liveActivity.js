@@ -36,10 +36,10 @@ export const shootEndTime = (target, orientation) => {
 // du shooting, 30 min après, pour qu'une marque posée plus tard vise le lendemain au lieu d'une fin déjà passée), le
 // coucher pour un projet du soir, sinon le prochain des deux; on regarde aujourd'hui puis demain.
 // Retourne { date, isSunrise, day, barStart } ou null.
-export const pickSunTarget = (daily, orientation) => {
-  const now = Date.now();
+// now: moment de référence (par défaut maintenant; le moment du marquage pour fixer la fin du shooting).
+export const pickSunTarget = (daily, orientation, now = Date.now()) => {
   const am = !!orientation?.includes('AM'), pm = !!orientation?.includes('PM');
-  for (const day of (daily || []).slice(0, 2)) {
+  for (const day of (daily || []).slice(0, 3)) {
     if (!day?.sunrise || !day?.sunset) continue;
     const sunrise = new Date(day.sunrise), sunset = new Date(day.sunset);
     const candidates = [];
