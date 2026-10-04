@@ -199,7 +199,7 @@ export const fetchWeather = async (lat, lng) => {
   // les jours qu'il couvre, GFS (portee 16 j) pour completer jusqu'a 10 jours. La sortie
   // garde exactement la meme forme qu'une reponse Open-Meteo unique: ni l'affichage ni le
   // parsing plus bas ne changent.
-  const qs = `latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode,windspeed_10m,windgusts_10m,cloudcover,precipitation,direct_radiation,diffuse_radiation,cloudcover_low,cloudcover_mid,cloudcover_high&daily=weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=America/Toronto&forecast_days=10`;
+  const qs = `latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode,windspeed_10m,windgusts_10m,cloudcover,precipitation,precipitation_probability,direct_radiation,diffuse_radiation,cloudcover_low,cloudcover_mid,cloudcover_high&daily=weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=America/Toronto&forecast_days=10`;
   const [iconRes, gfsRes, smokeMap] = await Promise.all([
     fetchOpenMeteoModel('dwd-icon', qs),
     fetchOpenMeteoModel('gfs', qs),
@@ -208,7 +208,7 @@ export const fetchWeather = async (lat, lng) => {
   const icon = iconRes.data || null;
   const gfs = gfsRes.data || null;
 
-  const HOURLY_KEYS = ['temperature_2m', 'weathercode', 'windspeed_10m', 'windgusts_10m', 'cloudcover', 'precipitation', 'direct_radiation', 'diffuse_radiation', 'cloudcover_low', 'cloudcover_mid', 'cloudcover_high'];
+  const HOURLY_KEYS = ['temperature_2m', 'weathercode', 'windspeed_10m', 'windgusts_10m', 'cloudcover', 'precipitation', 'precipitation_probability', 'direct_radiation', 'diffuse_radiation', 'cloudcover_low', 'cloudcover_mid', 'cloudcover_high'];
   const DAILY_KEYS = ['weathercode', 'temperature_2m_max', 'temperature_2m_min', 'sunrise', 'sunset'];
   const dateOf = (t) => String(t).slice(0, 10);
 
@@ -360,7 +360,7 @@ export const fetchWeather = async (lat, lng) => {
   };
 
   const formatted = {
-    hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), gust: data.hourly.windgusts_10m?.[i] != null ? Math.round(data.hourly.windgusts_10m[i]) : null, cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), cloudLow: data.hourly.cloudcover_low?.[i] ?? null, smoke: smokeMap[dateOf(t)] || 0, icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]) })),
+    hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), gust: data.hourly.windgusts_10m?.[i] != null ? Math.round(data.hourly.windgusts_10m[i]) : null, cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, precipProb: data.hourly.precipitation_probability?.[i] ?? null, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), cloudLow: data.hourly.cloudcover_low?.[i] ?? null, smoke: smokeMap[dateOf(t)] || 0, icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]) })),
     daily: data.daily.time.map((t,i) => {
       const stats = getDailyStats(t);
       // Use hourly-derived icon when available, fallback to daily weathercode
