@@ -90,6 +90,14 @@ iPad Air 11 pouces (Safari, app web installée et app native, portrait et paysag
 - v633.130: sur iPad, glisser une carte vers la gauche révèle le tiroir de suppression (halo rouge, corbeille,
   « Supprimer ? » pendant 3 s), comme sur téléphone; l'appui long déplace la carte (un écouteur touchmove non passif
   sur la liste annule le défilement une fois la carte saisie). Le shooting du jour reste un geste du téléphone.
+- v633.131: rafraîchissement par glissement sur iPad (indicateur sous la barre de statut); dans une fiche, seulement
+  depuis le haut de la fiche (aussi sur téléphone).
+- v633.132: Open-Meteo refusait les appels simultanés (429): file de 6 appels et nouveaux essais (voir src/weather/api.js).
+- v633.133, après une relecture indépendante: rafraîchissement ignoré pendant un déplacement par appui long, à deux
+  doigts, sur les cartes qui suivent un seul doigt (data-no-pull), la roue de date et le menu des dossiers; tiroirs de
+  la liste Édition sur iPad (Remettre, Archiver, Réactiver, corbeille); corbeille du tiroir des projets centrée sur la
+  rangée (29 px plus bas que le centre de la carte); bulle des jours retirée au toucher dans la liste seulement;
+  Apple Pencil en appui long.
 - Ordinateur et téléphone: captures identiques au pixel près avant et après (1440 px et 393 px).
 
 Installer l'app native sur un iPad: le brancher au Mac, le déverrouiller, accepter « Se fier à cet ordinateur »,
