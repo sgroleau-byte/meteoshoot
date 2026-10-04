@@ -1941,7 +1941,9 @@ export const ProjectDetail = ({ projectId, onClose }) => {
           /* Quand la place manque (iPad en portrait, fenêtre étroite), les colonnes passent sous les jours au lieu
              de les chevaucher; l'écart de 16 px entre les deux blocs est un gap pour que la 2e ligne parte du bord. */
           <div className="flex items-center" style={{ width: '100%', flexWrap: 'wrap', columnGap: '16px', rowGap: '18px' }}>
-            <div className="min-w-0">
+            {/* Pendant le chargement, le squelette (plus large que les 10 jours) est rogné à leur largeur (10 x 48 px x 1,15):
+                sans ça, les colonnes passaient sous les jours puis remontaient d'un coup à l'arrivée de la météo. */}
+            <div className="min-w-0" style={project.lat && project.lng && !weather?.daily?.length ? { width: '552px', overflow: 'hidden' } : undefined}>
               {project.lat && project.lng ? <div style={{ zoom: 1.15 }}><WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10} orientation={project.orientation}/></div> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
             </div>
             <div className="flex items-stretch flex-shrink-0 font-bebas-bold uppercase" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
@@ -2141,7 +2143,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
 
           {/* Colonne droite: Carte Google Maps interactive, square, bottom-right. Sans place à droite (iPad en
               portrait, fenêtre étroite), elle passe au-dessus des champs sur toute la largeur, comme sur téléphone. */}
-          <div className={`${isMobile || stackMap ? 'w-full' : ''} flex flex-col`} style={stackMap ? { height: '640px', order: -1 } : { minHeight: isMobile ? '450px' : undefined, height: isMobile ? undefined : '800px', order: isMobile ? -1 : 0, flex: isMobile ? undefined : '1 0 auto', position: isMobile ? undefined : 'sticky', top: isMobile ? undefined : '20px', alignSelf: isMobile ? undefined : 'flex-start' }}>
+          <div className={`${isMobile || stackMap ? 'w-full' : ''} flex flex-col`} data-no-pull={!isMobile && !stackMap ? '' : undefined} style={stackMap ? { height: '640px', order: -1 } : { minHeight: isMobile ? '450px' : undefined, height: isMobile ? undefined : '800px', order: isMobile ? -1 : 0, flex: isMobile ? undefined : '1 0 auto', position: isMobile ? undefined : 'sticky', top: isMobile ? undefined : '20px', alignSelf: isMobile ? undefined : 'flex-start' }}>
             {project.lat && project.lng ? (
               <>
               {showMapFull && <div onClick={() => setShowMapFull(false)} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(30,30,30,0.88)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}/>}

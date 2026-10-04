@@ -87,7 +87,9 @@ export const useFolderDnD = ({ listRef, groupedItems, applyTodoOrder, moveToFold
     } else return;
     if (!blockEl) return;
 
-    const isTouch = e.pointerType === 'touch';
+    // Doigt ou Apple Pencil: appui long avant de saisir (le stylet suivait la branche souris et saisissait la carte au
+    // lieu de faire défiler). Souris et stylet d'ordinateur (Wacom, écran avec survol) saisissent dès 5 px.
+    const isTouch = e.pointerType === 'touch' || (e.pointerType === 'pen' && window.matchMedia('(hover: none)').matches);
     const startX = e.clientX, startY = e.clientY;
     let armed = false, moved = false, timer = null;
     // Empêche la sélection de texte native (surlignage bleu) pendant tout le geste de glisser.

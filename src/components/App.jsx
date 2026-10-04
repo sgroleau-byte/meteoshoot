@@ -126,10 +126,20 @@ export const App = () => {
     const removeIndicator = () => {
       if (indicator) { indicator.remove(); indicator = null; }
     };
+    const cancelPull = () => { pulling = false; ready = false; removeIndicator(); };
     const onStart = (e) => {
+      cancelPull(); // un second doigt qui se pose pendant un tirage retire aussi l'indicateur
+      const target = e.target;
+      if (e.touches.length > 1 || !target.closest) return;
+      // Gestes qui appartiennent à autre chose (data-no-pull): carte Google qui suit un seul doigt (fiche en paysage sur
+      // iPad, carte de Route), roue de date; et le menu des dossiers (défilement interne). Une carte « coopérative »
+      // (un doigt fait défiler la page) reste un point de départ valable; à deux doigts, onMove annule.
+      if (target.closest('[data-no-pull], #folder-menu-portal')) return;
       // Fiche ouverte: la page ne défile pas (window.scrollY reste à 0), c'est la fiche qui défile. Sans ce test, un
-      // long glissement vers le bas pour remonter dans la fiche rechargeait l'app; il faut être en haut de la fiche.
-      const detail = e.target.closest && e.target.closest('.detail-scroll');
+      // long glissement vers le bas pour remonter dans la fiche rechargeait l'app; il faut être en haut de la fiche,
+      // et un élément posé par-dessus la fiche (portail dans body) ne compte pas.
+      const detail = target.closest('.detail-scroll');
+      if (!detail && document.querySelector('.detail-scroll')) return;
       if (window.scrollY <= 0 && (!detail || detail.scrollTop <= 0)) {
         startY = e.touches[0].clientY;
         pulling = true;
@@ -138,6 +148,8 @@ export const App = () => {
     };
     const onMove = (e) => {
       if (!pulling) return;
+      // Carte saisie par appui long (changement d'ordre) ou second doigt (pincement): ce n'est pas un rafraîchissement.
+      if (window.__isDragging || e.touches.length > 1) { cancelPull(); return; }
       const dy = e.touches[0].clientY - startY;
       if (dy < 0) { pulling = false; removeIndicator(); return; }
       if (dy > 20) {
@@ -176,10 +188,12 @@ export const App = () => {
     window.addEventListener('touchstart', onStart, { passive: true });
     window.addEventListener('touchmove', onMove, { passive: true });
     window.addEventListener('touchend', onEnd, { passive: true });
+    window.addEventListener('touchcancel', cancelPull, { passive: true }); // geste repris par iOS: pas de rechargement
     return () => {
       window.removeEventListener('touchstart', onStart);
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onEnd);
+      window.removeEventListener('touchcancel', cancelPull);
       removeIndicator();
     };
   }, [isMobile]);

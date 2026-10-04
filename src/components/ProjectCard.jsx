@@ -243,7 +243,7 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
         {/* Pendant le chargement, le squelette (plus large que les 9 jours) est rogné à leur largeur: la rangée
             garde sa taille finale et sa réduction sur iPad ne saute pas à l'arrivée de la météo. */}
         <div className="min-w-0" style={{ minWidth: '432px', overflow: "visible", ...(weather ? null : { width: '432px', overflow: 'hidden' }) }}>
-          {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} orientation={project.orientation} onDayClick={() => onSelect(project)}/> : <p className="text-charcoal-muted text-sm italic py-2 cursor-pointer" onClick={() => onSelect(project)}>{t('weatherUnavailable')}</p>}
+          {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} orientation={project.orientation} onDayClick={() => onSelect(project)} tapOpensDetail/> : <p className="text-charcoal-muted text-sm italic py-2 cursor-pointer" onClick={() => onSelect(project)}>{t('weatherUnavailable')}</p>}
         </div>
         <div onMouseEnter={() => { if (weatherRowDismiss.current) { weatherRowDismiss.current(); weatherRowDismiss.current = null; } }} onClick={() => onSelect(project)} className="cursor-pointer flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
           <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '75px' }}>
@@ -299,9 +299,10 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
     ) : desktopCard}
     {swipeWide && (
       <div ref={actionsRef} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW}px`, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '28px', transform: `translateX(${actionW - txWide}px)`, transition: easeWide, zIndex: 1 }}>
-        {/* Halo rouge du tiroir, comme sur téléphone (il suit le glissement) */}
-        <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
-        {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '16px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>{t('deleteConfirm')}</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
+        {/* Halo rouge du tiroir, comme sur téléphone (il suit le glissement). Halo et boutons descendent de 29 px: centrés
+            sur la rangée météo et les colonnes plutôt que sur toute la carte (titre compris), comme le décalage du téléphone. */}
+        <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, calc(-50% + 29px)) scaleX(1.22)' }}/>
+        {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '16px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap', position: 'relative', top: '29px' }} onClick={() => { deleteProject(project.id); }}>{t('deleteConfirm')}</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '29px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
       </div>
     )}
     <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>

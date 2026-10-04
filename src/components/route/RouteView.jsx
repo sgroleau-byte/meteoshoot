@@ -461,7 +461,8 @@ export const RouteMiniMap = ({ depLat, depLng, destinations, legs, height = 340 
     }
     return () => { alive = false; };
   }, [key]);
-  return <div ref={ref} style={{ height, borderRadius: 12, overflow: 'hidden', border: '1px solid #2A2F32', background: '#15191B' }} />;
+  // data-no-pull: la carte suit un seul doigt (greedy); la tirer vers le bas ne doit pas rafraîchir l'app (App.jsx).
+  return <div ref={ref} data-no-pull style={{ height, borderRadius: 12, overflow: 'hidden', border: '1px solid #2A2F32', background: '#15191B' }} />;
 };
 
 // Ouvre un lien externe (Google Maps, Google Earth) dans une nouvelle fenêtre: dans le site installé en app

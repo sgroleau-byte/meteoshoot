@@ -131,15 +131,33 @@ export const RetouchingCard = ({ project, onSelect, index = 0, openActionsId, se
   const actionsOpen = openActionsId === project.id;
   const setActionsOpen = (v) => setOpenActionsId ? setOpenActionsId(v ? project.id : null) : null;
   const actionW = 210;
+  // iPad (interface large au doigt, sans survol): mêmes actions qu'au survol, révélées en glissant la carte vers la gauche,
+  // avec le tiroir du téléphone.
+  const [touchOnly] = useState(() => window.matchMedia('(hover: none)').matches);
+  const swipeWide = !isMobile && touchOnly;
 
-  useSwipeActions({ cardRef, contentRef, actionsRef, haloWhiteRef, actionW, isMobile, setActionsOpen, syncHalo: true });
+  useSwipeActions({ cardRef, contentRef, actionsRef, haloWhiteRef, actionW, isMobile: isMobile || swipeWide, setActionsOpen, syncHalo: true, variant: isMobile ? 'mobile' : 'wide' });
 
   const isFirstMount = useRef(true);
   useEffect(() => afterEntrance(() => { isFirstMount.current = false; }), []);
 
+  const tx = actionsOpen ? actionW : 0;
+  const ease = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
+  const drawer = (
+      <div ref={actionsRef} style={{
+        position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW}px`,
+        display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: '12px', paddingRight: '20px',
+        transform: `translateX(${actionW - tx}px)`, transition: ease, zIndex: 1
+      }}>
+        {/* Red/pink glow */}
+        <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '280px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
+        {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmRevert) { setActionsOpen(false); revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setConfirmDone(false); setConfirmDelete(false); setTimeout(() => setConfirmRevert(false), 3000); } }}>{confirmRevert ? t('revertConfirm') : t('revert')}</button>}
+        {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmDone) { setActionsOpen(false); advanceProject(project.id); setConfirmDone(false); } else { setConfirmDone(true); setConfirmRevert(false); setConfirmDelete(false); setTimeout(() => setConfirmDone(false), 3000); } }}>{confirmDone ? t('archiveConfirm') : t('archive')}</button>}
+        {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>{t('deleteConfirm')}</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '-3px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
+      </div>
+  );
+
   if (isMobile) {
-    const tx = actionsOpen ? actionW : 0;
-    const ease = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
     return (
       <div ref={cardRef} data-open={actionsOpen} data-project-id={project.id} className={isFirstMount.current ? 'animate-card-in' : ''}
         style={{ position: 'relative', margin: '0 12px', marginBottom: '40px', ...(isFirstMount.current ? { animationDelay: `${0.05 + index * 0.12}s` } : {}), WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
@@ -162,31 +180,30 @@ export const RetouchingCard = ({ project, onSelect, index = 0, openActionsId, se
           )}
           <EditRow index={index} compact project={project} days={days} status={status} editPrefs={editPrefs} dateLabel={dateLabel} onClick={() => { if (!actionsOpen) onSelect(project); }}/>
         </div>
-        <div ref={actionsRef} style={{
-          position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW}px`,
-          display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: '12px', paddingRight: '20px',
-          transform: `translateX(${actionW - tx}px)`, transition: ease, zIndex: 1
-        }}>
-          {/* Red/pink glow */}
-          <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '280px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
-          {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmRevert) { setActionsOpen(false); revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setConfirmDone(false); setConfirmDelete(false); setTimeout(() => setConfirmRevert(false), 3000); } }}>{confirmRevert ? t('revertConfirm') : t('revert')}</button>}
-          {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmDone) { setActionsOpen(false); advanceProject(project.id); setConfirmDone(false); } else { setConfirmDone(true); setConfirmRevert(false); setConfirmDelete(false); setTimeout(() => setConfirmDone(false), 3000); } }}>{confirmDone ? t('archiveConfirm') : t('archive')}</button>}
-          {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>{t('deleteConfirm')}</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '-3px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
-        </div>
+        {drawer}
       </div>
     );
   }
 
   // Desktop layout : coque de carte inchangée (fond, halo, filet, survol), rangée 2a à l'intérieur.
   // Le padding interne (4 px / 18 px) s'ajoute à celui de la carte (16 px) pour donner 20 px / 34 px.
-  return (
-    <div className="card-glow-wrap">
+  const desktopCard = (
     <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden animate-card-in border-b border-adaptive"
       style={{ animationDelay: `${0.05 + index * 0.12}s` }}>
       <div className="card-info-flare" style={{ left: '-350px', top: '0px', background: 'radial-gradient(circle, rgba(216,175,76,1) 0%, rgba(216,175,76,0.5) 35%, transparent 65%)' }}></div>
-      <EditRow index={index} project={project} days={days} status={status} editPrefs={editPrefs} dateLabel={dateLabel} onClick={() => onSelect(project)} dateActive={editingShotDate}
+      <EditRow index={index} project={project} days={days} status={status} editPrefs={editPrefs} dateLabel={dateLabel} onClick={() => { if (!actionsOpen) onSelect(project); }} dateActive={editingShotDate}
         onDateClick={(e) => { if (!project.shotAt) return; e.stopPropagation(); const r = e.currentTarget.getBoundingClientRect(); setPickerPos({ top: r.bottom + 4, left: r.left }); originalDateRef.current = project.shotAt; setEditingShotDate(p => !p); }}/>
     </div>
+  );
+  return (
+    <div className="card-glow-wrap" ref={swipeWide ? cardRef : undefined} data-open={swipeWide ? actionsOpen : undefined}>
+    {swipeWide ? (
+      <div ref={contentRef} style={{ position: 'relative', zIndex: 1, transform: `translateX(${-tx}px)`, transition: ease }}>
+        {actionsOpen && <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} onClick={() => setActionsOpen(false)}/>}
+        {desktopCard}
+      </div>
+    ) : desktopCard}
+    {swipeWide && drawer}
     <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
       <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? t('cancelEditingConfirm') : t('cancelEditing')}</button>
       <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? t('archiveConfirm') : t('archive')}</button>
@@ -222,10 +239,13 @@ export const DoneCard = ({ project, index = 0, editPrefs = EDIT_LIST_DEFAULTS })
   const actionsRef2 = useRef(null);
   const [actionsOpen2, setActionsOpen2] = useState(false);
   const actionW2 = 160;
+  // iPad (interface large au doigt): même tiroir qu'au téléphone (Réactiver, corbeille), en glissant la carte vers la gauche.
+  const [touchOnly2] = useState(() => window.matchMedia('(hover: none)').matches);
+  const swipeWide2 = !isMobile && touchOnly2;
 
   useEffect(() => {
     const card = cardRef2.current;
-    if (!card || !isMobile) return;
+    if (!card || !(isMobile || swipeWide2)) return;
     let startX = 0, startY = 0, locked = false, mode = null, open = false, px = 0, lastMoveX = 0, lastMoveT = 0, velocity = 0;
     const ease = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
     const setTx = (v) => { px = v; if (contentRef2.current) contentRef2.current.style.transform = `translateX(${-v}px)`; if (actionsRef2.current) actionsRef2.current.style.transform = `translateX(${actionW2 - v}px)`; };
@@ -247,8 +267,12 @@ export const DoneCard = ({ project, index = 0, editPrefs = EDIT_LIST_DEFAULTS })
       else { if (contentRef2.current) contentRef2.current.style.transition = ease; if (actionsRef2.current) actionsRef2.current.style.transition = ease; }
       mode = null;
     };
+    // Tiroir refermé par le calque (toucher la carte): l'état local suit, sinon le glissement suivant partait en mode
+    // fermeture et la carte sautait d'un coup en position ouverte.
+    const attrObs = new MutationObserver(() => { if (card.dataset.open !== 'true') open = false; });
+    attrObs.observe(card, { attributes: true, attributeFilter: ['data-open'] });
     card.addEventListener('touchstart', onStart, { passive: true }); card.addEventListener('touchmove', onMove, { passive: false }); card.addEventListener('touchend', onEnd, { passive: true });
-    return () => { if (rafId) cancelAnimationFrame(rafId); card.removeEventListener('touchstart', onStart); card.removeEventListener('touchmove', onMove); card.removeEventListener('touchend', onEnd); };
+    return () => { if (rafId) cancelAnimationFrame(rafId); attrObs.disconnect(); card.removeEventListener('touchstart', onStart); card.removeEventListener('touchmove', onMove); card.removeEventListener('touchend', onEnd); };
   }, [isMobile]);
 
   const handleRevert = (e) => {
@@ -260,11 +284,25 @@ export const DoneCard = ({ project, index = 0, editPrefs = EDIT_LIST_DEFAULTS })
     if (confirmDelete) { deleteProject(project.id); } else { setConfirmDelete(true); setConfirmRevert(false); setTimeout(() => setConfirmDelete(false), 3000); }
   };
 
+  const tx2 = actionsOpen2 ? actionW2 : 0;
+  const ease2 = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
+  // Tiroir (Réactiver, corbeille), commun au téléphone et à l'iPad
+  const drawer2 = (
+      <div ref={actionsRef2} style={{
+        position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW2}px`,
+        display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: '12px', paddingRight: '20px',
+        transform: `translateX(${actionW2 - tx2}px)`, transition: ease2, zIndex: 1
+      }}>
+        {/* Red/pink glow */}
+        <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '280px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
+        {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmRevert) { setActionsOpen2(false); revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setConfirmDelete(false); setTimeout(() => setConfirmRevert(false), 3000); } }}>{confirmRevert ? t('reactivateConfirm') : t('reactivate')}</button>}
+        {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>{t('deleteConfirm')}</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '-3px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
+      </div>
+  );
+
   if (isMobile) {
-    const tx2 = actionsOpen2 ? actionW2 : 0;
-    const ease2 = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
     return (
-      <div ref={cardRef2} style={{ position: 'relative', margin: '0 12px', marginBottom: '40px', opacity: 0.5, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}>
+      <div ref={cardRef2} data-open={actionsOpen2} style={{ position: 'relative', margin: '0 12px', marginBottom: '40px', opacity: 0.5, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}>
         {/* Layer 2: fond (coins droits) + halos + contours flous */}
         <div style={{ position: 'absolute', top: 0, left: '-40px', right: 0, bottom: '-15px', borderRadius: '0px', overflow: 'hidden', background: 'rgba(0,0,0,0.14)', WebkitMaskImage: 'linear-gradient(to right, black, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', WebkitMaskComposite: 'destination-in', maskImage: 'linear-gradient(to right, black, black calc(100% - 50px), transparent), linear-gradient(to bottom, transparent, black 50px, black calc(100% - 50px), transparent)', maskComposite: 'intersect', pointerEvents: 'none' }}>
           <div style={{ position: 'absolute', left: '50%', bottom: '-350px', width: '700px', height: '500px', borderRadius: '50%', background: 'radial-gradient(ellipse 60% 45%, rgba(39,80,84,0.6) 0%, rgba(39,80,84,0.3) 40%, rgba(39,80,84,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translateX(-50%)' }}/>
@@ -279,26 +317,26 @@ export const DoneCard = ({ project, index = 0, editPrefs = EDIT_LIST_DEFAULTS })
           {actionsOpen2 && <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} onClick={() => setActionsOpen2(false)}/>}
           <EditRow index={index} compact project={project} days={frozenDays} status='normal' editPrefs={editPrefs} dateLabel={doneDateLabel}/>
         </div>
-        {/* Swipe actions */}
-        <div ref={actionsRef2} style={{
-          position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW2}px`,
-          display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: '12px', paddingRight: '20px',
-          transform: `translateX(${actionW2 - tx2}px)`, transition: ease2, zIndex: 1
-        }}>
-          {/* Red/pink glow */}
-          <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '280px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
-          {!confirmDelete && <button className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : '#8B9B99', fontSize: '15px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4)' : 'none', whiteSpace: 'nowrap', transition: 'color 0.2s, text-shadow 0.2s' }} onClick={() => { if (confirmRevert) { setActionsOpen2(false); revertProject(project.id); setConfirmRevert(false); } else { setConfirmRevert(true); setConfirmDelete(false); setTimeout(() => setConfirmRevert(false), 3000); } }}>{confirmRevert ? t('reactivateConfirm') : t('reactivate')}</button>}
-          {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '15px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>{t('deleteConfirm')}</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '-3px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
-        </div>
+        {drawer2}
       </div>
     );
   }
 
-  return (
-    <div className="card-glow-wrap">
+  const desktopCard2 = (
     <div className="project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden border-b border-adaptive" style={{ opacity: 0.5 }}>
       <EditRow index={index} project={project} days={frozenDays} status='normal' editPrefs={editPrefs} dateLabel={doneDateLabel}/>
     </div>
+  );
+  return (
+    <div className="card-glow-wrap" ref={swipeWide2 ? cardRef2 : undefined} data-open={swipeWide2 ? actionsOpen2 : undefined}>
+    {swipeWide2 ? (
+      <div ref={contentRef2} style={{ position: 'relative', zIndex: 1, transform: `translateX(${-tx2}px)`, transition: ease2 }}>
+        {actionsOpen2 && <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} onClick={() => setActionsOpen2(false)}/>}
+        {desktopCard2}
+      </div>
+    ) : desktopCard2}
+    {/* Atténué comme la carte, ainsi que l'est tout le tiroir du téléphone (opacité 0,5 de la carte) */}
+    {swipeWide2 && React.cloneElement(drawer2, { style: { ...drawer2.props.style, opacity: 0.5 } })}
     <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
       <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? t('reactivateConfirm') : t('reactivate')}</button>
       <button onClick={handleDelete} className={`p-2 trash-btn text-red-500`} title={t('delete')}><TrashIcon/></button>

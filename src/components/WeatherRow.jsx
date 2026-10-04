@@ -11,7 +11,7 @@ import { SMOKE_TINT, WeatherIcon } from './icons/WeatherIcon.jsx';
 // Global tracker for active weather tooltip
 export const weatherRowDismiss = { current: null };
 
-export const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9, orientation = [] }) => {
+export const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9, orientation = [], tapOpensDetail = false }) => {
   // Créneaux de shoot du projet (AM puis PM), pour l'indice d'opportunité sous chaque jour.
   const shootSlots = ['AM', 'PM'].filter((o) => (orientation || []).includes(o));
   const { t } = useLang();
@@ -25,6 +25,10 @@ export const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9, orientation
   const currentX = React.useRef(0);
   const rafRef = React.useRef(null);
   const isMobile = useIsMobile();
+  // Bulle de survol des jours. Dans la liste sur iPad (tapOpensDetail), le survol simulé au toucher l'affichait puis la
+  // laissait par-dessus la fiche ouverte: au doigt, elle ne sert que là où toucher un jour n'ouvre rien (fiche, Route).
+  const [touchOnly] = useState(() => window.matchMedia('(hover: none)').matches);
+  const hoverTips = !isMobile && !(touchOnly && tapOpensDetail);
 
   // Close tooltip on scroll/wheel (desktop)
   useEffect(() => {
@@ -95,7 +99,7 @@ export const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9, orientation
     <div 
       className="relative" 
       ref={rowRef}
-      onMouseLeave={isMobile ? undefined : handleRowLeave}
+      onMouseLeave={hoverTips ? handleRowLeave : undefined}
     >
       <div className="flex gap-0 py-0" style={{ overflow: 'visible' }}>
       {sortedDaily.map((day, i) => {
@@ -108,7 +112,7 @@ export const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9, orientation
             className={`day-cell relative flex flex-col items-center gap-0 min-w-[48px] px-0 py-0 rounded cursor-pointer ${i===0 ? 'bg-cream-dark/50' : ''}`}
             style={day.smoke ? { background: SMOKE_TINT[day.smoke] } : undefined}
             onClick={() => onDayClick?.()}
-            onMouseEnter={isMobile ? undefined : (e) => handleCellEnter(i, e)}
+            onMouseEnter={hoverTips ? (e) => handleCellEnter(i, e) : undefined}
           >
             {isSunny && <div style={{ position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%) translateY(95%) scaleX(0.6) scaleY(1.4)', width: '60px', height: '60px', pointerEvents: 'none', zIndex: 0, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,226,107,0.3) 0%, rgba(255,226,107,0.1) 40%, transparent 70%)', animation: 'sunglowPulse 6s ease-in-out infinite' }}/>}
             <span className="font-bebas-bold text-sm leading-none" style={{ color: '#8B9B99' }}>

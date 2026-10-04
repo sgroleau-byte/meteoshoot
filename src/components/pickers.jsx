@@ -231,8 +231,9 @@ export const DateWheelPicker = ({ date, onChange, onClose, onCancel, title, drop
     ? { position: 'relative', width: '100%', maxWidth: '350px', zIndex: 20, background: 'rgba(20,24,27,0.95)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderRadius: '16px', padding: '12px 0 18px' }
     : { position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '350px', zIndex: 20, background: 'rgba(20,24,27,0.7)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderRadius: '16px 16px 0 0', padding: '12px 0 18px' };
 
+  // data-no-pull: faire tourner la roue vers le bas ne doit pas déclencher le rafraîchissement par glissement (App.jsx).
   return (
-    <div style={posStyle}>
+    <div style={posStyle} data-no-pull>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px 8px' }}>
         <button onClick={leftBtn.action} className="font-bebas-bold" style={{ background: 'none', border: 'none', color: leftBtn.color, fontSize: '20px', cursor: 'pointer', letterSpacing: '0.05em' }}>{leftBtn.label}</button>
         <span className="font-bebas-bold" style={{ fontSize: '16px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.05em' }}>{title || t('sunDate')}</span>
