@@ -4,7 +4,9 @@ import { useEffect } from 'react';
 // actionW: largeur du tiroir. scrollRef (optionnel): n'ouvre que si la bande horaire est scrollée au bout.
 // syncHalo: inclure le halo blanc dans la transition de fermeture inter-cartes (RetouchingCard oui, ProjectCard non).
 // isMobile active le geste; variant (facultatif) le réinstalle quand la carte change de structure (téléphone ou iPad).
-export const useSwipeActions = ({ cardRef, contentRef, actionsRef, haloWhiteRef, scrollRef, actionW, isMobile, setActionsOpen, syncHalo, variant = '' }) => {
+// keepLayers: garder les calques préparés pour la puce graphique après le geste (carte large de l'iPad, lourde à
+// redessiner: la repréparer au début de chaque glissement le faisait saccader).
+export const useSwipeActions = ({ cardRef, contentRef, actionsRef, haloWhiteRef, scrollRef, actionW, isMobile, setActionsOpen, syncHalo, variant = '', keepLayers = false }) => {
   useEffect(() => {
     const card = cardRef.current;
     if (!card || !isMobile) return;
@@ -109,14 +111,15 @@ export const useSwipeActions = ({ cardRef, contentRef, actionsRef, haloWhiteRef,
         setTx(snap ? actionW : 0);
         setTimeout(() => {
           setActionsOpen(snap);
+          if (keepLayers) return;
           if (contentRef.current) contentRef.current.style.willChange = '';
           if (haloWhiteRef.current) haloWhiteRef.current.style.willChange = '';
           if (actionsRef.current) actionsRef.current.style.willChange = '';
         }, 600);
       } else {
-        if (contentRef.current) { contentRef.current.style.transition = ease; contentRef.current.style.willChange = ''; }
-        if (haloWhiteRef.current) { haloWhiteRef.current.style.transition = ease; haloWhiteRef.current.style.willChange = ''; }
-        if (actionsRef.current) { actionsRef.current.style.transition = ease; actionsRef.current.style.willChange = ''; }
+        if (contentRef.current) { contentRef.current.style.transition = ease; if (!keepLayers) contentRef.current.style.willChange = ''; }
+        if (haloWhiteRef.current) { haloWhiteRef.current.style.transition = ease; if (!keepLayers) haloWhiteRef.current.style.willChange = ''; }
+        if (actionsRef.current) { actionsRef.current.style.transition = ease; if (!keepLayers) actionsRef.current.style.willChange = ''; }
       }
       mode = null;
     };

@@ -136,7 +136,7 @@ export const RetouchingCard = ({ project, onSelect, index = 0, openActionsId, se
   const [touchOnly] = useState(() => window.matchMedia('(hover: none)').matches);
   const swipeWide = !isMobile && touchOnly;
 
-  useSwipeActions({ cardRef, contentRef, actionsRef, haloWhiteRef, actionW, isMobile: isMobile || swipeWide, setActionsOpen, syncHalo: true, variant: isMobile ? 'mobile' : 'wide' });
+  useSwipeActions({ cardRef, contentRef, actionsRef, haloWhiteRef, actionW, isMobile: isMobile || swipeWide, setActionsOpen, syncHalo: true, variant: isMobile ? 'mobile' : 'wide', keepLayers: swipeWide });
 
   const isFirstMount = useRef(true);
   useEffect(() => afterEntrance(() => { isFirstMount.current = false; }), []);
@@ -203,7 +203,8 @@ export const RetouchingCard = ({ project, onSelect, index = 0, openActionsId, se
         {desktopCard}
       </div>
     ) : desktopCard}
-    {swipeWide && drawer}
+    {/* iPad: tiroir préparé d'avance pour la puce graphique, comme la carte qui glisse */}
+    {swipeWide && React.cloneElement(drawer, { style: { ...drawer.props.style, willChange: 'transform' } })}
     <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
       <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? t('cancelEditingConfirm') : t('cancelEditing')}</button>
       <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? t('archiveConfirm') : t('archive')}</button>
@@ -336,7 +337,7 @@ export const DoneCard = ({ project, index = 0, editPrefs = EDIT_LIST_DEFAULTS })
       </div>
     ) : desktopCard2}
     {/* Atténué comme la carte, ainsi que l'est tout le tiroir du téléphone (opacité 0,5 de la carte) */}
-    {swipeWide2 && React.cloneElement(drawer2, { style: { ...drawer2.props.style, opacity: 0.5 } })}
+    {swipeWide2 && React.cloneElement(drawer2, { style: { ...drawer2.props.style, opacity: 0.5, willChange: 'transform' } })}
     <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
       <button onClick={handleRevert} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmRevert ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmRevert ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmRevert) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmRevert ? t('reactivateConfirm') : t('reactivate')}</button>
       <button onClick={handleDelete} className={`p-2 trash-btn text-red-500`} title={t('delete')}><TrashIcon/></button>

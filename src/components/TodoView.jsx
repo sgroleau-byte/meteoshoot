@@ -290,6 +290,9 @@ export const useFolderDnD = ({ listRef, groupedItems, applyTodoOrder, moveToFold
 export const TodoView = ({ onSelect, onAddProject, addingProject, plusRef }) => {
   const { projects, reorderProjects, applyTodoOrder, moveToFolder, folderStates, setFolderState } = useStore();
   const isMobile = useIsMobile();
+  // iPad: comme au téléphone, la liste annonce au navigateur que seul le défilement vertical est à lui (les glissements
+  // horizontaux ouvrent le tiroir).
+  const [touchOnly] = useState(() => window.matchMedia('(hover: none)').matches);
   const { tier, getProjectLimit, canCreateProject } = useSubscription();
   const { t } = useLang();
   const { bannerError, lastCachedAt } = useWeatherStatus();
@@ -343,7 +346,7 @@ export const TodoView = ({ onSelect, onAddProject, addingProject, plusRef }) => 
   
   
   return (
-    <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : 'calc(100px + env(safe-area-inset-top))', ...(isMobile ? { minHeight: '100vh', touchAction: 'pan-y', overflowX: 'clip' } : {}) }}>
+    <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : 'calc(100px + env(safe-area-inset-top))', ...(isMobile ? { minHeight: '100vh', touchAction: 'pan-y', overflowX: 'clip' } : touchOnly ? { touchAction: 'pan-y' } : {}) }}>
       {!isMobile && <h1 className="font-bebas-bold" style={{ position: 'fixed', top: 'calc(7px + env(safe-area-inset-top))', left: '10px', fontSize: '24px', color: '#5a6b69', letterSpacing: '0.03em', zIndex: 5 }}>PROJETS</h1>}
       {(() => {
         const limit = getProjectLimit();
@@ -508,14 +511,14 @@ export const TodoView = ({ onSelect, onAddProject, addingProject, plusRef }) => 
             return groupedItems.map((it) => {
               if (it.type === 'project') {
                 const i = ci++;
-                return <div key={it.project.id} data-drag-card={it.project.id} data-card-folder=""><ProjectCard project={it.project} index={i} onSelect={onSelect} openActionsId={openActionsId} setOpenActionsId={setOpenActionsId}/></div>;
+                return <div key={it.project.id} data-drag-card={it.project.id} data-card-folder=""><ProjectCard project={it.project} index={i} onSelect={onSelect} actionsOpen={openActionsId === it.project.id} setOpenActionsId={setOpenActionsId}/></div>;
               }
               const open = isFolderOpen(it);
               return (
                 <FolderAccordion key={'folder:' + it.name} name={it.name} count={it.projects.length} isOpen={open} onToggle={() => setFolderState(it.name, !open)}>
                   {open && it.projects.map((p) => {
                     const i = ci++;
-                    return <div key={p.id} data-drag-card={p.id} data-card-folder={it.name}><ProjectCard project={p} index={i} onSelect={onSelect} openActionsId={openActionsId} setOpenActionsId={setOpenActionsId}/></div>;
+                    return <div key={p.id} data-drag-card={p.id} data-card-folder={it.name}><ProjectCard project={p} index={i} onSelect={onSelect} actionsOpen={openActionsId === p.id} setOpenActionsId={setOpenActionsId}/></div>;
                   })}
                 </FolderAccordion>
               );

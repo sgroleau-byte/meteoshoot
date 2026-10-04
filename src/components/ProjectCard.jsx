@@ -19,7 +19,9 @@ import { endShootActivity, liveActivityAvailable, pickSunTarget, shootEndTime, s
 import { clearShootOfDay, getShootOfDay, setShootOfDayEnd, useShootOfDay } from '../native/shootOfDay.js';
 import { dayIcon } from '../weather/iconsLogic.js';
 
-export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, openActionsId, setOpenActionsId }) => {
+// React.memo + actionsOpen (booléen): ouvrir ou fermer un tiroir ne redessine que la carte concernée, pas toute la liste
+// (sur iPad, redessiner les cartes larges à la fin du glissement le faisait accrocher).
+export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDownDrag, actionsOpen, setOpenActionsId }) => {
   const { advanceProject, deleteProject } = useStore();
   const { t } = useLang();
   const { reportWeather, clearWeather } = useWeatherStatus();
@@ -162,7 +164,6 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
   const contentRef = useRef(null);
   const actionsRef = useRef(null);
   const haloWhiteRef = useRef(null);
-  const actionsOpen = openActionsId === project.id;
   const setActionsOpen = (v) => setOpenActionsId(v ? project.id : null);
   const actionW = 160;
   // iPad (interface large au doigt, sans survol): le tiroir de suppression se révèle en glissant la carte vers la
@@ -170,7 +171,7 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
   const [touchOnly] = useState(() => window.matchMedia('(hover: none)').matches);
   const swipeWide = !isMobile && touchOnly;
 
-  useSwipeActions({ cardRef, contentRef, actionsRef, haloWhiteRef, scrollRef, actionW, isMobile: isMobile || swipeWide, setActionsOpen, syncHalo: false, variant: isMobile ? 'mobile' : 'wide' });
+  useSwipeActions({ cardRef, contentRef, actionsRef, haloWhiteRef, scrollRef, actionW, isMobile: isMobile || swipeWide, setActionsOpen, syncHalo: false, variant: isMobile ? 'mobile' : 'wide', keepLayers: swipeWide });
 
   // Rangée desktop sur iPad en portrait et dans les fenêtres étroites (sous 1024 px): la colonne CRÉÉ quitte la
   // rangée (elle reste dans la fiche) et la rangée se réduit juste assez pour tenir dans la carte au lieu d'être
@@ -331,7 +332,7 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
       </div>
     ) : desktopCard}
     {swipeWide && (
-      <div ref={actionsRef} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW}px`, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '28px', transform: `translateX(${actionW - txWide}px)`, transition: easeWide, zIndex: 1 }}>
+      <div ref={actionsRef} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW}px`, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '28px', transform: `translateX(${actionW - txWide}px)`, transition: easeWide, zIndex: 1, willChange: 'transform' }}>
         {/* Halo rouge du tiroir, comme sur téléphone (il suit le glissement). Halo et boutons descendent de 29 px: centrés
             sur la rangée météo et les colonnes plutôt que sur toute la carte (titre compris), comme le décalage du téléphone. */}
         <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, calc(-50% + 29px)) scaleX(1.22)' }}/>
@@ -344,4 +345,4 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
     </div>
     </div>
   );
-};
+});

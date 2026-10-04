@@ -32,16 +32,16 @@ export const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9, orientation
 
   // Close tooltip on scroll/wheel (desktop)
   useEffect(() => {
-    if (isMobile) return;
+    if (!hoverTips) return;
     const dismiss = () => { setVisible(false); setHoveredIdx(null); };
     window.addEventListener('scroll', dismiss, true);
     window.addEventListener('wheel', dismiss, { passive: true });
     return () => { window.removeEventListener('scroll', dismiss, true); window.removeEventListener('wheel', dismiss); };
-  }, [isMobile]);
+  }, [hoverTips]);
 
-  // Lerp animation loop (desktop only)
+  // Lerp animation loop (desktop only): seulement là où la bulle existe (une boucle par rangée tournait sinon en continu)
   useEffect(() => {
-    if (isMobile) return;
+    if (!hoverTips) return;
     const animate = () => {
       const diff = targetX.current - currentX.current;
       currentX.current += diff * 0.15;
@@ -52,7 +52,7 @@ export const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9, orientation
     };
     rafRef.current = requestAnimationFrame(animate);
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [isMobile]);
+  }, [hoverTips]);
   
   if (!daily?.length) return <div className="flex gap-2 py-2">{[...Array(10)].map((_,i) => <div key={i} className="flex flex-col items-center gap-0 min-w-[56px]"><div className="w-12 h-4 bg-cream-dark rounded animate-pulse"/><div className="w-8 h-8 bg-cream-dark rounded-full animate-pulse"/></div>)}</div>;
   
