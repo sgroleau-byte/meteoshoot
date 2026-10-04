@@ -136,8 +136,12 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
   const actionsOpen = openActionsId === project.id;
   const setActionsOpen = (v) => setOpenActionsId(v ? project.id : null);
   const actionW = 160;
+  // iPad (interface large au doigt, sans survol): le tiroir de suppression se révèle en glissant la carte vers la
+  // gauche, comme sur téléphone (corbeille seule; « Passer en édition » reste dans la fiche).
+  const [touchOnly] = useState(() => window.matchMedia('(hover: none)').matches);
+  const swipeWide = !isMobile && touchOnly;
 
-  useSwipeActions({ cardRef, contentRef, actionsRef, haloWhiteRef, scrollRef, actionW, isMobile, setActionsOpen, syncHalo: false });
+  useSwipeActions({ cardRef, contentRef, actionsRef, haloWhiteRef, scrollRef, actionW, isMobile: isMobile || swipeWide, setActionsOpen, syncHalo: false, variant: isMobile ? 'mobile' : 'wide' });
 
   // Rangée desktop sur iPad en portrait et dans les fenêtres étroites (sous 1024 px): la colonne CRÉÉ quitte la
   // rangée (elle reste dans la fiche) et la rangée se réduit juste assez pour tenir dans la carte au lieu d'être
@@ -217,10 +221,11 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
     );
   }
 
-  // Desktop layout (unchanged)
-  return (
-    <div className="card-glow-wrap">
-    <div 
+  // Desktop layout (unchanged; sur iPad, enveloppé dans le calque qui glisse pour révéler le tiroir)
+  const txWide = swipeWide && actionsOpen ? actionW : 0;
+  const easeWide = 'transform 0.6s cubic-bezier(0.2, 1.5, 0.4, 1)';
+  const desktopCard = (
+    <div
       className={`project-card py-4 px-4 mb-3 hover:bg-cream-dark/30 overflow-hidden animate-card-in border-b border-adaptive`}
       style={{ animationDelay: `${0.05 + index * 0.05}s` }}
       onMouseDown={onMouseDownDrag ? (e) => onMouseDownDrag(e, project.id, index) : undefined}
@@ -283,6 +288,22 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
       )}
       </div>
     </div>
+  );
+  return (
+    <div className="card-glow-wrap" ref={swipeWide ? cardRef : undefined} data-open={swipeWide ? actionsOpen : undefined}>
+    {swipeWide ? (
+      <div ref={contentRef} style={{ position: 'relative', zIndex: 1, transform: `translateX(${-txWide}px)`, transition: easeWide }}>
+        {actionsOpen && <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} onClick={() => setActionsOpen(false)}/>}
+        {desktopCard}
+      </div>
+    ) : desktopCard}
+    {swipeWide && (
+      <div ref={actionsRef} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW}px`, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '28px', transform: `translateX(${actionW - txWide}px)`, transition: easeWide, zIndex: 1 }}>
+        {/* Halo rouge du tiroir, comme sur téléphone (il suit le glissement) */}
+        <div style={{ position: 'absolute', left: '100%', top: '50%', width: '400px', height: '400px', borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(216,49,82,0.8) 0%, rgba(216,49,82,0.3) 40%, rgba(216,49,82,0) 70%)', mixBlendMode: 'screen', pointerEvents: 'none', transform: 'translate(-17%, -50%) scaleX(1.22)' }}/>
+        {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '16px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap' }} onClick={() => { deleteProject(project.id); }}>{t('deleteConfirm')}</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
+      </div>
+    )}
     <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
       <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? t('moveToEditingConfirm') : t('moveToEditing')}</button>
       {confirmDelete ? <button onClick={handleDelete} className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '16px', cursor: confirmReady ? 'pointer' : 'default', letterSpacing: '0.03em', transition: 'color 0.3s', textShadow: confirmReady ? '0 0 12px rgba(255,59,48,0.4)' : 'none', padding: '6px 2px' }}>{t('deleteConfirm')}</button> : <button onClick={handleDelete} className="p-2 trash-btn text-red-500" title={t('delete')}><TrashIcon/></button>}

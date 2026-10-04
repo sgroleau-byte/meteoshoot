@@ -51,6 +51,18 @@ export const useFolderDnD = ({ listRef, groupedItems, applyTodoOrder, moveToFold
   const [dropLine, setDropLine] = useState(null);
   const st = useRef(null);
 
+  // iOS ne laisse bloquer le défilement que si un écouteur touchmove non passif existait dès le début du toucher:
+  // une fois la carte saisie (appui long), il annule le défilement. Sur téléphone, l'écouteur du tiroir de chaque
+  // carte jouait ce rôle par hasard; sur iPad (interface large, sans tiroir avant v633.130), la page défilait.
+  const hasList = groupedItems.length > 0;
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const block = (e) => { if (st.current) e.preventDefault(); };
+    list.addEventListener('touchmove', block, { passive: false });
+    return () => list.removeEventListener('touchmove', block);
+  }, [hasList]);
+
   const flattenIds = (items) => {
     const ids = [];
     items.forEach(it => { if (it.type === 'project') ids.push(it.project.id); else it.projects.forEach(p => ids.push(p.id)); });
@@ -308,7 +320,9 @@ export const TodoView = ({ onSelect, onAddProject, addingProject, plusRef }) => 
     if (isNative) Haptics.notification({ type: marked ? NotificationType.Success : NotificationType.Warning }).catch(() => {});
     else if (navigator.vibrate) navigator.vibrate(marked ? [30, 40, 30] : 40);
   };
-  const { onListPointerDown, dropLine } = useFolderDnD({ listRef, groupedItems, applyTodoOrder, moveToFolder, setFolderState, onCardHold });
+  // Le shooting du jour (appui long relâché sans bouger) reste un geste du téléphone; sur iPad, l'appui long sert
+  // seulement à déplacer la carte.
+  const { onListPointerDown, dropLine } = useFolderDnD({ listRef, groupedItems, applyTodoOrder, moveToFolder, setFolderState, onCardHold: isMobile ? onCardHold : null });
   // Tick chaque minute pour faire avancer le compteur "il y a 3H45" de la banniere.
   // 60s suffit: la precision affichee est la minute.
   const [now, setNow] = useState(() => Date.now());
@@ -318,9 +332,8 @@ export const TodoView = ({ onSelect, onAddProject, addingProject, plusRef }) => 
     return () => clearInterval(id);
   }, [bannerError, lastCachedAt]);
   
-  // Close actions on vertical scroll
+  // Close actions on vertical scroll (téléphone et iPad: à la souris, aucun tiroir ne s'ouvre)
   useEffect(() => {
-    if (!isMobile) return;
     const onScroll = () => { if (openActionsId) setOpenActionsId(null); };
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);

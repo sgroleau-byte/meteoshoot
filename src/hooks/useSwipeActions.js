@@ -3,7 +3,8 @@ import { useEffect } from 'react';
 // Swipe-to-reveal des actions sur mobile (cartes To-do et Retouche).
 // actionW: largeur du tiroir. scrollRef (optionnel): n'ouvre que si la bande horaire est scrollée au bout.
 // syncHalo: inclure le halo blanc dans la transition de fermeture inter-cartes (RetouchingCard oui, ProjectCard non).
-export const useSwipeActions = ({ cardRef, contentRef, actionsRef, haloWhiteRef, scrollRef, actionW, isMobile, setActionsOpen, syncHalo }) => {
+// isMobile active le geste; variant (facultatif) le réinstalle quand la carte change de structure (téléphone ou iPad).
+export const useSwipeActions = ({ cardRef, contentRef, actionsRef, haloWhiteRef, scrollRef, actionW, isMobile, setActionsOpen, syncHalo, variant = '' }) => {
   useEffect(() => {
     const card = cardRef.current;
     if (!card || !isMobile) return;
@@ -143,5 +144,5 @@ export const useSwipeActions = ({ cardRef, contentRef, actionsRef, haloWhiteRef,
       card.removeEventListener('touchend', onEnd);
       attrObs.disconnect();
     };
-  }, [isMobile]);
+  }, [isMobile, variant]);
 };
