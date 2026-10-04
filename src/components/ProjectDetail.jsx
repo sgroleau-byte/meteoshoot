@@ -2013,8 +2013,9 @@ export const ProjectDetail = ({ projectId, onClose }) => {
         )}
       </div>
 
-      {/* Météo horaire: redesigned */}
-      {(!isMobile || (project?.lat && project?.lng)) && <div className={`${isMobile ? 'pl-4 pr-0' : 'px-8 md:px-12'} border-b border-adaptive`}>
+      {/* Météo horaire: redesigned. Sur iPad, section entière non sélectionnable: ses marges de 48 px et son titre
+          bordent la bande, là où le doigt se pose pour la faire défiler (au téléphone, la bande va jusqu'au bord). */}
+      {(!isMobile || (project?.lat && project?.lng)) && <div className={`${isMobile ? 'pl-4 pr-0' : 'px-8 md:px-12'} border-b border-adaptive`} style={isMobile ? undefined : { WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}>
         <div className="pt-3 pb-1">
           <span className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('hourlyWeather')}</span>
         </div>
