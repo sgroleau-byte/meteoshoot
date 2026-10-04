@@ -116,12 +116,12 @@ export const RouteHourly = ({ weather }) => {
                           <svg width="11" height="11" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><circle cx="16" cy="16" r="8" fill={sunColor}/></svg>
                           {sunPct != null ? `${sunPct}%` : '--'}
                         </span>
+                        <span className="font-bebas-bold text-base leading-none text-charcoal-muted" style={{ letterSpacing: '0.04em', marginTop: '7px' }}>{h.temp}&deg;</span>
+                        <span className="font-bebas-bold text-sm leading-none text-charcoal-muted" style={{ marginTop: '7px' }}>{h.wind} <span className="text-xs">{t('kmh')}</span></span>
                         <span className="font-bebas-bold text-base leading-none" style={{ letterSpacing: '0.04em', marginTop: '7px', display: 'inline-flex', alignItems: 'center', gap: '3px', color: rainColor }}>
                           <svg width="10" height="10" viewBox="0 0 24 24" style={{ flexShrink: 0, position: 'relative', top: '-2.5px' }}><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" fill={rainColor}/></svg>
                           {rainPct != null ? `${rainPct}%` : '--'}
                         </span>
-                        <span className="font-bebas-bold text-base leading-none text-charcoal-muted" style={{ letterSpacing: '0.04em', marginTop: '7px' }}>{h.temp}&deg;</span>
-                        <span className="font-bebas-bold text-sm leading-none text-charcoal-muted" style={{ marginTop: '7px' }}>{h.wind} <span className="text-xs">{t('kmh')}</span></span>
                         {h.precip > 0 && <span className="font-bebas-bold text-sm leading-none" style={{ marginTop: '7px', letterSpacing: '0.04em', color: '#7dd3c6' }}>{h.precip < 1 ? h.precip.toFixed(1) : Math.round(h.precip)} <span className="text-xs">MM</span></span>}
                       </div>
                     );
