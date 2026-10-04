@@ -66,10 +66,11 @@ export const writeWeatherCache = (lat, lng, data) => {
 // requests »): mesuré le 3 octobre 2026, 5 ou 6 refus sur 24 appels simultanés, aucun à 8. Au chargement, chaque
 // projet lance deux appels (ICON et GFS): avec une dizaine de projets, plusieurs étaient refusés, et quand les deux
 // modèles d'un projet l'étaient, la bannière « API météo temporairement inaccessible » s'affichait alors que le service
-// fonctionnait. D'où une file (6 appels à la fois, dans l'ordre de la liste), un nouvel essai après une pause en cas
-// de refus, et le partage d'un appel identique déjà en cours.
-const OPEN_METEO_MAX_CONCURRENT = 6;
-const OPEN_METEO_RETRY_MS = [600, 1500, 3000];
+// fonctionnait. D'où une file (4 appels à la fois, dans l'ordre de la liste), de nouveaux essais espacés en cas de
+// refus, et le partage d'un appel identique déjà en cours. La limite vaut pour l'adresse internet: l'iPhone, l'iPad
+// et le Mac d'un même réseau la partagent (4 octobre 2026: refus massifs quand plusieurs chargeaient en même temps).
+const OPEN_METEO_MAX_CONCURRENT = 4;
+const OPEN_METEO_RETRY_MS = [600, 1500, 3000, 6000];
 let openMeteoActive = 0;
 const openMeteoWaiting = [];
 const openMeteoInFlight = new Map(); // url -> Promise du résultat

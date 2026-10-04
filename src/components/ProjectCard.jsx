@@ -9,14 +9,14 @@ import { MandateType, renderMandate } from '../projects/constants.js';
 import { useStore } from '../projects/StoreProvider.jsx';
 import { daysSince, formatDateShort, formatDuration, formatTime } from '../utils/dates.js';
 import { fetchWeather } from '../weather/api.js';
-import { calcDeparture } from '../weather/departure.js';
+import { calcDeparture, calcDepartureFromShootTime } from '../weather/departure.js';
 import { useWeatherStatus } from '../weather/WeatherStatusProvider.jsx';
 import { ShootCheckIcon, StarIcon, TrashIcon } from './icons/misc.jsx';
 import { WeatherRow, weatherRowDismiss } from './WeatherRow.jsx';
 import { getTravelTime } from '../maps/google.js';
 import { checkLocationPermission, getCurrentPosition } from '../native/geolocation.js';
-import { liveActivityAvailable, pickSunTarget, startShootActivity } from '../native/liveActivity.js';
-import { useShootOfDay } from '../native/shootOfDay.js';
+import { liveActivityAvailable, pickSunTarget, shootEndTime, startShootActivity } from '../native/liveActivity.js';
+import { getShootOfDay, setShootOfDayEnd, useShootOfDay } from '../native/shootOfDay.js';
 import { dayIcon } from '../weather/iconsLogic.js';
 
 export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, openActionsId, setOpenActionsId }) => {
@@ -55,6 +55,8 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
   const sun = weather?.daily?.[0];
   const departAM = calcDeparture(sun?.sunrise, project.travelTime?.durationSeconds);
   const departPM = calcDeparture(sun?.sunset, project.travelTime?.durationSeconds);
+  // Heure du shooting entrée dans la fiche: un seul départ (heure - trajet) à la place des deux départs au soleil.
+  const departShoot = project.shootTime ? calcDepartureFromShootTime(project.shootTime, project.travelTime?.durationSeconds) : null;
 
   // Shooting du jour (appui long dans la liste): le nom porte une coche dorée et, dans l'app iPhone, la carte démarre
   // ou met à jour l'activité en direct (écran verrouillé, Dynamic Island): soleil du jour, météo comme la bande
@@ -76,7 +78,20 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
       if (cancelled) return;
       const target = pickSunTarget(weather.daily, project.orientation);
       if (!target) return;
-      const depart = calcDeparture(target.isSunrise ? target.day.sunrise : target.day.sunset, travel?.durationSeconds);
+      // Fin du shooting, fixée une seule fois (au premier démarrage): sinon, ouvert entre le coucher et la fin, l'événement
+      // visé passerait au lendemain et repousserait la fin d'un jour. Un événement visé après la fin = shooting terminé:
+      // on ne relance rien, la marque s'efface à cette heure-là (shootOfDay.js).
+      // Recalculée si l'orientation a changé depuis (le plan du shooting a changé).
+      const mark = getShootOfDay();
+      const orientationKey = [...(project.orientation || [])].sort().join(',');
+      const frozen = mark?.endsAt && mark.endsFor === orientationKey;
+      const endsAt = frozen ? mark.endsAt : shootEndTime(target, project.orientation);
+      if (target.date.getTime() > endsAt) return;
+      if (!frozen) setShootOfDayEnd(project.id, endsAt, orientationKey);
+      // Heure du shooting entrée: départ = cette heure, le jour du shooting, moins le trajet; sinon calcul au soleil.
+      const depart = project.shootTime
+        ? calcDepartureFromShootTime(project.shootTime, travel?.durationSeconds, new Date(target.day.sunrise))
+        : calcDeparture(target.isSunrise ? target.day.sunrise : target.day.sunset, travel?.durationSeconds);
       startShootActivity(project.id, {
         name: project.name,
         sunriseText: formatTime(target.day.sunrise),
@@ -89,10 +104,11 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
         targetDate: Math.round(target.date.getTime() / 1000),
         targetIsSunrise: target.isSunrise,
         startDate: Math.round(target.barStart.getTime() / 1000),
+        endDate: Math.round(endsAt / 1000),
       });
     })();
     return () => { cancelled = true; };
-  }, [isShootOfDay, weather, project.id, project.name, project.lat, project.lng, project.orientation, project.travelTime]);
+  }, [isShootOfDay, weather, project.id, project.name, project.lat, project.lng, project.orientation, project.travelTime, project.shootTime]);
 
   // Couleurs adaptées au mode sombre/clair
   const colorActive = '#FAF9F7';
@@ -271,8 +287,12 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
           <div className="flex flex-col justify-center pl-2 ml-6 border-l border-adaptive" style={{ minWidth: '75px' }}>
             {/* Deux lignes comme la colonne SOLEIL: départ du matin (lever) puis du soir (coucher), atténuées selon l'orientation. */}
             <span style={{ color: colorInactive }}>{t('depart')}</span>
-            <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '-'}</span>
-            <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '-'}</span>
+            {project.shootTime
+              ? <span style={{ color: departShoot ? colorActive : colorInactive }}>{departShoot ? formatTime(departShoot).replace(':','H') : '-'}</span>
+              : <>
+                <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '-'}</span>
+                <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '-'}</span>
+              </>}
           </div>
           {!compactRow && <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive" style={{ minWidth: '120px' }}>
             <span style={{ color: colorInactive }}>{t('created')}</span>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { endShootActivity, sweepShootActivities } from './liveActivity.js';
 
 // Shooting du jour: un seul projet, marqué par appui long sur sa carte dans la liste (téléphone).
 // Rangé sur l'appareil seulement (localStorage): dans l'app iPhone, le projet marqué alimente l'activité en
@@ -23,6 +24,27 @@ export const toggleShootOfDay = (projectId) => {
   write({ projectId, markedAt: new Date().toISOString() });
   return true;
 };
+
+// Fin du shooting (endsAt, en ms): 30 min après son dernier événement solaire, fixée par la carte du projet quand elle
+// démarre l'activité en direct. Passé cette heure, la marque s'efface et l'activité se termine: elle ne doit plus
+// s'afficher une fois le shooting fini, ni revenir le lendemain.
+// endsFor: l'orientation qui a servi au calcul; si elle change, la carte du projet recalcule la fin.
+export const setShootOfDayEnd = (projectId, endsAt, endsFor) => {
+  const cur = read();
+  if (!cur || cur.projectId !== projectId || (cur.endsAt === endsAt && cur.endsFor === endsFor)) return;
+  write({ ...cur, endsAt, endsFor });
+};
+const expireShootOfDay = () => {
+  const cur = read();
+  if (cur && cur.endsAt && Date.now() >= cur.endsAt) { write(null); endShootActivity(); }
+  sweepShootActivities(); // côté iPhone: termine aussi une activité dont la fin est passée
+};
+if (typeof window !== 'undefined') {
+  // À l'ouverture, au retour dans l'app et chaque minute tant qu'elle est ouverte.
+  expireShootOfDay();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') expireShootOfDay(); });
+  setInterval(expireShootOfDay, 60000);
+}
 
 export const useShootOfDay = () => {
   const [value, setValue] = useState(read);

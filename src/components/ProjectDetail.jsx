@@ -13,12 +13,12 @@ import { useStore } from '../projects/StoreProvider.jsx';
 import { daysSince, formatDateShort, formatDuration, formatTime } from '../utils/dates.js';
 import { linkifyPhonesInEditor } from '../utils/linkify.js';
 import { fetchWeather } from '../weather/api.js';
-import { calcDeparture } from '../weather/departure.js';
+import { calcDeparture, calcDepartureFromShootTime } from '../weather/departure.js';
 import { getElevationProfile, isTerrainShadow } from '../weather/elevation.js';
 import { cloudcoverToIcon, veilIcon } from '../weather/iconsLogic.js';
 import { StarIcon } from './icons/misc.jsx';
 import { SMOKE_TINT, WeatherIcon } from './icons/WeatherIcon.jsx';
-import { DateWheelPicker, FolderCombo } from './pickers.jsx';
+import { DateWheelPicker, FolderCombo, TimeWheelPicker } from './pickers.jsx';
 import { rtOpenMap } from './route/RouteView.jsx';
 import { WeatherRow } from './WeatherRow.jsx';
 
@@ -42,6 +42,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   const [editingCreatedDate, setEditingCreatedDate] = useState(false);
   const [editingShotDate, setEditingShotDate] = useState(false);
   const [detailPickerPos, setDetailPickerPos] = useState({ top: 0, left: 0 });
+  const [shootTimePos, setShootTimePos] = useState(null); // roue de l'heure du shooting ouverte (position) ou null
   const originalDateRef = useRef(null);
   const isToday = React.useMemo(() => { const n = new Date(); return sunDate.getDate() === n.getDate() && sunDate.getMonth() === n.getMonth() && sunDate.getFullYear() === n.getFullYear(); }, [sunDate]);
   const [sunHour, setSunHour] = useState(0);
@@ -1722,6 +1723,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   const sun = weather?.daily?.[0];
   const departAM = calcDeparture(sun?.sunrise, project.travelTime?.durationSeconds);
   const departPM = calcDeparture(sun?.sunset, project.travelTime?.durationSeconds);
+  // Heure du shooting entrée: un seul départ (heure - trajet) remplace les deux départs au soleil.
+  const departShoot = project.shootTime ? calcDepartureFromShootTime(project.shootTime, project.travelTime?.durationSeconds) : null;
 
   const colorActive = '#FAF9F7';
   const colorInactive = '#404A48';
@@ -1917,8 +1920,12 @@ export const ProjectDetail = ({ projectId, onClose }) => {
               </div>
               <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
                 <span style={{ color: colorInactive }}>{t('depart')}</span>
-                <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '-'}</span>
-                <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '-'}</span>
+                {project.shootTime
+                  ? <span style={{ color: departShoot ? colorActive : colorInactive }}>{departShoot ? formatTime(departShoot).replace(':','H') : '-'}</span>
+                  : <>
+                  <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '-'}</span>
+                  <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '-'}</span>
+                  </>}
               </div>
               <div className="flex flex-col justify-center pl-2 ml-3" style={{ borderLeft: '1px solid rgba(139,155,153,0.2)' }}>
                 <span style={{ color: colorInactive }}>{t('created')}</span>
@@ -1968,8 +1975,12 @@ export const ProjectDetail = ({ projectId, onClose }) => {
               </div>
               <div className="flex flex-col justify-center pl-2 ml-4 border-l border-adaptive">
                 <span style={{ color: colorInactive }}>{t('depart')}</span>
-                <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '-'}</span>
-                <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '-'}</span>
+                {project.shootTime
+                  ? <span style={{ color: departShoot ? colorActive : colorInactive }}>{departShoot ? formatTime(departShoot).replace(':','H') : '-'}</span>
+                  : <>
+                  <span style={{ color: (project.orientation?.includes('AM') && departAM) ? colorActive : colorInactive }}>{departAM ? formatTime(departAM).replace(':','H') : '-'}</span>
+                  <span style={{ color: (project.orientation?.includes('PM') && departPM) ? colorActive : colorInactive }}>{departPM ? formatTime(departPM).replace(':','H') : '-'}</span>
+                  </>}
               </div>
               <div className="flex flex-col justify-center text-left pl-2 ml-4 border-l border-adaptive">
                 <span style={{ color: colorInactive }}>{t('created')}</span>
@@ -2050,6 +2061,23 @@ export const ProjectDetail = ({ projectId, onClose }) => {
               <div className="flex gap-5 mt-1">
                 {['AM','PM'].map(o => <button key={o} onClick={() => updateProject(project.id, { orientation: project.orientation?.includes(o) ? project.orientation.filter(x => x !== o) : [...(project.orientation||[]), o] })} className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '22px', color: project.orientation?.includes(o) ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)' }}>{o}</button>)}
               </div>
+            </div>
+            {/* Heure du shooting (début sur place, ex. un intérieur avant l'extérieur): le départ devient cette heure moins le
+                trajet. Vide = départ calculé au soleil, comme avant. */}
+            <div className="py-5 border-b border-adaptive">
+              <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('shootTime')}</label>
+              <div className="flex gap-5 mt-1">
+                <button onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setShootTimePos(p => p ? null : { top: r.bottom + 4, left: r.left }); }} className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '22px', color: project.shootTime ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>{project.shootTime ? project.shootTime.replace(':', 'H') : '--H--'}</button>
+              </div>
+              {shootTimePos && ReactDOM.createPortal(
+                <React.Fragment>
+                  <div onClick={() => setShootTimePos(null)} style={{ position: 'fixed', inset: 0, zIndex: 9998 }}/>
+                  <div style={{ position: 'fixed', top: shootTimePos.top, left: shootTimePos.left, zIndex: 9999 }}>
+                    <TimeWheelPicker title={t('shootTime')} value={project.shootTime} onChange={(v) => updateProject(project.id, { shootTime: v })} onClear={() => updateProject(project.id, { shootTime: null })} onClose={() => setShootTimePos(null)}/>
+                  </div>
+                </React.Fragment>,
+                document.body
+              )}
             </div>
             <div className="py-5 border-b border-adaptive">
               <FolderCombo key={project.id} value={project.clientFolder || ''} onChange={(v) => updateProject(project.id, { clientFolder: (v && v.trim()) || null })}/>

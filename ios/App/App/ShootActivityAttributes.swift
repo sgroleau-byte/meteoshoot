@@ -17,6 +17,7 @@ struct ShootActivityAttributes: ActivityAttributes {
         var targetDate: Date         // événement solaire visé par la barre et le compte à rebours
         var targetIsSunrise: Bool
         var startDate: Date          // début de la barre de progression
+        var endDate: Date?           // fin du shooting: 30 min après son dernier événement solaire; l'activité disparaît
     }
     var projectId: String
 }

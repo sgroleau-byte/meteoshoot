@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { App as CapApp } from '@capacitor/app';
 import { useAuth } from '../auth/AuthProvider.jsx';
 import { LoginScreen } from '../auth/LoginScreen.jsx';
 import { useIsMobile } from '../hooks/useIsMobile.js';
@@ -7,6 +8,7 @@ import { geocodeAddress, getTravelTime } from '../maps/google.js';
 import { StoreProvider, useStore } from '../projects/StoreProvider.jsx';
 import { SubscriptionProvider } from '../subscription/SubscriptionProvider.jsx';
 import { attachSmoothWheel } from '../utils/smoothWheel.js';
+import { isNative } from '../native/platform.js';
 import { WeatherStatusProvider } from '../weather/WeatherStatusProvider.jsx';
 import { Header } from './Header.jsx';
 import { MobileNewProjectScreen } from './MobileNewProjectScreen.jsx';
@@ -19,7 +21,7 @@ import { TodoView } from './TodoView.jsx';
 import { UndoToast } from './UndoToast.jsx';
 
 export const App = () => {
-  const { view, setView, selectedId, setSelectedId, prefs, lastDeleted, undoDelete, addProject, synced } = useStore();
+  const { view, setView, selectedId, setSelectedId, prefs, lastDeleted, undoDelete, addProject, synced, projects } = useStore();
   const { t } = useLang();
   const [showNew, setShowNew] = useState(false);
   const plusRef = React.useRef(null);
@@ -297,6 +299,26 @@ export const App = () => {
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  // Toucher l'activité en direct « Shooting du jour » (app iPhone) ouvre l'app sur un lien meteoshoot://projet/<id>:
+  // on affiche la fiche du projet, s'il existe. Seule l'écoute appUrlOpen sert: au lancement à froid, Capacitor garde
+  // le lien jusqu'à ce qu'elle s'abonne et le livre une fois. getLaunchUrl, lui, renvoie le dernier lien ouvert (jamais
+  // effacé) et rouvrait la fiche à chaque rechargement de la page.
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
+  useEffect(() => {
+    if (!isNative) return;
+    const openFromUrl = (url) => {
+      const m = /^meteoshoot:\/\/projet\/([^/?#]+)/.exec(url || '');
+      if (!m) return;
+      const id = decodeURIComponent(m[1]);
+      if (!(projectsRef.current || []).some((p) => p.id === id)) return;
+      setView('todo');
+      openProject({ id });
+    };
+    const sub = CapApp.addListener('appUrlOpen', (e) => openFromUrl(e.url));
+    return () => { sub.then((h) => h.remove()).catch(() => {}); };
   }, []);
 
   // Logo fade when overlapping content

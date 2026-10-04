@@ -151,9 +151,11 @@ struct LockScreenCard: View {
 struct ShootLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: ShootActivityAttributes.self) { context in
+            // Toucher la carte ouvre l'app sur la fiche du projet (lien lu par App.jsx).
             LockScreenCard(state: context.state)
                 .activityBackgroundTint(Look.background.opacity(0.85))
                 .activitySystemActionForegroundColor(Look.active)
+                .widgetURL(projectURL(context.attributes.projectId))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -190,8 +192,14 @@ struct ShootLiveActivity: Widget {
                 Image(systemName: context.state.targetIsSunrise ? "sunrise.fill" : "sunset.fill").foregroundStyle(Look.gold)
             }
             .keylineTint(Look.gold)
+            .widgetURL(projectURL(context.attributes.projectId))
         }
     }
+}
+
+// Lien vers la fiche du projet dans l'app (schéma meteoshoot déclaré dans l'Info.plist de l'app).
+private func projectURL(_ projectId: String) -> URL? {
+    URL(string: "meteoshoot://projet/" + (projectId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? projectId))
 }
 
 @main

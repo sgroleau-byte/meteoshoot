@@ -24,6 +24,25 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.meteoshoot.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>meteoshoot</string>
+			</array>
+		</dict>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.meteoshoot.app.fin-shooting</string>
+	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>MeteoShoot utilise votre position pour afficher la météo de l'endroit où vous êtes.</string>
 	<key>LSRequiresIPhoneOS</key>

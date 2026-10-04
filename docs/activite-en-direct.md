@@ -43,6 +43,21 @@ demain.
    Dynamic Island. Modèle partagé: `ios/App/App/ShootActivityAttributes.swift` (compilé dans les deux cibles).
    `ios/App/App/Info.plist` porte `NSSupportsLiveActivities`.
 
+Toucher l'activité (écran verrouillé ou Dynamic Island) ouvre l'app sur la fiche du projet: lien
+`meteoshoot://projet/<id>` (`widgetURL` dans le widget, schéma `meteoshoot` dans l'Info.plist de l'app), lu par
+`src/components/App.jsx` au lancement (`App.getLaunchUrl`) ou pendant que l'app tourne (`appUrlOpen`).
+
+Fin du shooting (v633.134, demande de Stéphane du 4 octobre 2026): 30 minutes après le dernier événement solaire du
+shooting (le lever pour un projet du matin seulement, sinon le coucher), l'activité doit disparaître. L'heure de fin
+(`endsAt`, `shootEndTime`) est fixée une seule fois, au premier démarrage, sur la marque (`ms-shoot-of-day`) et dans
+l'état de l'activité (`endDate`, qui sert aussi de date de péremption). Passé cette heure, la marque s'efface (pour que
+l'activité ne revienne pas le lendemain) et l'activité se termine: à l'ouverture de l'app, au retour dans l'app et
+chaque minute tant qu'elle est ouverte (`src/native/shootOfDay.js`, méthode native `sweep`), et par une tâche de fond
+demandée à iOS pour cette heure-là (`BGAppRefreshTask` « com.meteoshoot.app.fin-shooting », enregistrée par
+`AppDelegate`). iOS exécute cette tâche quand il le juge bon: souvent à temps, sans garantie (pas en mode économie
+d'énergie). Pour une disparition à la minute près app fermée, il faudrait un serveur qui envoie un « end » à l'activité
+(notifications ActivityKit, clé APNs à créer dans le compte développeur).
+
 Limites d'iOS: l'activité doit être démarrée pendant que l'app est ouverte; elle vit au plus huit heures
 après sa dernière mise à jour (l'app la met à jour à chaque ouverture); les données ne changent qu'à
 l'ouverture de l'app (pas de serveur de notifications pour l'instant), sauf le compte à rebours et la barre,

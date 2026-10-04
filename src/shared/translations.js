@@ -149,6 +149,8 @@ export const TRANSLATIONS = {
     travel: 'TRAJET',
     wake: 'RÉVEIL',
     depart: 'DÉPART',
+    shootTime: 'HEURE DU SHOOTING',
+    shootTimeClear: 'EFFACER',
 
     // Settings
     homeAddressLabel: 'ADRESSE DE DÉPART PAR DÉFAUT (TRAJET)',
@@ -351,6 +353,8 @@ export const TRANSLATIONS = {
     travel: 'TRAVEL',
     wake: 'WAKE',
     depart: 'LEAVE',
+    shootTime: 'SHOOT TIME',
+    shootTimeClear: 'CLEAR',
 
     // Settings
     homeAddressLabel: 'DEFAULT DEPARTURE ADDRESS (TRAVEL)',

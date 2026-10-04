@@ -248,3 +248,38 @@ export const DateWheelPicker = ({ date, onChange, onClose, onCancel, title, drop
     </div>
   );
 };
+
+// Roue des heures (heure du shooting, « HH:MM », minutes par pas de 5), même allure que DateWheelPicker en menu.
+// onChange seulement quand on tourne une roue (ouvrir la roue ne remplit pas l'heure); onClear l'efface.
+export const TimeWheelPicker = ({ value, onChange, onClear, onClose, title }) => {
+  const { t } = useLang();
+  const parts = /^(\d{1,2}):(\d{2})$/.exec(String(value || ''));
+  const [selH, setSelH] = useState(parts ? Number(parts[1]) : 12);
+  const [selM, setSelM] = useState(parts ? (Math.round(Number(parts[2]) / 5) * 5) % 60 : 0);
+  const touched = useRef(false);
+  const itemH = 40;
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  const minutes = Array.from({ length: 12 }, (_, i) => i * 5);
+  const pad = (n) => String(n).padStart(2, '0');
+
+  useEffect(() => {
+    if (!touched.current) return;
+    onChange(`${pad(selH)}:${pad(selM)}`);
+  }, [selH, selM]);
+  const pick = (setter) => (v) => { touched.current = true; setter(v); };
+
+  return (
+    <div data-no-pull style={{ position: 'relative', width: '310px', maxWidth: 'calc(100vw - 32px)', zIndex: 20, background: 'rgba(20,24,27,0.95)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderRadius: '16px', padding: '12px 0 18px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px 8px' }}>
+        <button onClick={() => { onClear(); onClose(); }} className="font-bebas-bold" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '20px', cursor: 'pointer', letterSpacing: '0.05em' }}>{t('shootTimeClear')}</button>
+        <span className="font-bebas-bold" style={{ fontSize: '16px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.05em' }}>{title}</span>
+        <button onClick={() => { if (!touched.current) onChange(`${pad(selH)}:${pad(selM)}`); onClose(); }} className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FAF9F7', fontSize: '20px', cursor: 'pointer', letterSpacing: '0.05em', textShadow: '0 0 12px rgba(255,255,255,0.4), 0 0 25px rgba(255,255,255,0.15)' }}>OK</button>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', position: 'relative' }}>
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '220px', height: itemH, background: 'rgba(255,255,255,0.08)', borderRadius: '10px', pointerEvents: 'none' }}/>
+        <WheelColumn items={hours} selected={selH} onSelect={pick(setSelH)} width="70px" renderItem={pad} />
+        <WheelColumn items={minutes} selected={selM} onSelect={pick(setSelM)} width="70px" renderItem={pad} />
+      </div>
+    </div>
+  );
+};

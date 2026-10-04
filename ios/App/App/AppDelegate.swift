@@ -7,7 +7,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // Tâche de fond qui termine l'activité en direct à la fin du shooting (ShootActivityPlugin).
+        ShootActivityPlugin.registerFinTask()
         return true
     }
 
