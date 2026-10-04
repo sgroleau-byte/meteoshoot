@@ -325,7 +325,7 @@ export const ProjectCard = ({ project, index = 0, onSelect, onMouseDownDrag, ope
   return (
     <div className="card-glow-wrap" ref={swipeWide ? cardRef : undefined} data-open={swipeWide ? actionsOpen : undefined}>
     {swipeWide ? (
-      <div ref={contentRef} style={{ position: 'relative', zIndex: 1, transform: `translateX(${-txWide}px)`, transition: easeWide }}>
+      <div ref={contentRef} style={{ position: 'relative', zIndex: 1, transform: `translateX(${-txWide}px)`, transition: easeWide, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
         {actionsOpen && <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} onClick={() => setActionsOpen(false)}/>}
         {desktopCard}
       </div>

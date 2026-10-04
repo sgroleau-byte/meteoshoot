@@ -198,7 +198,7 @@ export const RetouchingCard = ({ project, onSelect, index = 0, openActionsId, se
   return (
     <div className="card-glow-wrap" ref={swipeWide ? cardRef : undefined} data-open={swipeWide ? actionsOpen : undefined}>
     {swipeWide ? (
-      <div ref={contentRef} style={{ position: 'relative', zIndex: 1, transform: `translateX(${-tx}px)`, transition: ease }}>
+      <div ref={contentRef} style={{ position: 'relative', zIndex: 1, transform: `translateX(${-tx}px)`, transition: ease, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
         {actionsOpen && <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} onClick={() => setActionsOpen(false)}/>}
         {desktopCard}
       </div>
@@ -330,7 +330,7 @@ export const DoneCard = ({ project, index = 0, editPrefs = EDIT_LIST_DEFAULTS })
   return (
     <div className="card-glow-wrap" ref={swipeWide2 ? cardRef2 : undefined} data-open={swipeWide2 ? actionsOpen2 : undefined}>
     {swipeWide2 ? (
-      <div ref={contentRef2} style={{ position: 'relative', zIndex: 1, transform: `translateX(${-tx2}px)`, transition: ease2 }}>
+      <div ref={contentRef2} style={{ position: 'relative', zIndex: 1, transform: `translateX(${-tx2}px)`, transition: ease2, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
         {actionsOpen2 && <div style={{ position: 'absolute', inset: 0, zIndex: 10 }} onClick={() => setActionsOpen2(false)}/>}
         {desktopCard2}
       </div>

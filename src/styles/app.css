@@ -369,6 +369,9 @@
     .card-glow-wrap { position: relative; }
     .card-glow-wrap::after { content: ''; position: absolute; right: -450px; top: 50%; width: 550px; height: 550px; border-radius: 50%; background: radial-gradient(circle, rgba(216,49,82,0.7) 0%, rgba(216,49,82,0.25) 40%, transparent 70%); mix-blend-mode: color-dodge; pointer-events: none; opacity: 0; transition: opacity 0.3s ease; transform: translateY(-50%); z-index: 10; }
     @media (hover: hover) { .card-glow-wrap:hover::after { opacity: 1; } }
+    /* Écran tactile (iPad): ce halo de survol ne s'affiche jamais; retiré, sinon sa fusion de couleurs (color-dodge), posée
+       par-dessus la carte qui glisse vers le tiroir, était recalculée à chaque image et rendait le glissement saccadé. */
+    @media (hover: none) { .card-glow-wrap::after { display: none; } }
     .project-card.is-being-dragged {
       transition: none !important;
       opacity: 0.6;
