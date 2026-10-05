@@ -26,9 +26,10 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   essayée le 5 octobre 2026 (école Saint-Paul-Apôtre, 8 façades sur 12 trouvées, 17 à 21 cents et 70 à 110 s
   par analyse), puis retirée le soir même avec Stéphane: résultat « un peu cheese » et pas assez précis pour
   valoir la clé API, le coût et le risque de façades erronées. Le réglage manuel suffit pour juger la lumière.
-  Restes: la colonne `style3d` des tables `projects` et `projects_dev` (inutilisée, à laisser), la variable
-  `ANTHROPIC_API_KEY` dans Vercel (révocable dans la Console Anthropic, clé « Meteoshoot-3D »), et le code
-  dans l'historique git (commit 1a81033, v633.144 avant retrait) si l'idée revient.
+  Nettoyage complet le soir même (v633.151): colonne `style3d` supprimée des tables `projects` et `projects_dev`
+  (migration 20261005230000), variable `ANTHROPIC_API_KEY` retirée de Vercel, dépendances retirées. Reste à
+  Stéphane: révoquer la clé « Meteoshoot-3D » dans la Console Anthropic. Le code vit dans l'historique git
+  (commit 1a81033) si l'idée revient.
 
 ## Fichiers
 
@@ -64,7 +65,7 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
 - `scripts/scene3d-dev.mjs`: la fonction en local, port 3999 (`npm run api`); le proxy Vite envoie `/api`
   dessus, ou sur un déploiement d'aperçu si `MS_API_PROXY` est donné (`.env.local`, ignoré par git).
 - `supabase/migrations/20261005120000_cache_scene_3d.sql` (table `scene3d_cache`),
-  `20261005150000_style_3d_projet.sql` (colonne `style3d`, inutilisée),
+  `20261005150000_style_3d_projet.sql` (colonne `style3d`, supprimée par `20261005230000_retrait_style_3d.sql`),
   `20261005200000_cache_scene_3d_mise_a_jour.sql` (mise à jour d'une entrée périmée par un compte connecté).
 - `src/weather/api.js`: l'horaire porte `cloudMid` et `cloudHigh` (nuages moyens et hauts).
 - `vercel.json`: durée maximale de `api/scene3d.js` (90 s). `.vercelignore` exclut les dossiers natifs et de
