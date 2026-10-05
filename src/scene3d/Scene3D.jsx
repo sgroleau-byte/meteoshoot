@@ -6,11 +6,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { loadScene } from './data.js';
 
+const TOUCH = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(hover: none)').matches; // le rendu affiné est réservé aux ordinateurs
+const BTN = { background: 'rgba(20,24,26,0.45)', border: '1px solid rgba(255,255,255,0.5)', borderRadius: '14px', padding: '5px 12px 3px', color: 'rgba(255,255,255,0.9)', fontSize: '13px', letterSpacing: '0.08em', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', cursor: 'pointer' };
+
 export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, visible }) => {
   const box = useRef(null);
   const eng = useRef(null);
   const [info, setInfo] = useState(null);
   const [status, setStatus] = useState('');
+  const [rt, setRt] = useState(false); // rendu affiné (lancer de rayons) à la demande
 
   useEffect(() => {
     if (!visible || !box.current || !lat || !lng) return;
@@ -22,7 +26,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
       eng.current = e;
       if (import.meta.env.DEV) window.__scene3d = e; // inspection en développement seulement
       e.setProject({ lat, lng, buildings, orientation });
-      e.setTime(timeMs); e.setWeather(weatherRow);
+      e.setTime(timeMs); e.setWeather(weatherRow); if (rt) e.setRayTracing(true);
       setStatus('Environs en cours de chargement');
       loadScene(lat, lng).then(d => { if (!cancelled && eng.current === e) { e.setData(d); setStatus(''); } })
         .catch(err => { console.warn('[scene3d] environs indisponibles:', err); if (!cancelled) setStatus('Environs indisponibles, bâtiments du projet seulement'); });
@@ -31,6 +35,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
   }, [visible, lat, lng]);
   useEffect(() => { if (eng.current) eng.current.setProject({ lat, lng, buildings, orientation }); }, [buildings, orientation]);
   useEffect(() => { if (eng.current) eng.current.setTime(timeMs); }, [timeMs]);
+  useEffect(() => { if (eng.current) eng.current.setRayTracing(rt); }, [rt]);
   useEffect(() => { if (eng.current) eng.current.setWeather(weatherRow); }, [weatherRow?.time, weatherRow?.cloudLow, weatherRow?.cloudMid, weatherRow?.cloudHigh, weatherRow?.sunFraction]);
 
   if (!visible) return null;
@@ -43,11 +48,13 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
         {info.parts && <div style={{ opacity: 0.8 }}>{info.parts}</div>}
         <div style={{ opacity: 0.75 }}>{info.where}</div>
         {info.height && <div style={{ opacity: 0.75 }}>{info.height}</div>}
+        {info.rt && <div style={{ opacity: 0.75 }}>{info.rt}</div>}
       </div>}
       {info && <svg style={{ position: 'absolute', right: '14px', bottom: '12px', width: '34px', height: '34px', pointerEvents: 'none' }} viewBox="0 0 34 34">
         <circle cx="17" cy="17" r="15" fill="rgba(20,24,26,.35)" stroke="rgba(255,255,255,.55)" strokeWidth="1"/>
         <g transform={`rotate(${(-info.northDeg).toFixed(1)} 17 17)`}><path d="M17 5 L20 17 L17 15.5 L14 17 Z" fill="#fff"/><path d="M17 29 L20 17 L17 18.5 L14 17 Z" fill="rgba(255,255,255,.35)"/></g>
       </svg>}
+      {!TOUCH && <button className="font-bebas-book" onClick={() => setRt(v => !v)} style={{ ...BTN, position: 'absolute', right: '58px', bottom: '14px', background: rt ? 'rgba(255,255,255,0.85)' : BTN.background, color: rt ? '#23282b' : BTN.color }}>RENDU AFFINÉ</button>}
       {status && <div className="font-bebas-book" style={{ position: 'absolute', top: '50%', left: 0, right: 0, textAlign: 'center', fontSize: '15px', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.75)', pointerEvents: 'none' }}>{status.toUpperCase()}</div>}
     </div>
   );

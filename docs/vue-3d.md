@@ -98,6 +98,25 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   soleil et dos au soleil), heure bleue et ciel couvert. Réglages: `uTurb` 2,3 + 2 × voile haut + 0,8 × voile
   moyen, `uRay` 1,5, `uSkyK` 0,2 (échelle vers notre exposition), épaule douce 1/(1 + 0,22 × luminance) à
   l'horizon, soleil = 0,85 × (Fex/max)^0,45 + 0,15.
-- Option 2 notée, non commencée: rendu affiné à la demande par lancer de rayons progressif
-  (three-gpu-pathtracer) quand la caméra est immobile; bon sur Mac, lent sur iPhone. À tester avant de promettre.
+- Option 2 faite (v633.146): **rendu affiné** à la demande, bouton « Rendu affiné » en bas à droite de la 3D
+  (ordinateurs seulement, caché au toucher). Lancer de rayons progressif avec three-gpu-pathtracer
+  (`WebGLPathTracer`, 4 rebonds): dès que caméra, heure et météo sont immobiles depuis 350 ms, le traceur
+  accumule 2 échantillons par image jusqu'à 200, puis s'arrête (la carte graphique se repose); pause si
+  l'onglet est caché; tout mouvement rend la vue directe et remet l'accumulation à zéro. La scène du traceur
+  partage géométries et matériaux avec la vue directe, limitée à la zone proche (230 m): murs, toits,
+  soubassement, surfaces et rues proches, sol, arbres fusionnés en un maillage (couronnes simplifiées,
+  couleur par sommet). Toute la lumière vient du ciel capturé en cube 512 (puissance de deux obligatoire pour
+  la conversion en équirectangulaire du traceur) avec un disque solaire physique de 0,8° dont la radiance vaut
+  l'irradiance du soleil de la scène (uniformes `uPhys`, `uSunL`): ombres douces vraies, lumière indirecte,
+  ciel et nuages de la prévision, fenêtres allumées qui éclairent la nuit. Le résultat passe par la même
+  exposition et la même tonalité (ACES) que la vue directe.
+  Limites connues: pas de brouillard de distance (la zone lointaine n'est pas dans le traceur), pas d'ombres
+  de nuages qui passent, toutes les fenêtres allumées la nuit (le hasard une sur deux est un détail de shader
+  que le traceur ignore), 20 à 40 s pour 200 échantillons sur un Mac récent. Le 5 octobre 2026, une première
+  version sans plafond (600 échantillons, pleine zone) a saturé le Mac de Stéphane: garder le plafond.
+- Zones et détail: `NEAR = 230 m` autour du projet (origine) sépare les maillages proches (userData.pt, rendu
+  affiné) des lointains; arbres détaillés jusqu'à 160 m, couronnes simplifiées au-delà (deux lots instanciés).
+  Acné d'ombre (bandes en escalier sur les murs frôlés par le soleil) corrigée par `shadow.normalBias = 0.7`.
+- Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
+  idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
