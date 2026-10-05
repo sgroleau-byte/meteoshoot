@@ -125,6 +125,11 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   échantillons, normalBias 0,5); fenêtres modernes (grande baie plus large que haute, cadre fin anthracite, un
   meneau décalé, appui discret, plus de filet entre les étages) et nombre entier de travées par mur, centrées,
   pour qu'aucune fenêtre ne soit coupée dans un coin.
+- v633.148: rayures diagonales d'acné d'ombre au soleil bas (la carte VSM garde la profondeur en demi-flottants:
+  sur une plage de plus d'un kilomètre, les quanta dépassaient le décalage) corrigées en serrant la caméra
+  d'ombre en profondeur: lumière à 520 m du projet, plage 300 à 780 m, biais -0,0008, normalBias 0,6. Vérifié
+  le 24 novembre à 14 h 30 (soleil à 12°). Au-delà de 36 h de prévision ou dans le passé, la scène suppose
+  une journée ensoleillée et l'icône météo près du curseur disparaît (`sceneWeatherRow` nul).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

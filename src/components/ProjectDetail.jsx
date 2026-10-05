@@ -54,8 +54,11 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   // de la souris sur les heures de nuit); seul le curseur pilote la date et l'heure.
   // Vue 3D: instant du curseur et météo horaire la plus proche (nuages bas, moyens, hauts, soleil direct).
   const sceneTimeMs = React.useMemo(() => { const d = new Date(sunDate); d.setHours(0, 0, 0, 0); return d.getTime() + sunHourDisplay * 3600000; }, [sunDate, sunHourDisplay]);
+  // Au-delà de 36 h de prévision (ou dans le passé), la scène suppose une journée ensoleillée et aucune icône
+  // météo n'est affichée près du curseur: la prévision horaire n'est plus assez sûre pour piloter la lumière.
   const sceneWeatherRow = React.useMemo(() => {
     if (!weather?.hourly?.length) return null;
+    const now = Date.now(); if (sceneTimeMs > now + 36 * 3600000 || sceneTimeMs < now - 24 * 3600000) return null;
     let best = null, bd = Infinity;
     for (const h of weather.hourly) { const dd = Math.abs(new Date(h.time).getTime() - sceneTimeMs); if (dd < bd) { bd = dd; best = h; } }
     return bd <= 2 * 3600000 ? best : null;

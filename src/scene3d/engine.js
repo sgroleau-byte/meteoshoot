@@ -207,7 +207,7 @@ export function createScene3D(container, opts = {}) {
 
   // ---- soleil et ombres de nuages
   const sunL = new THREE.DirectionalLight(0xffffff, 10); sunL.castShadow = true; sunL.shadow.mapSize.set(4096, 4096);
-  const sc = sunL.shadow.camera; sc.left = -150; sc.right = 150; sc.top = 150; sc.bottom = -150; // 300 m autour du projet: 7 cm par pixel d'ombre sc.near = 1; sc.far = 2000; sunL.shadow.bias = 0; sunL.shadow.normalBias = 0.5; sunL.shadow.blurSamples = 24; // décalage le long de la normale: plus de bandes en escalier sur les murs frôlés par le soleil
+  const sc = sunL.shadow.camera; sc.left = -150; sc.right = 150; sc.top = 150; sc.bottom = -150; // 300 m autour du projet: 7 cm par pixel d'ombre sc.near = 300; sc.far = 780; sunL.shadow.bias = -0.0008; sunL.shadow.normalBias = 0.6; sunL.shadow.blurSamples = 24; // décalage le long de la normale: plus de bandes en escalier sur les murs frôlés par le soleil
   const T0 = new THREE.Vector3(0, 0, 0); S.add(sunL); S.add(sunL.target);
   // Lumière neutre des nuages: sous un cumulus ou un voile, l'ombre est éclairée par un ciel en partie blanc, pas
   // seulement par le bleu; sans ce complément, les ombres de nuages tirent sur le bleu marine.
@@ -498,7 +498,9 @@ export function createScene3D(container, opts = {}) {
     const sunV = [Math.sin(bearing) * Math.cos(el), Math.sin(el), -Math.cos(bearing) * Math.cos(el)];
     const zenTarget = 0.035 + 0.14 * Math.pow(clamp(Math.sin(el) / 0.45), 0.55), zenLum = LUM(preethamRadiance([0, 1, 0], sunV, turb, 1.5));
     const skyK = zenTarget / Math.max(1e-5, zenLum); skyMat.uniforms.uSkyK.value = skyK;
-    const dist = 300 + 150 / Math.max(d.y, 0.08); sunL.position.copy(T0).addScaledVector(d, dist); sc.far = dist + 700; sc.updateProjectionMatrix(); sunL.shadow.radius = 1.2 + 16 * Math.pow(1 - iv, 1.5) + 2 * cum; // pénombre: nette au soleil franc, de plus en plus floue sous le voile
+    // Caméra d'ombre serrée en profondeur (la carte VSM garde la profondeur en demi-flottants: plus la plage est courte, moins
+    // les surfaces s'auto-ombrent en rayures au soleil bas): lumière à 520 m, plage de 300 à 780 m.
+    const dist = 520; sunL.position.copy(T0).addScaledVector(d, dist); sc.near = 300; sc.far = 780; sc.updateProjectionMatrix(); sunL.shadow.radius = 1.2 + 16 * Math.pow(1 - iv, 1.5) + 2 * cum; // pénombre: nette au soleil franc, de plus en plus floue sous le voile
     fill.intensity = (0.2 + 1.1 * Math.max(cum, veil) * Math.min(1, Math.sin(el) / 0.3)) * (1 - 0.5 * twi);
     fill.color.setRGB(0.86, 0.90, 1.0).lerp(new THREE.Color(0.9, 0.9, 0.9), Math.max(cum, veil)); // ciel bleuté, gris sous les nuages
     fill.groundColor.copy(GROUND_TINT).multiplyScalar((0.5 + 1.3 * iv * Math.min(1, Math.sin(el) / 0.5)) * (1 - 0.6 * twi)); // rebond du sol
