@@ -23,7 +23,6 @@ export const projectFromRow = (p) => ({
   clientFolder: p.client_folder ?? null, tag: p.tag ?? null,
   onHold: p.on_hold ?? false,
   shootTime: p.shoot_time ?? null,
-  style3d: p.style3d ?? null
 });
 export const PROJECT_TO_ROW = {
   name: 'name', address: 'address', lat: 'lat', lng: 'lng', status: 'status',
@@ -31,7 +30,7 @@ export const PROJECT_TO_ROW = {
   notes: 'notes', links: 'links', departureAddress: 'departure_address',
   departureLat: 'departure_lat', departureLng: 'departure_lng', travelTime: 'travel_time',
   shotAt: 'shot_at', createdAt: 'created_at', completedAt: 'completed_at', buildings: 'buildings',
-  clientFolder: 'client_folder', tag: 'tag', onHold: 'on_hold', shootTime: 'shoot_time', style3d: 'style3d'
+  clientFolder: 'client_folder', tag: 'tag', onHold: 'on_hold', shootTime: 'shoot_time'
 };
 // rowFromProject: écriture (app vers db), ligne complète. Sert à réinsérer un projet
 // supprimé quand on annule la suppression (la ligne a déjà été effacée en base).

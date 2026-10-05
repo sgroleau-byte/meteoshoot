@@ -11,7 +11,6 @@ import { MAX_PROJECT_FILES_MB, fileHelpers } from '../projects/files.js';
 import { toggleMandate } from '../projects/helpers.js';
 import { useStore } from '../projects/StoreProvider.jsx';
 import { Scene3D } from '../scene3d/Scene3D.jsx';
-import { analyzeStyle } from '../scene3d/style.js';
 import { daysSince, formatDateShort, formatDuration, formatTime } from '../utils/dates.js';
 import { linkifyPhonesInEditor } from '../utils/linkify.js';
 import { fetchWeather } from '../weather/api.js';
@@ -357,6 +356,10 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   const [heightPickerIdx, setHeightPickerIdx] = useState(null);
   const [draggingHeight, setDraggingHeight] = useState(null); // { idx, startY, startH, currentH, offsetY }
   const BUILDING_COLORS = ['#ffe26b', '#7dd3c6', '#ff6b8a', '#b07dff', '#6bff8a'];
+  // Couleur des murs d'une forme dans la vue 3D (pastille FORME, bouton 3D ouvert); sans choix: brique rouge.
+  const WALL_COLORS = [['#7a3f33', 'Brique rouge'], ['#6e4a3a', 'Brique brune'], ['#b8957a', 'Brique beige'], ['#d2c2a4', 'Pierre claire'], ['#9a9a94', 'Béton'], ['#e8e4dc', 'Enduit blanc'], ['#b07d5e', 'Bois'], ['#5c5f63', 'Métal foncé']];
+  const [wallPickFor, setWallPickFor] = useState(null); // index de la forme dont on choisit la couleur des murs
+  const setWallColor = (idx, hex) => { setBuildings(prev => prev.map((bb, ii) => ii === idx ? { ...bb, wallColor: hex } : bb)); updateProject(project.id, { buildings: buildings.map((bb, ii) => ii === idx ? { ...bb, wallColor: hex } : bb) }); setWallPickFor(null); };
 
   // Height pill drag handlers
   useEffect(() => {
@@ -2531,8 +2534,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                 {/* Map controls - stacked vertically with subtle border */}
                 <div ref={mapContainerRef} className="detail-map-keep" style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#181b1e', filter: 'saturate(0.50)' }}/>
                 {/* Vue 3D par-dessus la carte (la carte reste montée, avec son état): même curseur, même météo */}
-                <Scene3D visible={view3d} lat={project?.lat} lng={project?.lng} buildings={buildings} orientation={project?.orientation} style={project?.style3d} timeMs={sceneTimeMs} weatherRow={sceneWeatherRow}
-                  onAnalyze={async () => { const files = await fileHelpers.list(project.id); const style = await analyzeStyle(project, files); updateProject(project.id, { style3d: style }); return style; }}/>
+                <Scene3D visible={view3d} lat={project?.lat} lng={project?.lng} buildings={buildings} orientation={project?.orientation} timeMs={sceneTimeMs} weatherRow={sceneWeatherRow}/>
                 <canvas ref={flareCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}/>
                 {nightOpacity > 0 && <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 3, background: `radial-gradient(ellipse at center, transparent 30%, rgba(0,0,15,${0.4 * nightOpacity}) 70%, rgba(0,0,15,${0.7 * nightOpacity}) 100%)`, transition: 'opacity 0.5s ease' }}/>}
                 {/* Fixed center pin */}
@@ -2609,6 +2611,11 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                             <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: color, flexShrink: 0 }}/>
                             <span className="font-bebas-bold" style={{ letterSpacing: '0.06em', fontSize: '17px', color: '#fff', lineHeight: '1', padding: '3px 0 0 0' }}>{t('shape')} {i + 1}</span>
                           </div>
+                          {/* Couleur des murs (vue 3D): pastille cliquable, palette sobre en dessous */}
+                          {view3d && <div onClick={(e) => { e.stopPropagation(); setWallPickFor(wallPickFor === i ? null : i); }} title={(WALL_COLORS.find(c => c[0] === (b.wallColor || '#7a3f33')) || [])[1]} style={{ width: '14px', height: '14px', borderRadius: '50%', background: b.wallColor || '#7a3f33', border: '1px solid rgba(255,255,255,0.7)', marginRight: '8px', cursor: 'pointer', flexShrink: 0 }}/>}
+                          {view3d && wallPickFor === i && <div style={{ position: 'absolute', top: '100%', right: '0', marginTop: '6px', display: 'flex', gap: '6px', padding: '6px 8px', borderRadius: '14px', background: 'rgba(20,24,26,0.75)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', boxShadow: '0 2px 12px rgba(0,0,0,0.4)', zIndex: 30 }}>
+                            {WALL_COLORS.map(([hex, name]) => <div key={hex} title={name} onClick={(e) => { e.stopPropagation(); setWallColor(i, hex); }} style={{ width: '16px', height: '16px', borderRadius: '50%', background: hex, border: (b.wallColor || '#7a3f33') === hex ? '2px solid #fff' : '1px solid rgba(255,255,255,0.35)', cursor: 'pointer', boxSizing: 'border-box' }}/>)}
+                          </div>}
                           <div style={{ position: 'relative' }}>
                             {(hoveredBuilding === i || isDragging) && (<>
                               <div style={{ position: 'absolute', left: '50%', transform: `translateX(-50%) translateY(${pillOffsetY}px)`, top: '-13px', pointerEvents: 'none', opacity: isDragging ? 0.8 : 0.5, transition: isDragging ? 'none' : 'opacity 0.2s' }}>
