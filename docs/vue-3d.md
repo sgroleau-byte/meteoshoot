@@ -32,10 +32,16 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
 
 ## Fichiers
 
-- `src/scene3d/engine.js`: moteur (three.js, chargé à la demande par import dynamique). Ciel procédural
-  (nuages bas en cumulus, moyens en couche, hauts en voile, soleil visible selon le soleil direct), capturé
-  en carte d'environnement pour éclairer la scène; soleil (SunCalc) avec ombres douces (VSM); ombres de
-  nuages qui passent; passes d'image: occlusion ambiante (recoins), tonalité ACES, lissage FXAA.
+- `src/scene3d/engine.js`: moteur (three.js, chargé à la demande par import dynamique). Ciel clair physique
+  (modèle de Preetham, le même que `Sky.js` de three: diffusion de Rayleigh pour le bleu, de Mie pour le halo
+  du soleil et la brume, extinction le long du rayon; turbidité un peu plus forte sous le voile), avec par-dessus
+  les nuages bas en cumulus, moyens en couche, hauts en voile, soleil visible selon le soleil direct; le ciel
+  est capturé en carte d'environnement pour éclairer la scène. Couleur et force du soleil direct tirées de la
+  même extinction (blanc chaud haut dans le ciel, orangé puis rougeoyant au ras de l'horizon, adouci).
+  Appoint hémisphérique: ciel bleuté ou gris par le haut, lumière renvoyée par le sol (teinte herbe et
+  asphalte, plus forte au soleil) par le bas. Ombres douces (VSM) dont la pénombre s'élargit avec le voile et
+  les nuages; ombres de nuages qui passent; passes d'image: occlusion ambiante (recoins), tonalité ACES,
+  lissage FXAA. Heure bleue et nuit traitées à part (dégradé bleu profond, lueur à l'horizon côté soleil).
   Bâtiments en un seul tracé (murs avec fenêtres par étage, toits plats); arbres instanciés à lobes avec
   masque de feuillage (le soleil passe entre les feuilles: ombre parsemée). Point de vue choisi à hauteur
   d'oeil du côté du créneau (AM ou PM), dans l'espace libre, vue dégagée sur le bâtiment principal.
@@ -85,9 +91,13 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
 - Déploiement d'aperçu sans pousser: `npx vercel link --yes --project meteoshoot --scope sgroleaus-projects`
   puis `npx vercel deploy --yes --archive=tgz` (voir la mémoire « variables Vercel »).
 
-## Pistes notées (non commencées)
+## Lumière (5 octobre 2026, v633.145)
 
-- Lumière plus fine: ciel physique (Hosek-Wilkie), pénombre selon la couverture nuageuse, rebond du sol et
-  des voisins; ou rendu affiné à la demande par lancer de rayons progressif (three-gpu-pathtracer) quand la
-  caméra est immobile, bon sur Mac, lent sur iPhone. Stéphane y réfléchit (5 octobre 2026).
+- Option 1 faite: ciel physique de Preetham, couleur du soleil par extinction, rebond du sol (lumière
+  hémisphérique), pénombre selon le voile. Vérifié en local à midi, 16 h 36, 17 h 56 (soleil à 3°, face au
+  soleil et dos au soleil), heure bleue et ciel couvert. Réglages: `uTurb` 2,3 + 2 × voile haut + 0,8 × voile
+  moyen, `uRay` 1,5, `uSkyK` 0,2 (échelle vers notre exposition), épaule douce 1/(1 + 0,22 × luminance) à
+  l'horizon, soleil = 0,85 × (Fex/max)^0,45 + 0,15.
+- Option 2 notée, non commencée: rendu affiné à la demande par lancer de rayons progressif
+  (three-gpu-pathtracer) quand la caméra est immobile; bon sur Mac, lent sur iPhone. À tester avant de promettre.
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

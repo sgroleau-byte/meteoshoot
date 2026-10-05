@@ -17,25 +17,43 @@ const mv = (a, b, t) => a.map((v, i) => v + (b[i] - v) * clamp(t));
 const hsh = (x, n, k) => { const s = Math.sin(x * 12.9898 + n * 78.233 + k * 37.719) * 43758.5453; return s - Math.floor(s); };
 const rgb = (h) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
 const L = (h) => new THREE.Color(h); // interprété comme sRGB, converti en linéaire par three
+// Extinction atmosphérique de Preetham pour la direction du soleil (mêmes constantes que le ciel): donne la couleur du
+// soleil direct (blanc haut dans le ciel, orange puis rouge au ras de l'horizon) et sa perte de force.
+function sunExtinction(y, turb, ray) {
+  const TR = [5.804542996261093e-6, 1.3562911419845635e-5, 3.0265902468824876e-5], MC = [1.8399918514433978e14, 2.7798023919660528e14, 4.0790479543861094e14];
+  const za = Math.acos(Math.max(0, y)), inv = 1 / (Math.cos(za) + 0.15 * Math.pow(93.885 - za * 57.29578, -1.253));
+  return TR.map((r, i) => Math.exp(-(r * ray * 8400 * inv + 0.434 * (0.2 * turb) * 1e-17 * MC[i] * 0.005 * 1250 * inv)));
+}
 
-const SKY_GLSL = `uniform float uCum,uMid,uHigh,uDirect,uWarm,uTw,uNight,uGlow;uniform vec3 uSun,uSunCol;varying vec3 vDir;
+const SKY_GLSL = `uniform float uCum,uMid,uHigh,uDirect,uWarm,uTw,uNight,uGlow,uTurb,uRay,uSkyK;uniform vec3 uSun,uSunCol;varying vec3 vDir;
+const vec3 LUMW=vec3(0.2126,0.7152,0.0722);
+// Ciel clair de Preetham (modèle analytique de lumière du jour, comme Sky.js de three): diffusion de Rayleigh (bleu du ciel) et de
+// Mie (halo blanc autour du soleil, brume à l'horizon), extinction Fex le long du rayon. uTurb = turbidité (brume), uRay = part
+// de Rayleigh, uSkyK = échelle vers notre exposition.
+const vec3 TR=vec3(5.804542996261093e-6,1.3562911419845635e-5,3.0265902468824876e-5);
+const vec3 MC=vec3(1.8399918514433978e14,2.7798023919660528e14,4.0790479543861094e14);
+float sunE(float y){y=clamp(y,-1.0,1.0);return 1000.0*max(0.0,1.0-exp(-((1.6110731556870734-acos(y))/1.5)));}
+vec3 preetham(vec3 dir,vec3 sd,out vec3 Fex){vec3 bR=TR*uRay,bM=0.434*(0.2*uTurb)*1e-17*MC*0.005;
+float za=acos(max(0.0,dir.y));float inv=1.0/(cos(za)+0.15*pow(93.885-za*57.29578,-1.253));Fex=exp(-(bR*8400.0*inv+bM*1250.0*inv));
+float ct=dot(dir,sd);float rPh=0.05968310365946075*(1.0+pow(ct*0.5+0.5,2.0));float mPh=0.07957747154594767*(0.36/pow(1.64-1.6*ct,1.5));
+float E=sunE(sd.y);vec3 br=(bR*rPh+bM*mPh)/(bR+bM);vec3 Lin=pow(E*br*(1.0-Fex),vec3(1.5));
+Lin*=mix(vec3(1.0),pow(E*br*Fex,vec3(0.5)),clamp(pow(1.0-sd.y,5.0),0.0,1.0));return (Lin+0.1*Fex)*0.04*uSkyK;}
 float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);vec2 u=f*f*(3.0-2.0*f);return mix(mix(hash(i),hash(i+vec2(1.0,0.0)),u.x),mix(hash(i+vec2(0.0,1.0)),hash(i+vec2(1.0,1.0)),u.x),u.y);}
 float fbm(vec2 p,float lod){float v=0.0,a=0.5;mat2 m=mat2(1.6,1.2,-1.2,1.6);for(int i=0;i<6;i++){float k=i<2?1.0:clamp(lod*2.0-float(i-2)*0.45,0.0,1.0);v+=a*(k*noise(p)+(1.0-k)*0.5);p=m*p;a*=0.5;}return v;}
 void main(){vec3 rd=normalize(vDir);vec3 sd=normalize(uSun);
-float y=rd.y,cg=dot(rd,sd),t=pow(clamp(y,0.0,1.0),0.45),anti=max(-cg,0.0),veil=max(uMid,uHigh),clr=1.0-veil*0.85,lod=smoothstep(0.0,0.35,y);
-vec3 zen=vec3(0.20,0.40,0.72),hor=vec3(0.62,0.76,0.90);vec3 col=mix(hor,zen,t);col=mix(col,vec3(0.80,0.86,0.92),(1.0-smoothstep(0.0,0.22,y))*0.6);
-float wm=uWarm*(1.0-t)*(0.35+0.65*pow(max(cg,0.0),2.0));col=mix(col,vec3(1.0,0.62,0.34),wm);col=mix(col,vec3(0.32,0.36,0.56),uWarm*t*0.55);
-col=mix(col,vec3(0.92,0.68,0.66),uWarm*clr*pow(anti,1.2)*smoothstep(0.0,0.06,y)*(1.0-smoothstep(0.06,0.22,y))*0.6);
-col=mix(col,vec3(0.45,0.50,0.62),uWarm*clr*pow(anti,1.2)*(1.0-smoothstep(0.0,0.05,y))*0.5);
-col+=uSunCol*(0.28*pow(max(cg,0.0),14.0)+0.10*pow(max(cg,0.0),3.0));
+float y=rd.y,cg=dot(rd,sd),t=pow(clamp(y,0.0,1.0),0.45),veil=max(uMid,uHigh),lod=smoothstep(0.0,0.35,y);
+// Ciel clair physique en linéaire, épaule douce (l'horizon de Preetham est très lumineux), puis domaine d'affichage
+// (gamme 2,2) pour le mélange des nuages, comme avant; l'heure bleue et la nuit restent traitées à part plus bas.
+vec3 Fx,FxH;vec3 preL=preetham(rd,sd,Fx);preL/=1.0+0.22*dot(preL,LUMW);vec3 col=pow(max(preL,vec3(0.0)),vec3(1.0/2.2));
+vec3 horL=preetham(normalize(vec3(rd.x,0.02,rd.z)),sd,FxH);horL/=1.0+0.22*dot(horL,LUMW);vec3 hor=pow(max(horL,vec3(0.0)),vec3(1.0/2.2));
 float thick=1.0-uDirect;float blur=0.004+0.02*thick*veil;float disc=smoothstep(cos(0.014+blur),cos(0.010),cg)*step(0.0,y+0.002);
 float dC=0.0,aMidG=0.0,aHighG=0.0;vec3 cC=vec3(0.0);
 if(y>0.0){vec2 p=rd.xz/(y+0.08)*0.55;float n=fbm(p,lod)*0.74+fbm(p*2.7+vec2(5.0,9.0),lod)*0.26;float th=0.5+(0.5-uCum)*0.62;float sw=0.09+0.14*(1.0-lod);
 dC=smoothstep(th,th+sw,n)*smoothstep(0.0,0.10,y)*step(0.02,uCum);
 float n2=fbm(p+normalize(sd.xz+vec2(1e-4))*0.12,lod);float lit=clamp(0.55+(n-n2)*5.0,0.0,1.0);
 vec3 shd=vec3(0.50,0.54,0.60),li=mix(vec3(1.0),uSunCol,0.55);cC=mix(shd,li,lit)*(1.0-0.22*smoothstep(0.62,0.85,n));cC=mix(cC,hor,0.5*(1.0-smoothstep(0.0,0.25,y)));}
-col+=vec3(1.0,0.98,0.92)*disc*2.0*(1.0-dC);col+=uSunCol*pow(max(cg,0.0),40.0)*dC*(1.0-dC)*1.6;col=mix(col,cC,dC);
+col+=uSunCol*disc*2.0*(1.0-dC);col+=uSunCol*pow(max(cg,0.0),40.0)*dC*(1.0-dC)*1.6;col=mix(col,cC,dC);
 if(uMid>0.01){float yy=max(y,0.0);vec2 pm=rd.xz/(yy+0.07)*0.42;float nm=fbm(pm*0.9+vec2(3.1,7.7),lod);float cov=smoothstep(0.62-0.5*uMid,0.72,nm+0.1*uMid);
 float a=uMid*mix(0.45*cov,0.96,thick*thick);aMidG=a;vec3 mc=mix(vec3(0.80,0.82,0.85),vec3(0.58,0.60,0.64),thick);mc=mix(mc,vec3(0.86,0.70,0.58),uWarm*0.45);mc*=1.0-0.12*smoothstep(0.7,0.95,nm);
 mc+=uSunCol*(0.35*pow(max(cg,0.0),8.0))*uDirect;col=mix(col,mc,a*(1.0-dC));}
@@ -132,7 +150,7 @@ export function createScene3D(container, opts = {}) {
   container.appendChild(R.domElement);
 
   // ---- ciel, environnement lumineux
-  const skyMat = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: { uCum: { value: 0 }, uMid: { value: 0 }, uHigh: { value: 0 }, uDirect: { value: 1 }, uWarm: { value: 0 }, uTw: { value: 0 }, uNight: { value: 0 }, uGlow: { value: 0 }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Vector3(1, 1, 1) } }, vertexShader: SKY_VERT, fragmentShader: SKY_GLSL });
+  const skyMat = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: { uCum: { value: 0 }, uMid: { value: 0 }, uHigh: { value: 0 }, uDirect: { value: 1 }, uWarm: { value: 0 }, uTw: { value: 0 }, uNight: { value: 0 }, uGlow: { value: 0 }, uTurb: { value: 2.5 }, uRay: { value: 1.5 }, uSkyK: { value: 0.2 }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Vector3(1, 1, 1) } }, vertexShader: SKY_VERT, fragmentShader: SKY_GLSL });
   const S = new THREE.Scene();
   const cam = new THREE.PerspectiveCamera(44, W / H, 1, 60000);
   const skyGeo = new THREE.SphereGeometry(5500, 40, 20);
@@ -166,7 +184,10 @@ export function createScene3D(container, opts = {}) {
   const T0 = new THREE.Vector3(0, 0, 0); S.add(sunL); S.add(sunL.target);
   // Lumière neutre des nuages: sous un cumulus ou un voile, l'ombre est éclairée par un ciel en partie blanc, pas
   // seulement par le bleu; sans ce complément, les ombres de nuages tirent sur le bleu marine.
-  const fill = new THREE.AmbientLight(0xffffff, 0.2); S.add(fill);
+  // Appoint hémisphérique: le ciel par le haut, et par le bas la lumière renvoyée par le sol et les voisins (teinte herbe et
+  // asphalte), plus forte au soleil: le bas des façades à l'ombre n'est plus uniforme.
+  const GROUND_TINT = new THREE.Color(0.46, 0.50, 0.37);
+  const fill = new THREE.HemisphereLight(0xffffff, 0x8a9270, 0.2); S.add(fill);
   // Heure bleue: le côté où le soleil s'est couché reste plus clair, comme une grande boîte à lumière.
   const twL = new THREE.DirectionalLight(0xffffff, 0); S.add(twL); S.add(twL.target);
   let seed = 11; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
@@ -343,10 +364,16 @@ export function createScene3D(container, opts = {}) {
     const realDeg = sp.altitude * 180 / Math.PI, el = Math.max(sp.altitude, 0.6 * Math.PI / 180), eld = el * 180 / Math.PI;
     const d = new THREE.Vector3(Math.sin(bearing) * Math.cos(el), Math.sin(el), -Math.cos(bearing) * Math.cos(el));
     const night = realDeg < -0.8, twi = smooth(2, -5, realDeg), nightF = smooth(-7, -15, realDeg), glow = 1 - smooth(-5, -10, realDeg);
-    const fe = Math.exp(-0.05 / Math.max(Math.sin(el), 0.01)), Idir = night ? 0 : 10 * fe * iv; sunL.intensity = Idir;
-    const warm = clamp(1 - (eld - 2) / 28), sc0 = mixHex(mixHex('#fff1dc', '#ff9a52', Math.pow(warm, 1.5)), '#eeebe4', (1 - iv) * 0.6); sunL.color.copy(L(sc0));
-    const dist = 300 + 150 / Math.max(d.y, 0.08); sunL.position.copy(T0).addScaledVector(d, dist); sc.far = dist + 700; sc.updateProjectionMatrix(); sunL.shadow.radius = 1 + 12 * (1 - iv) + 1.5 * cum;
+    // Brume (turbidité) un peu plus forte sous le voile; extinction du soleil direct selon sa hauteur.
+    const turb = 2.3 + 2.0 * high + 0.8 * mid, Fx = sunExtinction(Math.sin(el), turb, 1.5), fxm = Math.max(Fx[0], Fx[1], Fx[2], 1e-4);
+    const fe = Math.pow(0.2126 * Fx[0] + 0.7152 * Fx[1] + 0.0722 * Fx[2], 0.7), Idir = night ? 0 : 10 * fe * iv; sunL.intensity = Idir;
+    // Couleur du soleil direct: extinction adoucie (Preetham rougit trop au ras de l'horizon) et un peu de blanc gardé.
+    const sunRGB = Fx.map(v => 0.85 * Math.pow(v / fxm, 0.45) + 0.15), sc0 = mixHex('#' + sunRGB.map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join(''), '#eeebe4', (1 - iv) * 0.6); sunL.color.copy(L(sc0));
+    skyMat.uniforms.uTurb.value = turb;
+    const dist = 300 + 150 / Math.max(d.y, 0.08); sunL.position.copy(T0).addScaledVector(d, dist); sc.far = dist + 700; sc.updateProjectionMatrix(); sunL.shadow.radius = 1.2 + 16 * Math.pow(1 - iv, 1.5) + 2 * cum; // pénombre: nette au soleil franc, de plus en plus floue sous le voile
     fill.intensity = (0.2 + 1.1 * Math.max(cum, veil) * Math.min(1, Math.sin(el) / 0.3)) * (1 - 0.5 * twi);
+    fill.color.setRGB(0.86, 0.90, 1.0).lerp(new THREE.Color(0.9, 0.9, 0.9), Math.max(cum, veil)); // ciel bleuté, gris sous les nuages
+    fill.groundColor.copy(GROUND_TINT).multiplyScalar((0.5 + 1.3 * iv * Math.min(1, Math.sin(el) / 0.5)) * (1 - 0.6 * twi)); // rebond du sol
     const ambB = (0.3 + 0.55 * Math.min(1, Math.sin(el) / 0.5)) * (1 + 0.3 * Math.max(cum, veil)); const tot = (Idir / Math.PI * 0.5 + ambB) / 2.2;
     compMat.uniforms.uExp.value = Math.max(0.5, Math.min(1.15 - 0.4 * twi, 0.64 * Math.pow(1 / Math.max(0.05, Math.min(1, tot)), 0.3)));
     const nb = Math.min(60, Math.round(cum * 110)), hh = 150 / Math.max(d.y, 0.08); blobs.forEach((g, i) => { g.visible = i < nb; const u = g.userData; g.position.set(T0.x + u.gx + d.x * hh, 150, T0.z + u.gz + d.z * hh); });
