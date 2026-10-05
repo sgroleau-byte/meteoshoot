@@ -10,6 +10,7 @@ import { MandateType, renderMandate } from '../projects/constants.js';
 import { MAX_PROJECT_FILES_MB, fileHelpers } from '../projects/files.js';
 import { toggleMandate } from '../projects/helpers.js';
 import { useStore } from '../projects/StoreProvider.jsx';
+import { Scene3D } from '../scene3d/Scene3D.jsx';
 import { daysSince, formatDateShort, formatDuration, formatTime } from '../utils/dates.js';
 import { linkifyPhonesInEditor } from '../utils/linkify.js';
 import { fetchWeather } from '../weather/api.js';
@@ -31,6 +32,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   const [confirm, setConfirm] = useState(false);
   const [confirmDone, setConfirmDone] = useState(false);
   const [mapType, setMapType] = useState('hybrid');
+  const [view3d, setView3d] = useState(false); // vue 3D dans la fenêtre de la carte (SAT / 3D / MAP)
   const [mapZoom, setMapZoom] = useState(project?.mapZoom || 16);
   const [showMapFull, setShowMapFull] = useState(false);
   const [mapMenuOpen, setMapMenuOpen] = useState(false);
@@ -47,6 +49,20 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   const isToday = React.useMemo(() => { const n = new Date(); return sunDate.getDate() === n.getDate() && sunDate.getMonth() === n.getMonth() && sunDate.getFullYear() === n.getFullYear(); }, [sunDate]);
   const [sunHour, setSunHour] = useState(0);
   const [sunHourDisplay, setSunHourDisplay] = useState(0);
+  // Survol d'une heure de la météo horaire (souris): le curseur de la carte la suit, ombres et vue 3D avec lui.
+  const hoverHour = (d) => {
+    if (isMobile) return;
+    setSunDate(prev => (prev.getFullYear() === d.getFullYear() && prev.getMonth() === d.getMonth() && prev.getDate() === d.getDate()) ? prev : new Date(d.getFullYear(), d.getMonth(), d.getDate()));
+    setSunHour(d.getHours() + d.getMinutes() / 60);
+  };
+  // Vue 3D: instant du curseur et météo horaire la plus proche (nuages bas, moyens, hauts, soleil direct).
+  const sceneTimeMs = React.useMemo(() => { const d = new Date(sunDate); d.setHours(0, 0, 0, 0); return d.getTime() + sunHourDisplay * 3600000; }, [sunDate, sunHourDisplay]);
+  const sceneWeatherRow = React.useMemo(() => {
+    if (!weather?.hourly?.length) return null;
+    let best = null, bd = Infinity;
+    for (const h of weather.hourly) { const dd = Math.abs(new Date(h.time).getTime() - sceneTimeMs); if (dd < bd) { bd = dd; best = h; } }
+    return bd <= 2 * 3600000 ? best : null;
+  }, [weather, sceneTimeMs]);
   const sunHourTargetRef = React.useRef(sunHour);
   const sunTimesSnapRef = React.useRef({ sr: 6, ss: 18 });
   
@@ -1842,7 +1858,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                       }
 
                       return (
-                        <div key={h.time} className={`flex flex-col items-center gap-0 min-w-[56px] px-0 py-1 ${isNight ? 'bg-charcoal/5' : ''}`} style={!isNight && h.smoke ? { background: SMOKE_TINT[h.smoke] } : undefined}>
+                        <div key={h.time} className={`flex flex-col items-center gap-0 min-w-[56px] px-0 py-1 ${isNight ? 'bg-charcoal/5' : ''}`} style={!isNight && h.smoke ? { background: SMOKE_TINT[h.smoke] } : undefined} onMouseEnter={() => hoverHour(hDate)}>
                           {/* Sunrise/sunset chevron above time */}
                           {isSunrise && <svg width="18" height="10" viewBox="0 0 18 10" style={{ marginBottom: '8px' }}><polyline points="1,9 9,2 17,9" fill="none" stroke="#404A48" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                           {isSunset && <svg width="18" height="10" viewBox="0 0 18 10" style={{ marginBottom: '8px' }}><polyline points="1,1 9,8 17,1" fill="none" stroke="#404A48" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
@@ -2493,6 +2509,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                 })()}
                 {/* Map controls - stacked vertically with subtle border */}
                 <div ref={mapContainerRef} className="detail-map-keep" style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#181b1e', filter: 'saturate(0.50)' }}/>
+                {/* Vue 3D par-dessus la carte (la carte reste montée, avec son état): même curseur, même météo */}
+                <Scene3D visible={view3d} lat={project?.lat} lng={project?.lng} buildings={buildings} orientation={project?.orientation} timeMs={sceneTimeMs} weatherRow={sceneWeatherRow}/>
                 <canvas ref={flareCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}/>
                 {nightOpacity > 0 && <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 3, background: `radial-gradient(ellipse at center, transparent 30%, rgba(0,0,15,${0.4 * nightOpacity}) 70%, rgba(0,0,15,${0.7 * nightOpacity}) 100%)`, transition: 'opacity 0.5s ease' }}/>}
                 {/* Fixed center pin */}
@@ -2604,7 +2622,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                       padding: '4px 10px', cursor: 'pointer'
                     }}>
                       <span className="font-bebas-bold" style={{ fontSize: '12px', color: 'rgba(255,255,255,0.9)', letterSpacing: '0.04em' }}>
-                        {mapType === 'hybrid' ? 'SAT' : 'MAP'}
+                        {view3d ? '3D' : mapType === 'hybrid' ? 'SAT' : 'MAP'}
                       </span>
                     </div>}
                     {/* Expanded menu */}
@@ -2615,9 +2633,10 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                       borderRadius: '20px', border: '1.5px solid rgba(255,255,255,0.7)',
                       padding: '6px 2px', gap: '0px', width: '38px', boxSizing: 'border-box'
                     }}>
-                      <button onClick={() => { setMapType('hybrid'); setMapMenuOpen(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '13px', padding: '4px 8px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'hybrid' ? '0 0 10px rgba(255,255,255,0.7)' : 'none' }}>SAT</button>
-                      <button onClick={() => { setMapType('roadmap'); setMapMenuOpen(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '13px', padding: '4px 8px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'roadmap' ? '0 0 10px rgba(255,255,255,0.7)' : 'none' }}>MAP</button>
-                      <button onClick={() => { if (drawingMode) { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(false); } else { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(true); setEditingBuilding(null); } setMapMenuOpen(false); }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '5px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: drawingMode ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none' }}>
+                      <button onClick={() => { setMapType('hybrid'); setView3d(false); setMapMenuOpen(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '13px', padding: '4px 8px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'hybrid' && !view3d ? '0 0 10px rgba(255,255,255,0.7)' : 'none' }}>SAT</button>
+                      <button onClick={() => { setView3d(true); setMapMenuOpen(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '13px', padding: '4px 8px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: view3d ? '0 0 10px rgba(255,255,255,0.7)' : 'none' }}>3D</button>
+                      <button onClick={() => { setMapType('roadmap'); setView3d(false); setMapMenuOpen(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '13px', padding: '4px 8px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'roadmap' && !view3d ? '0 0 10px rgba(255,255,255,0.7)' : 'none' }}>MAP</button>
+                      <button onClick={() => { setView3d(false); if (drawingMode) { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(false); } else { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(true); setEditingBuilding(null); } setMapMenuOpen(false); }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '5px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: drawingMode ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none' }}>
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                       </button>
                       <button onClick={() => { setShowSunLines(v => !v); setMapMenuOpen(false); }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '5px', color: showSunLines ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: showSunLines ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none' }}>
@@ -2646,9 +2665,10 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                     padding: '10px 2px', gap: '2px',
                     width: '44px', boxSizing: 'border-box'
                   }}>
-                    <button onClick={() => setMapType('hybrid')} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '17px', padding: '6px 12px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'hybrid' ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none', transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>SAT</button>
-                    <button onClick={() => setMapType('roadmap')} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '17px', padding: '6px 12px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'roadmap' ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none', transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>MAP</button>
-                    <button onClick={() => { if (drawingMode) { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(false); } else { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(true); setEditingBuilding(null); } }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '8px', marginTop: '2px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: drawingMode ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none', transition: 'filter 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
+                    <button onClick={() => { setMapType('hybrid'); setView3d(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '17px', padding: '6px 12px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'hybrid' && !view3d ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none', transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>SAT</button>
+                    <button onClick={() => setView3d(true)} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '17px', padding: '6px 12px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: view3d ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none', transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>3D</button>
+                    <button onClick={() => { setMapType('roadmap'); setView3d(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '17px', padding: '6px 12px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'roadmap' && !view3d ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none', transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>MAP</button>
+                    <button onClick={() => { setView3d(false); if (drawingMode) { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(false); } else { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(true); setEditingBuilding(null); } }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '8px', marginTop: '2px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: drawingMode ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none', transition: 'filter 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                     </button>
                     <button onClick={() => setShowSunLines(v => !v)} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '8px', color: showSunLines ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: showSunLines ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none', transition: 'filter 0.3s ease, color 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>

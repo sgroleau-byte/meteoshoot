@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "api": "node scripts/scene3d-dev.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src/",
@@ -25,9 +26,11 @@
     "@fontsource/montserrat": "5.3.0",
     "@fontsource/oswald": "5.3.0",
     "@supabase/supabase-js": "2.117.2",
+    "duckdb": "^1.4.4",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "suncalc": "1.9.0"
+    "suncalc": "1.9.0",
+    "three": "^0.186.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "4.7.0",

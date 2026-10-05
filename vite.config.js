@@ -32,7 +32,8 @@ export default defineConfig({
     { name: 'meteoshoot-google-maps-key', transformIndexHtml: (html) => html.replace(/__GOOGLE_MAPS_KEY__/g, mapsKey) },
   ],
   define: { __GOOGLE_MAPS_KEY__: JSON.stringify(mapsKey), __MS_TARGET__: JSON.stringify(target) },
-  server: { port: 5173, strictPort: true },
+  // /api -> fonction scene3d servie en local par scripts/scene3d-dev.mjs (npm run api).
+  server: { port: 5173, strictPort: true, proxy: { '/api': 'http://localhost:3999' } },
   build: {
     // Compatibilité large (Safari 14, Chrome 87...): l'ancienne page transpilait tout avec Babel.
     target: ['es2019', 'safari14', 'chrome87', 'firefox78', 'edge88'],
