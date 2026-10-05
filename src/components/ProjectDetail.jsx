@@ -11,6 +11,7 @@ import { MAX_PROJECT_FILES_MB, fileHelpers } from '../projects/files.js';
 import { toggleMandate } from '../projects/helpers.js';
 import { useStore } from '../projects/StoreProvider.jsx';
 import { Scene3D } from '../scene3d/Scene3D.jsx';
+import { analyzeStyle } from '../scene3d/style.js';
 import { daysSince, formatDateShort, formatDuration, formatTime } from '../utils/dates.js';
 import { linkifyPhonesInEditor } from '../utils/linkify.js';
 import { fetchWeather } from '../weather/api.js';
@@ -2510,7 +2511,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                 {/* Map controls - stacked vertically with subtle border */}
                 <div ref={mapContainerRef} className="detail-map-keep" style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#181b1e', filter: 'saturate(0.50)' }}/>
                 {/* Vue 3D par-dessus la carte (la carte reste montée, avec son état): même curseur, même météo */}
-                <Scene3D visible={view3d} lat={project?.lat} lng={project?.lng} buildings={buildings} orientation={project?.orientation} timeMs={sceneTimeMs} weatherRow={sceneWeatherRow}/>
+                <Scene3D visible={view3d} lat={project?.lat} lng={project?.lng} buildings={buildings} orientation={project?.orientation} style={project?.style3d} timeMs={sceneTimeMs} weatherRow={sceneWeatherRow}
+                  onAnalyze={async () => { const files = await fileHelpers.list(project.id); const style = await analyzeStyle(project, files); updateProject(project.id, { style3d: style }); }}/>
                 <canvas ref={flareCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}/>
                 {nightOpacity > 0 && <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 3, background: `radial-gradient(ellipse at center, transparent 30%, rgba(0,0,15,${0.4 * nightOpacity}) 70%, rgba(0,0,15,${0.7 * nightOpacity}) 100%)`, transition: 'opacity 0.5s ease' }}/>}
                 {/* Fixed center pin */}

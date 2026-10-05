@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase.js';
 
 const mem = new Map();
 const TBL = 'scene3d_cache'; // partagé, pas de variante dev
-const API_BASE = (typeof __MS_TARGET__ !== 'undefined' && __MS_TARGET__ === 'native') ? 'https://meteoshoot.com' : '';
+const API_BASE = (typeof __MS_TARGET__ !== 'undefined' && __MS_TARGET__ === 'native') ? 'https://www.meteoshoot.com' : '';
 
 export const sceneKey = (lat, lng) => `${Number(lat).toFixed(5)}_${Number(lng).toFixed(5)}`;
 

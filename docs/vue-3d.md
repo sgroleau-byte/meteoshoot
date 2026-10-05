@@ -31,6 +31,15 @@ horaire déplace le curseur (date comprise), donc les ombres de la carte et la 3
 - `supabase/migrations/20261005120000_cache_scene_3d.sql`: table `scene3d_cache` (clé = latitude et
   longitude à 5 décimales, lecture pour tous, insertion pour les comptes connectés, validation 600 Ko).
 - `src/weather/api.js`: l'horaire porte maintenant `cloudMid` et `cloudHigh` (nuages moyens et hauts).
+- `api/scene3d-style.js` et `src/scene3d/style.js`: bouton « Analyser les images » dans la vue 3D. Les images du
+  projet (fichiers) sont réduites puis envoyées à Claude (modèle claude-opus-5-5, réponse structurée), qui en tire
+  couleur des murs, du soubassement, du toit, accent, matériau, rythme des fenêtres, étages et hauteur estimée.
+  Résultat gardé dans le projet (`style3d`, migration `20261005150000_style_3d_projet.sql`) et appliqué aux formes
+  dessinées (couleurs, bandeau de soubassement, rangées de fenêtres; hauteur si les formes sont restées à 30 m).
+  Demande la variable `ANTHROPIC_API_KEY` sur Vercel (réglages du projet, puis redéploiement); sans elle, le bouton
+  affiche « clé API Claude absente ». Quelques cents par analyse.
+- Les fichiers Overture sont lus en HTTPS direct (pas en s3://): sur Vercel, les identifiants AWS ambiants de la
+  fonction et sa région us-east-1 faussaient les requêtes vers ce seau public d'us-west-2 (erreur 301).
 
 ## Règles de rendu (validées avec Stéphane)
 

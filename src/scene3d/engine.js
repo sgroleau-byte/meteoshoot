@@ -199,7 +199,7 @@ export function createScene3D(container, opts = {}) {
   const fxMat = new THREE.ShaderMaterial({ uniforms: THREE.UniformsUtils.clone(FXAAShader.uniforms), vertexShader: FXAAShader.vertexShader, fragmentShader: FXAAShader.fragmentShader });
 
   // ---- état: lieu, heure, météo, caméra
-  let lat = 46.8, lng = -71.2, origin = null, projLocal = [], orientation = [], data = null, dateMs = Date.now();
+  let lat = 46.8, lng = -71.2, origin = null, projLocal = [], orientation = [], style = null, data = null, dateMs = Date.now();
   const tg = { cum: 0, mid: 0, high: 0, iv: 1 }, cur = { ...tg };
   let az = Math.PI * 1.2, camH = 1.7, Rr = 75; const ct = new THREE.Vector3(0, 10, 0);
   let statics = [], treesI = null, dirty = true, running = true, envKey = '', envAt = 0, drag = null, lastInfo = '', weatherRow = null;
@@ -231,6 +231,16 @@ export function createScene3D(container, opts = {}) {
     const wm = new THREE.Mesh(wg, wallMat); wm.castShadow = true; wm.receiveShadow = true; S.add(wm); statics.push(wm);
     const rgm = new THREE.BufferGeometry(); rgm.setAttribute('position', new THREE.Float32BufferAttribute(RP, 3)); rgm.setAttribute('normal', new THREE.Float32BufferAttribute(RN, 3)); rgm.setAttribute('color', new THREE.Float32BufferAttribute(RC, 3));
     const rm = new THREE.Mesh(rgm, roofMat); rm.castShadow = true; rm.receiveShadow = true; S.add(rm); statics.push(rm);
+  }
+  // Soubassement: bandeau de 0,9 m au pied des bâtiments du projet, dans la couleur du bas des murs.
+  function band(list, col, hh) {
+    const P = [], N = [], C = [];
+    list.forEach(pts => { const r = signedArea(pts) < 0 ? pts.slice().reverse() : pts;
+      for (let i = 0; i < r.length; i++) { const a = r[i], c = r[(i + 1) % r.length]; const ax = a[0], az = -a[1], bx = c[0], bz = -c[1]; const ex = bx - ax, ez = bz - az, len = Math.hypot(ex, ez); if (len < 0.05) continue;
+        const nx = -ez / len, nz = ex / len, o = 0.06; const q = [[ax + nx * o, 0, az + nz * o], [bx + nx * o, 0, bz + nz * o], [bx + nx * o, hh, bz + nz * o], [ax + nx * o, hh, az + nz * o]];
+        [[0, 1, 2], [0, 2, 3]].forEach(t => t.forEach(k => { const v = q[k]; P.push(v[0], v[1], v[2]); N.push(nx, 0, nz); C.push(col.r, col.g, col.b); })); } });
+    if (!P.length) return; const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+    const m = new THREE.Mesh(g, roofMat); m.receiveShadow = true; S.add(m); statics.push(m);
   }
   function trees(list) {
     if (!list.length) return;
@@ -283,10 +293,14 @@ export function createScene3D(container, opts = {}) {
     // Hauteurs jamais réglées dans le projet (toutes à 30 m, le défaut): on prend la hauteur mesurée du même
     // édifice si on l'a, sinon 9 m (deux ou trois étages). Dès qu'une forme a été réglée, chaque valeur compte.
     const untouched = drawn.length > 0 && drawn.every(d => d.def);
-    drawn.forEach(d => { if (!untouched) return; const hits = data ? data.bld.filter(([p, , , k]) => k !== 2 && ringsOverlap(d.p, p)) : []; d.h = hits.length ? Math.max(3, Math.max(...hits.map(h => h[1]))) : 9; });
+    // Priorité: hauteur estimée par l'analyse des images du client, sinon hauteur mesurée, sinon 9 m.
+    const st = style || {};
+    drawn.forEach(d => { if (!untouched) return; const hits = data ? data.bld.filter(([p, , , k]) => k !== 2 && ringsOverlap(d.p, p)) : []; d.h = st.heightM ? Math.max(3, st.heightM) : hits.length ? Math.max(3, Math.max(...hits.map(h => h[1]))) : 9; });
     // Bâtiment du projet (école, bureau, commerce): deux rangées de fenêtres jusqu'à 16 m, puis 4,5 m par étage;
-    // fenêtres espacées de 6 m, sobres.
-    const list = drawn.map(b => ({ p: b.p, h: b.h, fl: b.h < 6 ? 1 : b.h <= 16 ? 2 : Math.round(b.h / 4.5), bay: 6.0, col: L('#7a3f33'), rc: L('#5a5650') }));
+    // fenêtres espacées de 6 m, sobres. Le style tiré des images du client (couleurs, fenêtres, étages) l'emporte.
+    const wallC = L(st.wallColor || '#7a3f33'), roofC = L(st.roofColor || '#5a5650'), bay = st.windowStyle === 'few' ? 9 : st.windowStyle === 'large' ? 4.5 : 6;
+    const list = drawn.map(b => ({ p: b.p, h: b.h, fl: st.storeys ? Math.max(1, Math.min(st.storeys, Math.round(b.h / 2.6))) : b.h < 6 ? 1 : b.h <= 16 ? 2 : Math.round(b.h / 4.5), bay, col: wallC, rc: roofC }));
+    if (st.baseColor && st.baseColor.toLowerCase() !== (st.wallColor || '').toLowerCase()) band(drawn.map(d => d.p), L(st.baseColor), 0.9);
     const others = [];
     if (data) {
       data.bld.forEach(([p, h, fl, k]) => {
@@ -372,8 +386,8 @@ export function createScene3D(container, opts = {}) {
     W = w; H = h; R.setSize(W, H); cam.aspect = W / H; cam.updateProjectionMatrix(); alloc(); dirty = true;
   }
   return {
-    setProject({ lat: la, lng: ln, buildings, orientation: ori }) {
-      lat = la; lng = ln; projLocal = buildings || []; orientation = ori || [];
+    setProject({ lat: la, lng: ln, buildings, orientation: ori, style: sty }) {
+      lat = la; lng = ln; projLocal = buildings || []; orientation = ori || []; style = sty || null;
       if (!data) origin = [la, ln];
       rebuild();
     },

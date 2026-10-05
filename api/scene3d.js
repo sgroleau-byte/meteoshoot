@@ -15,13 +15,16 @@ export const maxDuration = 60;
 
 const RELEASE = '2026-09-23.1';
 const BASE = `s3://overturemaps-us-west-2/release/${RELEASE}`;
+// Avec l'index, les fichiers sont lus en HTTPS direct (pas de signature S3: sur Vercel, les identifiants AWS de la
+// fonction et sa région us-east-1 faussaient les requêtes S3 vers ce seau public d'us-west-2).
+const HTTPS_BASE = `https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/release/${RELEASE}`;
 // Index des fichiers par cadre (scripts/overture-index.mjs): on n'ouvre que ceux qui touchent le lieu.
 let INDEX = null;
 try { INDEX = JSON.parse(readFileSync(new URL('./overture-index.json', import.meta.url), 'utf8')); if (INDEX.release !== RELEASE) INDEX = null; } catch (e) { INDEX = null; }
 function filesFor(path, [x0, y0, x1, y1]) {
   const list = INDEX && INDEX.types[path];
   if (!list) return null;
-  return list.filter(([, fx0, fy0, fx1, fy1]) => fx0 <= x1 && fx1 >= x0 && fy0 <= y1 && fy1 >= y0).map(([name]) => `${BASE}/${path}/${name}`);
+  return list.filter(([, fx0, fy0, fx1, fy1]) => fx0 <= x1 && fx1 >= x0 && fy0 <= y1 && fy1 >= y0).map(([name]) => `${HTTPS_BASE}/${path}/${name}`);
 }
 const R_BLD = 450, R_ROAD = 500, R_TREE = 340, R_WOOD = 500, R_GREEN = 500, R_WATER = 2500;
 
@@ -36,6 +39,8 @@ function getDb() {
       await run(con, `SET autoinstall_known_extensions=true`);
       await run(con, `SET autoload_known_extensions=true`);
       await run(con, `SET s3_region='us-west-2'`);
+      // Secret anonyme pour le seau public (sans lui, DuckDB signerait avec les identifiants AWS ambiants).
+      await run(con, `CREATE OR REPLACE SECRET overture (TYPE S3, PROVIDER config, REGION 'us-west-2', SCOPE 's3://overturemaps-us-west-2')`).catch(() => {});
       await run(con, `SET threads=8`);
       await run(con, `SET memory_limit='768MB'`);
       await run(con, `SET enable_object_cache=true`);
@@ -148,7 +153,7 @@ export async function buildScene(lat, lng) {
     const src = files ? `[${files.map(f => `'${f}'`).join(',')}]` : `'${BASE}/${path}/*'`;
     const con = db.connect();
     try {
-      return await run(con, `SELECT ${cols}, geometry FROM read_parquet(${src}, hive_partitioning=1) WHERE bbox.xmin <= ? AND bbox.xmax >= ? AND bbox.ymin <= ? AND bbox.ymax >= ?`, [x1, x0, y1, y0]);
+      return await run(con, `SELECT ${cols}, geometry FROM read_parquet(${src}, hive_partitioning=0) WHERE bbox.xmin <= ? AND bbox.xmax >= ? AND bbox.ymin <= ? AND bbox.ymax >= ?`, [x1, x0, y1, y0]);
     } finally { con.close(); }
   };
   const t0 = Date.now();
