@@ -11,6 +11,40 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import SunCalc from 'suncalc';
 import { DIRS, centroid, edgesOf, localRings, signedArea } from './footprint.js';
 
+// Ombres PCSS (percentage-closer soft shadows) greffées sur le mode d'ombre « de base » de three (carte de profondeur en
+// pleine précision, lue directement): pénombre nette au contact et de plus en plus large en s'éloignant de l'objet qui
+// porte l'ombre (disque solaire de 0,5°), élargie sous le voile par shadow.radius. Remplace la méthode VSM (profondeur en
+// demi-flottants: rayures et fuites de lumière). Constante 0,0149 = plage de profondeur 480 m x 2 tan(0,25°) / cadre 300 m
+// (caméra d'ombre dans createScene3D), par unité de profondeur normalisée.
+const PCSS_GLSL = `
+		float pcssNoise( vec2 p ) { return fract( 52.9829189 * fract( dot( p, vec2( 0.06711056, 0.00583715 ) ) ) ); }
+		vec2 pcssVogel( int i, int n, float phi ) { float r = sqrt( ( float( i ) + 0.5 ) / float( n ) ); float t = float( i ) * 2.399963229728653 + phi; return vec2( cos( t ), sin( t ) ) * r; }
+		float getShadow( sampler2D shadowMap, vec2 shadowMapSize, float shadowIntensity, float shadowBias, float shadowRadius, vec4 shadowCoord ) {
+			shadowCoord.xyz /= shadowCoord.w;
+			shadowCoord.z += shadowBias;
+			bool inFrustum = shadowCoord.x >= 0.0 && shadowCoord.x <= 1.0 && shadowCoord.y >= 0.0 && shadowCoord.y <= 1.0;
+			if ( ! inFrustum || shadowCoord.z > 1.0 ) return 1.0;
+			float texel = 1.0 / shadowMapSize.x, zR = shadowCoord.z, k = 0.0149 * shadowRadius;
+			float phi = pcssNoise( gl_FragCoord.xy ) * 6.2831853;
+			float sRad = clamp( k * zR, 2.0 * texel, 0.03 ), bSum = 0.0, bN = 0.0;
+			for ( int i = 0; i < 16; i ++ ) { float d = texture2D( shadowMap, shadowCoord.xy + pcssVogel( i, 16, phi ) * sRad ).r; if ( d < zR ) { bSum += d; bN += 1.0; } }
+			if ( bN < 0.5 ) return 1.0;
+			float pen = clamp( k * ( zR - bSum / bN ), texel, 0.025 ), sh = 0.0;
+			for ( int i = 0; i < 24; i ++ ) { float d = texture2D( shadowMap, shadowCoord.xy + pcssVogel( i, 24, phi ) * pen ).r; sh += step( zR, d ); }
+			return mix( 1.0, sh / 24.0, shadowIntensity );
+		}
+`;
+let PCSS_OK = false;
+(() => {
+  const c = THREE.ShaderChunk.shadowmap_pars_fragment;
+  const a = c.indexOf('#else\n\t\tfloat getShadow( sampler2D shadowMap'); if (a < 0) return;
+  // Fin de la fonction de base: le #endif qui précède le bloc suivant (pas le #endif interne du tampon inversé).
+  let b = c.indexOf('\n\t#endif\n\t#if NUM_SUN_LIGHT_SHADOWS', a); if (b < 0) b = c.indexOf('\n\t#endif\n\t#if NUM_POINT_LIGHT_SHADOWS', a); if (b < 0) return;
+  THREE.ShaderChunk.shadowmap_pars_fragment = c.slice(0, a) + '#else' + PCSS_GLSL + c.slice(b + 1);
+  PCSS_OK = true;
+})();
+if (!PCSS_OK) console.warn('[scene3d] chunk d’ombre de three inattendu: ombres PCF au lieu de PCSS');
+
 const clamp = (x) => Math.max(0, Math.min(1, x));
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
 const mixHex = (a, b, t) => { t = clamp(t); const p = (h) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)); const A = p(a), B = p(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join(''); };
@@ -171,7 +205,7 @@ export function createScene3D(container, opts = {}) {
   const DPR = Math.min(2, window.devicePixelRatio || 1);
   let W = Math.max(2, container.clientWidth), H = Math.max(2, container.clientHeight);
   const R = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  R.setPixelRatio(DPR); R.setSize(W, H); R.shadowMap.enabled = true; R.shadowMap.type = THREE.VSMShadowMap;
+  R.setPixelRatio(DPR); R.setSize(W, H); R.shadowMap.enabled = true; R.shadowMap.type = PCSS_OK ? THREE.BasicShadowMap : THREE.PCFShadowMap;
   R.outputColorSpace = THREE.LinearSRGBColorSpace; R.toneMapping = THREE.NoToneMapping; R.autoClear = true;
   R.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none';
   container.appendChild(R.domElement);
@@ -207,7 +241,7 @@ export function createScene3D(container, opts = {}) {
 
   // ---- soleil et ombres de nuages
   const sunL = new THREE.DirectionalLight(0xffffff, 10); sunL.castShadow = true; sunL.shadow.mapSize.set(4096, 4096);
-  const sc = sunL.shadow.camera; sc.left = -150; sc.right = 150; sc.top = 150; sc.bottom = -150; // 300 m autour du projet: 7 cm par pixel d'ombre sc.near = 300; sc.far = 780; sunL.shadow.bias = -0.0008; sunL.shadow.normalBias = 0.6; sunL.shadow.blurSamples = 24; // décalage le long de la normale: plus de bandes en escalier sur les murs frôlés par le soleil
+  const sc = sunL.shadow.camera; sc.left = -150; sc.right = 150; sc.top = 150; sc.bottom = -150; // 300 m autour du projet: 7 cm par pixel d'ombre sc.near = 300; sc.far = 780; sunL.shadow.bias = -0.0006; sunL.shadow.normalBias = 0.5; // décalage le long de la normale: plus de bandes en escalier sur les murs frôlés par le soleil
   const T0 = new THREE.Vector3(0, 0, 0); S.add(sunL); S.add(sunL.target);
   // Lumière neutre des nuages: sous un cumulus ou un voile, l'ombre est éclairée par un ciel en partie blanc, pas
   // seulement par le bleu; sans ce complément, les ombres de nuages tirent sur le bleu marine.
@@ -500,7 +534,7 @@ export function createScene3D(container, opts = {}) {
     const skyK = zenTarget / Math.max(1e-5, zenLum); skyMat.uniforms.uSkyK.value = skyK;
     // Caméra d'ombre serrée en profondeur (la carte VSM garde la profondeur en demi-flottants: plus la plage est courte, moins
     // les surfaces s'auto-ombrent en rayures au soleil bas): lumière à 520 m, plage de 300 à 780 m.
-    const dist = 520; sunL.position.copy(T0).addScaledVector(d, dist); sc.near = 300; sc.far = 780; sc.updateProjectionMatrix(); sunL.shadow.radius = 1.2 + 16 * Math.pow(1 - iv, 1.5) + 2 * cum; // pénombre: nette au soleil franc, de plus en plus floue sous le voile
+    const dist = 520; sunL.position.copy(T0).addScaledVector(d, dist); sc.near = 300; sc.far = 780; sc.updateProjectionMatrix(); sunL.shadow.radius = 1 + 7 * Math.pow(1 - iv, 1.3) + 1.5 * cum; // taille apparente du soleil pour la pénombre: vraie au soleil franc, élargie sous le voile et les nuages
     fill.intensity = (0.2 + 1.1 * Math.max(cum, veil) * Math.min(1, Math.sin(el) / 0.3)) * (1 - 0.5 * twi);
     fill.color.setRGB(0.86, 0.90, 1.0).lerp(new THREE.Color(0.9, 0.9, 0.9), Math.max(cum, veil)); // ciel bleuté, gris sous les nuages
     fill.groundColor.copy(GROUND_TINT).multiplyScalar((0.5 + 1.3 * iv * Math.min(1, Math.sin(el) / 0.5)) * (1 - 0.6 * twi)); // rebond du sol

@@ -130,6 +130,16 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   d'ombre en profondeur: lumière à 520 m du projet, plage 300 à 780 m, biais -0,0008, normalBias 0,6. Vérifié
   le 24 novembre à 14 h 30 (soleil à 12°). Au-delà de 36 h de prévision ou dans le passé, la scène suppose
   une journée ensoleillée et l'icône météo près du curseur disparaît (`sceneWeatherRow` nul).
+- v633.149, **ombres PCSS** (percentage-closer soft shadows), « vraiment mieux » selon Stéphane: `engine.js`
+  greffe sa propre fonction `getShadow` dans le chunk `shadowmap_pars_fragment` de three (branche du mode
+  `BasicShadowMap`, carte de profondeur 24 bits lue directement, plus de demi-flottants ni de fuites de
+  lumière): recherche des occulteurs (16 échantillons, disque de Vogel tourné par un bruit par pixel), largeur de
+  pénombre proportionnelle à la distance occulteur-récepteur (constante 0,0149 = plage de profondeur 480 m x
+  2 tan 0,25° / cadre 300 m, multipliée par `shadow.radius`), puis filtrage à 24 échantillons. `shadow.radius`
+  vaut 1 au soleil franc (vraie taille du soleil) et monte jusqu'à 8 sous le voile et les nuages (pénombre
+  élargie). Si le chunk de three change de forme, le code retombe sur les ombres PCF de three avec un
+  avertissement. Caméra d'ombre: lumière à 520 m, plage 300 à 780 m, cadre 300 m, 4096 px, biais -0,0006,
+  normalBias 0,5.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
