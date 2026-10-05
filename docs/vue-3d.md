@@ -140,6 +140,15 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   élargie). Si le chunk de three change de forme, le code retombe sur les ombres PCF de three avec un
   avertissement. Caméra d'ombre: lumière à 520 m, plage 300 à 780 m, cadre 300 m, 4096 px, biais -0,0006,
   normalBias 0,5.
+- v633.150, fenêtres la nuit (demande de Stéphane): toutes les fenêtres de l'édifice photographié sont allumées
+  (graine `aSeed` négative dans le shader des murs; les voisins gardent une fenêtre sur deux au hasard), lueur
+  douce (carte d'émission avec halo 40 px, seuil de l'éclat 0,3, flou 1,8 px au quart de résolution, éclat
+  0,55, émission 0,62 pour des fenêtres chaudes plutôt que blanches; une première version plus forte « bavait
+  trop » pour Stéphane), et la lumière des fenêtres éclaire
+  les alentours: une lumière surfacique (`RectAreaLight`, `RectAreaLightUniformsLib`) par façade du projet
+  (les 12 plus longues, 6 au toucher), devant le mur à mi-hauteur, dirigée vers l'extérieur, intensité 0,32 ×
+  l'émission des fenêtres: sol, arbres et voisins proches reçoivent une lueur chaude. Le rendu affiné le fait
+  physiquement (fenêtres émissives) et n'utilise pas ces lumières.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

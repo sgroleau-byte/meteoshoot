@@ -8,6 +8,8 @@
 import * as THREE from 'three';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+RectAreaLightUniformsLib.init(); // tables des lumières surfaciques (façades allumées la nuit)
 import SunCalc from 'suncalc';
 import { DIRS, centroid, edgesOf, localRings, signedArea } from './footprint.js';
 
@@ -174,8 +176,8 @@ function facadeTex() {
   const r = document.createElement('canvas'); r.width = r.height = 256; const y = r.getContext('2d'); y.fillStyle = 'rgb(0,238,0)'; y.fillRect(0, 0, 256, 256); y.fillStyle = 'rgb(0,60,0)'; y.fillRect(wx, wy, ww, wh);
   // Fenêtres allumées (émission chaude, dosée selon la hauteur du soleil)
   const e = document.createElement('canvas'); e.width = e.height = 256; const z = e.getContext('2d'); z.fillStyle = '#000'; z.fillRect(0, 0, 256, 256);
-  z.save(); z.shadowColor = '#ffd9a0'; z.shadowBlur = 34; z.globalAlpha = 0.33; z.fillStyle = '#ffd9a0'; z.fillRect(wx, wy, ww, wh); z.restore();
-  z.fillStyle = '#ffd9a0'; z.fillRect(wx, wy, ww, wh); z.fillStyle = '#3a3226'; z.fillRect(mull - 2, wy, 4, wh);
+  z.save(); z.shadowColor = '#ffd9a0'; z.shadowBlur = 40; z.globalAlpha = 0.4; z.fillStyle = '#ffd9a0'; z.fillRect(wx, wy, ww, wh); z.restore();
+  z.fillStyle = '#ffe2b0'; z.fillRect(wx, wy, ww, wh); z.fillStyle = '#3a3226'; z.fillRect(mull - 2, wy, 4, wh);
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
   const rt = new THREE.CanvasTexture(r); rt.wrapS = rt.wrapT = THREE.RepeatWrapping;
   const et = new THREE.CanvasTexture(e); et.wrapS = et.wrapT = THREE.RepeatWrapping; et.colorSpace = THREE.SRGBColorSpace;
@@ -227,7 +229,7 @@ export function createScene3D(container, opts = {}) {
   const wallMat = new THREE.MeshStandardMaterial({ vertexColors: true, map: FT.map, roughnessMap: FT.rough, roughness: 1, metalness: 0, envMapIntensity: 0.75, emissive: 0xffffff, emissiveMap: FT.emis, emissiveIntensity: 0 });
   wallMat.onBeforeCompile = (sh) => {
     sh.vertexShader = 'attribute float aSeed;varying float vSeed;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvSeed=aSeed;');
-    sh.fragmentShader = 'varying float vSeed;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance*=step(0.5,fract(sin(dot(floor(vEmissiveMapUv)+vec2(vSeed,vSeed*0.37),vec2(12.9898,78.233)))*43758.5453));');
+    sh.fragmentShader = 'varying float vSeed;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance*=vSeed<0.0?1.0:step(0.5,fract(sin(dot(floor(vEmissiveMapUv)+vec2(vSeed,vSeed*0.37),vec2(12.9898,78.233)))*43758.5453));');
   };
   const roofMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, envMapIntensity: 0.75 });
   const trunkMat = new THREE.MeshStandardMaterial({ color: L('#4a3b2e'), roughness: 0.95, envMapIntensity: 0.75 });
@@ -352,8 +354,8 @@ export function createScene3D(container, opts = {}) {
   // brouillard ferme l'horizon. Comme dans un jeu: tout le détail près du sujet, peu au loin.
   const NEAR = 230;
   const nearXY = (x, n) => Math.hypot(x, n) < NEAR;
-  let treeNear = [];
-  function clearStatics() { statics.forEach(m => { S.remove(m); m.geometry && m.geometry.dispose(); }); statics = []; treesI = null; treeNear = []; }
+  let treeNear = [], winLights = [];
+  function clearStatics() { statics.forEach(m => { S.remove(m); m.geometry && m.geometry.dispose(); }); statics = []; treesI = null; treeNear = []; winLights.forEach(l => { S.remove(l); l.dispose && l.dispose(); }); winLights = []; }
   function addMesh(g, mat, y, near, shadows) { const m = new THREE.Mesh(g, mat); m.position.y = y; m.receiveShadow = true; if (shadows) m.castShadow = true; m.userData.pt = !!near; S.add(m); statics.push(m); return m; }
   // Surfaces au sol (parcs, asphalte, eau): items = [{ o: contour, h: trous }], séparés proche/loin.
   function addFlat(items, mat, y) {
@@ -385,7 +387,7 @@ export function createScene3D(container, opts = {}) {
           const nx = -ez / len, nz = ex / len;
           // Nombre entier de travées par mur (fenêtres centrées, jamais coupées dans un coin); mur trop court: plein.
           const nb = Math.round(len / (b.bay || 4.8)); const u1 = u0 + nb; const q = [[ax, 0, azz, u0, 0], [bx, 0, bz, u1, 0], [bx, h, bz, u1, lv], [ax, h, azz, u0, lv]];
-          [[0, 1, 2], [0, 2, 3]].forEach(t => t.forEach(k => { const v = q[k]; P.push(v[0], v[1], v[2]); N.push(nx, 0, nz); U.push(v[3], v[4]); C.push(col.r, col.g, col.b); SD.push(seed0 + i); })); u0 = u1;
+          [[0, 1, 2], [0, 2, 3]].forEach(t => t.forEach(k => { const v = q[k]; P.push(v[0], v[1], v[2]); N.push(nx, 0, nz); U.push(v[3], v[4]); C.push(col.r, col.g, col.b); SD.push(b.allLit ? -1 : seed0 + i); })); u0 = u1;
         }
         const rg = new THREE.ShapeGeometry(shapeOf(pts)); rg.rotateX(-Math.PI / 2); const ra = rg.toNonIndexed().attributes.position.array; for (let i = 0; i < ra.length; i += 3) { RP.push(ra[i], h, ra[i + 2]); RN.push(0, 1, 0); RC.push(rc.r, rc.g, rc.b); } rg.dispose();
       });
@@ -475,7 +477,14 @@ export function createScene3D(container, opts = {}) {
       const fl = h < 6 ? 1 : h <= 16 ? 2 : Math.round(h / 4.5);
       const wallHex = (projLocal[d.i] && projLocal[d.i].wallColor) || '#7a3f33';
       edgesOf(d.p).forEach(e => projInfo.push({ dir: e.dir, len: e.len, mid: e.mid, nrm: e.nrm, label: `Forme ${i + 1}`, h, src }));
-      list.push({ p: d.p, h, fl, bay: 6, col: L(wallHex), rc: L('#5a5650') });
+      list.push({ p: d.p, h, fl, bay: 6, col: L(wallHex), rc: L('#5a5650'), allLit: true }); // l'édifice photographié: toutes les fenêtres allumées la nuit
+    });
+    // Les façades allumées éclairent les alentours: une lumière surfacique chaude par façade (les plus longues d'abord),
+    // devant le mur, à mi-hauteur, dirigée vers l'extérieur; intensité suivant celle des fenêtres (voir frame).
+    const walls = []; projInfo.forEach(e => { if (e.len >= 4) walls.push(e); }); walls.sort((a, b) => b.len - a.len);
+    walls.slice(0, (window.matchMedia && window.matchMedia('(hover: none)').matches) ? 6 : 12).forEach(e => {
+      const l = new THREE.RectAreaLight(0xffd9a0, 0, e.len * 0.9, e.h * 0.7); const nx = e.nrm[0], nz = -e.nrm[1];
+      l.position.set(e.mid[0] + nx * 0.4, e.h * 0.5, -e.mid[1] + nz * 0.4); l.lookAt(l.position.x + nx, l.position.y, l.position.z + nz); l.visible = false; S.add(l); winLights.push(l);
     });
     const others = [];
     if (data) {
@@ -544,7 +553,8 @@ export function createScene3D(container, opts = {}) {
     cam.position.set(ct.x + Math.sin(az) * Rr, camH, ct.z - Math.cos(az) * Rr); cam.lookAt(ct); cam.updateMatrixWorld(); cam.getWorldDirection(vF); sky.position.copy(cam.position);
     const U = skyMat.uniforms, dk = 0.5 + 0.5 * clamp((realDeg + 1) / 14), uW = clamp(1 - (realDeg - 1) / 22);
     U.uCum.value = cum; U.uMid.value = mid; U.uHigh.value = high; U.uDirect.value = iv; U.uWarm.value = uW; U.uTw.value = twi; U.uNight.value = nightF; U.uGlow.value = glow;
-    wallMat.emissiveIntensity = 0.55 * smooth(1, -4, realDeg);
+    wallMat.emissiveIntensity = 0.62 * smooth(1, -4, realDeg); // fenêtres chaudes, pas blanches
+    winLights.forEach(l => { l.intensity = 0.32 * wallMat.emissiveIntensity / 0.62; l.visible = l.intensity > 0.01; }); // lumière des fenêtres sur le sol, les arbres et les voisins
     const soft = twi * (1 - nightF); twL.intensity = 1.8 * soft; twL.color.copy(L(mixHex('#9fb0e0', '#e8bc92', glow * 0.5)));
     twL.target.position.copy(T0); twL.position.copy(T0).add(new THREE.Vector3(Math.sin(bearing) * Math.cos(0.17), Math.sin(0.17), -Math.cos(bearing) * Math.cos(0.17)).multiplyScalar(400));
     const sDir = new THREE.Vector3(Math.sin(bearing) * Math.cos(sp.altitude), Math.sin(sp.altitude), -Math.cos(bearing) * Math.cos(sp.altitude)); U.uSun.value.copy(sDir); const sc1 = rgb(sc0); U.uSunCol.value.set(sc1[0], sc1[1], sc1[2]);
@@ -579,8 +589,8 @@ export function createScene3D(container, opts = {}) {
     R.setRenderTarget(sceneRT); R.render(S, cam);
     aoMat.uniforms.tDepth.value = sceneRT.depthTexture; aoMat.uniforms.uRes.value.set(PW, PH); aoMat.uniforms.uProj.value.copy(cam.projectionMatrix); aoMat.uniforms.uProjInv.value.copy(cam.projectionMatrixInverse); pass(aoMat, aoRT);
     blurMat.uniforms.tDepth.value = sceneRT.depthTexture; blurMat.uniforms.tAO.value = aoRT.texture; blurMat.uniforms.uDir.value.set(1 / PW, 0); pass(blurMat, aoRT2); blurMat.uniforms.tAO.value = aoRT2.texture; blurMat.uniforms.uDir.value.set(0, 1 / PH); pass(blurMat, aoRT);
-    const glowK = wallMat.emissiveIntensity > 0.01 ? 0.5 * smooth(1, -4, realDeg) : 0; compMat.uniforms.uBloom.value = glowK;
-    if (glowK > 0) { brightMat.uniforms.tCol.value = sceneRT.texture; pass(brightMat, bloomA); gblurMat.uniforms.tSrc.value = bloomA.texture; gblurMat.uniforms.uDir.value.set(1.5 / BW, 0); pass(gblurMat, bloomB); gblurMat.uniforms.tSrc.value = bloomB.texture; gblurMat.uniforms.uDir.value.set(0, 1.5 / BH); pass(gblurMat, bloomA); }
+    const glowK = wallMat.emissiveIntensity > 0.01 ? 0.55 * smooth(1, -4, realDeg) : 0; compMat.uniforms.uBloom.value = glowK;
+    if (glowK > 0) { brightMat.uniforms.tCol.value = sceneRT.texture; pass(brightMat, bloomA); gblurMat.uniforms.tSrc.value = bloomA.texture; gblurMat.uniforms.uDir.value.set(1.8 / BW, 0); pass(gblurMat, bloomB); gblurMat.uniforms.tSrc.value = bloomB.texture; gblurMat.uniforms.uDir.value.set(0, 1.8 / BH); pass(gblurMat, bloomA); }
     compMat.uniforms.tCol.value = sceneRT.texture; compMat.uniforms.tAO.value = aoRT.texture; compMat.uniforms.tBloom.value = bloomA.texture; pass(compMat, compRT);
     fxMat.uniforms.tDiffuse.value = compRT.texture; fxMat.uniforms.resolution.value.set(1 / PW, 1 / PH); pass(fxMat, null);
     // Légende: condition de lumière, parts de nuages, position du soleil
