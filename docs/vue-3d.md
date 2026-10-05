@@ -117,6 +117,14 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
 - Zones et détail: `NEAR = 230 m` autour du projet (origine) sépare les maillages proches (userData.pt, rendu
   affiné) des lointains; arbres détaillés jusqu'à 160 m, couronnes simplifiées au-delà (deux lots instanciés).
   Acné d'ombre (bandes en escalier sur les murs frôlés par le soleil) corrigée par `shadow.normalBias = 0.7`.
+- Retouches du 5 octobre au soir (v633.147), après les retours de Stéphane (« lumière pas mal du tout »):
+  bande blanche entre ciel et terre supprimée (épaisseur d'atmosphère bornée à 7° d'élévation dans le modèle,
+  épaule 1/(1 + 0,5 × luminance), niveau du zénith calé par `zenTarget = 0,035 + 0,14 × (sin el / 0,45)^0,55`
+  via `uSkyK`, brouillard teinté avec l'horizon du même ciel dans la direction regardée mais 0,45 fois plus sombre, le sol lointain étant plus sombre que le ciel, sinon « brume blanche »; sous un ciel couvert, les cumulus lointains se rejoignent jusqu'au sol dans le shader (`hz`, `hzc`) et le brouillard prend la base grise des nuages); ombres en escalier
+  sur les façades corrigées (carte d'ombre resserrée à 300 m autour du projet, soit 7 cm par pixel, flou à 24
+  échantillons, normalBias 0,5); fenêtres modernes (grande baie plus large que haute, cadre fin anthracite, un
+  meneau décalé, appui discret, plus de filet entre les étages) et nombre entier de travées par mur, centrées,
+  pour qu'aucune fenêtre ne soit coupée dans un coin.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

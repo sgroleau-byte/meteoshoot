@@ -20,6 +20,18 @@ const rgb = (h) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
 const L = (h) => new THREE.Color(h); // interprété comme sRGB, converti en linéaire par three
 // Extinction atmosphérique de Preetham pour la direction du soleil (mêmes constantes que le ciel): donne la couleur du
 // soleil direct (blanc haut dans le ciel, orange puis rouge au ras de l'horizon) et sa perte de force.
+// Radiance du ciel de Preetham dans une direction (mêmes formules que le shader), en linéaire avant échelle: sert à caler
+// le niveau du ciel (zénith) sur notre courbe d'exposition et à teinter le brouillard avec l'horizon réel.
+function preethamRadiance(dir, sun, turb, ray) {
+  const TR = [5.804542996261093e-6, 1.3562911419845635e-5, 3.0265902468824876e-5], MC = [1.8399918514433978e14, 2.7798023919660528e14, 4.0790479543861094e14];
+  const bR = TR.map(v => v * ray), bM = MC.map(v => 0.434 * (0.2 * turb) * 1e-17 * v * 0.005);
+  const za = Math.acos(Math.max(0.12, dir[1])), inv = 1 / (Math.cos(za) + 0.15 * Math.pow(93.885 - za * 57.29578, -1.253));
+  const Fex = bR.map((b, i) => Math.exp(-(b * 8400 * inv + bM[i] * 1250 * inv)));
+  const ct = dir[0] * sun[0] + dir[1] * sun[1] + dir[2] * sun[2], rPh = 0.05968310365946075 * (1 + Math.pow(ct * 0.5 + 0.5, 2)), mPh = 0.07957747154594767 * (0.36 / Math.pow(1.64 - 1.6 * ct, 1.5));
+  const E = 1000 * Math.max(0, 1 - Math.exp(-((1.6110731556870734 - Math.acos(Math.max(-1, Math.min(1, sun[1])))) / 1.5))), w = Math.min(1, Math.pow(1 - sun[1], 5));
+  return bR.map((b, i) => { const br = (b * rPh + bM[i] * mPh) / (b + bM[i]); let Lin = Math.pow(E * br * (1 - Fex[i]), 1.5); Lin *= (1 - w) + w * Math.sqrt(E * br * Fex[i]); return (Lin + 0.1 * Fex[i]) * 0.04; });
+}
+const LUM = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 function sunExtinction(y, turb, ray) {
   const TR = [5.804542996261093e-6, 1.3562911419845635e-5, 3.0265902468824876e-5], MC = [1.8399918514433978e14, 2.7798023919660528e14, 4.0790479543861094e14];
   const za = Math.acos(Math.max(0, y)), inv = 1 / (Math.cos(za) + 0.15 * Math.pow(93.885 - za * 57.29578, -1.253));
@@ -35,7 +47,7 @@ const vec3 TR=vec3(5.804542996261093e-6,1.3562911419845635e-5,3.0265902468824876
 const vec3 MC=vec3(1.8399918514433978e14,2.7798023919660528e14,4.0790479543861094e14);
 float sunE(float y){y=clamp(y,-1.0,1.0);return 1000.0*max(0.0,1.0-exp(-((1.6110731556870734-acos(y))/1.5)));}
 vec3 preetham(vec3 dir,vec3 sd,out vec3 Fex){vec3 bR=TR*uRay,bM=0.434*(0.2*uTurb)*1e-17*MC*0.005;
-float za=acos(max(0.0,dir.y));float inv=1.0/(cos(za)+0.15*pow(93.885-za*57.29578,-1.253));Fex=exp(-(bR*8400.0*inv+bM*1250.0*inv));
+float za=acos(max(0.12,dir.y));// épaisseur bornée: sous 7° d'élévation le ciel garde la couleur de 7° (pas de bande claire à l'horizon)float inv=1.0/(cos(za)+0.15*pow(93.885-za*57.29578,-1.253));Fex=exp(-(bR*8400.0*inv+bM*1250.0*inv));
 float ct=dot(dir,sd);float rPh=0.05968310365946075*(1.0+pow(ct*0.5+0.5,2.0));float mPh=0.07957747154594767*(0.36/pow(1.64-1.6*ct,1.5));
 float E=sunE(sd.y);vec3 br=(bR*rPh+bM*mPh)/(bR+bM);vec3 Lin=pow(E*br*(1.0-Fex),vec3(1.5));
 Lin*=mix(vec3(1.0),pow(E*br*Fex,vec3(0.5)),clamp(pow(1.0-sd.y,5.0),0.0,1.0));return (Lin+0.1*Fex)*0.04*uSkyK;}
@@ -46,8 +58,8 @@ void main(){vec3 rd=normalize(vDir);vec3 sd=normalize(uSun);
 float y=rd.y,cg=dot(rd,sd),t=pow(clamp(y,0.0,1.0),0.45),veil=max(uMid,uHigh),lod=smoothstep(0.0,0.35,y);
 // Ciel clair physique en linéaire, épaule douce (l'horizon de Preetham est très lumineux), puis domaine d'affichage
 // (gamme 2,2) pour le mélange des nuages, comme avant; l'heure bleue et la nuit restent traitées à part plus bas.
-vec3 Fx,FxH;vec3 preL=preetham(rd,sd,Fx);preL/=1.0+0.22*dot(preL,LUMW);vec3 col=pow(max(preL,vec3(0.0)),vec3(1.0/2.2));
-vec3 horL=preetham(normalize(vec3(rd.x,0.02,rd.z)),sd,FxH);horL/=1.0+0.22*dot(horL,LUMW);vec3 hor=pow(max(horL,vec3(0.0)),vec3(1.0/2.2));
+vec3 Fx,FxH;vec3 preL=preetham(rd,sd,Fx);preL/=1.0+0.5*dot(preL,LUMW);vec3 col=pow(max(preL,vec3(0.0)),vec3(1.0/2.2));
+vec3 horL=preetham(normalize(vec3(rd.x,0.04,rd.z)),sd,FxH);horL/=1.0+0.5*dot(horL,LUMW);vec3 hor=pow(max(horL,vec3(0.0)),vec3(1.0/2.2));
 float thick=1.0-uDirect;float blur=0.004+0.02*thick*veil;float disc=smoothstep(cos(0.014+blur),cos(0.010),cg)*step(0.0,y+0.002);
 float dC=0.0,aMidG=0.0,aHighG=0.0;vec3 cC=vec3(0.0);
 if(y>0.0){vec2 p=rd.xz/(y+0.08)*0.55;float n=fbm(p,lod)*0.74+fbm(p*2.7+vec2(5.0,9.0),lod)*0.26;float th=0.5+(0.5-uCum)*0.62;float sw=0.09+0.14*(1.0-lod);
@@ -65,6 +77,10 @@ vc+=uSunCol*(0.55*pow(max(cg,0.0),6.0)+0.25*pow(max(cg,0.0),60.0))*uDirect;
 float halo=exp(-pow((acos(clamp(cg,-1.0,1.0))-0.384)/0.012,2.0))*smoothstep(0.25,0.5,uDirect)*(1.0-uDirect)*0.5;
 col=mix(col,vc,a*(1.0-dC))+halo*uHigh*vec3(0.9,0.88,0.85)*0.35;}
 col+=vec3(1.0,0.96,0.88)*disc*veil*uDirect*1.2*(1.0-dC);
+// Sous un ciel couvert, l'horizon n'est pas clair: les nuages lointains se superposent jusqu'au sol (sinon une bande
+// pâle de ciel clair apparaît sous la couche sombre, là où les cumulus s'estompent).
+float hz=1.0-smoothstep(0.0,0.14,y);vec3 hzc=mix(vec3(0.50,0.54,0.60),hor,0.3)*(1.0-0.25*thick);
+col=mix(col,hzc,smoothstep(0.25,0.85,uCum)*hz*0.92);
 if(y<0.0){col=mix(col,hor*vec3(0.52,0.55,0.46),smoothstep(0.0,-0.08,y));}
 // Heure bleue puis nuit: dégradé bleu profond, lueur chaude seulement à l'horizon côté soleil, nuages en silhouette.
 vec3 bh=mix(vec3(0.11,0.24,0.50),vec3(0.03,0.07,0.21),t);
@@ -109,17 +125,23 @@ function segsCross(a, b, c, d) { const o = (p, q, r) => Math.sign((q[0] - p[0]) 
 function segHitsRing(a, b, r) { if (pointInRing(a, r) || pointInRing(b, r)) return true; for (let i = 0; i < r.length; i++) if (segsCross(a, b, r[i], r[(i + 1) % r.length])) return true; return false; }
 function ringsOverlap(a, b) { if (pointInRing(centroid(a), b) || pointInRing(centroid(b), a)) return true; if (a.some(p => pointInRing(p, b)) || b.some(p => pointInRing(p, a))) return true; for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) if (segsCross(a[i], a[(i + 1) % a.length], b[j], b[(j + 1) % b.length])) return true; return false; }
 
+// Tuile de façade (une travée sur un étage): fenêtre moderne, plus large que haute, cadre fin anthracite, un seul
+// meneau décalé au tiers, verre sombre et réfléchissant; carte de rugosité (verre lisse) et carte d'émission
+// (fenêtre allumée la nuit, lueur douce). La tuile se répète un nombre entier de fois par mur (voir blocks).
 function facadeTex() {
   const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
-  x.fillStyle = '#ffffff'; x.fillRect(0, 0, 256, 256); x.fillStyle = '#d6d2cb'; x.fillRect(0, 0, 256, 9);
-  const ww = 72, wh = 110, wx = 92, wy = 70; x.fillStyle = '#ebe8e2'; x.fillRect(wx - 7, wy - 7, ww + 14, wh + 14);
-  const g = x.createLinearGradient(0, wy, 0, wy + wh); g.addColorStop(0, '#26323c'); g.addColorStop(1, '#56687a'); x.fillStyle = g; x.fillRect(wx, wy, ww, wh);
-  x.fillStyle = 'rgba(255,255,255,0.07)'; x.fillRect(wx, wy, ww / 2, wh); x.fillStyle = '#ebe8e2'; x.fillRect(wx + ww / 2 - 2, wy, 4, wh); x.fillRect(wx, wy + wh / 2 - 2, ww, 4);
+  x.fillStyle = '#ffffff'; x.fillRect(0, 0, 256, 256);
+  const ww = 118, wh = 112, wx = 69, wy = 64, fr = 4, mull = Math.round(wx + ww * 0.36);
+  x.fillStyle = '#2d3033'; x.fillRect(wx - fr, wy - fr, ww + 2 * fr, wh + 2 * fr); // cadre
+  const g = x.createLinearGradient(wx, wy, wx + ww * 0.6, wy + wh); g.addColorStop(0, '#4a5c6e'); g.addColorStop(0.45, '#26323c'); g.addColorStop(1, '#3a4856'); x.fillStyle = g; x.fillRect(wx, wy, ww, wh);
+  x.fillStyle = 'rgba(255,255,255,0.08)'; x.fillRect(wx, wy, ww, Math.round(wh * 0.4)); // reflet du ciel en haut
+  x.fillStyle = '#2d3033'; x.fillRect(mull - 2, wy, 4, wh); // meneau
+  x.fillStyle = '#d8d4cc'; x.fillRect(wx - fr - 2, wy + wh + fr, ww + 2 * fr + 4, 4); // appui discret
   const r = document.createElement('canvas'); r.width = r.height = 256; const y = r.getContext('2d'); y.fillStyle = 'rgb(0,238,0)'; y.fillRect(0, 0, 256, 256); y.fillStyle = 'rgb(0,60,0)'; y.fillRect(wx, wy, ww, wh);
   // Fenêtres allumées (émission chaude, dosée selon la hauteur du soleil)
   const e = document.createElement('canvas'); e.width = e.height = 256; const z = e.getContext('2d'); z.fillStyle = '#000'; z.fillRect(0, 0, 256, 256);
   z.save(); z.shadowColor = '#ffd9a0'; z.shadowBlur = 34; z.globalAlpha = 0.33; z.fillStyle = '#ffd9a0'; z.fillRect(wx, wy, ww, wh); z.restore();
-  z.fillStyle = '#ffd9a0'; z.fillRect(wx, wy, ww, wh); z.fillStyle = '#5a4a30'; z.fillRect(wx + ww / 2 - 2, wy, 4, wh); z.fillRect(wx, wy + wh / 2 - 2, ww, 4);
+  z.fillStyle = '#ffd9a0'; z.fillRect(wx, wy, ww, wh); z.fillStyle = '#3a3226'; z.fillRect(mull - 2, wy, 4, wh);
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
   const rt = new THREE.CanvasTexture(r); rt.wrapS = rt.wrapT = THREE.RepeatWrapping;
   const et = new THREE.CanvasTexture(e); et.wrapS = et.wrapT = THREE.RepeatWrapping; et.colorSpace = THREE.SRGBColorSpace;
@@ -185,7 +207,7 @@ export function createScene3D(container, opts = {}) {
 
   // ---- soleil et ombres de nuages
   const sunL = new THREE.DirectionalLight(0xffffff, 10); sunL.castShadow = true; sunL.shadow.mapSize.set(4096, 4096);
-  const sc = sunL.shadow.camera; sc.left = -440; sc.right = 440; sc.top = 440; sc.bottom = -440; sc.near = 1; sc.far = 2000; sunL.shadow.bias = 0; sunL.shadow.normalBias = 0.7; sunL.shadow.blurSamples = 16; // décalage le long de la normale: plus de bandes en escalier sur les murs frôlés par le soleil
+  const sc = sunL.shadow.camera; sc.left = -150; sc.right = 150; sc.top = 150; sc.bottom = -150; // 300 m autour du projet: 7 cm par pixel d'ombre sc.near = 1; sc.far = 2000; sunL.shadow.bias = 0; sunL.shadow.normalBias = 0.5; sunL.shadow.blurSamples = 24; // décalage le long de la normale: plus de bandes en escalier sur les murs frôlés par le soleil
   const T0 = new THREE.Vector3(0, 0, 0); S.add(sunL); S.add(sunL.target);
   // Lumière neutre des nuages: sous un cumulus ou un voile, l'ombre est éclairée par un ciel en partie blanc, pas
   // seulement par le bleu; sans ce complément, les ombres de nuages tirent sur le bleu marine.
@@ -327,7 +349,8 @@ export function createScene3D(container, opts = {}) {
         for (let i = 0; i < pts.length; i++) {
           const a = pts[i], c = pts[(i + 1) % pts.length]; const ax = a[0], azz = -a[1], bx = c[0], bz = -c[1]; const ex = bx - ax, ez = bz - azz, len = Math.hypot(ex, ez); if (len < 0.05) continue;
           const nx = -ez / len, nz = ex / len;
-          const u1 = u0 + len / (b.bay || 4.8); const q = [[ax, 0, azz, u0, 0], [bx, 0, bz, u1, 0], [bx, h, bz, u1, lv], [ax, h, azz, u0, lv]];
+          // Nombre entier de travées par mur (fenêtres centrées, jamais coupées dans un coin); mur trop court: plein.
+          const nb = Math.round(len / (b.bay || 4.8)); const u1 = u0 + nb; const q = [[ax, 0, azz, u0, 0], [bx, 0, bz, u1, 0], [bx, h, bz, u1, lv], [ax, h, azz, u0, lv]];
           [[0, 1, 2], [0, 2, 3]].forEach(t => t.forEach(k => { const v = q[k]; P.push(v[0], v[1], v[2]); N.push(nx, 0, nz); U.push(v[3], v[4]); C.push(col.r, col.g, col.b); SD.push(seed0 + i); })); u0 = u1;
         }
         const rg = new THREE.ShapeGeometry(shapeOf(pts)); rg.rotateX(-Math.PI / 2); const ra = rg.toNonIndexed().attributes.position.array; for (let i = 0; i < ra.length; i += 3) { RP.push(ra[i], h, ra[i + 2]); RN.push(0, 1, 0); RC.push(rc.r, rc.g, rc.b); } rg.dispose();
@@ -470,6 +493,11 @@ export function createScene3D(container, opts = {}) {
     // Couleur du soleil direct: extinction adoucie (Preetham rougit trop au ras de l'horizon) et un peu de blanc gardé.
     const sunRGB = Fx.map(v => 0.85 * Math.pow(v / fxm, 0.45) + 0.15), sc0 = mixHex('#' + sunRGB.map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join(''), '#eeebe4', (1 - iv) * 0.6); sunL.color.copy(L(sc0));
     skyMat.uniforms.uTurb.value = turb;
+    // Niveau du ciel: le modèle donne les couleurs et leur répartition, notre courbe donne la luminance du zénith
+    // (0,17 en plein jour, encore 0,04 au ras de l'horizon), sinon le zénith s'éteint au soleil bas et l'horizon blanchit.
+    const sunV = [Math.sin(bearing) * Math.cos(el), Math.sin(el), -Math.cos(bearing) * Math.cos(el)];
+    const zenTarget = 0.035 + 0.14 * Math.pow(clamp(Math.sin(el) / 0.45), 0.55), zenLum = LUM(preethamRadiance([0, 1, 0], sunV, turb, 1.5));
+    const skyK = zenTarget / Math.max(1e-5, zenLum); skyMat.uniforms.uSkyK.value = skyK;
     const dist = 300 + 150 / Math.max(d.y, 0.08); sunL.position.copy(T0).addScaledVector(d, dist); sc.far = dist + 700; sc.updateProjectionMatrix(); sunL.shadow.radius = 1.2 + 16 * Math.pow(1 - iv, 1.5) + 2 * cum; // pénombre: nette au soleil franc, de plus en plus floue sous le voile
     fill.intensity = (0.2 + 1.1 * Math.max(cum, veil) * Math.min(1, Math.sin(el) / 0.3)) * (1 - 0.5 * twi);
     fill.color.setRGB(0.86, 0.90, 1.0).lerp(new THREE.Color(0.9, 0.9, 0.9), Math.max(cum, veil)); // ciel bleuté, gris sous les nuages
@@ -486,8 +514,14 @@ export function createScene3D(container, opts = {}) {
     const sDir = new THREE.Vector3(Math.sin(bearing) * Math.cos(sp.altitude), Math.sin(sp.altitude), -Math.cos(bearing) * Math.cos(sp.altitude)); U.uSun.value.copy(sDir); const sc1 = rgb(sc0); U.uSunCol.value.set(sc1[0], sc1[1], sc1[2]);
     const key = [cum, mid, high, iv, uW, dk, sDir.x, sDir.y].map(v => v.toFixed(2)).join(','); if (key !== envKey && now - envAt > 120) { envKey = key; envAt = now; updateEnv(); }
     const cgv = Math.max(0, new THREE.Vector3(vF.x, 0, vF.z).normalize().dot(sDir)), thick = 1 - iv;
-    let hc = [0.728, 0.82, 0.912]; hc = mv(hc, [1, 0.62, 0.34], uW * (0.35 + 0.65 * cgv * cgv)); let vc = mv([0.88, 0.89, 0.90], [0.64, 0.66, 0.69], thick); vc = mv(vc, mv([0.62, 0.62, 0.66], [0.95, 0.72, 0.55], 0.6), uW * 0.5);
-    hc = mv(hc, vc, veil * (0.45 + 0.52 * thick * thick)); hc = mv(hc, [0.62, 0.65, 0.69], cum * 0.5); hc = mv(hc, [0.11, 0.24, 0.50].map(v => v * (0.72 + 0.55 * cgv)), twi); hc = mv(hc, [0.045, 0.07, 0.16].map(v => v * (0.8 + 0.3 * cgv)), nightF); fog.color.setRGB(hc[0], hc[1], hc[2], THREE.SRGBColorSpace); fog.near = 250 + camH * 4; fog.far = 1500 + camH * 14;
+    // Brouillard: couleur de l'horizon du même ciel physique dans la direction regardée (épaule comme dans le shader),
+    // puis voile, cumulus, heure bleue et nuit comme le ciel; tout en linéaire.
+    const fdir = new THREE.Vector3(vF.x, 0.04, vF.z).normalize(), lin = (c) => c.map(v => Math.pow(v, 2.2));
+    // Le sol lointain est nettement plus sombre que le ciel juste au-dessus de l'horizon (sinon brume blanche): 0,45 fois l'horizon;
+    // sous un voile ou des cumulus, la base grise des nuages, comme dans le ciel.
+    let hc = preethamRadiance([fdir.x, fdir.y, fdir.z], sunV, turb, 1.5).map(v => v * skyK); const hl = LUM(hc); hc = hc.map(v => 0.45 * v / (1 + 0.5 * hl));
+    let vc = mv([0.88, 0.89, 0.90], [0.64, 0.66, 0.69], thick); vc = mv(vc, mv([0.62, 0.62, 0.66], [0.95, 0.72, 0.55], 0.6), uW * 0.5);
+    hc = mv(hc, lin(vc).map(v => v * 0.55), veil * (0.45 + 0.52 * thick * thick)); hc = mv(hc, lin([0.50, 0.54, 0.60]).map(v => v * 0.65), smooth(0.25, 0.85, cum)); hc = mv(hc, lin([0.11, 0.24, 0.50]).map(v => v * (0.72 + 0.55 * cgv)), twi); hc = mv(hc, lin([0.045, 0.07, 0.16]).map(v => v * (0.8 + 0.3 * cgv)), nightF); fog.color.setRGB(hc[0], hc[1], hc[2]); fog.near = 250 + camH * 4; fog.far = 1500 + camH * 14;
     // Rendu affiné: dès que caméra, heure et météo sont stables, le traceur accumule et remplace l'image directe.
     if (ptOn && ptReady && pt) {
       const vk = [az, camH, Rr, ct.x, ct.z].map(v => v.toFixed(3)).join(','), lk = [dateMs, cum, mid, high, iv].map(v => (+v).toFixed(3)).join(',');
