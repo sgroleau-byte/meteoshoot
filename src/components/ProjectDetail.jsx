@@ -51,11 +51,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   const [sunHour, setSunHour] = useState(0);
   const [sunHourDisplay, setSunHourDisplay] = useState(0);
   // Survol d'une heure de la météo horaire (souris): le curseur de la carte la suit, ombres et vue 3D avec lui.
-  const hoverHour = (d) => {
-    if (isMobile) return;
-    setSunDate(prev => (prev.getFullYear() === d.getFullYear() && prev.getMonth() === d.getMonth() && prev.getDate() === d.getDate()) ? prev : new Date(d.getFullYear(), d.getMonth(), d.getDate()));
-    setSunHour(d.getHours() + d.getMinutes() / 60);
-  };
+  // Le survol de la météo horaire ne déplace plus le curseur (retiré le 5 octobre 2026: la 3D basculait en nuit au passage
+  // de la souris sur les heures de nuit); seul le curseur pilote la date et l'heure.
   // Vue 3D: instant du curseur et météo horaire la plus proche (nuages bas, moyens, hauts, soleil direct).
   const sceneTimeMs = React.useMemo(() => { const d = new Date(sunDate); d.setHours(0, 0, 0, 0); return d.getTime() + sunHourDisplay * 3600000; }, [sunDate, sunHourDisplay]);
   const sceneWeatherRow = React.useMemo(() => {
@@ -1859,7 +1856,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                       }
 
                       return (
-                        <div key={h.time} className={`flex flex-col items-center gap-0 min-w-[56px] px-0 py-1 ${isNight ? 'bg-charcoal/5' : ''}`} style={!isNight && h.smoke ? { background: SMOKE_TINT[h.smoke] } : undefined} onMouseEnter={() => hoverHour(hDate)}>
+                        <div key={h.time} className={`flex flex-col items-center gap-0 min-w-[56px] px-0 py-1 ${isNight ? 'bg-charcoal/5' : ''}`} style={!isNight && h.smoke ? { background: SMOKE_TINT[h.smoke] } : undefined}>
                           {/* Sunrise/sunset chevron above time */}
                           {isSunrise && <svg width="18" height="10" viewBox="0 0 18 10" style={{ marginBottom: '8px' }}><polyline points="1,9 9,2 17,9" fill="none" stroke="#404A48" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                           {isSunset && <svg width="18" height="10" viewBox="0 0 18 10" style={{ marginBottom: '8px' }}><polyline points="1,1 9,8 17,1" fill="none" stroke="#404A48" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
@@ -2404,6 +2401,29 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                         filter: 'blur(15px)',
                         zIndex: 1
                       }}/>
+                      {/* Météo de l'heure du curseur à droite de la pastille: icône au-dessus, nuages et soleil direct en dessous
+                          (ce que la 3D et les ombres simulent); même dessin que les cases de la météo horaire. */}
+                      {sceneWeatherRow && (() => {
+                        const h = sceneWeatherRow, tt = new Date(sceneTimeMs);
+                        const night = !!(st?.sunrise && st?.sunset && (tt < st.sunrise || tt >= st.sunset));
+                        const icon = getIconFromCloudcover(h.cloudcover, h.icon, night, h.sunFraction, h.cloudLow, h.smoke);
+                        const sunPct = h.sunFraction != null ? Math.round(h.sunFraction * 100) : null;
+                        const sunColor = sunPct == null ? '#6f7d7b' : sunPct >= 60 ? '#E9D27A' : sunPct >= 45 ? '#E4CB78' : sunPct >= 32 ? '#DBCD92' : sunPct >= 20 ? '#CFC8A4' : sunPct >= 10 ? '#C3BDAA' : '#A7A99C';
+                        const pct = { fontSize: `${Math.round(16 * S)}px`, lineHeight: '1', letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center', gap: '4px' };
+                        return (
+                          <div style={{ position: 'absolute', top: '50%', left: thumbLeft, transform: 'translateY(-50%)', marginLeft: `${Math.round(26 * S)}px`, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: `${Math.round(7 * S)}px`, pointerEvents: 'none', zIndex: 5, whiteSpace: 'nowrap' }}>
+                            <WeatherIcon type={icon} className={`w-10 h-10 ${night ? 'opacity-50' : ''}`}/>
+                            <span className="font-bebas-bold" style={{ ...pct, color: '#ffffff' }}>
+                              <svg width="12" height="12" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><g fill="#8A9794"><circle cx="12" cy="18" r="6"/><circle cx="20" cy="16" r="7"/><rect x="8" y="18" width="15" height="6" rx="3"/></g></svg>
+                              {h.cloudcover != null ? `${h.cloudcover}%` : '--'}
+                            </span>
+                            <span className="font-bebas-bold" style={{ ...pct, color: sunColor }}>
+                              <svg width="11" height="11" viewBox="0 0 32 32" style={{ flexShrink: 0, position: 'relative', top: '-1.5px' }}><circle cx="16" cy="16" r="8" fill={sunColor}/></svg>
+                              {sunPct != null ? `${sunPct}%` : '--'}
+                            </span>
+                          </div>
+                        );
+                      })()}
                       {!isMobile && <div style={{ position: 'absolute', top: '50%', left: thumbLeft, width: `${Math.round(300*S)}px`, height: `${Math.round(120*S)}px`, transform: 'translate(-50%, -50%)', pointerEvents: 'none', overflow: 'visible', zIndex: 1 }}>
                         <div style={{ position: 'absolute', top: '50%', left: '20%', width: '120px', height: '40px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}30 0%, ${glowColor}10 50%, transparent 75%)`, filter: 'blur(12px)', animation: 'vaporDrift1 8s ease-in-out infinite', opacity: 0.6 }}/>
                         <div style={{ position: 'absolute', top: '50%', left: '60%', width: '90px', height: '35px', borderRadius: '50%', background: `radial-gradient(ellipse, ${glowColor}25 0%, ${glowColor}0c 50%, transparent 75%)`, filter: 'blur(10px)', animation: 'vaporDrift2 11s ease-in-out infinite', animationDelay: '-3s', opacity: 0.5 }}/>
@@ -2512,7 +2532,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                 <div ref={mapContainerRef} className="detail-map-keep" style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#181b1e', filter: 'saturate(0.50)' }}/>
                 {/* Vue 3D par-dessus la carte (la carte reste montée, avec son état): même curseur, même météo */}
                 <Scene3D visible={view3d} lat={project?.lat} lng={project?.lng} buildings={buildings} orientation={project?.orientation} style={project?.style3d} timeMs={sceneTimeMs} weatherRow={sceneWeatherRow}
-                  onAnalyze={async () => { const files = await fileHelpers.list(project.id); const style = await analyzeStyle(project, files); updateProject(project.id, { style3d: style }); }}/>
+                  onAnalyze={async () => { const files = await fileHelpers.list(project.id); const style = await analyzeStyle(project, files); updateProject(project.id, { style3d: style }); return style; }}/>
                 <canvas ref={flareCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}/>
                 {nightOpacity > 0 && <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 3, background: `radial-gradient(ellipse at center, transparent 30%, rgba(0,0,15,${0.4 * nightOpacity}) 70%, rgba(0,0,15,${0.7 * nightOpacity}) 100%)`, transition: 'opacity 0.5s ease' }}/>}
                 {/* Fixed center pin */}

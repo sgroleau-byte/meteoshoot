@@ -6,6 +6,7 @@
 // donc chaque lieu n'est calculé qu'une fois.
 //
 // GET /api/scene3d?lat=46.8367&lng=-71.2336  ->  { v, release, origin, bld, roads, trees, green, asphalt, water }
+// v2 (5 octobre 2026): les rues portent leur nom (n) quand Overture le connaît.
 // Essai local: node api/scene3d.js --test 46.8367 -71.2336
 
 import duckdb from 'duckdb';
@@ -159,7 +160,7 @@ export async function buildScene(lat, lng) {
   const t0 = Date.now();
   const [bRows, sRows, lRows, uRows, wRows] = await Promise.all([
     query('theme=buildings/type=building', 'height, num_floors, subtype, class', R_BLD),
-    query('theme=transportation/type=segment', 'class, subclass', R_ROAD),
+    query('theme=transportation/type=segment', 'class, subclass, names.primary AS name', R_ROAD),
     query('theme=base/type=land', 'subtype, class', R_WOOD),
     query('theme=base/type=land_use', 'subtype, class', R_GREEN),
     query('theme=base/type=water', 'subtype, class', R_WATER),
@@ -198,7 +199,9 @@ export async function buildScene(lat, lng) {
     for (const line of linesOf(wkbToGeom(row.geometry))) {
       const p = simplify(loc(line), 0.4);
       if (p.length < 2 || !p.some(q => Math.hypot(q[0], q[1]) <= R_ROAD)) continue;
-      roads.push({ w, k, p: round1(p) });
+      const road = { w, k, p: round1(p) };
+      if (k === 0 && row.name) road.n = String(row.name).slice(0, 60); // nom de la rue: repère d'orientation pour l'analyse des façades
+      roads.push(road);
     }
   }
 
@@ -267,7 +270,7 @@ export async function buildScene(lat, lng) {
     }
   }
 
-  return { v: 1, release: RELEASE, origin: [lat, lng], bld, roads, trees, green, asphalt, water, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
+  return { v: 2, release: RELEASE, origin: [lat, lng], bld, roads, trees, green, asphalt, water, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
 }
 
 export default async function handler(req, res) {

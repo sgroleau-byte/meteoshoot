@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 // Clé Google Maps selon la cible: 'web' (site) ou 'native' (apps Capacitor, MS_TARGET=native).
@@ -9,6 +9,9 @@ import react from '@vitejs/plugin-react';
 // google-maps-keys.example.json). Une clé Maps JavaScript est visible dans la page servie: sa protection
 // est la restriction par référents et par API dans la console Google (docs/cle-google-maps.md).
 const target = process.env.MS_TARGET === 'native' ? 'native' : 'web';
+// Cible du proxy /api en développement: variable MS_API_PROXY (environnement ou .env.local, ignoré par git), sinon le
+// serveur local des fonctions (npm run api).
+const apiProxy = process.env.MS_API_PROXY || loadEnv('development', __dirname, 'MS_').MS_API_PROXY || 'http://localhost:3999';
 const mapsKey = readMapsKey(target);
 
 function readMapsKey(target) {
@@ -32,8 +35,9 @@ export default defineConfig({
     { name: 'meteoshoot-google-maps-key', transformIndexHtml: (html) => html.replace(/__GOOGLE_MAPS_KEY__/g, mapsKey) },
   ],
   define: { __GOOGLE_MAPS_KEY__: JSON.stringify(mapsKey), __MS_TARGET__: JSON.stringify(target) },
-  // /api -> fonction scene3d servie en local par scripts/scene3d-dev.mjs (npm run api).
-  server: { port: 5173, strictPort: true, proxy: { '/api': 'http://localhost:3999' } },
+  // /api -> fonctions serveur jouées en local par scripts/scene3d-dev.mjs (npm run api), ou un déploiement Vercel
+  // d'aperçu si MS_API_PROXY le donne (l'analyse des images a besoin de la clé Claude, qui ne vit que sur Vercel).
+  server: { port: 5173, strictPort: true, proxy: { '/api': { target: apiProxy, changeOrigin: true } } },
   build: {
     // Compatibilité large (Safari 14, Chrome 87...): l'ancienne page transpilait tout avec Babel.
     target: ['es2019', 'safari14', 'chrome87', 'firefox78', 'edge88'],

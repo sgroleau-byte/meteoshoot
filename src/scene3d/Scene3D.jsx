@@ -1,8 +1,12 @@
 // Vue 3D dans la fenêtre de la carte (bascule SAT / 3D / MAP). Le moteur (three.js) n'est chargé
 // qu'à l'ouverture. Les environs viennent de loadScene (cache partagé, sinon fonction serveur); les
 // bâtiments dessinés s'affichent tout de suite, les voisins s'ajoutent quand ils arrivent.
+// La légende dit toujours d'où vient ce qu'on regarde: condition de lumière (prévision), façade en face
+// (images du client ou rythme générique) et hauteur du volume (cote, mesure, estimation, réglage, défaut).
 import React, { useEffect, useRef, useState } from 'react';
 import { loadScene } from './data.js';
+
+const BTN = { background: 'rgba(20,24,26,0.45)', border: '1px solid rgba(255,255,255,0.5)', borderRadius: '14px', padding: '5px 12px 3px', color: 'rgba(255,255,255,0.9)', fontSize: '13px', letterSpacing: '0.08em', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' };
 
 export const Scene3D = ({ lat, lng, buildings, orientation, style, timeMs, weatherRow, visible, onAnalyze }) => {
   const box = useRef(null);
@@ -11,6 +15,8 @@ export const Scene3D = ({ lat, lng, buildings, orientation, style, timeMs, weath
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
+  const [neutral, setNeutral] = useState(false); // modèle sans le style tiré des images (boîtes et couleurs par défaut)
+  const applied = neutral ? null : style;
 
   useEffect(() => {
     if (!visible || !box.current || !lat || !lng) return;
@@ -21,7 +27,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, style, timeMs, weath
       const e = m.createScene3D(box.current, { onInfo: setInfo });
       eng.current = e;
       if (import.meta.env.DEV) window.__scene3d = e; // inspection en développement seulement
-      e.setProject({ lat, lng, buildings, orientation, style });
+      e.setProject({ lat, lng, buildings, orientation, style: applied });
       e.setTime(timeMs); e.setWeather(weatherRow);
       setStatus('Environs en cours de chargement');
       loadScene(lat, lng).then(d => { if (!cancelled && eng.current === e) { e.setData(d); setStatus(''); } })
@@ -29,12 +35,24 @@ export const Scene3D = ({ lat, lng, buildings, orientation, style, timeMs, weath
     }).catch(err => { console.error('[scene3d] moteur:', err); if (!cancelled) setStatus('La 3D ne peut pas s’afficher ici'); });
     return () => { cancelled = true; if (eng.current) { eng.current.dispose(); eng.current = null; } };
   }, [visible, lat, lng]);
-  useEffect(() => { if (eng.current) eng.current.setProject({ lat, lng, buildings, orientation, style }); }, [buildings, orientation, style]);
+  useEffect(() => { if (eng.current) eng.current.setProject({ lat, lng, buildings, orientation, style: applied }); }, [buildings, orientation, applied]);
   useEffect(() => { if (eng.current) eng.current.setTime(timeMs); }, [timeMs]);
   useEffect(() => { if (eng.current) eng.current.setWeather(weatherRow); }, [weatherRow?.time, weatherRow?.cloudLow, weatherRow?.cloudMid, weatherRow?.cloudHigh, weatherRow?.sunFraction]);
 
   if (!visible) return null;
   const color = info?.light === false ? '#23282b' : '#f4f4f2';
+  // Garde-fou de coût: une analyse par projet toutes les 10 minutes (chaque analyse est payée à Claude).
+  const COOLDOWN_MIN = 10;
+  const sinceMin = style && style.analyzedAt ? (Date.now() - new Date(style.analyzedAt).getTime()) / 60000 : Infinity;
+  const waitMin = sinceMin < COOLDOWN_MIN ? Math.max(1, Math.ceil(COOLDOWN_MIN - sinceMin)) : 0;
+  const analyze = async () => {
+    setBusy(true); setNote('');
+    try {
+      const r = await onAnalyze();
+      setNeutral(false);
+      setNote(r && r.orientation && r.orientation.confidence === 'faible' ? 'Orientation incertaine : façades génériques' : r && r.orientation && !r.orientation.matched ? 'Documents non reliés au dessin : façades génériques' : 'Style mis à jour d’après les images');
+    } catch (err) { setNote(String(err && err.message || err)); } finally { setBusy(false); setTimeout(() => setNote(''), 7000); }
+  };
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 6, background: '#202427', overflow: 'hidden' }}>
       <div ref={box} style={{ position: 'absolute', inset: 0 }}/>
@@ -42,14 +60,18 @@ export const Scene3D = ({ lat, lng, buildings, orientation, style, timeMs, weath
         <div>{info.cond}</div>
         {info.parts && <div style={{ opacity: 0.8 }}>{info.parts}</div>}
         <div style={{ opacity: 0.75 }}>{info.where}</div>
+        {info.facade && <div style={{ opacity: 0.75 }}>{info.facade}</div>}
+        {info.height && <div style={{ opacity: 0.75 }}>{info.height}</div>}
       </div>}
       {info && <svg style={{ position: 'absolute', right: '14px', bottom: '12px', width: '34px', height: '34px', pointerEvents: 'none' }} viewBox="0 0 34 34">
         <circle cx="17" cy="17" r="15" fill="rgba(20,24,26,.35)" stroke="rgba(255,255,255,.55)" strokeWidth="1"/>
         <g transform={`rotate(${(-info.northDeg).toFixed(1)} 17 17)`}><path d="M17 5 L20 17 L17 15.5 L14 17 Z" fill="#fff"/><path d="M17 29 L20 17 L17 18.5 L14 17 Z" fill="rgba(255,255,255,.35)"/></g>
       </svg>}
-      {onAnalyze && <button className="font-bebas-book" disabled={busy} onClick={async () => { setBusy(true); setNote(''); try { await onAnalyze(); setNote('Style mis à jour d’après les images'); } catch (err) { setNote(String(err && err.message || err)); } finally { setBusy(false); setTimeout(() => setNote(''), 6000); } }}
-        style={{ position: 'absolute', right: '58px', bottom: '14px', background: 'rgba(20,24,26,0.45)', border: '1px solid rgba(255,255,255,0.5)', borderRadius: '14px', padding: '5px 12px 3px', color: 'rgba(255,255,255,0.9)', fontSize: '13px', letterSpacing: '0.08em', cursor: busy ? 'default' : 'pointer', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
-        {busy ? 'ANALYSE EN COURS' : style ? 'RÉANALYSER LES IMAGES' : 'ANALYSER LES IMAGES'}</button>}
+      {onAnalyze && <div style={{ position: 'absolute', right: '58px', bottom: '14px', display: 'flex', gap: '8px' }}>
+        {style && <button className="font-bebas-book" onClick={() => setNeutral(n => !n)} style={{ ...BTN, cursor: 'pointer', opacity: neutral ? 1 : 0.8 }}>{neutral ? 'AVEC LE STYLE' : 'SANS LE STYLE'}</button>}
+        <button className="font-bebas-book" disabled={busy || waitMin > 0} onClick={analyze} style={{ ...BTN, cursor: busy || waitMin > 0 ? 'default' : 'pointer', opacity: waitMin > 0 ? 0.55 : 1 }}>
+          {busy ? 'ANALYSE EN COURS' : waitMin > 0 ? `RÉANALYSER DANS ${waitMin} MIN` : style ? 'RÉANALYSER LES IMAGES' : 'ANALYSER LES IMAGES'}</button>
+      </div>}
       {note && <div className="font-bebas-book" style={{ position: 'absolute', right: '58px', bottom: '48px', fontSize: '13px', letterSpacing: '0.06em', color: 'rgba(255,255,255,0.85)', background: 'rgba(20,24,26,0.5)', padding: '4px 10px 2px', borderRadius: '10px', pointerEvents: 'none' }}>{note.toUpperCase()}</div>}
       {status && <div className="font-bebas-book" style={{ position: 'absolute', top: '50%', left: 0, right: 0, textAlign: 'center', fontSize: '15px', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.75)', pointerEvents: 'none' }}>{status.toUpperCase()}</div>}
     </div>

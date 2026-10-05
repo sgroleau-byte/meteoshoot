@@ -10,3 +10,4 @@ build/
 
 # Clés Google Maps locales (valeurs réelles; modèle: google-maps-keys.example.json)
 google-maps-keys.json
+.env*

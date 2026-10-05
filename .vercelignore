@@ -1,0 +1,12 @@
+# Dossiers inutiles à la compilation web sur Vercel (apps natives, compilations locales, documentation).
+# Sans ce fichier, le client Vercel envoyait aussi build/ (12 000 fichiers de compilation iPhone).
+build/
+android/
+ios/
+dist/
+.claude/
+docs/
+tools/
+supabase/
+_PSD/
+design_handoff_liste_edition/
