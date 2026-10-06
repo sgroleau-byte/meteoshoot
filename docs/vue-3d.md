@@ -234,6 +234,19 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   (300 à 780 m à 150, comme avant), biais ramené au prorata de la plage, normalBias et pénombre PCSS mis à l'échelle
   (la pénombre est en texels). À hauteur d'oeil rien ne change; en vue haute, les ombres lointaines existent et la
   coupure part dans la brume, au prix d'une finesse d'ombre de 34 cm par texel à 700 m.
+- v633.161 (6 octobre 2026), **ciel gris réparé** (« pourquoi le ciel est complètement gris par une belle journée
+  ensoleillée? », « ça vire au noir avant de devenir bleu flashy »). Cause: dans le shader du ciel (chaîne GLSL écrite
+  sur une seule ligne), un commentaire `//` ajouté le 5 octobre pour l'épaisseur bornée avalait la suite de la ligne,
+  c'est-à-dire le calcul de l'extinction atmosphérique `Fex`; `Fex` (paramètre `out` jamais assigné) valait 0: plus de
+  diffusion de Rayleigh, donc un ciel gris dont la clarté ne dépendait que de la hauteur du soleil (noir au lever,
+  blanc sous un soleil haut), depuis la v633.147. Le soleil lui-même (couleur et force) était calculé en JS et restait
+  juste. Diagnostic: lecture des pixels du cadre (`afterFrame` + `readPixels`, attention: les rangées partent du bas),
+  puis shader de débogage qui affiche `Fx` (= 0), `sunE` et les uniformes. **Règle: dans les chaînes GLSL d'une
+  ligne, jamais de `//`, seulement `/* */`.** En plus, calage du ciel clair: chromaticité du modèle physique adoucie
+  (35 % de blanc au zénith, 70 % à l'horizon), luminance dessinée (zénith `uZen` = cible selon la hauteur du soleil,
+  horizon 2,4 fois plus clair, halo de Mie borné) au lieu de la radiance brute qui saturait en blanc dès 30° à
+  travers l'ACES; brouillard recalculé sur le même horizon. Mesures après correction (vue à l'opposé du soleil, haut
+  du cadre): 14 octobre 10 h 55 (120,156,196), juillet midi (133,166,202), 17 h 30 (98,130,167), lever (65,93,138).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
