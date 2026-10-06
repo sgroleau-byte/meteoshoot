@@ -150,6 +150,18 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   (les 12 plus longues, 6 au toucher), devant le mur à mi-hauteur, dirigée vers l'extérieur, intensité 0,32 ×
   l'émission des fenêtres: sol, arbres et voisins proches reçoivent une lueur chaude. Le rendu affiné le fait
   physiquement (fenêtres émissives) et n'utilise pas ces lumières.
+- v633.152, **surfaces pavées d'après l'imagerie satellite** (`api/paved.js`, environs version 3), demandées par
+  Stéphane pour les stationnements et les aires que les cartes ignorent (essai sur l'héliport de Valcartier:
+  aire, plateformes, voies de circulation, stationnements). Tuiles Esri World Imagery (zoom 19, 0,2 m par
+  pixel, 196 tuiles sur 640 m, attribution « Esri, Maxar, Earthstar Geographics » en légende), classification par
+  couleur (béton clair: luminosité > 0,70 et saturation < 0,22; asphalte neutre: saturation < 0,12; asphalte
+  bleuté: teinte 165 à 275° et saturation < 0,22; jamais sous 0,23 de luminosité), moins les bâtiments
+  (dilatés de 2,5 m) et les rues (largeur + 2 m), morphologie à 0,4 m (fermer 3,5 m, ouvrir 3 m, fermer 2 m),
+  composantes de 200 m² et plus, contour extérieur suivi puis simplifié au mètre. Désactivé quand plus de 18 %
+  du sol est bâti dans 300 m (centre-ville: tout est gris). Environ 3 s de plus par lieu, une fois (cache).
+  Rendu: même gris que l'asphalte, légende « surfaces pavées d'après l'imagerie satellite, approximatives ».
+  Limites: bords au mètre près, gravier et sols nus parfois pris pour du pavé, toits non répertoriés aussi.
+  Prototype Python (OpenCV) dans le scratchpad de la session du 6 octobre; la version serveur est en pur JS.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

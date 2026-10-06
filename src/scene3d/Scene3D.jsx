@@ -49,6 +49,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
         <div style={{ opacity: 0.75 }}>{info.where}</div>
         {info.height && <div style={{ opacity: 0.75 }}>{info.height}</div>}
         {info.rt && <div style={{ opacity: 0.75 }}>{info.rt}</div>}
+        {info.srcLine && <div style={{ opacity: 0.6, fontSize: '11px' }}>{info.srcLine}</div>}
       </div>}
       {info && <svg style={{ position: 'absolute', right: '14px', bottom: '12px', width: '34px', height: '34px', pointerEvents: 'none' }} viewBox="0 0 34 34">
         <circle cx="17" cy="17" r="15" fill="rgba(20,24,26,.35)" stroke="rgba(255,255,255,.55)" strokeWidth="1"/>

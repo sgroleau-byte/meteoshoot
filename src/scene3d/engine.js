@@ -498,6 +498,8 @@ export function createScene3D(container, opts = {}) {
       });
       Object.keys(GC).forEach(k => addFlat(data.green.filter(p => p.k === k).map(p => ({ o: p.p })), flatMats[k], 0.03));
       addFlat(data.asphalt.map(p => ({ o: p })), flatMats.asphalt, 0.05);
+      // Surfaces pavées vues sur l'imagerie satellite (stationnements, aires, cours): même gris que l'asphalte, un cran dessous.
+      addFlat((data.paved || []).map(p => ({ o: p })), flatMats.asphalt, 0.045);
       addFlat(data.water.map(w => ({ o: w.o, h: w.h })), waterMat, 0.05);
       ribbons(data.roads.filter(r => r.k === 0), 0.08, flatMats.road); ribbons(data.roads.filter(r => r.k === 2), 0.1, flatMats.rail); ribbons(data.roads.filter(r => r.k === 1), 0.12, flatMats.walk);
       trees(data.trees);
@@ -604,9 +606,10 @@ export function createScene3D(container, opts = {}) {
     let fac = null, best = -Infinity;
     projInfo.forEach(e => { if (e.len < 2.5) return; const dx = cam.position.x - e.mid[0], dz = cam.position.z + e.mid[1], dist = Math.hypot(dx, dz) || 1; const facing = (e.nrm[0] * dx - e.nrm[1] * dz) / dist; if (facing < 0.15) return; const scv = facing * Math.sqrt(e.len) / Math.sqrt(dist); if (scv > best) { best = scv; fac = e; } });
     const height = fac ? `${fac.label}, côté ${fac.dir} : ${Math.round(fac.h)} m, hauteur ${fac.src}` : '';
-    const info = cond + '|' + parts + '|' + where + '|' + height + '|' + (est > 0.55 ? 'dark' : 'light');
+    const srcLine = data && data.paved && data.paved.length ? `Surfaces pavées d’après l’imagerie satellite (${data.pavedSrc || 'Esri'}), approximatives` : '';
+    const info = cond + '|' + parts + '|' + where + '|' + height + '|' + srcLine + '|' + (est > 0.55 ? 'dark' : 'light');
     const rt = ptMsg || (ptOn ? (ptReady ? 'Rendu affiné : en attente que tout soit immobile' : 'Rendu affiné : préparation') : '');
-    if (info + '|' + rt !== lastInfo) { lastInfo = info + '|' + rt; lastInfoObj = { cond, parts, where, height, light: est <= 0.55, northDeg: (Math.atan2(vF.x, -vF.z) * 180 / Math.PI) }; onInfo({ ...lastInfoObj, rt }); }
+    if (info + '|' + rt !== lastInfo) { lastInfo = info + '|' + rt; lastInfoObj = { cond, parts, where, height, srcLine, light: est <= 0.55, northDeg: (Math.atan2(vF.x, -vF.z) * 180 / Math.PI) }; onInfo({ ...lastInfoObj, rt }); }
   }
   raf = requestAnimationFrame(frame);
   const ro = new ResizeObserver(() => resize()); ro.observe(container);

@@ -7,10 +7,12 @@
 //
 // GET /api/scene3d?lat=46.8367&lng=-71.2336  ->  { v, release, origin, bld, roads, trees, green, asphalt, water }
 // v2 (5 octobre 2026): les rues portent leur nom (n) quand Overture le connaît.
+// v3 (6 octobre 2026): surfaces pavées (paved) détectées sur l'imagerie satellite Esri (api/paved.js), hors zone dense.
 // Essai local: node api/scene3d.js --test 46.8367 -71.2336
 
 import duckdb from 'duckdb';
 import { readFileSync } from 'fs';
+import { pavedFromImagery, PAVED_ATTRIBUTION } from './paved.js';
 
 export const maxDuration = 60;
 
@@ -270,7 +272,10 @@ export async function buildScene(lat, lng) {
     }
   }
 
-  return { v: 2, release: RELEASE, origin: [lat, lng], bld, roads, trees, green, asphalt, water, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
+  // Surfaces pavées d'après l'imagerie satellite (stationnements, aires, cours), là où les cartes ne les ont pas.
+  let paved = [], pavedSrc = null;
+  try { const r = await pavedFromImagery(lat, lng, bld, roads, (m) => console.log('[scene3d]', m)); paved = r.paved; pavedSrc = r.dense ? null : PAVED_ATTRIBUTION; } catch (e) { console.warn('[scene3d] surfaces pavées indisponibles:', e && e.message); }
+  return { v: 3, release: RELEASE, origin: [lat, lng], bld, roads, trees, green, asphalt, water, paved, pavedSrc, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
 }
 
 export default async function handler(req, res) {
@@ -297,7 +302,7 @@ if (process.argv.includes('--test')) {
   const lat = parseFloat(process.argv[i + 1] || '46.8367'), lng = parseFloat(process.argv[i + 2] || '-71.2336');
   buildScene(lat, lng).then((s) => {
     const j = JSON.stringify(s);
-    console.log({ bld: s.bld.length, roads: s.roads.length, trees: s.trees.length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, bytes: j.length, ms: s.ms });
+    console.log({ bld: s.bld.length, roads: s.roads.length, trees: s.trees.length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, bytes: j.length, ms: s.ms });
     if (process.argv.includes('--out')) { import('fs').then(fs => fs.writeFileSync(process.argv[process.argv.indexOf('--out') + 1], j)); }
   }).catch((e) => { console.error(e); process.exit(1); });
 }

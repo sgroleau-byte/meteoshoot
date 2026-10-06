@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase.js';
 
 const mem = new Map();
 const TBL = 'scene3d_cache'; // partagé, pas de variante dev
-const SCENE_V = 2; // v2: noms de rues
+const SCENE_V = 3; // v2: noms de rues; v3: surfaces pavées d'après l'imagerie satellite
 const API_BASE = (typeof __MS_TARGET__ !== 'undefined' && __MS_TARGET__ === 'native') ? 'https://www.meteoshoot.com' : '';
 
 export const sceneKey = (lat, lng) => `${Number(lat).toFixed(5)}_${Number(lng).toFixed(5)}`;
