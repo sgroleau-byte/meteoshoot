@@ -444,6 +444,7 @@
     .edit-gauge-fill { transform-origin: 0 50%; animation: msGaugeFill 0.8s cubic-bezier(0.16, 1, 0.3, 1) both; }
     @keyframes msGaugeFill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
     @keyframes msFade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes scene3dSpin { to { transform: rotate(360deg); } } /* anneau d'attente de la vue 3D */
     @keyframes msGeoIn { from { opacity: 0; transform: scale(0.985); filter: blur(6px); } 60% { filter: blur(0); } to { opacity: 1; transform: none; filter: blur(0); } }
     @keyframes msDetailIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
     @keyframes msDetailOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(14px); } }

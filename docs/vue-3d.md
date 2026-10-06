@@ -201,6 +201,10 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   quand elle est affichée (`zoomRef` passé par ProjectDetail à Scene3D, `engine.zoom(f)`, un cran = × 1,4). Le doigt
   restant après un pincement continue à tourner. Distance bornée par `clampR`: au moins la demi-diagonale de
   l'emprise du bâtiment visé + 8 m (la caméra n'entre jamais dedans, calculé dans `pickView`), au plus 450 m.
+- v633.156 (6 octobre 2026), **attente épurée**: pendant le chargement du moteur puis des environs (jusqu'à 20 s la
+  première fois pour un lieu), un anneau fin (arc clair qui tourne, 34 px, `scene3dSpin` dans app.css) au-dessus
+  d'un mot court en Bebas (« Chargement », « Environs en préparation »), centré, fondu à l'apparition; les
+  messages d'erreur restent en texte seul (`status = { text, busy }` dans Scene3D).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
