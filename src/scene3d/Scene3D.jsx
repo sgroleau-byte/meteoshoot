@@ -1,10 +1,11 @@
 // Vue 3D dans la fenêtre de la carte (bascule SAT / 3D / MAP). Le moteur (three.js) n'est chargé
 // qu'à l'ouverture. Les environs viennent de loadScene (cache partagé, sinon fonction serveur); les
-// bâtiments dessinés s'affichent tout de suite, les voisins s'ajoutent quand ils arrivent.
+// bâtiments dessinés s'affichent tout de suite, les voisins et le relief (loadTerrain) s'ajoutent quand ils arrivent.
 // La légende dit toujours d'où vient ce qu'on regarde: condition de lumière (prévision) et hauteur de la forme
 // en face (réglée dans le projet, mesurée Overture, par défaut).
 import React, { useEffect, useRef, useState } from 'react';
 import { loadScene } from './data.js';
+import { loadTerrain } from './terrain.js';
 import { isChunkLoadError, reloadForUpdate } from '../shared/updateReload.js';
 
 export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, visible, zoomRef }) => { // zoomRef.current(f) : les boutons + et - de la fenêtre
@@ -25,8 +26,12 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
       e.setProject({ lat, lng, buildings, orientation });
       e.setTime(timeMs); e.setWeather(weatherRow);
       setStatus({ text: 'Environs en préparation', busy: true });
-      loadScene(lat, lng).then(d => { if (!cancelled && eng.current === e) { e.setData(d); setStatus(null); } })
-        .catch(err => { console.warn('[scene3d] environs indisponibles:', err); if (!cancelled) setStatus({ text: 'Environs indisponibles, bâtiments du projet seulement', busy: false }); });
+      // Environs (Overture) et relief (LiDAR) arrivent chacun de leur côté; l'anneau d'attente reste tant qu'il en manque un.
+      let pending = 2, failed = false; const done = () => { pending--; if (pending <= 0 && !failed && !cancelled && eng.current === e) setStatus(null); };
+      loadScene(lat, lng).then(d => { if (!cancelled && eng.current === e) { e.setData(d); done(); } })
+        .catch(err => { console.warn('[scene3d] environs indisponibles:', err); failed = true; if (!cancelled) setStatus({ text: 'Environs indisponibles, bâtiments du projet seulement', busy: false }); });
+      loadTerrain(lat, lng).then(t => { if (!cancelled && eng.current === e) { e.setTerrain(t); done(); } })
+        .catch(err => { console.warn('[scene3d] relief indisponible, sol plat:', err); done(); });
     }).catch(err => {
       console.error('[scene3d] moteur:', err); if (cancelled) return;
       // Morceau de code introuvable (nouvelle version déployée depuis l'ouverture de la page): on recharge une fois.

@@ -5,6 +5,9 @@
   "functions": {
     "api/scene3d.js": {
       "maxDuration": 90
+    },
+    "api/terrain.js": {
+      "maxDuration": 60
     }
   },
   "github": {

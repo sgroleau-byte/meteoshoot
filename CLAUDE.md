@@ -12,6 +12,7 @@
   - `src/shared/` configuration Supabase et Lemon Squeezy, traductions (partagé avec les pages)
   - `src/pages/` code des pages `site/login.html`, `signup.html`, `account.html`, `dieu.html`
   - `src/styles/app.css` styles de l'application (ancien bloc `<style>`), suivi des directives Tailwind
+  - `src/scene3d/` vue 3D de la fiche projet (moteur three.js, environs Overture par `api/scene3d.js`, relief par `api/terrain.js`: LiDAR de Ressources naturelles Canada lu par tuiles avec `api/cog.js`, sinon modèle d'élévation du Canada; cache partagé Supabase `scene3d_cache`)
   - `src/native/` détection de la plateforme, géolocalisation Capacitor (natif seulement), réglages natifs au démarrage, shooting du jour (`shootOfDay.js`) et activité en direct iPhone (`liveActivity.js`)
 - `ios/` et `android/` projets Capacitor 8 (iOS avec Swift Package Manager, signature automatique équipe 89HN379C53, appId `com.meteoshoot.app`). Côté iOS, `SceneDelegate` crée `MeteoShootViewController` (Capacitor plus le pont `ShootActivityPlugin`) et l'extension `MeteoShootWidget` dessine l'activité en direct « Shooting du jour » sur l'écran verrouillé et dans la Dynamic Island (`docs/activite-en-direct.md`). `npm run ios` compile, synchronise et ouvre Xcode; `npm run android` idem pour Android Studio (SDK Android et JDK à installer). Le contenu web des apps vient de `dist/`, jamais modifié à la main.
 - `tools/baseline/` harnais de mesure et de comparaison visuelle (voir `verification_etape0/` dans le dossier parent pour les captures et mesures).
