@@ -156,9 +156,25 @@ float lin(float z){return (2.0*uNF.x*uNF.y)/(uNF.y+uNF.x-(2.0*z-1.0)*(uNF.y-uNF.
 void main(){float d0=lin(texture2D(tDepth,vUv).x);float s=0.0,w=0.0;for(int i=-3;i<=3;i++){vec2 uv=vUv+uDir*float(i);float d=lin(texture2D(tDepth,uv).x);float k=exp(-float(i*i)/5.0)*(abs(d-d0)<0.06*d0?1.0:0.0);s+=texture2D(tAO,uv).r*k;w+=k;}gl_FragColor=vec4(vec3(s/max(w,1e-4)),1.0);}`;
 const BRIGHT_FRAG = `uniform sampler2D tCol;uniform float uTh;varying vec2 vUv;void main(){vec3 c=texture2D(tCol,vUv).rgb;float l=dot(c,vec3(0.2126,0.7152,0.0722));gl_FragColor=vec4(c*smoothstep(uTh,uTh+0.4,l),1.0);}`;
 const GBLUR_FRAG = `uniform sampler2D tSrc;uniform vec2 uDir;varying vec2 vUv;void main(){float w[5];w[0]=0.227;w[1]=0.195;w[2]=0.122;w[3]=0.054;w[4]=0.016;vec3 s=texture2D(tSrc,vUv).rgb*w[0];for(int i=1;i<5;i++){s+=texture2D(tSrc,vUv+uDir*float(i)).rgb*w[i];s+=texture2D(tSrc,vUv-uDir*float(i)).rgb*w[i];}gl_FragColor=vec4(s,1.0);}`;
-const COMP_FRAG = `uniform sampler2D tCol,tAO,tBloom;uniform float uExp,uAO,uBloom;varying vec2 vUv;
+// Composition: recoins, lueur des fenêtres, flare du soleil bas, tonalité (ACES) et gamma, avec un léger bruit contre les bandes.
+// Flare « photo de drone » quand le soleil est bas: halo serré (presque blanc), lueur moyenne et voile large (couleur du
+// soleil) qui relève les noirs de toute l'image, étoile de 16 branches quand le disque est visible. La visibilité du disque
+// est lue dans la profondeur (le ciel laisse la profondeur vide) sur un petit disque autour du soleil: derrière une crête, un
+// bâtiment ou des arbres, l'étoile s'éteint et le voile ne garde qu'une part (lumière diffusée par l'air). Soleil hors cadre:
+// uVis (relief seulement, calculé dans frame). uFlare, uRays et uVeilW viennent de la hauteur du soleil et de la météo.
+const COMP_FRAG = `uniform sampler2D tCol,tAO,tBloom,tDepth;uniform float uExp,uAO,uBloom,uAspect,uFlare,uRays,uVeilW,uVis;uniform vec2 uSunUV;uniform vec3 uSunC;varying vec2 vUv;
 vec3 aces(vec3 x){x*=uExp/0.6;return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0);}
-void main(){vec3 c=texture2D(tCol,vUv).rgb;float ao=texture2D(tAO,vUv).r;c*=mix(1.0,ao,uAO);c+=texture2D(tBloom,vUv).rgb*uBloom;c=aces(c);gl_FragColor=vec4(pow(c,vec3(1.0/2.2)),1.0);}`;
+float ign(vec2 p){return fract(52.9829189*fract(0.06711056*p.x+0.00583715*p.y));}
+vec3 flare(){if(uFlare<=0.0)return vec3(0.0);
+vec2 q=(vUv-uSunUV)*vec2(uAspect,1.0);float d=length(q),vis=uVis;
+if(uSunUV.x>0.0&&uSunUV.x<1.0&&uSunUV.y>0.0&&uSunUV.y<1.0){float v=0.0;for(int i=0;i<12;i++){float r=sqrt((float(i)+0.5)/12.0),a=float(i)*2.39996;v+=step(0.99999,texture2D(tDepth,uSunUV+vec2(cos(a)/uAspect,sin(a))*r*0.014).x);}vis=v/12.0;}
+vec3 warm=uSunC*vec3(1.0,0.76,0.5),core=mix(uSunC,vec3(1.0),0.55);float w=uVeilW;
+float hCore=exp(-pow(d/(0.05*w),1.3)),hMid=exp(-d/(0.15*w)),hWide=1.0/(1.0+pow(d/0.5,2.0));
+vec3 f=core*hCore*1.8*vis+warm*hMid*0.5*(0.3+0.7*vis)+warm*hWide*0.085*(0.5+0.5*vis);
+float a=atan(q.y,q.x),r1=pow(abs(cos(4.0*a+0.2)),110.0),r2=0.5*pow(abs(cos(4.0*a+0.5927)),140.0);
+float rays=(r1+r2)*(0.65+0.35*cos(3.0*a+1.7))*exp(-d/0.17)*smoothstep(0.0,0.02,d);
+f+=core*rays*0.7*uRays*vis*vis;return f*uFlare*(0.6/uExp);}
+void main(){vec3 c=texture2D(tCol,vUv).rgb;float ao=texture2D(tAO,vUv).r;c*=mix(1.0,ao,uAO);c+=texture2D(tBloom,vUv).rgb*uBloom;c+=flare();c=aces(c);gl_FragColor=vec4(pow(c,vec3(1.0/2.2))+(ign(gl_FragCoord.xy)-0.5)/255.0,1.0);}`;
 
 const PAL_RES = ['#8f4e3a', '#a0624c', '#7a4a3a', '#b07d5e', '#9c7a62', '#6e5a50', '#b8957a', '#d2c2a4', '#8c6b58'];
 const ROOF = ['#57524d', '#5d5a55', '#514e4a', '#625e58'];
@@ -356,7 +372,7 @@ export function createScene3D(container, opts = {}) {
   const kern = []; for (let i = 0; i < 12; i++) { const v = new THREE.Vector3(hsh(i, 3, 1) * 2 - 1, hsh(i, 3, 2) * 2 - 1, 0.15 + 0.85 * hsh(i, 3, 3)).normalize(); const s = i / 12; v.multiplyScalar(0.12 + 0.88 * s * s); kern.push(v); }
   const aoMat = new THREE.ShaderMaterial({ uniforms: { tDepth: { value: null }, uRes: { value: new THREE.Vector2() }, uProj: { value: new THREE.Matrix4() }, uProjInv: { value: new THREE.Matrix4() }, uR: { value: 2.4 }, uBias: { value: 0.04 }, uInt: { value: 1.6 }, uK: { value: kern } }, vertexShader: QV, fragmentShader: AO_FRAG });
   const blurMat = new THREE.ShaderMaterial({ uniforms: { tAO: { value: null }, tDepth: { value: null }, uDir: { value: new THREE.Vector2() }, uNF: { value: new THREE.Vector2(1, 60000) } }, vertexShader: QV, fragmentShader: BLUR_FRAG });
-  const compMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, tAO: { value: null }, tBloom: { value: null }, uExp: { value: 1 }, uAO: { value: 0.9 }, uBloom: { value: 0 } }, vertexShader: QV, fragmentShader: COMP_FRAG });
+  const compMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, tAO: { value: null }, tBloom: { value: null }, tDepth: { value: null }, uExp: { value: 1 }, uAO: { value: 0.9 }, uBloom: { value: 0 }, uAspect: { value: 1 }, uFlare: { value: 0 }, uRays: { value: 0 }, uVeilW: { value: 1 }, uVis: { value: 1 }, uSunUV: { value: new THREE.Vector2(0.5, 0.5) }, uSunC: { value: new THREE.Vector3(1, 1, 1) } }, vertexShader: QV, fragmentShader: COMP_FRAG });
   const brightMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, uTh: { value: 0.3 } }, vertexShader: QV, fragmentShader: BRIGHT_FRAG });
   const gblurMat = new THREE.ShaderMaterial({ uniforms: { tSrc: { value: null }, uDir: { value: new THREE.Vector2() } }, vertexShader: QV, fragmentShader: GBLUR_FRAG });
   const fxMat = new THREE.ShaderMaterial({ uniforms: THREE.UniformsUtils.clone(FXAAShader.uniforms), vertexShader: FXAAShader.vertexShader, fragmentShader: FXAAShader.fragmentShader });
@@ -659,6 +675,19 @@ export function createScene3D(container, opts = {}) {
     blurMat.uniforms.tDepth.value = sceneRT.depthTexture; blurMat.uniforms.tAO.value = aoRT.texture; blurMat.uniforms.uDir.value.set(1 / PW, 0); pass(blurMat, aoRT2); blurMat.uniforms.tAO.value = aoRT2.texture; blurMat.uniforms.uDir.value.set(0, 1 / PH); pass(blurMat, aoRT);
     const glowK = wallMat.emissiveIntensity > 0.01 ? 0.55 * smooth(1, -4, realDeg) : 0; compMat.uniforms.uBloom.value = glowK;
     if (glowK > 0) { brightMat.uniforms.tCol.value = sceneRT.texture; pass(brightMat, bloomA); gblurMat.uniforms.tSrc.value = bloomA.texture; gblurMat.uniforms.uDir.value.set(1.8 / BW, 0); pass(gblurMat, bloomB); gblurMat.uniforms.tSrc.value = bloomB.texture; gblurMat.uniforms.uDir.value.set(0, 1.8 / BH); pass(gblurMat, bloomA); }
+    // Flare du soleil bas (voile chaud, halo, étoile), comme sur une photo de drone: plein sous 4°, nul au-delà de 22° et
+    // juste après le coucher; aussi quand le soleil est un peu hors cadre (jusqu'à 0,8 hauteur d'image). Météo: les
+    // nuages bas l'éteignent, le voile d'altitude élargit la lueur et éteint l'étoile. Hors cadre, l'occultation par le
+    // relief est estimée ici (dans le cadre, le shader lit la profondeur).
+    const fwd = sDir.dot(vF); let kFl = 0, sunPx = 0.5, sunPy = 0.5, visCPU = 1;
+    if (fwd > 0.08 && realDeg > -1.5) {
+      const pS = new THREE.Vector3().copy(sDir).multiplyScalar(3000).add(cam.position).project(cam); sunPx = (pS.x + 1) / 2; sunPy = (pS.y + 1) / 2;
+      const outX = Math.max(0, Math.abs(sunPx - 0.5) - 0.5) * (W / H), outY = Math.max(0, Math.abs(sunPy - 0.5) - 0.5);
+      kFl = smooth(22, 4, realDeg) * smooth(-1.5, -0.3, realDeg) * smooth(0.8, 0, Math.hypot(outX, outY));
+      if (kFl > 0) visCPU = terrain.blocked(cam.position.x, -cam.position.z, cam.position.y, cam.position.x + sDir.x * 9000, -cam.position.z - sDir.z * 9000, cam.position.y + sDir.y * 9000) ? 0 : 1;
+    }
+    const CU = compMat.uniforms; CU.tDepth.value = sceneRT.depthTexture; CU.uSunUV.value.set(sunPx, sunPy); CU.uAspect.value = W / H; CU.uFlare.value = kFl * (0.35 + 0.65 * iv) * (1 - 0.85 * cum); CU.uRays.value = iv * iv * (1 - 0.7 * veil); CU.uVeilW.value = 1 + 1.2 * high + 0.5 * mid; CU.uVis.value = visCPU;
+    const sl = rgb(sc0).map(v => Math.pow(v, 2.2)); CU.uSunC.value.set(sl[0], sl[1], sl[2]);
     compMat.uniforms.tCol.value = sceneRT.texture; compMat.uniforms.tAO.value = aoRT.texture; compMat.uniforms.tBloom.value = bloomA.texture; pass(compMat, compRT);
     fxMat.uniforms.tDiffuse.value = compRT.texture; fxMat.uniforms.resolution.value.set(1 / PW, 1 / PH); pass(fxMat, null);
     if (import.meta.env.DEV && window.__scene3dCore && window.__scene3dCore.afterFrame) window.__scene3dCore.afterFrame(PW, PH); // mesure en développement
