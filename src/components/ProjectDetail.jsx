@@ -571,7 +571,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     const verts = drawingVerticesRef.current;
     if (verts.length < 3) return;
     if (buildings.length >= 5) { setDrawingMode(false); setDrawingVertices([]); drawingVerticesRef.current = []; return; }
-    const newBuilding = { polygon: [...verts], height: 30, name: '' };
+    const newBuilding = { polygon: [...verts], height: 30, name: '', wallColor: '#e8e4dc' }; // enduit blanc par défaut (demande du 6 octobre 2026)
     setBuildings(prev => {
       newBuilding.name = `Bâtiment ${prev.length + 1}`;
       setEditingBuilding(prev.length);
@@ -590,7 +590,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   const finishDrawing = () => {
     if (drawingVertices.length < 3) return;
     if (buildings.length >= 5) { setDrawingMode(false); setDrawingVertices([]); return; }
-    const newBuilding = { polygon: [...drawingVertices], height: 30, name: `Bâtiment ${buildings.length + 1}` };
+    const newBuilding = { polygon: [...drawingVertices], height: 30, name: `Bâtiment ${buildings.length + 1}`, wallColor: '#e8e4dc' }; // enduit blanc par défaut
     setBuildings(prev => [...prev, newBuilding]);
     setEditingBuilding(buildings.length);
     setBuildingHeight('30');

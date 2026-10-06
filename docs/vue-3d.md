@@ -223,6 +223,9 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   proche/lointain (`userData.pt`, NEAR 230 m) reste: il sert au détail des arbres. **Boussole** (le « rond à côté » que
   Stéphane ne reconnaissait pas): la lettre N est posée à la pointe de l'aiguille et reste droite quand l'aiguille
   tourne. **Échelle de la carte** cachée en 3D (elle chevauchait la boussole; la perspective n'a pas d'échelle fixe).
+- v633.159 (6 octobre 2026): **toute nouvelle forme est blanche** (« Enduit blanc », #e8e4dc, posé à la création dans
+  ProjectDetail, les deux chemins de dessin). Les formes existantes gardent leur couleur; celles créées avant sans
+  couleur choisie restent en brique (repli #7a3f33 dans engine.js et la pastille).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
