@@ -158,6 +158,24 @@ const GC = { park: '#66784d', pitch: '#5d8a47', play: '#b8a88e', grass: '#6f8552
 // ---- géométrie 2D (x est, n nord); signedArea, centroid et les lettres des volumes viennent de footprint.js
 function pointInRing(p, r) { let inside = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const a = r[i], b = r[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside; } return inside; }
 function segsCross(a, b, c, d) { const o = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])); return o(a, b, c) !== o(a, b, d) && o(c, d, a) !== o(c, d, b); }
+// Contour tracé sur une grille (surfaces pavées d'après l'imagerie): rééchantillonné au mètre, adouci sur ±3 m puis
+// simplifié à 25 cm, pour des bords courbes au lieu de marches d'escalier.
+function smoothRing(r, step = 1, half = 3, eps = 0.25) {
+  if (r.length < 3) return r;
+  const pts = []; // rééchantillonnage au pas constant le long du contour fermé
+  for (let i = 0; i < r.length; i++) { const a = r[i], b = r[(i + 1) % r.length]; const l = Math.hypot(b[0] - a[0], b[1] - a[1]); const n = Math.max(1, Math.round(l / step)); for (let k = 0; k < n; k++) { const t = k / n; pts.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); } }
+  const N = pts.length; if (N < 8) return r;
+  const w = Math.min(Math.round(half / step), Math.floor((N - 1) / 2)), out = [];
+  for (let i = 0; i < N; i++) { let x = 0, n = 0; for (let k = -w; k <= w; k++) { const q = pts[(i + k + N) % N]; x += q[0]; n += q[1]; } out.push([x / (2 * w + 1), n / (2 * w + 1)]); }
+  // simplification (Douglas-Peucker) sur le contour fermé, coupé en deux arcs
+  const dp = (a, b) => { const keep = [a]; const st = [[a, b]]; const flags = new Uint8Array(N); flags[a] = flags[b] = 1;
+    while (st.length) { const [i, j] = st.pop(); const A = out[i], B = out[j]; const dx = B[0] - A[0], dn = B[1] - A[1], l2 = dx * dx + dn * dn || 1e-9; let best = 0, bi = -1;
+      for (let k = i + 1; k < j; k++) { const P = out[k]; const t = Math.max(0, Math.min(1, ((P[0] - A[0]) * dx + (P[1] - A[1]) * dn) / l2)); const d = Math.hypot(P[0] - A[0] - t * dx, P[1] - A[1] - t * dn); if (d > best) { best = d; bi = k; } }
+      if (best > eps) { flags[bi] = 1; st.push([i, bi], [bi, j]); } }
+    for (let k = a + 1; k < b; k++) if (flags[k]) keep.push(k); return keep; };
+  const h = Math.floor(N / 2), idx = [...dp(0, h), ...dp(h, N - 1)];
+  return idx.map(i => out[i]);
+}
 function segHitsRing(a, b, r) { if (pointInRing(a, r) || pointInRing(b, r)) return true; for (let i = 0; i < r.length; i++) if (segsCross(a, b, r[i], r[(i + 1) % r.length])) return true; return false; }
 function ringsOverlap(a, b) { if (pointInRing(centroid(a), b) || pointInRing(centroid(b), a)) return true; if (a.some(p => pointInRing(p, b)) || b.some(p => pointInRing(p, a))) return true; for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) if (segsCross(a[i], a[(i + 1) % a.length], b[j], b[(j + 1) % b.length])) return true; return false; }
 
@@ -216,6 +234,7 @@ export function createScene3D(container, opts = {}) {
   const skyMat = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: { uCum: { value: 0 }, uMid: { value: 0 }, uHigh: { value: 0 }, uDirect: { value: 1 }, uWarm: { value: 0 }, uTw: { value: 0 }, uNight: { value: 0 }, uGlow: { value: 0 }, uTurb: { value: 2.5 }, uRay: { value: 1.5 }, uSkyK: { value: 0.2 }, uPhys: { value: 0 }, uSunL: { value: 0 }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Vector3(1, 1, 1) } }, vertexShader: SKY_VERT, fragmentShader: SKY_GLSL });
   const S = new THREE.Scene();
   const cam = new THREE.PerspectiveCamera(44, W / H, 1, 60000);
+  if (import.meta.env.DEV) window.__scene3dCore = { R, S, cam, THREE }; // inspection en développement seulement
   const skyGeo = new THREE.SphereGeometry(5500, 40, 20);
   const sky = new THREE.Mesh(skyGeo, skyMat); sky.renderOrder = -1; S.add(sky);
   const skyScene = new THREE.Scene(); skyScene.add(new THREE.Mesh(skyGeo, skyMat));
@@ -224,7 +243,12 @@ export function createScene3D(container, opts = {}) {
   function updateEnv() { cubeCam.update(R, skyScene); const nrt = pmrem.fromCubemap(cubeRT.texture); if (envRT) envRT.dispose(); envRT = nrt; S.environment = nrt.texture; }
   const fog = new THREE.Fog(0xcccccc, 300, 1600); S.fog = fog;
   const gndTex = groundTex();
-  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000), new THREE.MeshStandardMaterial({ color: L('#5c6b42'), roughness: 1, envMapIntensity: 0.75, map: gndTex })); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; S.add(gnd);
+  // Sol en deux pièces: un carré de 3 km maillé fin (triangles de 50 m) pour une profondeur précise sous les surfaces au
+  // sol (un seul quad de 60 km fait scintiller les stationnements vus de haut), puis la plaine jusqu'à l'horizon, 30 cm plus bas.
+  const gndTexNear = gndTex.clone(); gndTexNear.repeat.set(330, 330);
+  const gndMat = new THREE.MeshStandardMaterial({ color: L('#5c6b42'), roughness: 1, envMapIntensity: 0.75, map: gndTexNear }), gndMatFar = gndMat.clone(); gndMatFar.map = gndTex;
+  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000, 60, 60), gndMat); gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true; S.add(gnd);
+  const gndFar = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000, 8, 8), gndMatFar); gndFar.rotation.x = -Math.PI / 2; gndFar.position.y = -0.3; gndFar.receiveShadow = true; S.add(gndFar);
   const FT = facadeTex();
   const wallMat = new THREE.MeshStandardMaterial({ vertexColors: true, map: FT.map, roughnessMap: FT.rough, roughness: 1, metalness: 0, envMapIntensity: 0.75, emissive: 0xffffff, emissiveMap: FT.emis, emissiveIntensity: 0 });
   wallMat.onBeforeCompile = (sh) => {
@@ -237,8 +261,11 @@ export function createScene3D(container, opts = {}) {
   const crownMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, envMapIntensity: 0.75, alphaMap: leafMask, alphaTest: 0.5, side: THREE.DoubleSide });
   const waterMat = new THREE.MeshStandardMaterial({ color: L('#2a3b48'), roughness: 0.12, metalness: 0, envMapIntensity: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   const crownGeo = lobes(), crownGeoLow = lobes(1), trunkGeo = new THREE.CylinderGeometry(0.16, 0.26, 1, 6); // couronne simplifiée pour le lancer de rayons
-  const flat = (h, y) => new THREE.MeshStandardMaterial({ color: L(h), roughness: 0.95, side: THREE.DoubleSide, envMapIntensity: 0.75, polygonOffset: true, polygonOffsetFactor: -y, polygonOffsetUnits: -y });
-  const flatMats = { road: flat('#4f5255', 3), rail: flat('#8a8378', 3), walk: flat('#b3afa3', 4), asphalt: flat('#4e5154', 2) };
+  // Surfaces au sol: pas d'écriture de profondeur et un ordre de rendu par couche (gazon, asphalte, pavé, rails, rues,
+  // trottoirs), sinon des surfaces à quelques millimètres l'une de l'autre scintillent à 200 m (triangles qui clignotent).
+  const flat = (h, y) => new THREE.MeshStandardMaterial({ color: L(h), roughness: 0.95, side: THREE.DoubleSide, envMapIntensity: 0.75, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 * y });
+  // Gris foncés (rues, surfaces pavées) pour trancher avec le gazon et les toits (#5a5650); trottoirs un peu plus clairs.
+  const flatMats = { road: flat('#383b3e', 3), rail: flat('#7d766c', 3), walk: flat('#9b978d', 4), asphalt: flat('#3a3d40', 2) };
   Object.keys(GC).forEach(k => { flatMats[k] = flat(GC[k], 1); });
 
   // ---- soleil et ombres de nuages
@@ -327,7 +354,7 @@ export function createScene3D(container, opts = {}) {
     ptDisposeOwned();
     const sc = new THREE.Scene();
     statics.forEach(m => { if (m.isInstancedMesh || !m.userData.pt) return; const c = new THREE.Mesh(ensureColor(m.geometry), m.material); c.position.copy(m.position); c.rotation.copy(m.rotation); c.scale.copy(m.scale); sc.add(c); });
-    const g2 = new THREE.Mesh(ensureColor(gnd.geometry), gnd.material); g2.rotation.copy(gnd.rotation); sc.add(g2);
+    [gnd, gndFar].forEach(m => { const g2 = new THREE.Mesh(ensureColor(m.geometry), m.material); g2.rotation.copy(m.rotation); g2.position.copy(m.position); sc.add(g2); });
     if (treeNear.length) {
       const o3 = new THREE.Object3D(), crowns = [], trunks = [];
       treeNear.forEach(t => {
@@ -356,22 +383,22 @@ export function createScene3D(container, opts = {}) {
   const nearXY = (x, n) => Math.hypot(x, n) < NEAR;
   let treeNear = [], winLights = [];
   function clearStatics() { statics.forEach(m => { S.remove(m); m.geometry && m.geometry.dispose(); }); statics = []; treesI = null; treeNear = []; winLights.forEach(l => { S.remove(l); l.dispose && l.dispose(); }); winLights = []; }
-  function addMesh(g, mat, y, near, shadows) { const m = new THREE.Mesh(g, mat); m.position.y = y; m.receiveShadow = true; if (shadows) m.castShadow = true; m.userData.pt = !!near; S.add(m); statics.push(m); return m; }
+  function addMesh(g, mat, y, near, shadows, order = 0) { const m = new THREE.Mesh(g, mat); m.position.y = y; m.renderOrder = order; m.receiveShadow = true; if (shadows) m.castShadow = true; m.userData.pt = !!near; S.add(m); statics.push(m); return m; }
   // Surfaces au sol (parcs, asphalte, eau): items = [{ o: contour, h: trous }], séparés proche/loin.
-  function addFlat(items, mat, y) {
+  function addFlat(items, mat, y, order = 0) {
     [true, false].forEach(near => {
       const part = items.filter(it => { const c = centroid(it.o); return nearXY(c[0], c[1]) === near; });
       if (!part.length) return;
-      const g = new THREE.ShapeGeometry(part.map(it => shapeOf(it.o, it.h))); g.rotateX(-Math.PI / 2); addMesh(g, mat, y, near, false);
+      const g = new THREE.ShapeGeometry(part.map(it => shapeOf(it.o, it.h))); g.rotateX(-Math.PI / 2); addMesh(g, mat, y, near, false, order);
     });
   }
-  function ribbons(list, y, mat) {
+  function ribbons(list, y, mat, order = 0) {
     [true, false].forEach(near => {
       const part = list.filter(r => r.p.some(q => nearXY(q[0], q[1])) === near); if (!part.length) return;
       const v = []; const T = (a, b, c) => v.push(a[0], 0, -a[1], b[0], 0, -b[1], c[0], 0, -c[1]);
       part.forEach(r => { const w = r.w / 2, P = r.p; for (let i = 0; i < P.length - 1; i++) { const [x1, n1] = P[i], [x2, n2] = P[i + 1]; const dx = x2 - x1, dn = n2 - n1, l = Math.hypot(dx, dn) || 1, ox = -dn / l * w, on = dx / l * w; const A = [x1 + ox, n1 + on], B = [x1 - ox, n1 - on], C = [x2 - ox, n2 - on], D = [x2 + ox, n2 + on]; T(A, B, C); T(A, C, D); }
         P.forEach(([x, n]) => { for (let k = 0; k < 10; k++) { const a1 = k / 10 * Math.PI * 2, a2 = (k + 1) / 10 * Math.PI * 2; T([x, n], [x + Math.cos(a1) * w, n + Math.sin(a1) * w], [x + Math.cos(a2) * w, n + Math.sin(a2) * w]); } }); });
-      if (!v.length) return; const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); g.computeVertexNormals(); addMesh(g, mat, y, near, false);
+      if (!v.length) return; const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); g.computeVertexNormals(); addMesh(g, mat, y, near, false, order);
     });
   }
   function blocks(list) {
@@ -386,7 +413,7 @@ export function createScene3D(container, opts = {}) {
           const a = pts[i], c = pts[(i + 1) % pts.length]; const ax = a[0], azz = -a[1], bx = c[0], bz = -c[1]; const ex = bx - ax, ez = bz - azz, len = Math.hypot(ex, ez); if (len < 0.05) continue;
           const nx = -ez / len, nz = ex / len;
           // Nombre entier de travées par mur (fenêtres centrées, jamais coupées dans un coin); mur trop court: plein.
-          const nb = Math.round(len / (b.bay || 4.8)); const u1 = u0 + nb; const q = [[ax, 0, azz, u0, 0], [bx, 0, bz, u1, 0], [bx, h, bz, u1, lv], [ax, h, azz, u0, lv]];
+          const nb = Math.round(len / (b.bay || 6.5)); const u1 = u0 + nb; const q = [[ax, 0, azz, u0, 0], [bx, 0, bz, u1, 0], [bx, h, bz, u1, lv], [ax, h, azz, u0, lv]];
           [[0, 1, 2], [0, 2, 3]].forEach(t => t.forEach(k => { const v = q[k]; P.push(v[0], v[1], v[2]); N.push(nx, 0, nz); U.push(v[3], v[4]); C.push(col.r, col.g, col.b); SD.push(b.allLit ? -1 : seed0 + i); })); u0 = u1;
         }
         const rg = new THREE.ShapeGeometry(shapeOf(pts)); rg.rotateX(-Math.PI / 2); const ra = rg.toNonIndexed().attributes.position.array; for (let i = 0; i < ra.length; i += 3) { RP.push(ra[i], h, ra[i + 2]); RN.push(0, 1, 0); RC.push(rc.r, rc.g, rc.b); } rg.dispose();
@@ -466,7 +493,7 @@ export function createScene3D(container, opts = {}) {
     const drawn = localRings(projLocal, origin);
     // Hauteur: valeur réglée dans la pastille FORME, sinon hauteur mesurée Overture du même édifice (30 m est le défaut du
     // dessin, jamais une vraie hauteur: Stéphane ne la connaît pas), sinon 9 m. Couleur des murs: choisie dans la pastille,
-    // sinon brique. Fenêtres sobres: deux rangées jusqu'à 16 m, puis 4,5 m par étage, une par 6 m.
+    // sinon brique. Fenêtres sobres: une rangée par étage de 3,6 m, une travée par 8 m.
     const list = []; projInfo = [];
     drawn.forEach((d, i) => {
       const hits = data ? data.bld.filter(([p, , , k]) => k !== 2 && ringsOverlap(d.p, p)) : [];
@@ -474,10 +501,10 @@ export function createScene3D(container, opts = {}) {
       let h, src;
       if (!d.def) { h = d.h; src = 'réglée dans le projet'; } else if (measured != null) { h = measured; src = 'mesurée (Overture)'; } else { h = 9; src = 'par défaut'; }
       h = Math.max(3, h);
-      const fl = h < 6 ? 1 : h <= 16 ? 2 : Math.round(h / 4.5);
+      const fl = Math.max(1, Math.floor(h / 3.6)); // une rangée de fenêtres par étage de 3,6 m environ (jamais étirée)
       const wallHex = (projLocal[d.i] && projLocal[d.i].wallColor) || '#7a3f33';
       edgesOf(d.p).forEach(e => projInfo.push({ dir: e.dir, len: e.len, mid: e.mid, nrm: e.nrm, label: `Forme ${i + 1}`, h, src }));
-      list.push({ p: d.p, h, fl, bay: 6, col: L(wallHex), rc: L('#5a5650'), allLit: true }); // l'édifice photographié: toutes les fenêtres allumées la nuit
+      list.push({ p: d.p, h, fl, bay: 8, col: L(wallHex), rc: L('#5a5650'), allLit: true }); // l'édifice photographié: toutes les fenêtres allumées la nuit
     });
     // Les façades allumées éclairent les alentours: une lumière surfacique chaude par façade (les plus longues d'abord),
     // devant le mur, à mi-hauteur, dirigée vers l'extérieur; intensité suivant celle des fenêtres (voir frame).
@@ -494,18 +521,25 @@ export function createScene3D(container, opts = {}) {
         if (drawn.some(d => ringsOverlap(d.p, p))) return;
         others.push(p);
         const q = p[0], r = hsh(q[0], q[1], 5); const hh = k === 0 ? Math.max(h, 6.2) : h;
-        list.push({ p, h: hh, fl: k === 0 ? Math.max(fl, Math.round(hh / 3.1)) : fl, col: L(k === 2 ? '#9a9a94' : k === 1 ? '#cfc7b8' : PAL_RES[Math.floor(r * PAL_RES.length)]), rc: L(ROOF[Math.floor(hsh(q[0], q[1], 6) * ROOF.length)]) });
+        list.push({ p, h: hh, fl: Math.max(1, Math.min(k === 0 ? Math.max(fl, Math.round(hh / 3.1)) : fl, Math.floor(hh / 3.2))), col: L(k === 2 ? '#9a9a94' : k === 1 ? '#cfc7b8' : PAL_RES[Math.floor(r * PAL_RES.length)]), rc: L(ROOF[Math.floor(hsh(q[0], q[1], 6) * ROOF.length)]) });
       });
-      Object.keys(GC).forEach(k => addFlat(data.green.filter(p => p.k === k).map(p => ({ o: p.p })), flatMats[k], 0.03));
-      addFlat(data.asphalt.map(p => ({ o: p })), flatMats.asphalt, 0.05);
+      Object.keys(GC).forEach(k => addFlat(data.green.filter(p => p.k === k).map(p => ({ o: p.p })), flatMats[k], 0.03, 1));
+      addFlat(data.asphalt.map(p => ({ o: p })), flatMats.asphalt, 0.05, 2);
       // Surfaces pavées vues sur l'imagerie satellite (stationnements, aires, cours): même gris que l'asphalte, un cran dessous.
-      addFlat((data.paved || []).map(p => ({ o: p })), flatMats.asphalt, 0.045);
+      addFlat((data.paved || []).map(p => ({ o: smoothRing(p) })), flatMats.asphalt, 0.045, 3);
       addFlat(data.water.map(w => ({ o: w.o, h: w.h })), waterMat, 0.05);
-      ribbons(data.roads.filter(r => r.k === 0), 0.08, flatMats.road); ribbons(data.roads.filter(r => r.k === 2), 0.1, flatMats.rail); ribbons(data.roads.filter(r => r.k === 1), 0.12, flatMats.walk);
+      ribbons(data.roads.filter(r => r.k === 2), 0.1, flatMats.rail, 4); ribbons(data.roads.filter(r => r.k === 0), 0.08, flatMats.road, 5); ribbons(data.roads.filter(r => r.k === 1), 0.12, flatMats.walk, 6);
       trees(data.trees);
     }
     blocks(list);
-    pickView(drawn.length ? drawn[0].p : [], others, data ? data.roads : [], data ? data.trees : []);
+    // Point de vue sur la première forme dessinée; sans forme, sur l'édifice (Overture) sous le point du projet, sinon le plus proche à moins de 60 m.
+    let focus = drawn.length ? drawn[0].p : null;
+    if (!focus && data) {
+      const cand = data.bld.filter(b => b[3] !== 2);
+      const under = cand.find(([p]) => pointInRing([0, 0], p)) || cand.map(b => ({ b, d: Math.hypot(...centroid(b[0])) })).sort((a, b) => a.d - b.d).find(x => x.d < 60)?.b;
+      if (under) focus = under[0];
+    }
+    pickView(focus || [], others.filter(r => r !== focus), data ? data.roads : [], data ? data.trees : []);
     dirty = true;
     if (ptOn && pt) { ptReady = false; ptBuild(); }
   }
@@ -595,6 +629,7 @@ export function createScene3D(container, opts = {}) {
     if (glowK > 0) { brightMat.uniforms.tCol.value = sceneRT.texture; pass(brightMat, bloomA); gblurMat.uniforms.tSrc.value = bloomA.texture; gblurMat.uniforms.uDir.value.set(1.8 / BW, 0); pass(gblurMat, bloomB); gblurMat.uniforms.tSrc.value = bloomB.texture; gblurMat.uniforms.uDir.value.set(0, 1.8 / BH); pass(gblurMat, bloomA); }
     compMat.uniforms.tCol.value = sceneRT.texture; compMat.uniforms.tAO.value = aoRT.texture; compMat.uniforms.tBloom.value = bloomA.texture; pass(compMat, compRT);
     fxMat.uniforms.tDiffuse.value = compRT.texture; fxMat.uniforms.resolution.value.set(1 / PW, 1 / PH); pass(fxMat, null);
+    if (import.meta.env.DEV && window.__scene3dCore && window.__scene3dCore.afterFrame) window.__scene3dCore.afterFrame(PW, PH); // mesure en développement
     // Légende: condition de lumière, parts de nuages, position du soleil
     const w = weatherRow || {}; const low = w.cloudLow ?? null, alt = Math.max(w.cloudMid ?? 0, w.cloudHigh ?? 0), sun = w.sunFraction != null ? Math.round(w.sunFraction * 100) : null;
     const vt = tg.iv >= 0.45 ? 'Voile d’altitude léger : soleil filtré, ombres douces' : tg.iv >= 0.2 ? 'Voile épais : ombres à peine marquées' : 'Lumière plate : presque plus d’ombres';
@@ -642,7 +677,7 @@ export function createScene3D(container, opts = {}) {
       if (pt) { try { pt.dispose(); } catch (e) { /* déjà libéré */ } pt = null; } if (ptCubes) ptCubes.forEach(c => c.dispose()); ptDisposeOwned();
       [sceneRT, aoRT, aoRT2, compRT, cubeRT, envRT].forEach(r => r && r.dispose()); pmrem.dispose();
       [skyMat, aoMat, blurMat, compMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, waterMat, cloudMat, ...Object.values(flatMats)].forEach(m => m.dispose());
-      [skyGeo, crownGeo, crownGeoLow, trunkGeo, sg, gnd.geometry, quad.geometry].forEach(g => g.dispose()); FT.map.dispose(); FT.rough.dispose(); FT.emis.dispose(); gndTex.dispose(); leafMask.dispose();
+      [skyGeo, crownGeo, crownGeoLow, trunkGeo, sg, gnd.geometry, gndFar.geometry, quad.geometry].forEach(g => g.dispose()); FT.map.dispose(); FT.rough.dispose(); FT.emis.dispose(); gndTex.dispose(); gndTexNear.dispose(); gndMat.dispose(); gndMatFar.dispose(); leafMask.dispose();
       R.dispose(); R.forceContextLoss(); if (el.parentNode) el.parentNode.removeChild(el);
     },
   };

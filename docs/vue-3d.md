@@ -20,8 +20,10 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   sobres, brique rouge par défaut). La légende dit, pour la forme que l'on regarde, d'où vient sa hauteur:
   « réglée dans le projet », « mesurée (Overture) » (forme laissée à 30 m, la valeur par défaut du dessin,
   et édifice existant mesuré) ou « par défaut » (9 m).
-- Les fenêtres gardent un rythme générique sobre (deux rangées jusqu'à 16 m, puis 4,5 m par étage, une
-  fenêtre par 6 m): elles ne prétendent pas reproduire le vrai bâtiment.
+- Les fenêtres gardent un rythme générique sobre (une rangée par étage de 3,6 m, une travée par 8 m sur
+  l'édifice photographié, par 6,5 m chez les voisins): elles ne prétendent pas reproduire le vrai bâtiment.
+- Le point de vue vise la première forme dessinée; sans forme, l'édifice Overture sous le point du projet
+  (ou le plus proche à moins de 60 m).
 - Une analyse automatique des images du client par Claude (couleurs, volumes, façades) a été construite et
   essayée le 5 octobre 2026 (école Saint-Paul-Apôtre, 8 façades sur 12 trouvées, 17 à 21 cents et 70 à 110 s
   par analyse), puis retirée le soir même avec Stéphane: résultat « un peu cheese » et pas assez précis pour
@@ -162,6 +164,25 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   Rendu: même gris que l'asphalte, légende « surfaces pavées d'après l'imagerie satellite, approximatives ».
   Limites: bords au mètre près, gravier et sols nus parfois pris pour du pavé, toits non répertoriés aussi.
   Prototype Python (OpenCV) dans le scratchpad de la session du 6 octobre; la version serveur est en pur JS.
+- v633.153 (6 octobre 2026): gris plus foncés au sol (rues #383b3e, asphalte et pavé #3a3d40, trottoirs #9b978d);
+  une rangée de fenêtres par étage de 3,6 m, moins de fenêtres (travée de 8 m sur le projet, 6,5 m chez les
+  voisins); sans forme dessinée, la caméra vise l'édifice Overture sous le point du projet. **Scintillement des
+  zones grises** (« une forme par-dessus l'autre qui entre en conflit », vu par Stéphane à 100 m de haut):
+  deux causes, les surfaces au sol empilées à quelques millimètres (pavé de l'imagerie à 4,5 cm sous l'asphalte
+  à 5 cm, même matériau) et le sol en un seul quad de 60 km dont la profondeur interpolée n'est pas assez
+  précise pour départager des surfaces à 3 cm au-dessus. Correction: les surfaces au sol n'écrivent plus la
+  profondeur et se dessinent dans un ordre fixe (gazon 1, asphalte 2, pavé 3, rails 4, rues 5, trottoirs 6,
+  `renderOrder`), décalage de polygone sans pente (facteur -1 seulement, le facteur par couche faisait baver
+  les surfaces lointaines sur le pied des bâtiments aux angles rasants), et sol en deux pièces: carré de 3 km
+  maillé en 60 × 60 (triangles de 50 m) à y = 0, plaine de 60 km à y = -0,3 m. Contours pavés adoucis à
+  l'affichage (`smoothRing`: rééchantillonnage au mètre, moyenne sur ±3 m, simplification à 25 cm) pour
+  enlever l'effet « Minecraft » des marches de 2 à 3 m issues de la morphologie carrée; le cache (version 3)
+  n'a pas changé. Méthode de mesure (sans la voir à l'oeil): en développement, `window.__scene3dCore`
+  expose le rendu, la scène et la caméra, et `__scene3dCore.afterFrame(PW, PH)` est appelé à la fin de chaque
+  image: lire les pixels (`gl.readPixels`), comparer deux images dont la caméra n'a bougé que de 0,0004 rad;
+  contours en mouvement = 500 à 5 000 pixels changés sur 2,9 M, conflit de profondeur = 100 000 à 850 000.
+  Attention: après une modification de `engine.js`, Vite ne recrée pas la scène ouverte (le composant
+  `Scene3D` accepte la mise à jour sans relancer l'effet): fermer et rouvrir la 3D ou recharger la page.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
