@@ -5,6 +5,7 @@
 // en face (réglée dans le projet, mesurée Overture, par défaut).
 import React, { useEffect, useRef, useState } from 'react';
 import { loadScene } from './data.js';
+import { isChunkLoadError, reloadForUpdate } from '../shared/updateReload.js';
 
 const TOUCH = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(hover: none)').matches; // le rendu affiné est réservé aux ordinateurs
 const BTN = { background: 'rgba(20,24,26,0.45)', border: '1px solid rgba(255,255,255,0.5)', borderRadius: '14px', padding: '5px 12px 3px', color: 'rgba(255,255,255,0.9)', fontSize: '13px', letterSpacing: '0.08em', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', cursor: 'pointer' };
@@ -30,7 +31,12 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
       setStatus({ text: 'Environs en préparation', busy: true });
       loadScene(lat, lng).then(d => { if (!cancelled && eng.current === e) { e.setData(d); setStatus(null); } })
         .catch(err => { console.warn('[scene3d] environs indisponibles:', err); if (!cancelled) setStatus({ text: 'Environs indisponibles, bâtiments du projet seulement', busy: false }); });
-    }).catch(err => { console.error('[scene3d] moteur:', err); if (!cancelled) setStatus({ text: 'La 3D ne peut pas s’afficher ici', busy: false }); });
+    }).catch(err => {
+      console.error('[scene3d] moteur:', err); if (cancelled) return;
+      // Morceau de code introuvable (nouvelle version déployée depuis l'ouverture de la page): on recharge une fois.
+      if (isChunkLoadError(err) && reloadForUpdate()) { setStatus({ text: 'Mise à jour de l’application', busy: true }); return; }
+      setStatus({ text: isChunkLoadError(err) ? 'Nouvelle version disponible : recharger la page' : 'La 3D ne peut pas s’afficher ici', busy: false });
+    });
     return () => { cancelled = true; if (zoomRef) zoomRef.current = null; if (eng.current) { eng.current.dispose(); eng.current = null; } };
   }, [visible, lat, lng]);
   useEffect(() => { if (eng.current) eng.current.setProject({ lat, lng, buildings, orientation }); }, [buildings, orientation]);

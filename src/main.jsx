@@ -14,5 +14,9 @@ import { createRoot } from 'react-dom/client';
 import { AuthProvider } from './auth/AuthProvider.jsx';
 import { LangProvider } from './i18n/LangProvider.jsx';
 import { AppWithAuth } from './components/App.jsx';
+import { reloadForUpdate } from './shared/updateReload.js';
+
+// Nouvelle version déployée pendant que la page était ouverte: Vite signale l'échec du chargement différé, on recharge une fois.
+window.addEventListener('vite:preloadError', (e) => { if (reloadForUpdate()) e.preventDefault(); });
 
 createRoot(document.getElementById('root')).render(<AuthProvider><LangProvider><AppWithAuth/></LangProvider></AuthProvider>);

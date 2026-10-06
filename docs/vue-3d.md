@@ -205,6 +205,15 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   première fois pour un lieu), un anneau fin (arc clair qui tourne, 34 px, `scene3dSpin` dans app.css) au-dessus
   d'un mot court en Bebas (« Chargement », « Environs en préparation »), centré, fondu à l'apparition; les
   messages d'erreur restent en texte seul (`status = { text, busy }` dans Scene3D).
+- v633.157 (6 octobre 2026), **page restée ouverte pendant un déploiement**: Stéphane a vu « La 3D ne peut pas
+  s'afficher ici » dans l'app Mac après les mises en production 155 et 156. Cause: l'ancienne page demandait le
+  morceau `engine-<hachage>.js` d'un déploiement précédent, qui n'existe plus sur le domaine (chaque déploiement
+  Vercel a ses propres fichiers). La version compilée elle-même fonctionnait (vérifié sur `meteoshoot-dist`).
+  Correction: `src/shared/updateReload.js` (`reloadForUpdate`, une fois par minute, garde-fou en sessionStorage;
+  `isChunkLoadError`), écouteur `vite:preloadError` dans main.jsx, et dans Scene3D le message « Mise à jour de
+  l'application » avec rechargement, sinon « Nouvelle version disponible : recharger la page » si on vient déjà de
+  recharger. Test: retirer `dist/assets/engine-*.js`, servir dist, ouvrir la 3D: un rechargement, puis le message,
+  pas de boucle. Après le rechargement l'app revient à la liste (pas de lien profond vers la fiche au chargement).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
