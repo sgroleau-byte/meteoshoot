@@ -196,6 +196,11 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   côtés droits et coins francs, aires conservées à 84 à 100 %. Banc d'essai hors application dans le scratchpad de
   la session (`regul/`: prototype `regularize.mjs`, `run4.mjs` + `draw4.py` → `compare4.png`, `engine_fns.mjs`
   qui exécute les fonctions extraites d'engine.js et vérifie qu'elles donnent la même chose que le prototype).
+- v633.155 (6 octobre 2026), **zoom** (« on peut activer le zoom, quitte à le limiter si ça cause problème »):
+  pincement à deux doigts (iPhone, iPad), molette ou trackpad, et les boutons + et - de la fenêtre agissent sur la 3D
+  quand elle est affichée (`zoomRef` passé par ProjectDetail à Scene3D, `engine.zoom(f)`, un cran = × 1,4). Le doigt
+  restant après un pincement continue à tourner. Distance bornée par `clampR`: au moins la demi-diagonale de
+  l'emprise du bâtiment visé + 8 m (la caméra n'entre jamais dedans, calculé dans `pickView`), au plus 450 m.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

@@ -356,6 +356,7 @@ export function createScene3D(container, opts = {}) {
   let lat = 46.8, lng = -71.2, origin = null, projLocal = [], orientation = [], style = null, data = null, dateMs = Date.now();
   const tg = { cum: 0, mid: 0, high: 0, iv: 1 }, cur = { ...tg };
   let az = Math.PI * 1.2, camH = 1.7, Rr = 75; const ct = new THREE.Vector3(0, 10, 0);
+  let rMin = 20; const R_MAX = 450; const clampR = (r) => Math.max(rMin, Math.min(R_MAX, r)); // distance caméra: hors du bâtiment visé, au plus 450 m
   let statics = [], treesI = null, dirty = true, running = true, envKey = '', envAt = 0, drag = null, lastInfo = '', weatherRow = null;
   let projInfo = [], lastInfoObj = {}; // côtés des formes du projet avec hauteur et source (légende)
 
@@ -511,6 +512,7 @@ export function createScene3D(container, opts = {}) {
     const corners = [[minx, miny], [maxx, maxy], [minx, maxy], [maxx, miny]];
     const pref = orientation.includes('PM') && !orientation.includes('AM') ? 215 : orientation.includes('AM') && !orientation.includes('PM') ? 140 : 180;
     const size = Math.max(maxx - minx, maxy - miny); const radPref = Math.max(40, Math.min(110, size * 1.0 + 25));
+    rMin = Math.max(15, Math.hypot(maxx - minx, maxy - miny) / 2 + 8); // on ne peut pas s'approcher au point d'entrer dans le bâtiment (8 m de marge)
     let best = null;
     const near = others.filter(r => Math.hypot(centroid(r)[0] - tc[0], centroid(r)[1] - tc[1]) < 260);
     for (let bea = pref - 80; bea <= pref + 80; bea += 5) {
@@ -529,7 +531,7 @@ export function createScene3D(container, opts = {}) {
     }
     if (!best) { best = { px: tc[0] + Math.sin(pref * Math.PI / 180) * radPref, py: tc[1] + Math.cos(pref * Math.PI / 180) * radPref }; }
     ct.set(tc[0], Math.min(14, 4 + size * 0.1), -tc[1]); T0.set(tc[0], 0, -tc[1]); sunL.target.position.copy(T0);
-    az = Math.atan2(best.px - tc[0], best.py - tc[1]); Rr = Math.hypot(best.px - tc[0], best.py - tc[1]); camH = 1.7;
+    az = Math.atan2(best.px - tc[0], best.py - tc[1]); Rr = clampR(Math.hypot(best.px - tc[0], best.py - tc[1])); camH = 1.7;
   }
 
   function rebuild() {
@@ -590,13 +592,27 @@ export function createScene3D(container, opts = {}) {
     if (ptOn && pt) { ptReady = false; ptBuild(); }
   }
 
-  // ---- interaction: glisser pour tourner, molette pour s'approcher
-  const el = R.domElement;
-  el.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; el.setPointerCapture(e.pointerId); el.style.cursor = 'grabbing'; });
-  el.addEventListener('pointermove', e => { if (!drag || e.pointerId !== drag.id) return; az += (e.clientX - drag.x) * 0.008; camH = Math.max(1.2, Math.min(320, camH + (e.clientY - drag.y) * 0.6)); drag = { x: e.clientX, y: e.clientY, id: drag.id }; dirty = true; });
-  const endDrag = e => { if (drag && (!e || e.pointerId === drag.id)) { drag = null; el.style.cursor = 'grab'; } };
-  el.addEventListener('pointerup', endDrag); el.addEventListener('pointercancel', endDrag);
-  el.addEventListener('wheel', e => { e.preventDefault(); Rr = Math.max(20, Math.min(400, Rr * Math.exp(e.deltaY * 0.0015))); dirty = true; }, { passive: false });
+  // ---- interaction: un doigt (ou la souris) tourne et monte, deux doigts pincent pour s'approcher, molette ou
+  // trackpad aussi; les boutons + et - de la fenêtre passent par zoom(). Distance bornée par clampR.
+  const el = R.domElement; const ptrs = new Map(); let pinch = null;
+  el.addEventListener('pointerdown', e => {
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); try { el.setPointerCapture(e.pointerId); } catch (err) { /* pointeur déjà parti */ }
+    if (ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, r0: Rr }; drag = null; }
+    else { drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; el.style.cursor = 'grabbing'; }
+  });
+  el.addEventListener('pointermove', e => {
+    const p = ptrs.get(e.pointerId); if (p) { p.x = e.clientX; p.y = e.clientY; }
+    if (pinch && ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y) || 1; Rr = clampR(pinch.r0 * pinch.d0 / d); dirty = true; return; }
+    if (!drag || e.pointerId !== drag.id) return;
+    az += (e.clientX - drag.x) * 0.008; camH = Math.max(1.2, Math.min(320, camH + (e.clientY - drag.y) * 0.6)); drag = { x: e.clientX, y: e.clientY, id: drag.id }; dirty = true;
+  });
+  const endPtr = e => {
+    ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (drag && e.pointerId === drag.id) drag = null;
+    if (ptrs.size === 1 && !drag) { const [[id, p]] = [...ptrs.entries()]; drag = { x: p.x, y: p.y, id }; } // le doigt restant continue à tourner
+    if (!ptrs.size) el.style.cursor = 'grab';
+  };
+  el.addEventListener('pointerup', endPtr); el.addEventListener('pointercancel', endPtr);
+  el.addEventListener('wheel', e => { e.preventDefault(); Rr = clampR(Rr * Math.exp(e.deltaY * 0.0015)); dirty = true; }, { passive: false });
 
   const vF = new THREE.Vector3(); let last = performance.now(), raf = 0;
   function frame(now) {
@@ -717,6 +733,7 @@ export function createScene3D(container, opts = {}) {
     resize,
     getView() { return { az, camH, Rr, ct: ct.toArray(), time: new Date(dateMs).toString().slice(0, 24) }; },
     setView(v) { if (v.az != null) az = v.az; if (v.camH != null) camH = v.camH; if (v.Rr != null) Rr = v.Rr; dirty = true; },
+    zoom(f) { Rr = clampR(Rr * f); dirty = true; }, // f < 1: on s'approche
     setRayTracing(on) { ptEnable(!!on); },
     dispose() {
       running = false; cancelAnimationFrame(raf); ro.disconnect(); clearStatics();

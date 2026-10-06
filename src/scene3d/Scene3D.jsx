@@ -9,7 +9,7 @@ import { loadScene } from './data.js';
 const TOUCH = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(hover: none)').matches; // le rendu affiné est réservé aux ordinateurs
 const BTN = { background: 'rgba(20,24,26,0.45)', border: '1px solid rgba(255,255,255,0.5)', borderRadius: '14px', padding: '5px 12px 3px', color: 'rgba(255,255,255,0.9)', fontSize: '13px', letterSpacing: '0.08em', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', cursor: 'pointer' };
 
-export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, visible }) => {
+export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, visible, zoomRef }) => { // zoomRef.current(f) : les boutons + et - de la fenêtre
   const box = useRef(null);
   const eng = useRef(null);
   const [info, setInfo] = useState(null);
@@ -23,7 +23,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
     import('./engine.js').then(m => {
       if (cancelled || !box.current) return;
       const e = m.createScene3D(box.current, { onInfo: setInfo });
-      eng.current = e;
+      eng.current = e; if (zoomRef) zoomRef.current = (f) => e.zoom(f);
       if (import.meta.env.DEV) window.__scene3d = e; // inspection en développement seulement
       e.setProject({ lat, lng, buildings, orientation });
       e.setTime(timeMs); e.setWeather(weatherRow); if (rt) e.setRayTracing(true);
@@ -31,7 +31,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
       loadScene(lat, lng).then(d => { if (!cancelled && eng.current === e) { e.setData(d); setStatus(''); } })
         .catch(err => { console.warn('[scene3d] environs indisponibles:', err); if (!cancelled) setStatus('Environs indisponibles, bâtiments du projet seulement'); });
     }).catch(err => { console.error('[scene3d] moteur:', err); if (!cancelled) setStatus('La 3D ne peut pas s’afficher ici'); });
-    return () => { cancelled = true; if (eng.current) { eng.current.dispose(); eng.current = null; } };
+    return () => { cancelled = true; if (zoomRef) zoomRef.current = null; if (eng.current) { eng.current.dispose(); eng.current = null; } };
   }, [visible, lat, lng]);
   useEffect(() => { if (eng.current) eng.current.setProject({ lat, lng, buildings, orientation }); }, [buildings, orientation]);
   useEffect(() => { if (eng.current) eng.current.setTime(timeMs); }, [timeMs]);

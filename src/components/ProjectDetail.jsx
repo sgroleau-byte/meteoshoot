@@ -33,6 +33,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   const [confirmDone, setConfirmDone] = useState(false);
   const [mapType, setMapType] = useState('hybrid');
   const [view3d, setView3d] = useState(false); // vue 3D dans la fenêtre de la carte (SAT / 3D / MAP)
+  const scene3dZoom = useRef(null); // zoom de la vue 3D (boutons + et -), rempli par Scene3D
   const [mapZoom, setMapZoom] = useState(project?.mapZoom || 16);
   const [showMapFull, setShowMapFull] = useState(false);
   const [mapMenuOpen, setMapMenuOpen] = useState(false);
@@ -2537,7 +2538,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                 {/* Map controls - stacked vertically with subtle border */}
                 <div ref={mapContainerRef} className="detail-map-keep" style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#181b1e', filter: 'saturate(0.50)' }}/>
                 {/* Vue 3D par-dessus la carte (la carte reste montée, avec son état): même curseur, même météo */}
-                <Scene3D visible={view3d} lat={project?.lat} lng={project?.lng} buildings={buildings} orientation={project?.orientation} timeMs={sceneTimeMs} weatherRow={sceneWeatherRow}/>
+                <Scene3D visible={view3d} lat={project?.lat} lng={project?.lng} buildings={buildings} orientation={project?.orientation} timeMs={sceneTimeMs} weatherRow={sceneWeatherRow} zoomRef={scene3dZoom}/>
                 <canvas ref={flareCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}/>
                 {nightOpacity > 0 && <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 3, background: `radial-gradient(ellipse at center, transparent 30%, rgba(0,0,15,${0.4 * nightOpacity}) 70%, rgba(0,0,15,${0.7 * nightOpacity}) 100%)`, transition: 'opacity 0.5s ease' }}/>}
                 {/* Fixed center pin */}
@@ -2737,9 +2738,9 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                           color: '#333', fontSize: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
                         }}>−</span>
                       {/* Invisible 50/50 click overlays */}
-                      <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() + 1); }}
+                      <button onClick={() => { if (view3d) { if (scene3dZoom.current) scene3dZoom.current(1 / 1.4); return; } const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() + 1); }}
                         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '50%', background: 'transparent', border: 'none', cursor: 'pointer' }}/>
-                      <button onClick={() => { const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() - 1); }}
+                      <button onClick={() => { if (view3d) { if (scene3dZoom.current) scene3dZoom.current(1.4); return; } const m = mapInstanceRef.current; if (m) m.setZoom(m.getZoom() - 1); }}
                         style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: '50%', background: 'transparent', border: 'none', cursor: 'pointer' }}/>
                     </div>
                   )}
