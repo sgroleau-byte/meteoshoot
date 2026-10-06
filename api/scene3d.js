@@ -8,6 +8,7 @@
 // GET /api/scene3d?lat=46.8367&lng=-71.2336  ->  { v, release, origin, bld, roads, trees, green, asphalt, water }
 // v2 (5 octobre 2026): les rues portent leur nom (n) quand Overture le connaît.
 // v3 (6 octobre 2026): surfaces pavées (paved) détectées sur l'imagerie satellite Esri (api/paved.js), hors zone dense.
+// v4 (6 octobre 2026): surfaces pavées avec leurs trous ({ o, h }), asphalte neutre jusqu'à 0,16 de saturation.
 // Essai local: node api/scene3d.js --test 46.8367 -71.2336
 
 import duckdb from 'duckdb';
@@ -275,7 +276,7 @@ export async function buildScene(lat, lng) {
   // Surfaces pavées d'après l'imagerie satellite (stationnements, aires, cours), là où les cartes ne les ont pas.
   let paved = [], pavedSrc = null;
   try { const r = await pavedFromImagery(lat, lng, bld, roads, (m) => console.log('[scene3d]', m)); paved = r.paved; pavedSrc = r.dense ? null : PAVED_ATTRIBUTION; } catch (e) { console.warn('[scene3d] surfaces pavées indisponibles:', e && e.message); }
-  return { v: 3, release: RELEASE, origin: [lat, lng], bld, roads, trees, green, asphalt, water, paved, pavedSrc, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
+  return { v: 4, release: RELEASE, origin: [lat, lng], bld, roads, trees, green, asphalt, water, paved, pavedSrc, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
 }
 
 export default async function handler(req, res) {

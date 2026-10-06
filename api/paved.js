@@ -23,7 +23,7 @@ function isPaved(r, g, b) {
   const mx = Math.max(r, g, b), mn = Math.min(r, g, b), v = mx / 255, s = mx ? (mx - mn) / mx : 0;
   if (v > 0.985 || v <= 0.23) return false;
   if (v > 0.70 && s < 0.22) return true;
-  if (s < 0.12) return true;
+  if (s < 0.16) return true;
   if (s < 0.22) { let h = 0; const d = mx - mn; if (d > 0) { if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4; h = (h * 60 + 360) % 360; } return h > 165 && h < 275; }
   return false;
 }
@@ -93,18 +93,27 @@ export async function pavedFromImagery(lat, lng, bld, roads, log = () => {}) {
   const W2 = W >> 1, H2 = H >> 1, m2 = new Uint8Array(W2 * H2), mp2 = mpp * 2;
   for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) { const i = (2 * y) * W + 2 * x; m2[y * W2 + x] = (mask[i] + mask[i + 1] + mask[i + W] + mask[i + W + 1]) >= 2 ? 1 : 0; }
   let m = close(m2, W2, H2, Math.round(3.5 / mp2)); m = open(m, W2, H2, Math.round(3 / mp2)); m = close(m, W2, H2, Math.round(2 / mp2));
-  // Composantes (remplissage) de 200 m² et plus, contour extérieur, simplification au mètre, mètres locaux
-  const seen = new Uint8Array(W2 * H2), polys = []; const minPx = 200 / (mp2 * mp2);
+  // Composantes (remplissage) de 200 m² et plus: contour extérieur, puis leurs trous (fond enclavé de 150 m² et plus,
+  // par exemple l'herbe au milieu d'une boucle de voies), simplification au mètre, mètres locaux.
+  const lab = new Int32Array(W2 * H2), comps = []; const minPx = 200 / (mp2 * mp2), minHole = 150 / (mp2 * mp2);
+  const toM = (c) => c.map(p => [Math.round((p[0] * 2 - cxp) * mpp * 10) / 10, Math.round((cyp - p[1] * 2) * mpp * 10) / 10]);
+  const ring = (pix, x, y) => { const cm = new Uint8Array(W2 * H2); pix.forEach(j => { cm[j] = 1; }); const c = simplify(traceContour(cm, W2, H2, x, y), 1 / mp2); return c.length >= 3 ? toM(c) : null; };
   for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) {
-    const i = y * W2 + x; if (!m[i] || seen[i]) continue;
-    const stack = [i], comp = []; seen[i] = 1;
-    while (stack.length) { const j = stack.pop(); comp.push(j); const jx = j % W2, jy = (j - jx) / W2; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = jx + dx, ny = jy + dy; if (nx < 0 || ny < 0 || nx >= W2 || ny >= H2) continue; const n = ny * W2 + nx; if (m[n] && !seen[n]) { seen[n] = 1; stack.push(n); } } }
-    if (comp.length < minPx) continue;
-    const cm = new Uint8Array(W2 * H2); comp.forEach(j => { cm[j] = 1; });
-    const c = simplify(traceContour(cm, W2, H2, x, y), 1 / mp2);
-    if (c.length < 3) continue;
-    polys.push(c.map(p => [Math.round((p[0] * 2 - cxp) * mpp * 10) / 10, Math.round((cyp - p[1] * 2) * mpp * 10) / 10]));
+    const i = y * W2 + x; if (!m[i] || lab[i]) continue;
+    const id = comps.length + 1, stack = [i], comp = []; lab[i] = id;
+    while (stack.length) { const j = stack.pop(); comp.push(j); const jx = j % W2, jy = (j - jx) / W2; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = jx + dx, ny = jy + dy; if (nx < 0 || ny < 0 || nx >= W2 || ny >= H2) continue; const n = ny * W2 + nx; if (m[n] && !lab[n]) { lab[n] = id; stack.push(n); } } }
+    comps.push(comp.length >= minPx ? { o: ring(comp, x, y), h: [] } : null);
   }
+  // Fond: ses composantes (4-connexité) qui ne touchent pas le bord sont des trous; leur parent est le pavé voisin.
+  const seen = new Uint8Array(W2 * H2);
+  for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) {
+    const i = y * W2 + x; if (m[i] || seen[i]) continue;
+    const stack = [i], pix = []; seen[i] = 1; let border = false, parent = 0;
+    while (stack.length) { const j = stack.pop(); pix.push(j); const jx = j % W2, jy = (j - jx) / W2; if (jx === 0 || jy === 0 || jx === W2 - 1 || jy === H2 - 1) border = true; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = jx + dx, ny = jy + dy; if (nx < 0 || ny < 0 || nx >= W2 || ny >= H2) continue; const n = ny * W2 + nx; if (m[n]) { if (!parent) parent = lab[n]; } else if (!seen[n]) { seen[n] = 1; stack.push(n); } } }
+    if (border || pix.length < minHole || !parent || !comps[parent - 1] || !comps[parent - 1].o) continue;
+    const hr = ring(pix, x, y); if (hr) comps[parent - 1].h.push(hr);
+  }
+  const polys = comps.filter(c => c && c.o);
   log(`surfaces pavées: ${polys.length}`);
-  return { paved: polys, dense: false };
+  return { paved: polys, dense: false }; // [{ o: contour, h: [trous] }] en mètres locaux
 }

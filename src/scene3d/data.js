@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase.js';
 
 const mem = new Map();
 const TBL = 'scene3d_cache'; // partagé, pas de variante dev
-const SCENE_V = 3; // v2: noms de rues; v3: surfaces pavées d'après l'imagerie satellite
+const SCENE_V = 4; // v2: noms de rues; v3: surfaces pavées d'après l'imagerie satellite; v4: leurs trous, asphalte mieux capté
 const API_BASE = (typeof __MS_TARGET__ !== 'undefined' && __MS_TARGET__ === 'native') ? 'https://www.meteoshoot.com' : '';
 
 export const sceneKey = (lat, lng) => `${Number(lat).toFixed(5)}_${Number(lng).toFixed(5)}`;
@@ -22,9 +22,12 @@ export function loadScene(lat, lng) {
       if (data?.data?.bld) { if ((data.data.v || 1) >= SCENE_V) return data.data; stale = true; }
     } catch (e) { /* cache indisponible: on calcule */ }
     // v dans l'adresse: la réponse est gardée 24 h par le navigateur, une nouvelle version ne doit pas tomber sur l'ancienne.
-    const res = await fetch(`${API_BASE}/api/scene3d?lat=${la}&lng=${ln}&v=${SCENE_V}`);
+    const url = `${API_BASE}/api/scene3d?lat=${la}&lng=${ln}&v=${SCENE_V}`;
+    let res = await fetch(url);
     if (!res.ok) throw new Error('scene3d ' + res.status);
-    const scene = await res.json();
+    let scene = await res.json();
+    // Réponse d'une version antérieure gardée par le navigateur (24 h): on la redemande au serveur une fois.
+    if (scene?.bld && (scene.v || 1) < SCENE_V) { res = await fetch(url, { cache: 'reload' }); if (res.ok) scene = await res.json(); }
     if (!scene?.bld) throw new Error('scene3d: réponse invalide');
     delete scene.ms;
     try {

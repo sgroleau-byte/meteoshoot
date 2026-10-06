@@ -159,7 +159,7 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   couleur (béton clair: luminosité > 0,70 et saturation < 0,22; asphalte neutre: saturation < 0,12; asphalte
   bleuté: teinte 165 à 275° et saturation < 0,22; jamais sous 0,23 de luminosité), moins les bâtiments
   (dilatés de 2,5 m) et les rues (largeur + 2 m), morphologie à 0,4 m (fermer 3,5 m, ouvrir 3 m, fermer 2 m),
-  composantes de 200 m² et plus, contour extérieur suivi puis simplifié au mètre. Désactivé quand plus de 18 %
+  composantes de 200 m² et plus, contour extérieur (et trous depuis la v4) suivi puis simplifié au mètre. Désactivé quand plus de 18 %
   du sol est bâti dans 300 m (centre-ville: tout est gris). Environ 3 s de plus par lieu, une fois (cache).
   Rendu: même gris que l'asphalte, légende « surfaces pavées d'après l'imagerie satellite, approximatives ».
   Limites: bords au mètre près, gravier et sols nus parfois pris pour du pavé, toits non répertoriés aussi.
@@ -183,6 +183,19 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   contours en mouvement = 500 à 5 000 pixels changés sur 2,9 M, conflit de profondeur = 100 000 à 850 000.
   Attention: après une modification de `engine.js`, Vite ne recrée pas la scène ouverte (le composant
   `Scene3D` accepte la mise à jour sans relancer l'effet): fermer et rouvrir la 3D ou recharger la page.
+- v633.154 (6 octobre 2026), **formes pavées nettes** (« des formes de stationnement plus précises, moins organiques »,
+  avec la capture du Y de l'héliport). Trois changements. Serveur (environs **version 4**, `SCENE_V = 4`, les entrées v3
+  du cache sont recalculées à la prochaine ouverture): les composantes gardent leurs **trous** (fond enclavé de 150 m²
+  et plus: l'herbe au milieu du Y était avalée, le contour extérieur seul donnait un triangle plein), format
+  `paved: [{ o, h }]`; asphalte neutre admis jusqu'à 0,16 de saturation au lieu de 0,12 (stationnement sud de
+  Valcartier capté à 79 % au lieu de 47 %, herbe sèche toujours sous 3 %, mesuré sur l'imagerie Esri). Client
+  (`regularizeRing` dans engine.js, remplace le simple lissage de la veille): lissage ±4 m, Douglas-Peucker 1,2 m,
+  directions dominantes (histogramme des angles pondéré par la longueur, pics ≥ 10 % du périmètre, perpendiculaire
+  de la principale ajoutée), côtés alignés à ±12°, côtés consécutifs à moins de 15° fusionnés, sommets aux
+  intersections (jonction par projection si l'intersection s'éloigne de plus de 6 m ou 75 % du côté). Résultat:
+  côtés droits et coins francs, aires conservées à 84 à 100 %. Banc d'essai hors application dans le scratchpad de
+  la session (`regul/`: prototype `regularize.mjs`, `run4.mjs` + `draw4.py` → `compare4.png`, `engine_fns.mjs`
+  qui exécute les fonctions extraites d'engine.js et vérifie qu'elles donnent la même chose que le prototype).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
