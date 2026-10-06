@@ -226,6 +226,14 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
 - v633.159 (6 octobre 2026): **toute nouvelle forme est blanche** (« Enduit blanc », #e8e4dc, posé à la création dans
   ProjectDetail, les deux chemins de dessin). Les formes existantes gardent leur couleur; celles créées avant sans
   couleur choisie restent en brique (repli #7a3f33 dans engine.js et la pastille).
+- v633.160 (6 octobre 2026), **zone d'ombre qui suit la caméra** (« un gros carré d'ombre... ça coupe net », vu au sol
+  aussi): le cadre de la caméra d'ombre n'était que ±150 m autour du projet; au-delà, ni bâtiments ni nuages n'avaient
+  d'ombre, et les ombres de nuages (100 à 200 m) étaient tranchées sur le bord du carré. Maintenant la demi-largeur
+  SR = 0,9·Rr + 0,8·camH + 60, bornée entre 150 et 700 m, par paliers de 50 m (sinon la grille d'ombre tremble à chaque
+  mouvement); la lumière est placée à 2,2·SR + 190 (520 m à 150), plage de profondeur de −1,5·SR à +1,75·SR autour
+  (300 à 780 m à 150, comme avant), biais ramené au prorata de la plage, normalBias et pénombre PCSS mis à l'échelle
+  (la pénombre est en texels). À hauteur d'oeil rien ne change; en vue haute, les ombres lointaines existent et la
+  coupure part dans la brume, au prix d'une finesse d'ombre de 34 cm par texel à 700 m.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

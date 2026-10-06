@@ -571,7 +571,14 @@ export function createScene3D(container, opts = {}) {
     const skyK = zenTarget / Math.max(1e-5, zenLum); skyMat.uniforms.uSkyK.value = skyK;
     // Caméra d'ombre serrée en profondeur (la carte VSM garde la profondeur en demi-flottants: plus la plage est courte, moins
     // les surfaces s'auto-ombrent en rayures au soleil bas): lumière à 520 m, plage de 300 à 780 m.
-    const dist = 520; sunL.position.copy(T0).addScaledVector(d, dist); sc.near = 300; sc.far = 780; sc.updateProjectionMatrix(); sunL.shadow.radius = 1 + 7 * Math.pow(1 - iv, 1.3) + 1.5 * cum; // taille apparente du soleil pour la pénombre: vraie au soleil franc, élargie sous le voile et les nuages
+    // Zone d'ombre qui suit la caméra: 300 m autour du projet à hauteur d'oeil (7 cm par pixel d'ombre), jusqu'à 1 400 m
+    // en vue haute ou lointaine (sinon, au-delà du carré, ni les bâtiments ni les nuages n'ont d'ombre: « ça coupe net »).
+    // Paliers de 50 m pour que la grille d'ombre ne tremble pas à chaque mouvement; profondeur, biais et pénombre suivent.
+    const SR = Math.ceil(Math.max(150, Math.min(700, 0.9 * Rr + 0.8 * camH + 60)) / 50) * 50;
+    sc.left = -SR; sc.right = SR; sc.top = SR; sc.bottom = -SR;
+    const dist = 2.2 * SR + 190; sunL.position.copy(T0).addScaledVector(d, dist); sc.near = dist - 1.5 * SR; sc.far = dist + 1.75 * SR; sc.updateProjectionMatrix();
+    sunL.shadow.bias = -0.0006 * 487.5 / (sc.far - sc.near); sunL.shadow.normalBias = 0.5 * Math.min(2.5, SR / 150);
+    sunL.shadow.radius = (1 + 7 * Math.pow(1 - iv, 1.3) + 1.5 * cum) * Math.max(0.35, 150 / SR); // taille apparente du soleil pour la pénombre: vraie au soleil franc, élargie sous le voile et les nuages; en texels, donc ramenée quand la zone s'élargit
     fill.intensity = (0.2 + 1.1 * Math.max(cum, veil) * Math.min(1, Math.sin(el) / 0.3)) * (1 - 0.5 * twi);
     fill.color.setRGB(0.86, 0.90, 1.0).lerp(new THREE.Color(0.9, 0.9, 0.9), Math.max(cum, veil)); // ciel bleuté, gris sous les nuages
     fill.groundColor.copy(GROUND_TINT).multiplyScalar((0.5 + 1.3 * iv * Math.min(1, Math.sin(el) / 0.5)) * (1 - 0.6 * twi)); // rebond du sol
