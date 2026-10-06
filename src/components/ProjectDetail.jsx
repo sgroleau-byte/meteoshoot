@@ -2745,8 +2745,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                     </div>
                   )}
                 </div>}
-                {/* Zoom scale bar */}
-                {(() => {
+                {/* Échelle de la carte (pas en 3D: la perspective n'a pas d'échelle fixe, et elle chevauchait la boussole) */}
+                {!view3d && (() => {
                   const lat = adjustedPos?.lat ?? project?.lat ?? 45;
                   const mPerPx = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, mapZoom);
                   const targetPx = 100;

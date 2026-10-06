@@ -7,7 +7,6 @@
 // Chargé à la demande (import dynamique), three.js ne pèse rien tant que la 3D n'est pas ouverte.
 import * as THREE from 'three';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 RectAreaLightUniformsLib.init(); // tables des lumières surfaciques (façades allumées la nuit)
 import SunCalc from 'suncalc';
@@ -74,7 +73,7 @@ function sunExtinction(y, turb, ray) {
   return TR.map((r, i) => Math.exp(-(r * ray * 8400 * inv + 0.434 * (0.2 * turb) * 1e-17 * MC[i] * 0.005 * 1250 * inv)));
 }
 
-const SKY_GLSL = `uniform float uCum,uMid,uHigh,uDirect,uWarm,uTw,uNight,uGlow,uTurb,uRay,uSkyK,uPhys,uSunL;uniform vec3 uSun,uSunCol;varying vec3 vDir;
+const SKY_GLSL = `uniform float uCum,uMid,uHigh,uDirect,uWarm,uTw,uNight,uGlow,uTurb,uRay,uSkyK;uniform vec3 uSun,uSunCol;varying vec3 vDir;
 const vec3 LUMW=vec3(0.2126,0.7152,0.0722);
 // Ciel clair de Preetham (modèle analytique de lumière du jour, comme Sky.js de three): diffusion de Rayleigh (bleu du ciel) et de
 // Mie (halo blanc autour du soleil, brume à l'horizon), extinction Fex le long du rayon. uTurb = turbidité (brume), uRay = part
@@ -102,7 +101,7 @@ if(y>0.0){vec2 p=rd.xz/(y+0.08)*0.55;float n=fbm(p,lod)*0.74+fbm(p*2.7+vec2(5.0,
 dC=smoothstep(th,th+sw,n)*smoothstep(0.0,0.10,y)*step(0.02,uCum);
 float n2=fbm(p+normalize(sd.xz+vec2(1e-4))*0.12,lod);float lit=clamp(0.55+(n-n2)*5.0,0.0,1.0);
 vec3 shd=vec3(0.50,0.54,0.60),li=mix(vec3(1.0),uSunCol,0.55);cC=mix(shd,li,lit)*(1.0-0.22*smoothstep(0.62,0.85,n));cC=mix(cC,hor,0.5*(1.0-smoothstep(0.0,0.25,y)));}
-col+=uSunCol*disc*2.0*(1.0-dC)*(1.0-uPhys);col+=uSunCol*pow(max(cg,0.0),40.0)*dC*(1.0-dC)*1.6;col=mix(col,cC,dC);
+col+=uSunCol*disc*2.0*(1.0-dC);col+=uSunCol*pow(max(cg,0.0),40.0)*dC*(1.0-dC)*1.6;col=mix(col,cC,dC);
 if(uMid>0.01){float yy=max(y,0.0);vec2 pm=rd.xz/(yy+0.07)*0.42;float nm=fbm(pm*0.9+vec2(3.1,7.7),lod);float cov=smoothstep(0.62-0.5*uMid,0.72,nm+0.1*uMid);
 float a=uMid*mix(0.45*cov,0.96,thick*thick);aMidG=a;vec3 mc=mix(vec3(0.80,0.82,0.85),vec3(0.58,0.60,0.64),thick);mc=mix(mc,vec3(0.86,0.70,0.58),uWarm*0.45);mc*=1.0-0.12*smoothstep(0.7,0.95,nm);
 mc+=uSunCol*(0.35*pow(max(cg,0.0),8.0))*uDirect;col=mix(col,mc,a*(1.0-dC));}
@@ -127,9 +126,6 @@ vec3 night=mix(vec3(0.045,0.07,0.16),vec3(0.016,0.03,0.09),t)*(0.8+0.3*cgh*(1.0-
 vec3 tw=mix(bh,night,uNight)*(1.0-0.45*dC-0.25*aMidG-0.15*aHighG);
 col=mix(col,tw,uTw);
 col=pow(max(col,0.0),vec3(2.2));
-// Carte d'environnement du rendu affiné (uPhys): disque solaire à la radiance physique (irradiance = soleil de la scène),
-// derrière les cumulus; c'est lui qui fait les ombres douces du lancer de rayons.
-if(uPhys>0.5){float dp=smoothstep(cos(0.0078),cos(0.0066),cg)*step(0.0,y);col+=uSunL*uSunCol*dp*(1.0-uTw);}
 gl_FragColor=vec4(col,1.0);}`;
 const SKY_VERT = `varying vec3 vDir;void main(){vec4 wp=modelMatrix*vec4(position,1.0);vDir=wp.xyz-cameraPosition;gl_Position=projectionMatrix*viewMatrix*wp;}`;
 const QV = `varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.0,1.0);}`;
@@ -277,7 +273,7 @@ export function createScene3D(container, opts = {}) {
   container.appendChild(R.domElement);
 
   // ---- ciel, environnement lumineux
-  const skyMat = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: { uCum: { value: 0 }, uMid: { value: 0 }, uHigh: { value: 0 }, uDirect: { value: 1 }, uWarm: { value: 0 }, uTw: { value: 0 }, uNight: { value: 0 }, uGlow: { value: 0 }, uTurb: { value: 2.5 }, uRay: { value: 1.5 }, uSkyK: { value: 0.2 }, uPhys: { value: 0 }, uSunL: { value: 0 }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Vector3(1, 1, 1) } }, vertexShader: SKY_VERT, fragmentShader: SKY_GLSL });
+  const skyMat = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: { uCum: { value: 0 }, uMid: { value: 0 }, uHigh: { value: 0 }, uDirect: { value: 1 }, uWarm: { value: 0 }, uTw: { value: 0 }, uNight: { value: 0 }, uGlow: { value: 0 }, uTurb: { value: 2.5 }, uRay: { value: 1.5 }, uSkyK: { value: 0.2 }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Vector3(1, 1, 1) } }, vertexShader: SKY_VERT, fragmentShader: SKY_GLSL });
   const S = new THREE.Scene();
   const cam = new THREE.PerspectiveCamera(44, W / H, 1, 60000);
   if (import.meta.env.DEV) window.__scene3dCore = { R, S, cam, THREE }; // inspection en développement seulement
@@ -358,73 +354,9 @@ export function createScene3D(container, opts = {}) {
   let az = Math.PI * 1.2, camH = 1.7, Rr = 75; const ct = new THREE.Vector3(0, 10, 0);
   let rMin = 20; const R_MAX = 450; const clampR = (r) => Math.max(rMin, Math.min(R_MAX, r)); // distance caméra: hors du bâtiment visé, au plus 450 m
   let statics = [], treesI = null, dirty = true, running = true, envKey = '', envAt = 0, drag = null, lastInfo = '', weatherRow = null;
-  let projInfo = [], lastInfoObj = {}; // côtés des formes du projet avec hauteur et source (légende)
+  let projInfo = []; // côtés des formes du projet avec hauteur et source (légende)
 
-  // ---- Rendu affiné, à la demande: lancer de rayons progressif (three-gpu-pathtracer) quand rien ne bouge. La scène
-  // du traceur partage géométries et matériaux avec la scène dessinée (couronnes d'arbres simplifiées, autour du projet);
-  // toute la lumière vient du ciel capturé en cube avec un disque solaire physique: ombres douces vraies, lumière
-  // indirecte, fenêtres allumées qui éclairent la nuit. Tant que la caméra, l'heure ou la météo bougent, le rendu
-  // direct reste affiché; le résultat affiné se raffine ensuite échantillon après échantillon.
-  let pt = null, ptScene = null, ptCubes = null, ptCubeCam = null, ptCubeK = 0, ptOn = false, ptReady = false, ptBuilding = false;
-  let ptStillAt = 0, ptViewKey = '', ptLightKey = '', ptEnvKey = '', ptCamDirty = true, ptMsg = '';
-  const PT_R = 0.0072, PT_OMEGA = 2 * Math.PI * (1 - Math.cos(PT_R)); // disque de 0,8° (1,5 fois le vrai soleil: converge plus vite)
-  const PT_MAX = 200; // échantillons par image, puis la carte graphique se repose
-  async function ptEnable(on) {
-    ptOn = on; dirty = true;
-    if (!on) return;
-    if (!pt) {
-      try {
-        const m = await import('three-gpu-pathtracer');
-        if (!running) return;
-        const P = new m.WebGLPathTracer(R);
-        P.renderToCanvas = false; P.rasterizeScene = false; P.dynamicLowRes = false; P.renderDelay = 0; P.minSamples = 1; P.bounces = 4; P.filterGlossyFactor = 0.5; P.tiles.set(1, 1);
-        pt = P;
-        ptCubes = [0, 1].map(() => new THREE.WebGLCubeRenderTarget(512, { type: THREE.HalfFloatType })); // puissance de deux obligatoire (conversion en équirectangulaire 2048 x 1024)
-        ptCubeCam = new THREE.CubeCamera(1, 9000, ptCubes[0]); skyScene.add(ptCubeCam);
-        if (import.meta.env.DEV) { window.__pt = P; window.__scene3dDbg = { R, ptCubes, ptCubeCam, skyScene, skyMat, cubeRT, THREE, lib: m }; } // inspection en développement
-      } catch (e) { console.error('[scene3d] lancer de rayons indisponible:', e); ptMsg = 'Rendu affiné indisponible ici'; ptOn = false; dirty = true; return; }
-    }
-    await ptBuild();
-  }
-  function ptEnvRender() {
-    const U = skyMat.uniforms; U.uPhys.value = 1; U.uSunL.value = sunL.intensity / PT_OMEGA;
-    ptCubeK ^= 1; ptCubeCam.renderTarget = ptCubes[ptCubeK]; ptCubeCam.update(R, skyScene); U.uPhys.value = 0;
-    if (ptScene) { ptScene.environment = ptCubes[ptCubeK].texture; ptScene.background = ptScene.environment; }
-  }
-  let ptOwned = []; // géométries et matériaux créés pour le traceur seulement
-  function ptDisposeOwned() { ptOwned.forEach(o => o.dispose()); ptOwned = []; }
-  // Le traceur attend les mêmes attributs sur toutes les géométries: couleur par sommet blanche là où il n'y en a pas.
-  function ensureColor(g) { if (!g.attributes.color) { const n = g.attributes.position.count; g.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(n * 3).fill(1), 3)); } return g; }
-  async function ptBuild() {
-    if (!pt || ptBuilding) return;
-    ptBuilding = true; ptReady = false; ptMsg = 'Rendu affiné : préparation'; dirty = true;
-    ptDisposeOwned();
-    const sc = new THREE.Scene();
-    statics.forEach(m => { if (m.isInstancedMesh || !m.userData.pt) return; const c = new THREE.Mesh(ensureColor(m.geometry), m.material); c.position.copy(m.position); c.rotation.copy(m.rotation); c.scale.copy(m.scale); sc.add(c); });
-    [gnd, gndFar].forEach(m => { const g2 = new THREE.Mesh(ensureColor(m.geometry), m.material); g2.rotation.copy(m.rotation); g2.position.copy(m.position); sc.add(g2); });
-    if (treeNear.length) {
-      const o3 = new THREE.Object3D(), crowns = [], trunks = [];
-      treeNear.forEach(t => {
-        const g = crownGeoLow.clone(); o3.position.set(t.x, t.th + t.cr * 0.85, -t.n); o3.scale.set(t.cr, t.cr * 1.05, t.cr); o3.rotation.set(0, t.rot, 0); o3.updateMatrix(); g.applyMatrix4(o3.matrix);
-        const c = L(t.col), n = g.attributes.position.count, arr = new Float32Array(n * 3); for (let i = 0; i < n; i++) { arr[3 * i] = c.r; arr[3 * i + 1] = c.g; arr[3 * i + 2] = c.b; } g.setAttribute('color', new THREE.Float32BufferAttribute(arr, 3)); crowns.push(g);
-        const tg = trunkGeo.clone(); o3.position.set(t.x, t.th / 2, -t.n); o3.scale.set(1, t.th, 1); o3.rotation.set(0, 0, 0); o3.updateMatrix(); tg.applyMatrix4(o3.matrix); trunks.push(ensureColor(tg));
-      });
-      const cg = mergeGeometries(crowns, false), tg = mergeGeometries(trunks, false); crowns.forEach(g => g.dispose()); trunks.forEach(g => g.dispose());
-      const cm = crownMat.clone(); cm.vertexColors = true; ptOwned.push(cg, tg, cm);
-      sc.add(new THREE.Mesh(cg, cm)); sc.add(new THREE.Mesh(tg, trunkMat));
-    }
-    ptScene = sc; ptEnvRender();
-    try { await pt.setSceneAsync(sc, cam); }
-    catch (e) {
-      console.warn('[scene3d] construction asynchrone indisponible, construction directe:', e);
-      try { pt.setScene(sc, cam); } catch (e2) { console.error('[scene3d] rendu affiné:', e2); ptMsg = 'Rendu affiné indisponible ici'; ptOn = false; ptBuilding = false; dirty = true; return; }
-    }
-    ptBuilding = false; if (!running) return;
-    ptReady = true; ptEnvKey = ''; ptCamDirty = true; ptMsg = ''; dirty = true;
-  }
-
-  // Zone proche (rayon NEAR autour du projet, à l'origine): c'est elle que le rendu affiné calcule (userData.pt) et où
-  // les arbres gardent tout leur détail; au-delà, la scène directe garde les voisins et des arbres simplifiés, et le
+  // Zone proche (rayon NEAR autour du projet, à l'origine, drapeau userData.pt): les arbres y gardent tout leur détail; au-delà, la scène directe garde les voisins et des arbres simplifiés, et le
   // brouillard ferme l'horizon. Comme dans un jeu: tout le détail près du sujet, peu au loin.
   const NEAR = 230;
   const nearXY = (x, n) => Math.hypot(x, n) < NEAR;
@@ -589,7 +521,6 @@ export function createScene3D(container, opts = {}) {
     }
     pickView(focus || [], others.filter(r => r !== focus), data ? data.roads : [], data ? data.trees : []);
     dirty = true;
-    if (ptOn && pt) { ptReady = false; ptBuild(); }
   }
 
   // ---- interaction: un doigt (ou la souris) tourne et monte, deux doigts pincent pour s'approcher, molette ou
@@ -620,8 +551,7 @@ export function createScene3D(container, opts = {}) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     const a = 1 - Math.exp(-dt * 3.5); let moving = false;
     ['cum', 'mid', 'high', 'iv'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > 0.0005) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; });
-    const ptLive = ptOn && ptReady && pt && pt.samples < PT_MAX && now - ptStillAt > 350 && !document.hidden;
-    if (!dirty && !moving && now - envAt > 400 && !ptLive) return; // rien à redessiner: on laisse le processeur tranquille
+    if (!dirty && !moving && now - envAt > 400) return; // rien à redessiner: on laisse le processeur tranquille
     dirty = false;
     const cum = cur.cum, mid = cur.mid, high = cur.high, iv = cur.iv, veil = Math.max(mid, high);
     const sp = SunCalc.getPosition(new Date(dateMs), lat, lng); const bearing = sp.azimuth + Math.PI; // azimut depuis le nord, sens horaire
@@ -666,24 +596,6 @@ export function createScene3D(container, opts = {}) {
     let hc = preethamRadiance([fdir.x, fdir.y, fdir.z], sunV, turb, 1.5).map(v => v * skyK); const hl = LUM(hc); hc = hc.map(v => 0.45 * v / (1 + 0.5 * hl));
     let vc = mv([0.88, 0.89, 0.90], [0.64, 0.66, 0.69], thick); vc = mv(vc, mv([0.62, 0.62, 0.66], [0.95, 0.72, 0.55], 0.6), uW * 0.5);
     hc = mv(hc, lin(vc).map(v => v * 0.55), veil * (0.45 + 0.52 * thick * thick)); hc = mv(hc, lin([0.50, 0.54, 0.60]).map(v => v * 0.65), smooth(0.25, 0.85, cum)); hc = mv(hc, lin([0.11, 0.24, 0.50]).map(v => v * (0.72 + 0.55 * cgv)), twi); hc = mv(hc, lin([0.045, 0.07, 0.16]).map(v => v * (0.8 + 0.3 * cgv)), nightF); fog.color.setRGB(hc[0], hc[1], hc[2]); fog.near = 250 + camH * 4; fog.far = 1500 + camH * 14;
-    // Rendu affiné: dès que caméra, heure et météo sont stables, le traceur accumule et remplace l'image directe.
-    if (ptOn && ptReady && pt) {
-      const vk = [az, camH, Rr, ct.x, ct.z].map(v => v.toFixed(3)).join(','), lk = [dateMs, cum, mid, high, iv].map(v => (+v).toFixed(3)).join(',');
-      if (vk !== ptViewKey) { ptViewKey = vk; ptCamDirty = true; ptStillAt = now; }
-      if (lk !== ptLightKey) { ptLightKey = lk; ptStillAt = now; }
-      if (now - ptStillAt > 350) {
-        if (ptEnvKey !== lk) { ptEnvKey = lk; ptEnvRender(); pt.updateMaterials(); pt.updateEnvironment(); }
-        if (ptCamDirty) { ptCamDirty = false; pt.updateCamera(); }
-        if (pt.samples < PT_MAX && !document.hidden) { pt.renderSample(); pt.renderSample(); }
-        if (pt.samples >= 1) {
-          compMat.uniforms.tCol.value = pt.target.texture; compMat.uniforms.tAO.value = aoRT.texture; compMat.uniforms.tBloom.value = bloomA.texture; compMat.uniforms.uAO.value = 0; compMat.uniforms.uBloom.value = 0;
-          pass(compMat, null); compMat.uniforms.uAO.value = 0.9;
-          const rt = pt.samples >= PT_MAX ? `Rendu affiné : terminé (${PT_MAX} échantillons)` : `Rendu affiné : ${Math.round(pt.samples)} échantillons`;
-          if (rt !== lastInfo) { lastInfo = rt; onInfo({ ...lastInfoObj, rt }); }
-          return;
-        }
-      }
-    }
     R.setRenderTarget(sceneRT); R.render(S, cam);
     aoMat.uniforms.tDepth.value = sceneRT.depthTexture; aoMat.uniforms.uRes.value.set(PW, PH); aoMat.uniforms.uProj.value.copy(cam.projectionMatrix); aoMat.uniforms.uProjInv.value.copy(cam.projectionMatrixInverse); pass(aoMat, aoRT);
     blurMat.uniforms.tDepth.value = sceneRT.depthTexture; blurMat.uniforms.tAO.value = aoRT.texture; blurMat.uniforms.uDir.value.set(1 / PW, 0); pass(blurMat, aoRT2); blurMat.uniforms.tAO.value = aoRT2.texture; blurMat.uniforms.uDir.value.set(0, 1 / PH); pass(blurMat, aoRT);
@@ -705,8 +617,7 @@ export function createScene3D(container, opts = {}) {
     const height = fac ? `${fac.label}, côté ${fac.dir} : ${Math.round(fac.h)} m, hauteur ${fac.src}` : '';
     const srcLine = data && data.paved && data.paved.length ? `Surfaces pavées d’après l’imagerie satellite (${data.pavedSrc || 'Esri'}), approximatives` : '';
     const info = cond + '|' + parts + '|' + where + '|' + height + '|' + srcLine + '|' + (est > 0.55 ? 'dark' : 'light');
-    const rt = ptMsg || (ptOn ? (ptReady ? 'Rendu affiné : en attente que tout soit immobile' : 'Rendu affiné : préparation') : '');
-    if (info + '|' + rt !== lastInfo) { lastInfo = info + '|' + rt; lastInfoObj = { cond, parts, where, height, srcLine, light: est <= 0.55, northDeg: (Math.atan2(vF.x, -vF.z) * 180 / Math.PI) }; onInfo({ ...lastInfoObj, rt }); }
+    if (info !== lastInfo) { lastInfo = info; onInfo({ cond, parts, where, height, srcLine, light: est <= 0.55, northDeg: (Math.atan2(vF.x, -vF.z) * 180 / Math.PI) }); }
   }
   raf = requestAnimationFrame(frame);
   const ro = new ResizeObserver(() => resize()); ro.observe(container);
@@ -734,10 +645,8 @@ export function createScene3D(container, opts = {}) {
     getView() { return { az, camH, Rr, ct: ct.toArray(), time: new Date(dateMs).toString().slice(0, 24) }; },
     setView(v) { if (v.az != null) az = v.az; if (v.camH != null) camH = v.camH; if (v.Rr != null) Rr = v.Rr; dirty = true; },
     zoom(f) { Rr = clampR(Rr * f); dirty = true; }, // f < 1: on s'approche
-    setRayTracing(on) { ptEnable(!!on); },
     dispose() {
       running = false; cancelAnimationFrame(raf); ro.disconnect(); clearStatics();
-      if (pt) { try { pt.dispose(); } catch (e) { /* déjà libéré */ } pt = null; } if (ptCubes) ptCubes.forEach(c => c.dispose()); ptDisposeOwned();
       [sceneRT, aoRT, aoRT2, compRT, cubeRT, envRT].forEach(r => r && r.dispose()); pmrem.dispose();
       [skyMat, aoMat, blurMat, compMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, waterMat, cloudMat, ...Object.values(flatMats)].forEach(m => m.dispose());
       [skyGeo, crownGeo, crownGeoLow, trunkGeo, sg, gnd.geometry, gndFar.geometry, quad.geometry].forEach(g => g.dispose()); FT.map.dispose(); FT.rough.dispose(); FT.emis.dispose(); gndTex.dispose(); gndTexNear.dispose(); gndMat.dispose(); gndMatFar.dispose(); leafMask.dispose();

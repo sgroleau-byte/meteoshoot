@@ -214,6 +214,15 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   l'application » avec rechargement, sinon « Nouvelle version disponible : recharger la page » si on vient déjà de
   recharger. Test: retirer `dist/assets/engine-*.js`, servir dist, ouvrir la 3D: un rechargement, puis le message,
   pas de boucle. Après le rechargement l'app revient à la liste (pas de lien profond vers la fiche au chargement).
+- v633.158 (6 octobre 2026), **rendu affiné retiré** (« l'option rendu affiné fait buguer le Mac, l'ordi devient
+  saccadé », Mac Studio M1 Ultra; « cette option ne sert à rien »): bouton, état `rt`, `setRayTracing`, tout le code
+  du traceur dans engine.js (ptEnable/ptBuild/ptEnvRender, scène partagée, cube d'environnement physique uPhys/uSunL,
+  compositing du traceur) et les dépendances `three-gpu-pathtracer` et `three-mesh-bvh` supprimés. La dernière
+  version qui l'avait est étiquetée `rendu-affine` (4f899e6, v633.157) si l'idée revient un jour; la cause probable
+  du saccadé était deux échantillons plein cadre par image à la densité 2 sans découpage en tuiles. Le partage
+  proche/lointain (`userData.pt`, NEAR 230 m) reste: il sert au détail des arbres. **Boussole** (le « rond à côté » que
+  Stéphane ne reconnaissait pas): la lettre N est posée à la pointe de l'aiguille et reste droite quand l'aiguille
+  tourne. **Échelle de la carte** cachée en 3D (elle chevauchait la boussole; la perspective n'a pas d'échelle fixe).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
