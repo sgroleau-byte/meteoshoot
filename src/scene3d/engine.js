@@ -257,6 +257,10 @@ function ringsOverlap(a, b) { if (pointInRing(centroid(a), b) || pointInRing(cen
 // un simple vitrage à peine plus foncé que le mur, dans sa teinte, sans cadre ni reflet. Le matériau passe de l'une
 // à l'autre avec la tombée du jour (uNight): la nuit reste exactement comme avant.
 const WIN_DAY = '#cfcdc9'; // vitrage de jour: environ 80 % de la teinte du mur
+const LAMP_LIGHT = 0.5; // force de la lumière des lampadaires sur le sol, les murs et les arbres, la nuit
+const LAMP_SIGMA = 12; // m: étalement de la lumière d'un lampadaire (diffuse: les voisins se fondent le long des rues)
+const LAMP_HALF = 460, LAMP_N = 512; // carte de lumière des lampadaires: ±460 m autour du projet, 1,8 m par case
+const CITY_FILL = 0.07; // lumière d'ambiance ajoutée la nuit en ville (rebond des rues éclairées)
 function facadeTex() {
   const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
   x.fillStyle = '#ffffff'; x.fillRect(0, 0, 256, 256);
@@ -295,6 +299,14 @@ function leafTex() {
   const grid = (gx, gy, gs, k) => { const i0 = Math.floor(gx), j0 = Math.floor(gy), fx = gx - i0, fy = gy - j0, sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy); const v = (i, j) => hsh(((i % gs) + gs) % gs, ((j % gs) + gs) % gs, k); return (v(i0, j0) * (1 - sx) + v(i0 + 1, j0) * sx) * (1 - sy) + (v(i0, j0 + 1) * (1 - sx) + v(i0 + 1, j0 + 1) * sx) * sy; };
   for (let i = 0; i < N * N; i++) { const px = i & 255, py = i >> 8; const n = 0.3 * grid(px / 12, py / 12, 22, 11) + 0.4 * grid(px / 5, py / 5, 52, 12) + 0.3 * grid(px / 2.5, py / 2.5, 103, 13); const v = n > 0.5 ? 255 : 0; d[i * 4] = v; d[i * 4 + 1] = v; d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }
   x.putImageData(im, 0, 0); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+}
+// Tache de lumière ronde et douce (alpha seulement): flaques des lampadaires et têtes lumineuses.
+function glowTex() {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+  const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+  for (let k = 0; k <= 16; k++) { const o = k / 16; g.addColorStop(o, `rgba(255,255,255,${(Math.exp(-4.5 * o * o) - Math.exp(-4.5)) / (1 - Math.exp(-4.5))})`); } // décroissance douce, sans bord
+  x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
 }
 const shapeOf = (o, holes) => { const s = new THREE.Shape(o.map(p => new THREE.Vector2(p[0], p[1]))); (holes || []).forEach(h => s.holes.push(new THREE.Path(h.map(p => new THREE.Vector2(p[0], p[1]))))); return s; };
 
@@ -344,12 +356,36 @@ export function createScene3D(container, opts = {}) {
   const crownMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, envMapIntensity: 0.75, alphaMap: leafMask, alphaTest: 0.5, side: THREE.DoubleSide });
   const waterMat = new THREE.MeshStandardMaterial({ color: L('#2a3b48'), roughness: 0.12, metalness: 0, envMapIntensity: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   const crownGeo = lobes(), crownGeoLow = lobes(1), trunkGeo = new THREE.CylinderGeometry(0.16, 0.26, 1, 6); // couronne simplifiée pour le lancer de rayons
+  // Éclairage de nuit (7 octobre 2026): lampadaires peints (flaque de lumière au sol, tête lumineuse) et lueur de la
+  // ville; ils s'allument avec les fenêtres. Pas de vraies sources de lumière: des centaines resteraient légères.
+  const LAMP_COL = new THREE.Color(1.0, 0.7, 0.42); // blanc chaud (DEL d'environ 3000 K), en linéaire
+  const GLOW = glowTex();
+  // Lumière des lampadaires: carte vue du dessus (intensité, et hauteur du sol pour l'éteindre en hauteur), lue par les
+  // matériaux du sol, des rues, des murs et des arbres. Diffuse: chaque surface la reçoit dans sa propre couleur.
+  const lampU = { uLampMap: { value: new THREE.DataTexture(new Uint16Array(4), 1, 1, THREE.RGFormat, THREE.HalfFloatType) }, uLampK: { value: 0 }, uLampHalf: { value: LAMP_HALF }, uLampCol: { value: LAMP_COL } };
+  lampU.uLampMap.value.needsUpdate = true;
+  const lampLit = (mat, key) => {
+    const prev = mat.onBeforeCompile;
+    mat.onBeforeCompile = (sh, r) => {
+      if (prev) prev.call(mat, sh, r);
+      Object.assign(sh.uniforms, lampU);
+      sh.vertexShader = 'varying vec3 vLampW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvec4 lampWP=vec4(transformed,1.0);\n#ifdef USE_INSTANCING\nlampWP=instanceMatrix*lampWP;\n#endif\nvLampW=(modelMatrix*lampWP).xyz;');
+      sh.fragmentShader = 'uniform sampler2D uLampMap;uniform float uLampK,uLampHalf;uniform vec3 uLampCol;varying vec3 vLampW;\n' + sh.fragmentShader.replace('#include <aomap_fragment>',
+        '{vec2 luv=vec2(vLampW.x,-vLampW.z)/(2.0*uLampHalf)+0.5;if(uLampK>0.0&&luv.x>0.0&&luv.x<1.0&&luv.y>0.0&&luv.y<1.0){vec2 lm=texture2D(uLampMap,luv).rg;totalEmissiveRadiance+=diffuseColor.rgb*uLampCol*(lm.r*uLampK*smoothstep(14.0,2.0,vLampW.y-lm.g));}}\n#include <aomap_fragment>');
+    };
+    mat.customProgramCacheKey = () => 'lamp-' + key; // un programme par matériau (les fonctions se ressemblent)
+  };
+  const lampHeadMat = new THREE.PointsMaterial({ map: GLOW, color: LAMP_COL, size: 2.2, sizeAttenuation: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+  const CITY_GLOW = new THREE.Color(0.62, 0.47, 0.33); // rebond chaud des rues éclairées sur les murs et les arbres
+  let lampMeshes = [], urban = 0; // urban: 0 en campagne, 1 en ville (densité des bâtiments)
   // Surfaces au sol: pas d'écriture de profondeur et un ordre de rendu par couche (gazon, asphalte, pavé, rails, rues,
   // trottoirs), sinon des surfaces à quelques millimètres l'une de l'autre scintillent à 200 m (triangles qui clignotent).
   const flat = (h, y) => new THREE.MeshStandardMaterial({ color: L(h), roughness: 0.95, side: THREE.DoubleSide, envMapIntensity: 0.75, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 * y });
   // Gris foncés (rues, surfaces pavées) pour trancher avec le gazon et les toits (#5a5650); trottoirs un peu plus clairs.
   const flatMats = { road: flat('#383b3e', 3), rail: flat('#7d766c', 3), walk: flat('#9b978d', 4), asphalt: flat('#3a3d40', 2) };
   Object.keys(GC).forEach(k => { flatMats[k] = flat(GC[k], 1); });
+  // Matériaux qui reçoivent la lumière des lampadaires (le toit, au-dessus des lampes, n'en reçoit presque pas).
+  [[wallMat, 'mur'], [roofMat, 'toit'], [trunkMat, 'tronc'], [crownMat, 'feuillage'], [gndMat, 'sol'], [gndMatFar, 'sol-loin'], ...Object.entries(flatMats).map(([k, m]) => [m, 'plat-' + k])].forEach(([m, k]) => lampLit(m, k));
 
   // ---- soleil et ombres de nuages
   const sunL = new THREE.DirectionalLight(0xffffff, 10); sunL.castShadow = true; sunL.shadow.mapSize.set(4096, 4096);
@@ -417,7 +453,7 @@ export function createScene3D(container, opts = {}) {
   const NEAR = 230;
   const nearXY = (x, n) => Math.hypot(x, n) < NEAR;
   let treeNear = [], winLights = [];
-  function clearStatics() { statics.forEach(m => { S.remove(m); m.geometry && m.geometry.dispose(); }); statics = []; treesI = null; treeNear = []; winLights.forEach(l => { S.remove(l); l.dispose && l.dispose(); }); winLights = []; }
+  function clearStatics() { statics.forEach(m => { S.remove(m); m.geometry && m.geometry.dispose(); }); statics = []; treesI = null; treeNear = []; winLights.forEach(l => { S.remove(l); l.dispose && l.dispose(); }); winLights = []; lampMeshes = []; urban = 0; }
   function addMesh(g, mat, y, near, shadows, order = 0) { const m = new THREE.Mesh(g, mat); m.position.y = y; m.renderOrder = order; m.receiveShadow = true; if (shadows) m.castShadow = true; m.userData.pt = !!near; S.add(m); statics.push(m); return m; }
   // Surfaces au sol (parcs, asphalte, eau): items = [{ o: contour, h: trous }], séparés proche/loin, triangulées en 2D
   // puis drapées sur le relief (chaque morceau dans le plan du maillage du sol, voir terrain.drape).
@@ -486,6 +522,45 @@ export function createScene3D(container, opts = {}) {
         [[0, 1, 2], [0, 2, 3]].forEach(t => t.forEach(k => { const v = q[k]; P.push(v[0], v[1], v[2]); N.push(nx, 0, nz); C.push(col.r, col.g, col.b); })); } });
     if (!P.length) return; const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
     addMesh(g, roofMat, 0, true, false);
+  }
+  // Lampadaires le long des rues (pas de relevé réel: positions tirées des rues): un tous les 38 m environ, en
+  // alternant les côtés, au bord de la chaussée, sans doublon aux intersections; jusqu'à 420 m du projet. Chaque
+  // flaque suit le relief (petite grille drapée), la tête lumineuse est un point à 7,5 m.
+  function lamps(roads, bld) {
+    urban = clamp((bld.filter(b => Math.hypot(...centroid(b[0])) < 300).length - 15) / 200);
+    const pos = [], grid = new Map(), cell = (x, n) => Math.round(x / 16) + ',' + Math.round(n / 16);
+    const taken = (x, n) => { const gx = Math.round(x / 16), gn = Math.round(n / 16); for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const l = grid.get((gx + a) + ',' + (gn + b)); if (l && l.some(([px, pn]) => Math.hypot(px - x, pn - n) < 17)) return true; } return false; };
+    roads.filter(r => r.k === 0 && r.w >= 6).sort((a, b) => b.w - a.w).forEach(r => {
+      const P = r.p; let acc = 10, side = 1;
+      for (let i = 0; i < P.length - 1; i++) {
+        const a = P[i], b = P[i + 1], len = Math.hypot(b[0] - a[0], b[1] - a[1]); if (len < 0.01) continue;
+        const ux = (b[0] - a[0]) / len, un = (b[1] - a[1]) / len;
+        while (acc <= len) {
+          const off = r.w / 2 + 1.2, x = a[0] + ux * acc - un * off * side, n = a[1] + un * acc + ux * off * side;
+          if (Math.hypot(x, n) < 420 && !taken(x, n)) { pos.push([x, n, -un * side, ux * side]); const k = cell(x, n); if (!grid.has(k)) grid.set(k, []); grid.get(k).push([x, n]); }
+          acc += 38; side = -side;
+        }
+        acc -= len;
+      }
+    });
+    if (!pos.length) return;
+    // Carte de lumière: somme de taches gaussiennes centrées 3 m vers la chaussée (la lumière tombe surtout sur la
+    // rue), plafonnée là où plusieurs se recouvrent; canal vert: hauteur du sol, pour éteindre la lumière en hauteur.
+    const N = LAMP_N, cellM = 2 * LAMP_HALF / N, I = new Float32Array(N * N), rad = 3 * LAMP_SIGMA, k2 = 1 / (2 * LAMP_SIGMA * LAMP_SIGMA);
+    pos.forEach(([x, n, sx, sn]) => {
+      const cx = x - sx * 3, cn = n - sn * 3;
+      const i0 = Math.max(0, Math.floor((cx - rad + LAMP_HALF) / cellM)), i1 = Math.min(N - 1, Math.ceil((cx + rad + LAMP_HALF) / cellM));
+      const j0 = Math.max(0, Math.floor((cn - rad + LAMP_HALF) / cellM)), j1 = Math.min(N - 1, Math.ceil((cn + rad + LAMP_HALF) / cellM));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const dx = -LAMP_HALF + (i + 0.5) * cellM - cx, dn = -LAMP_HALF + (j + 0.5) * cellM - cn; I[j * N + i] += Math.exp(-(dx * dx + dn * dn) * k2); }
+    });
+    const half = new Uint16Array(N * N * 2), toH = THREE.DataUtils.toHalfFloat;
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const q = j * N + i; half[q * 2] = toH(Math.min(1.3, I[q])); half[q * 2 + 1] = I[q] > 0.002 ? toH(terrain.hTri(-LAMP_HALF + (i + 0.5) * cellM, -LAMP_HALF + (j + 0.5) * cellM)) : 0; }
+    const tex = new THREE.DataTexture(half, N, N, THREE.RGFormat, THREE.HalfFloatType); tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.needsUpdate = true;
+    if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
+    lampU.uLampMap.value = tex;
+    const hp = new Float32Array(pos.length * 3); pos.forEach(([x, n], i) => { hp[i * 3] = x; hp[i * 3 + 1] = terrain.hTri(x, n) + 7.5; hp[i * 3 + 2] = -n; });
+    const hg = new THREE.BufferGeometry(); hg.setAttribute('position', new THREE.BufferAttribute(hp, 3));
+    const heads = new THREE.Points(hg, lampHeadMat); heads.renderOrder = 9; heads.visible = false; S.add(heads); statics.push(heads); lampMeshes.push(heads);
   }
   // Arbres: couronnes détaillées jusqu'à 160 m, simplifiées au-delà (deux lots instanciés); ceux de la zone proche
   // sont gardés en liste pour le rendu affiné, qui les fusionne en un seul maillage.
@@ -586,6 +661,7 @@ export function createScene3D(container, opts = {}) {
       addFlat(data.water.map(w => ({ o: w.o, h: w.h, hFn: terrain.waterSurface(w), nFn: terrain.upNormal })), waterMat, 0.05); // surface lisse calée sur les rives
       ribbons(data.roads.filter(r => r.k === 2), 0.1, flatMats.rail, 4); ribbons(data.roads.filter(r => r.k === 0), 0.08, flatMats.road, 5); ribbons(data.roads.filter(r => r.k === 1), 0.12, flatMats.walk, 6);
       trees(data.trees);
+      lamps(data.roads, data.bld);
     }
     blocks(list);
     // Point de vue sur la première forme dessinée; sans forme, sur l'édifice (Overture) sous le point du projet, sinon le plus proche à moins de 60 m.
@@ -670,6 +746,10 @@ export function createScene3D(container, opts = {}) {
     wallMat.emissiveIntensity = 0.62 * smooth(1, -4, realDeg); // fenêtres chaudes, pas blanches
     uNight.value = smooth(1, -4, realDeg); // fenêtres discrètes le jour, d'origine dès la tombée du jour
     winLights.forEach(l => { l.intensity = 0.32 * wallMat.emissiveIntensity / 0.62; l.visible = l.intensity > 0.01; }); // lumière des fenêtres sur le sol, les arbres et les voisins
+    // Lampadaires et lueur de la ville: même allumage que les fenêtres, à petite dose (on devine les rues et les volumes).
+    const lampK = uNight.value, city = urban * lampK;
+    lampU.uLampK.value = LAMP_LIGHT * lampK; lampHeadMat.opacity = lampK; lampMeshes.forEach(m => { m.visible = lampK > 0.01; });
+    fill.intensity += CITY_FILL * city; fill.groundColor.lerp(CITY_GLOW, 0.55 * city);
     const soft = twi * (1 - nightF); twL.intensity = 1.8 * soft; twL.color.copy(L(mixHex('#9fb0e0', '#e8bc92', glow * 0.5)));
     twL.target.position.copy(T0); twL.position.copy(T0).add(new THREE.Vector3(Math.sin(bearing) * Math.cos(0.17), Math.sin(0.17), -Math.cos(bearing) * Math.cos(0.17)).multiplyScalar(400));
     const sDir = new THREE.Vector3(Math.sin(bearing) * Math.cos(sp.altitude), Math.sin(sp.altitude), -Math.cos(bearing) * Math.cos(sp.altitude)); U.uSun.value.copy(sDir); const sc1 = rgb(sc0); U.uSunCol.value.set(sc1[0], sc1[1], sc1[2]);
@@ -683,7 +763,7 @@ export function createScene3D(container, opts = {}) {
     // Brouillard: même horizon que le ciel (chromaticité adoucie à 70 %, luminance 2,4 fois le zénith), un peu plus sombre (0,45).
     const hp = preethamRadiance([fdir.x, fdir.y, fdir.z], sunV, turb, 1.5), lph = Math.max(LUM(hp), 1e-6); let hc = hp.map(v => (v / lph * 0.3 + 0.7) * zenTarget * 2.4); const hl = LUM(hc); hc = hc.map(v => 0.45 * v / (1 + 0.5 * hl));
     let vc = mv([0.88, 0.89, 0.90], [0.64, 0.66, 0.69], thick); vc = mv(vc, mv([0.62, 0.62, 0.66], [0.95, 0.72, 0.55], 0.6), uW * 0.5);
-    hc = mv(hc, lin(vc).map(v => v * 0.55), veil * (0.45 + 0.52 * thick * thick)); hc = mv(hc, lin([0.50, 0.54, 0.60]).map(v => v * 0.65), smooth(0.25, 0.85, cum)); hc = mv(hc, lin([0.11, 0.24, 0.50]).map(v => v * (0.72 + 0.55 * cgv)), twi); hc = mv(hc, lin([0.045, 0.07, 0.16]).map(v => v * (0.8 + 0.3 * cgv)), nightF); fog.color.setRGB(hc[0], hc[1], hc[2]); fog.near = 250 + camH * 4; fog.far = 1500 + camH * 14;
+    hc = mv(hc, lin(vc).map(v => v * 0.55), veil * (0.45 + 0.52 * thick * thick)); hc = mv(hc, lin([0.50, 0.54, 0.60]).map(v => v * 0.65), smooth(0.25, 0.85, cum)); hc = mv(hc, lin([0.11, 0.24, 0.50]).map(v => v * (0.72 + 0.55 * cgv)), twi); hc = mv(hc, lin([0.045, 0.07, 0.16]).map(v => v * (0.8 + 0.3 * cgv)), nightF); hc = mv(hc, lin([0.30, 0.21, 0.13]).map(v => v * 0.5), 0.28 * urban * nightF); fog.color.setRGB(hc[0], hc[1], hc[2]); // pollution lumineuse au loin, en ville fog.near = 250 + camH * 4; fog.far = 1500 + camH * 14;
     R.setRenderTarget(sceneRT); R.render(S, cam);
     aoMat.uniforms.tDepth.value = sceneRT.depthTexture; aoMat.uniforms.uRes.value.set(PW, PH); aoMat.uniforms.uProj.value.copy(cam.projectionMatrix); aoMat.uniforms.uProjInv.value.copy(cam.projectionMatrixInverse); pass(aoMat, aoRT);
     blurMat.uniforms.tDepth.value = sceneRT.depthTexture; blurMat.uniforms.tAO.value = aoRT.texture; blurMat.uniforms.uDir.value.set(1 / PW, 0); pass(blurMat, aoRT2); blurMat.uniforms.tAO.value = aoRT2.texture; blurMat.uniforms.uDir.value.set(0, 1 / PH); pass(blurMat, aoRT);
@@ -753,7 +833,7 @@ export function createScene3D(container, opts = {}) {
     dispose() {
       running = false; cancelAnimationFrame(raf); ro.disconnect(); clearStatics();
       [sceneRT, aoRT, aoRT2, compRT, cubeRT, envRT].forEach(r => r && r.dispose()); pmrem.dispose();
-      [skyMat, aoMat, blurMat, compMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, waterMat, cloudMat, ...Object.values(flatMats)].forEach(m => m.dispose());
+      [skyMat, aoMat, blurMat, compMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, waterMat, cloudMat, lampHeadMat, ...Object.values(flatMats)].forEach(m => m.dispose()); GLOW.dispose(); if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
       [skyGeo, crownGeo, crownGeoLow, trunkGeo, sg, gnd && gnd.geometry, gndFar.geometry, quad.geometry].forEach(g => g && g.dispose()); FT.map.dispose(); FT.rough.dispose(); FT.emis.dispose(); gndTex.dispose(); gndTexNear.dispose(); gndMat.dispose(); gndMatFar.dispose(); leafMask.dispose();
       R.dispose(); R.forceContextLoss(); if (el.parentNode) el.parentNode.removeChild(el);
     },
