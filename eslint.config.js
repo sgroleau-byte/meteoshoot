@@ -10,7 +10,7 @@ export default [
       ecmaVersion: 2024,
       sourceType: 'module',
       parserOptions: { ecmaFeatures: { jsx: true } },
-      globals: { ...globals.browser, google: 'readonly', isDev: 'readonly', __GOOGLE_MAPS_KEY__: 'readonly', __MS_TARGET__: 'readonly' },
+      globals: { ...globals.browser, google: 'readonly', mapkit: 'readonly', isDev: 'readonly', __GOOGLE_MAPS_KEY__: 'readonly', __APPLE_MAPS_TOKENS__: 'readonly', __MS_TARGET__: 'readonly' },
     },
     settings: { react: { version: '18.3' } },
     rules: {

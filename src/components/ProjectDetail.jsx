@@ -5,12 +5,15 @@ import { useAuth } from '../auth/AuthProvider.jsx';
 import { useIsMobile } from '../hooks/useIsMobile.js';
 import { useViewportWidth } from '../hooks/useViewportWidth.js';
 import { useLang } from '../i18n/LangProvider.jsx';
+import * as AppleSat from '../maps/appleSat.js';
 import { getTravelTime, reverseGeocode } from '../maps/google.js';
+import { StreetLabels } from '../maps/streetLabels.js';
 import { MandateType, renderMandate } from '../projects/constants.js';
 import { MAX_PROJECT_FILES_MB, fileHelpers } from '../projects/files.js';
 import { toggleMandate } from '../projects/helpers.js';
 import { useStore } from '../projects/StoreProvider.jsx';
 import { Scene3D } from '../scene3d/Scene3D.jsx';
+import { loadScene } from '../scene3d/data.js';
 import { daysSince, formatDateShort, formatDuration, formatTime } from '../utils/dates.js';
 import { linkifyPhonesInEditor } from '../utils/linkify.js';
 import { fetchWeather } from '../weather/api.js';
@@ -31,8 +34,14 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   const [weather, setWeather] = useState(null);
   const [confirm, setConfirm] = useState(false);
   const [confirmDone, setConfirmDone] = useState(false);
-  const [mapType, setMapType] = useState('hybrid');
-  const [view3d, setView3d] = useState(false); // vue 3D dans la fenêtre de la carte (SAT / 3D / MAP)
+  const [mapType, setMapType] = useState('hybrid'); // 'hybrid' (SAT, Google) ou 'sat2' (SAT2, satellite Plans d'Apple)
+  const [mapKitReady, setMapKitReady] = useState(false);
+  // SAT2 ne remplace la carte qu'une fois MapKit chargé: d'ici là, SAT reste en place et utilisable.
+  const mapEngine = mapType === 'sat2' && AppleSat.appleSatAvailable() && mapKitReady ? 'apple' : 'google';
+  const [overlayTick, setOverlayTick] = useState(0); // +1 quand le calque de nuit d'une nouvelle carte a sa projection
+  const [mapEpoch, setMapEpoch] = useState(0); // +1 à chaque carte créée: les dessins se refont sur la nouvelle
+  const [activeEngine, setActiveEngine] = useState('google'); // moteur de la carte affichée (SAT2: désaturation des images seulement)
+  const [view3d, setView3d] = useState(false); // vue 3D dans la fenêtre de la carte (SAT / SAT2 / 3D)
   const scene3dZoom = useRef(null); // zoom de la vue 3D (boutons + et -), rempli par Scene3D
   const [mapZoom, setMapZoom] = useState(project?.mapZoom || 16);
   const [showMapFull, setShowMapFull] = useState(false);
@@ -331,6 +340,15 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     
   }, []);
   const mapInstanceRef = React.useRef(null);
+  const mapEngineRef = React.useRef('google'); // moteur de la carte en place: 'google' (SAT) ou 'apple' (SAT2)
+  const mapCameraRef = React.useRef(null); // centre et zoom gardés au passage SAT <-> SAT2
+  const mapTeardownRef = React.useRef(null); // démontage de la carte en place (gardé à travers « Mettre à jour »)
+  const projectPosRef = React.useRef(null); // position courante du projet, lue par les écouteurs de la carte
+  const mapBuiltForRef = React.useRef(null); // position du projet pour laquelle la carte en place a été construite
+  const googleMapRef = React.useRef(null); // carte Google gardée en vie pendant SAT2 et entre deux adresses
+  // Interface de la carte en place: Google Maps, ou la couche Plans d'Apple qui en reproduit les fonctions (SAT2).
+  const gm = () => (mapEngineRef.current === 'apple' ? AppleSat : window.google && google.maps);
+  projectPosRef.current = project?.lat && project?.lng ? { lat: project.lat, lng: project.lng } : null;
   const sunLinesRef = React.useRef([]);
   const sunPosLineRef = React.useRef(null);
   const shadowLineRef = React.useRef(null);
@@ -437,7 +455,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     if (!map) return;
     // Clean up previous listener
     if (drawClickListenerRef.current) {
-      google.maps.event.removeListener(drawClickListenerRef.current);
+      gm().event.removeListener(drawClickListenerRef.current);
       drawClickListenerRef.current = null;
     }
     if (!drawingMode) {
@@ -470,14 +488,14 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     document.addEventListener('keydown', enterHandler);
     return () => {
       if (drawClickListenerRef.current) {
-        google.maps.event.removeListener(drawClickListenerRef.current);
+        gm().event.removeListener(drawClickListenerRef.current);
         drawClickListenerRef.current = null;
       }
-      google.maps.event.removeListener(dblClickListener);
+      gm().event.removeListener(dblClickListener);
       document.removeEventListener('keydown', enterHandler);
       map.setOptions({ draggableCursor: null });
     };
-  }, [drawingMode]);
+  }, [drawingMode, mapEpoch]);
 
   // Update drawing preview polygon + vertex markers
   useEffect(() => {
@@ -490,7 +508,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     if (drawingVertices.length >= 2) {
       const nextColor = BUILDING_COLORS[buildings.length % BUILDING_COLORS.length];
       // Glow polygon (behind)
-      const glow = new google.maps.Polygon({
+      const glow = new (gm().Polygon)({
         paths: drawingVertices,
         strokeColor: nextColor, strokeOpacity: 0.3, strokeWeight: 8,
         fillColor: nextColor, fillOpacity: 0.08, map, zIndex: 29,
@@ -500,7 +518,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       // Main polygon, with clickable: false so clicks pass through to the map
       // (otherwise concave shapes like an L are impossible: clicks inside the
       // current preview are absorbed by the polygon and never reach the map)
-      drawingPolygonRef.current = new google.maps.Polygon({
+      drawingPolygonRef.current = new (gm().Polygon)({
         paths: drawingVertices,
         strokeColor: nextColor, strokeOpacity: 0.9, strokeWeight: 2,
         fillColor: nextColor, fillOpacity: 0.2, map,
@@ -514,23 +532,23 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       const canClose = isFirst && drawingVertices.length >= 3;
       // White circle border behind checkmark when closeable
       if (canClose) {
-        const circleBg = new google.maps.Marker({
+        const circleBg = new (gm().Marker)({
           position: v, map,
-          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: nextColor, fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 3, strokeOpacity: 1 },
+          icon: { path: gm().SymbolPath.CIRCLE, scale: 12, fillColor: nextColor, fillOpacity: 1, strokeColor: '#ffffff', strokeWeight: 3, strokeOpacity: 1 },
           zIndex: 36, clickable: false
         });
         drawingMarkersRef.current.push(circleBg);
       }
-      const marker = new google.maps.Marker({
+      const marker = new (gm().Marker)({
         position: v, map,
         icon: canClose ? {
           path: 'M-2.5,0 L-1,2 L2.5,-2',
           scale: 2,
           fillColor: 'transparent', fillOpacity: 0,
           strokeColor: '#ffffff', strokeWeight: 3, strokeOpacity: 1,
-          anchor: new google.maps.Point(0, 0),
+          anchor: new (gm().Point)(0, 0),
         } : {
-          path: google.maps.SymbolPath.CIRCLE,
+          path: gm().SymbolPath.CIRCLE,
           scale: isFirst ? 10 : 5,
           fillColor: nextColor,
           fillOpacity: 1,
@@ -542,9 +560,9 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       });
       // Add pulsing circle behind first vertex when closeable
       if (canClose) {
-        const pulseCircle = new google.maps.Marker({
+        const pulseCircle = new (gm().Marker)({
           position: v, map,
-          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 20, fillColor: nextColor, fillOpacity: 0.3, strokeColor: nextColor, strokeWeight: 2, strokeOpacity: 0.5 },
+          icon: { path: gm().SymbolPath.CIRCLE, scale: 20, fillColor: nextColor, fillOpacity: 0.3, strokeColor: nextColor, strokeWeight: 2, strokeOpacity: 0.5 },
           zIndex: 34, clickable: false
         });
         drawingMarkersRef.current.push(pulseCircle);
@@ -560,12 +578,12 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     if (drawingVertices.length >= 1 && nightOverlayRef.current && nightOverlayRef.current.getProjection()) {
       const last = drawingVertices[drawingVertices.length - 1];
       const proj = nightOverlayRef.current.getProjection();
-      const px = proj.fromLatLngToContainerPixel(new google.maps.LatLng(last.lat, last.lng));
+      const px = proj.fromLatLngToContainerPixel(new (gm().LatLng)(last.lat, last.lng));
       if (px) setDrawPanelPos({ x: px.x, y: px.y });
     } else {
       setDrawPanelPos(null);
     }
-  }, [drawingVertices, buildings.length]);
+  }, [drawingVertices, buildings.length, mapEpoch, overlayTick]);
 
   const finishDrawingFromRef = () => {
     const verts = drawingVerticesRef.current;
@@ -666,8 +684,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     }
 
     // Create canvas overlay (lazy, first render only)
-    if (!shadowOverlayRef.current && window.google && google.maps.OverlayView) {
-      class ShadowCanvas extends google.maps.OverlayView {
+    if (!shadowOverlayRef.current && gm() && gm().OverlayView) {
+      class ShadowCanvas extends gm().OverlayView {
         constructor() { super(); this.canvas = null; this.shadows = []; this.buildings = []; }
         onAdd() {
           this.canvas = document.createElement('canvas');
@@ -702,7 +720,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
           const ctx = this.canvas.getContext('2d');
           ctx.clearRect(0, 0, cW, cH);
           const toPx = (ll) => {
-            const dp = projection.fromLatLngToDivPixel(new google.maps.LatLng(ll.lat, ll.lng));
+            const dp = projection.fromLatLngToDivPixel(new (gm().LatLng)(ll.lat, ll.lng));
             return { x: dp.x - cLeft, y: dp.y - cTop };
           };
           const tracePath = (path) => {
@@ -755,14 +773,14 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       // Draw building footprint: per-shape color
       const shapeColor = BUILDING_COLORS[idx % BUILDING_COLORS.length];
       // Glow behind
-      const glowPoly = new google.maps.Polygon({
+      const glowPoly = new (gm().Polygon)({
         paths: bldg.polygon,
         strokeColor: shapeColor, strokeOpacity: 0.4, strokeWeight: isSelected ? 10 : 6,
         fillColor: 'transparent', fillOpacity: 0, map, zIndex: 24,
       });
       buildingPolygonsRef.current.push(glowPoly);
       
-      const poly = new google.maps.Polygon({
+      const poly = new (gm().Polygon)({
         paths: bldg.polygon,
         strokeColor: shapeColor,
         strokeOpacity: isSelected ? 1 : 0.85, strokeWeight: isSelected ? 2.5 : 1.5,
@@ -780,10 +798,10 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       // Draggable vertex markers for selected building
       if (isSelected) {
         bldg.polygon.forEach((v, vi) => {
-          const vertexMarker = new google.maps.Marker({
+          const vertexMarker = new (gm().Marker)({
             position: v, map, draggable: true,
             icon: {
-              path: google.maps.SymbolPath.CIRCLE,
+              path: gm().SymbolPath.CIRCLE,
               scale: 6, fillColor: shapeColor, fillOpacity: 1,
               strokeColor: '#fff', strokeWeight: 2,
             },
@@ -810,7 +828,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       const overlay = nightOverlayRef.current;
       if (overlay && overlay.getProjection()) {
         const proj = overlay.getProjection();
-        const px = proj.fromLatLngToContainerPixel(new google.maps.LatLng(centroid.lat, centroid.lng));
+        const px = proj.fromLatLngToContainerPixel(new (gm().LatLng)(centroid.lat, centroid.lng));
         if (px) setEditPanelPos({ x: px.x, y: px.y });
       }
     } else {
@@ -823,7 +841,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       wallPolygonsRef.current.forEach(p => p.setMap(null));
       roofPolygonsRef.current.forEach(p => p.setMap(null));
     };
-  }, [buildings, sunHour, sunDate, adjustedPos, editingBuilding, project?.lat, project?.lng, mapType]);
+  }, [buildings, sunHour, sunDate, adjustedPos, editingBuilding, project?.lat, project?.lng, mapEpoch, overlayTick]);
 
   // === Project files ===
   const [projectFiles, setProjectFiles] = useState([]);
@@ -1010,62 +1028,87 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     }
   }, [projectId]);
 
-  // Interactive Google Map with dark mode
+  // Carte de la fiche: satellite Google (SAT) ou satellite Plans d'Apple (SAT2). SAT2 passe par la couche appleSat,
+  // qui reproduit l'interface de Google: tous les dessins ci-dessous servent aux deux.
   useEffect(() => {
-    if (!mapContainerRef.current || !project?.lat || !project?.lng || !window.google) return;
-    // Skip map recreation when just confirming adjusted position
+    const apple = mapEngine === 'apple';
+    if (!mapContainerRef.current || !project?.lat || !project?.lng || (!apple && !window.google)) return;
+    // Position ajustée confirmée (« Mettre à jour »): la carte reste telle quelle. Son démontage reste branché pour
+    // le prochain vrai changement (SAT <-> SAT2, autre position, fermeture de la fiche).
     if (skipMapRecreateRef.current) {
       skipMapRecreateRef.current = false;
-      return;
+      mapBuiltForRef.current = { lat: project.lat, lng: project.lng };
+      return () => {
+        if (skipMapRecreateRef.current) return;
+        const teardown = mapTeardownRef.current;
+        mapTeardownRef.current = null;
+        if (teardown) teardown();
+      };
     }
-    
-    const darkStyle = [
-      { elementType: 'geometry', stylers: [{ color: '#2d2d2d' }] },
-      { elementType: 'labels.text.stroke', stylers: [{ color: '#2d2d2d' }] },
-      { elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
-      { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#b0b0b0' }] },
-      { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
-      { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
-      { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#333333' }] },
-      { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#6b8a6b' }] },
-      { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#3a3a3a' }] },
-      { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#252525' }] },
-      { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9a9a9a' }] },
-      { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#4a4a4a' }] },
-      { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#2a2a2a' }] },
-      { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#b0b0b0' }] },
-      { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#353535' }] },
-      { featureType: 'transit.station', elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
-      { featureType: 'transit', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
-      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
-      { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4a4a4a' }] },
-      { featureType: 'water', elementType: 'labels.text.stroke', stylers: [{ color: '#1a1a1a' }] },
-    ];
+    // Chaque moteur a son propre calque dans le conteneur. La carte Google reste en vie (masquée) pendant SAT2:
+    // revenir sur SAT ne recharge pas une carte Google (chaque chargement est compté par Google).
+    const hostFor = (kind) => {
+      let h = mapContainerRef.current.querySelector(`:scope > [data-map-host="${kind}"]`);
+      if (!h) {
+        h = document.createElement('div');
+        h.dataset.mapHost = kind;
+        h.style.cssText = 'position:absolute;inset:0;';
+        mapContainerRef.current.appendChild(h);
+      }
+      return h;
+    };
+    const host = hostFor(mapEngine);
+    const otherHost = mapContainerRef.current.querySelector(`:scope > [data-map-host="${apple ? 'google' : 'apple'}"]`);
+    host.style.display = '';
+    if (otherHost) otherHost.style.display = 'none';
+    // Passage SAT <-> SAT2 sur le même projet: on reprend le cadrage de la carte précédente.
+    const engineChanged = mapEngineRef.current !== mapEngine;
+    mapEngineRef.current = mapEngine;
+    const saved = mapCameraRef.current;
+    mapCameraRef.current = null;
+    const cam = engineChanged && saved && saved.lat === project.lat && saved.lng === project.lng ? saved : null;
+    mapBuiltForRef.current = { lat: project.lat, lng: project.lng };
 
-    const map = new google.maps.Map(mapContainerRef.current, {
-      center: { lat: project.lat, lng: project.lng },
-      zoom: project.mapZoom || (isMobile ? 16 : 18),
-      mapTypeId: mapType,
-      styles: mapType === 'roadmap' ? darkStyle : [
-        { stylers: [{ saturation: 0 }] },
-        { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
-        { featureType: 'transit', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
-      ],
-      disableDefaultUI: true,
-      disableDoubleClickZoom: true,
-      zoomControl: false,
+    const mapOptions = {
+      center: cam ? cam.center : { lat: project.lat, lng: project.lng },
+      zoom: cam ? cam.zoom : (project.mapZoom || (isMobile ? 16 : 18)),
       gestureHandling: isMobile || stackMap ? 'cooperative' : 'greedy',
-      scrollwheel: false,
-      mapTypeControl: false,
-      clickableIcons: false,
-      backgroundColor: '#181b1e',
-      ...(isMobile ? { padding: { top: 0, right: 0, bottom: 100, left: 0 } } : {}),
-    });
+    };
+    let map;
+    const cachedGoogle = googleMapRef.current;
+    if (apple) {
+      map = new AppleSat.Map(host, mapOptions);
+    } else if (cachedGoogle) {
+      map = cachedGoogle;
+      map.setOptions({ gestureHandling: mapOptions.gestureHandling });
+      map.setCenter(mapOptions.center);
+      map.setZoom(mapOptions.zoom);
+    } else {
+      map = new google.maps.Map(host, {
+        ...mapOptions,
+        mapTypeId: 'hybrid',
+        styles: [
+          { stylers: [{ saturation: 0 }] },
+          { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
+          { featureType: 'transit', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
+        ],
+        disableDefaultUI: true,
+        disableDoubleClickZoom: true,
+        zoomControl: false,
+        scrollwheel: false,
+        mapTypeControl: false,
+        clickableIcons: false,
+        backgroundColor: '#181b1e',
+        ...(isMobile ? { padding: { top: 0, right: 0, bottom: 100, left: 0 } } : {}),
+      });
+      googleMapRef.current = map;
+    }
     mapInstanceRef.current = map;
+    const handles = []; // écouteurs posés ici, retirés au démontage (la carte Google, elle, peut resservir)
     
     // Reveal animation: start after tiles load
     if (!mapRevealedRef.current) {
-      google.maps.event.addListenerOnce(map, 'tilesloaded', () => {
+      handles.push(gm().event.addListenerOnce(map, 'tilesloaded', () => {
         if (mapRevealedRef.current) return;
         mapRevealedRef.current = true;
         setMapRevealed(true);
@@ -1094,10 +1137,11 @@ export const ProjectDetail = ({ projectId, onClose }) => {
           };
           requestAnimationFrame(animSlider);
         }, 200);
-      });
+      }));
     }
     // Desaturation: CSS filter on container, counter-filter on all overlay panes
-    const counterOverlay = new google.maps.OverlayView();
+    // (SAT2: la couche appleSat compense elle-même sur ses calques)
+    const counterOverlay = new (gm().OverlayView)();
     counterOverlay.onAdd = function() {
       const applyCounter = () => {
         const panes = this.getPanes();
@@ -1112,23 +1156,23 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     };
     counterOverlay.draw = function() {};
     counterOverlay.onRemove = function() { if (this._interval) clearInterval(this._interval); };
-    counterOverlay.setMap(map);
+    if (!apple) counterOverlay.setMap(map);
     // Zoom uniquement via les boutons + et - de l'interface : plus aucun zoom à la molette
     // ni au trackpad (geste trop souvent déclenché par erreur). En ne captant plus l'évènement
     // wheel, le survol de la carte fait défiler la page comme partout ailleurs dans le détail.
     // Le zoom natif de la carte reste neutralisé par scrollwheel: false; le drag pour déplacer
     // la carte demeure actif.
     // No panBy: center pin is at visual center
-    map.addListener('idle', () => { const z = map.getZoom(); if (z !== mapZoom) setMapZoom(z); });
+    handles.push(map.addListener('idle', () => setMapZoom(map.getZoom()))); // pas de comparaison avec mapZoom: sa valeur ici date de la création de la carte
 
     // Keep center anchored during scroll-zoom (not drag)
     let isDragging = false;
-    map.addListener('dragstart', () => { isDragging = true; });
-    map.addListener('dragend', () => { isDragging = false; });
-    map.addListener('zoom_changed', () => {
+    handles.push(map.addListener('dragstart', () => { isDragging = true; }));
+    handles.push(map.addListener('dragend', () => { isDragging = false; }));
+    handles.push(map.addListener('zoom_changed', () => {
       if (!isDragging) {
-        const anchor = effectiveCenterRef.current || { lat: project.lat, lng: project.lng };
-        map.setCenter(anchor);
+        const anchor = effectiveCenterRef.current || projectPosRef.current;
+        if (anchor) map.setCenter(anchor);
       }
       // Immediately reposition sun dot to avoid drift during zoom animation
       if (sunPosMarkerRef.current && sunBearingRef.current) {
@@ -1143,10 +1187,10 @@ export const ProjectDetail = ({ projectId, onClose }) => {
           sunPosMarkerRef.current.draw();
         }
       }
-    });
+    }));
 
     // Night overlay: inserted into mapPane so it's BELOW polylines
-    class NightOverlay extends google.maps.OverlayView {
+    class NightOverlay extends gm().OverlayView {
       constructor() { super(); this.div = null; }
       onAdd() {
         this.div = document.createElement('div');
@@ -1161,7 +1205,9 @@ export const ProjectDetail = ({ projectId, onClose }) => {
         this.div.style.transition = 'opacity 0.5s ease';
         this.getPanes().mapPane.appendChild(this.div);
       }
-      draw() {}
+      // Premier dessin: la projection existe (Google la donne plus tard que la création). Les dessins qui en
+      // dépendent (soleil, heures, nuit, ombres des formes) se refont alors une fois.
+      draw() { if (!this._ready) { this._ready = true; setOverlayTick(t => t + 1); } }
       setNight(opacity) { if (this.div) this.div.style.opacity = String(opacity); }
       onRemove() { if (this.div) { this.div.parentNode.removeChild(this.div); this.div = null; } }
     }
@@ -1175,7 +1221,9 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     // Detect map pan → update adjustedPos (exploratoire, ne modifie PAS le projet)
     const panListener = map.addListener('idle', () => {
       const c = map.getCenter();
-      const dist = Math.abs(c.lat() - project.lat) + Math.abs(c.lng() - project.lng);
+      const pos0 = projectPosRef.current;
+      if (!pos0) return;
+      const dist = Math.abs(c.lat() - pos0.lat) + Math.abs(c.lng() - pos0.lng);
       if (dist > 0.00005) {
         const pos = { lat: c.lat(), lng: c.lng() };
         setAdjustedPos(pos);
@@ -1186,14 +1234,15 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       }
     });
 
+    setMapEpoch(e => e + 1);
+    setActiveEngine(mapEngine);
+
     // Sun lines are drawn by the sunDate/adjustedPos effect.
     // No drag/zoom listener needed: yellow line, glow, current time line
     // and sun/moon dot are all drawn on the flareCanvas / as fixed-viewport
     // divs, so they remain visually pinned during map movement.
 
-    return () => {
-      // When skipping (drag-reposition), don't clean up anything: everything persists
-      if (skipMapRecreateRef.current) return;
+    const teardown = () => {
       sunLinesRef.current.forEach(l => l.setMap(null));
       sunLinesRef.current = [];
       if (sunPosLineRef.current) { sunPosLineRef.current.setMap(null); sunPosLineRef.current = null; }
@@ -1205,39 +1254,60 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       shadowPolygonsRef.current.forEach(p => p.setMap(null)); shadowPolygonsRef.current = [];
       wallPolygonsRef.current.forEach(p => p.setMap(null)); wallPolygonsRef.current = [];
       roofPolygonsRef.current.forEach(p => p.setMap(null)); roofPolygonsRef.current = [];
-      google.maps.event.removeListener(panListener);
+      gm().event.removeListener(panListener);
+      handles.forEach((h) => gm().event.removeListener(h));
+      if (shadowOverlayRef.current) { shadowOverlayRef.current.setMap(null); shadowOverlayRef.current = null; }
+      // Cadrage gardé pour la carte suivante (passage SAT <-> SAT2), étiqueté avec la position pour laquelle cette
+      // carte avait été construite: après un changement d'adresse, la nouvelle carte s'ouvre sur la nouvelle adresse.
+      const c = map.getCenter();
+      const built = mapBuiltForRef.current;
+      mapCameraRef.current = c && built ? { center: { lat: c.lat(), lng: c.lng() }, zoom: map.getZoom(), lat: built.lat, lng: built.lng } : null;
+      if (apple) map.destroy(); // libère MapKit, ses écouteurs et ses calques
+      else counterOverlay.setMap(null); // arrête sa minuterie; la carte Google elle-même reste pour un retour sur SAT
+      if (mapInstanceRef.current === map) mapInstanceRef.current = null;
     };
-  }, [project?.lat, project?.lng]);
+    mapTeardownRef.current = teardown;
+    return () => {
+      // When skipping (drag-reposition), don't clean up anything: everything persists
+      if (skipMapRecreateRef.current) return;
+      mapTeardownRef.current = null;
+      teardown();
+    };
+  }, [project?.lat, project?.lng, mapEngine]);
 
-  // Switch map type without recreating: preserves overlays & zoom
+  // Première ouverture de SAT2: MapKit JS se charge; la carte SAT reste en place et utilisable d'ici là.
+  useEffect(() => {
+    if (mapType !== 'sat2' || mapKitReady || !AppleSat.appleSatAvailable()) return;
+    let alive = true;
+    AppleSat.loadMapKit()
+      .then(() => { if (alive) setMapKitReady(true); })
+      .catch((e) => { console.warn('[SAT2]', e.message); if (alive) setMapType('hybrid'); });
+    return () => { alive = false; };
+  }, [mapType, mapKitReady]);
+
+  // SAT2 refusé par Plans (jeton, domaine, quota): retour sur SAT.
+  useEffect(() => AppleSat.onAppleMapsError(() => setMapType('hybrid')), []);
+
+  // SAT2: noms de rues dessinés par nous (le satellite d'Apple n'en a pas), d'après les rues de la vue 3D.
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map) return;
-    map.setMapTypeId(mapType);
-    const darkStyle = [
-      { elementType: 'geometry', stylers: [{ color: '#2c2c2c' }] },
-      { elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-      { elementType: 'labels.text.stroke', stylers: [{ color: '#212121' }] },
-      { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#3c3c3c' }] },
-      { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
-      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
-      { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4a4a4a' }] },
-      { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-    ];
-    const satStyle = [
-      { stylers: [{ saturation: 0 }] },
-      { featureType: 'poi', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
-      { featureType: 'transit', elementType: 'labels.icon', stylers: [{ saturation: -100 }, { lightness: -20 }] },
-    ];
-    map.setOptions({ styles: mapType === 'roadmap' ? darkStyle : satStyle });
-  }, [mapType]);
+    if (mapEngine !== 'apple' || !(map instanceof AppleSat.Map) || !project?.lat || !project?.lng) return;
+    let labels = null;
+    let cancelled = false;
+    loadScene(project.lat, project.lng).then((scene) => {
+      if (cancelled || mapInstanceRef.current !== map) return;
+      labels = new StreetLabels(scene);
+      labels.setMap(map);
+    }).catch((e) => console.warn('[SAT2] noms de rues:', e.message));
+    return () => { cancelled = true; if (labels) { try { labels.setMap(null); } catch (e) { /* carte déjà démontée */ } } };
+  }, [mapEpoch, mapEngine, project?.lat, project?.lng]);
 
   // Rotation de l'iPad: carte au-dessus des champs (dans le défilement: un doigt fait défiler la page, deux
   // doigts déplacent la carte) ou carte à droite (un doigt la déplace).
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (map && !isMobile) map.setOptions({ gestureHandling: stackMap ? 'cooperative' : 'greedy' });
-  }, [stackMap, isMobile]);
+  }, [stackMap, isMobile, mapEpoch]);
 
   // Redraw sun lines when sunDate or adjustedPos changes
   useEffect(() => {
@@ -1273,7 +1343,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       const startLng = eLng + offsetDeg * Math.sin(bRad) / Math.cos(eLat * Math.PI / 180);
       const lat2 = eLat + R * Math.cos(bRad);
       const lng2 = eLng + R * Math.sin(bRad) / Math.cos(eLat * Math.PI / 180);
-      const line = new google.maps.Polyline({
+      const line = new (gm().Polyline)({
         path: [{ lat: startLat, lng: startLng }, { lat: lat2, lng: lng2 }],
         strokeColor: color, strokeOpacity: opacity, strokeWeight: weight, map
       });
@@ -1292,7 +1362,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     if (altDegPie > 0) {
       // Shadow wedge drawn on canvas overlay for smooth gradient
     }
-  }, [sunDate, project?.lat, project?.lng, mapZoom, adjustedPos, showSunLines, drawingMode, sunHour]);
+  }, [sunDate, project?.lat, project?.lng, mapZoom, adjustedPos, showSunLines, drawingMode, sunHour, mapEpoch]);
 
   // Hide POI labels in drawing mode or when sun lines hidden
   const savedMapStylesRef = React.useRef(null);
@@ -1313,7 +1383,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
         savedMapStylesRef.current = null;
       }
     }
-  }, [drawingMode, showSunLines]);
+  }, [drawingMode, showSunLines, mapEpoch]);
 
   // Escape key closes fullscreen map
   useEffect(() => {
@@ -1325,16 +1395,20 @@ export const ProjectDetail = ({ projectId, onClose }) => {
 
   // Resize map when fullscreen toggled
   useEffect(() => {
+    let t1, t2;
     if (mapInstanceRef.current && project?.lat && project?.lng) {
+      // La carte peut avoir changé (SAT <-> SAT2) entre-temps: on relit la carte en place au moment voulu.
       const doResize = () => {
-        google.maps.event.trigger(mapInstanceRef.current, 'resize');
-        mapInstanceRef.current.setCenter({ lat: project.lat, lng: project.lng });
+        const m = mapInstanceRef.current;
+        if (!m) return;
+        gm().event.trigger(m, 'resize');
+        m.setCenter({ lat: project.lat, lng: project.lng });
       };
-      setTimeout(doResize, 50);
-      setTimeout(doResize, 300);
+      t1 = setTimeout(doResize, 50);
+      t2 = setTimeout(doResize, 300);
     }
     document.body.style.overflow = showMapFull ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
+    return () => { clearTimeout(t1); clearTimeout(t2); document.body.style.overflow = ''; };
   }, [showMapFull]);
 
   // Fetch terrain elevation profile when position changes
@@ -1401,7 +1475,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     const overlay = nightOverlayRef.current;
     if (overlay && overlay.getProjection() && flareCanvasRef.current) {
       const proj = overlay.getProjection();
-      const centerPx = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat, eLng));
+      const centerPx = proj.fromLatLngToContainerPixel(new (gm().LatLng)(eLat, eLng));
       if (centerPx) {
         const container = mapContainerRef.current;
         const w = container ? container.offsetWidth : 400;
@@ -1424,7 +1498,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
           const lngS = Math.abs(b.getNorthEast().lng() - b.getSouthWest().lng());
           return Math.min(latS, lngS) * 0.38 * (isMobile ? 0.74 : 1);
         })();
-        const endPtR = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat + rDeg, eLng));
+        const endPtR = proj.fromLatLngToContainerPixel(new (gm().LatLng)(eLat + rDeg, eLng));
         const wLinePx = Math.abs(endPtR.y - centerPx.y);
         const circOff = 17;
 
@@ -1449,8 +1523,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
             const lngS = Math.abs(b.getNorthEast().lng() - b.getSouthWest().lng());
             return Math.min(latS, lngS) * 0.38 * (isMobile ? 0.74 : 1);
           })();
-          const endPtH = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat + rDegH, eLng));
-          const centerPtH = proj.fromLatLngToContainerPixel(new google.maps.LatLng(eLat, eLng));
+          const endPtH = proj.fromLatLngToContainerPixel(new (gm().LatLng)(eLat + rDegH, eLng));
+          const centerPtH = proj.fromLatLngToContainerPixel(new (gm().LatLng)(eLat, eLng));
           const lineLenPx = Math.abs(endPtH.y - centerPtH.y);
 
           const drawLineHalo = (lineAngle, cr, cg, cb) => {
@@ -1729,12 +1803,12 @@ export const ProjectDetail = ({ projectId, onClose }) => {
         drawLensFlare(sunPx.x, sunPx.y, w, h, sunPos.altitude);
       }
     }
-  }, [sunHour, project?.lat, project?.lng, mapType, mapZoom, sunDate, adjustedPos, showSunLines, drawingMode]);
+  }, [sunHour, project?.lat, project?.lng, mapType, mapZoom, sunDate, adjustedPos, showSunLines, drawingMode, mapEpoch, overlayTick]);
 
   // Night overlay toggle
   useEffect(() => {
     if (nightOverlayRef.current) nightOverlayRef.current.setNight(nightOpacity);
-  }, [nightOpacity]);
+  }, [nightOpacity, mapEpoch, overlayTick]);
 
   // Current time white line is now drawn on the flareCanvas in the
   // sun-position-line effect above (fixed to viewport, no Google Maps Polyline).
@@ -2536,7 +2610,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                   );
                 })()}
                 {/* Map controls - stacked vertically with subtle border */}
-                <div ref={mapContainerRef} className="detail-map-keep" style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#181b1e', filter: 'saturate(0.50)' }}/>
+                <div ref={mapContainerRef} className="detail-map-keep" style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#181b1e', filter: activeEngine === 'apple' ? 'none' : 'saturate(0.50)' }}/>
                 {/* Vue 3D par-dessus la carte (la carte reste montée, avec son état): même curseur, même météo */}
                 <Scene3D visible={view3d} lat={project?.lat} lng={project?.lng} buildings={buildings} orientation={project?.orientation} timeMs={sceneTimeMs} weatherRow={sceneWeatherRow} zoomRef={scene3dZoom}/>
                 <canvas ref={flareCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}/>
@@ -2655,7 +2729,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                       padding: '4px 10px', cursor: 'pointer'
                     }}>
                       <span className="font-bebas-bold" style={{ fontSize: '12px', color: 'rgba(255,255,255,0.9)', letterSpacing: '0.04em' }}>
-                        {view3d ? '3D' : mapType === 'hybrid' ? 'SAT' : 'MAP'}
+                        {view3d ? '3D' : mapType === 'sat2' ? 'SAT2' : 'SAT'}
                       </span>
                     </div>}
                     {/* Expanded menu */}
@@ -2667,8 +2741,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                       padding: '6px 2px', gap: '0px', width: '38px', boxSizing: 'border-box'
                     }}>
                       <button onClick={() => { setMapType('hybrid'); setView3d(false); setMapMenuOpen(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '13px', padding: '4px 8px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'hybrid' && !view3d ? '0 0 10px rgba(255,255,255,0.7)' : 'none' }}>SAT</button>
+                      {AppleSat.appleSatAvailable() && <button onClick={() => { setMapType('sat2'); setView3d(false); setMapMenuOpen(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '13px', padding: '4px 8px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'sat2' && !view3d ? '0 0 10px rgba(255,255,255,0.7)' : 'none' }}>SAT2</button>}
                       <button onClick={() => { setView3d(true); setMapMenuOpen(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '13px', padding: '4px 8px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: view3d ? '0 0 10px rgba(255,255,255,0.7)' : 'none' }}>3D</button>
-                      <button onClick={() => { setMapType('roadmap'); setView3d(false); setMapMenuOpen(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '13px', padding: '4px 8px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'roadmap' && !view3d ? '0 0 10px rgba(255,255,255,0.7)' : 'none' }}>MAP</button>
                       <button onClick={() => { setView3d(false); if (drawingMode) { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(false); } else { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(true); setEditingBuilding(null); } setMapMenuOpen(false); }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '5px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: drawingMode ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none' }}>
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                       </button>
@@ -2699,8 +2773,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                     width: '44px', boxSizing: 'border-box'
                   }}>
                     <button onClick={() => { setMapType('hybrid'); setView3d(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '17px', padding: '6px 12px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'hybrid' && !view3d ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none', transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>SAT</button>
+                    {AppleSat.appleSatAvailable() && <button onClick={() => { setMapType('sat2'); setView3d(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '17px', padding: '6px 12px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'sat2' && !view3d ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none', transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>SAT2</button>}
                     <button onClick={() => setView3d(true)} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '17px', padding: '6px 12px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: view3d ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none', transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>3D</button>
-                    <button onClick={() => { setMapType('roadmap'); setView3d(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '17px', padding: '6px 12px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'roadmap' && !view3d ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none', transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>MAP</button>
                     <button onClick={() => { setView3d(false); if (drawingMode) { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(false); } else { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(true); setEditingBuilding(null); } }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '8px', marginTop: '2px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: drawingMode ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none', transition: 'filter 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                     </button>

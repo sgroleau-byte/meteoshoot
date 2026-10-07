@@ -469,3 +469,11 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* SAT2 (satellite Plans d'Apple): même désaturation que SAT, appliquée aux images seulement. Le logo Plans et le
+   lien « Mentions légales » d'Apple n'en reçoivent pas (licence d'Apple: ni modifiés ni masqués). */
+.ms-apple-sat canvas { filter: saturate(0.5); }
+/* Logo Plans et « Mentions légales » au-dessus du vignettage, des teintes de nuit et de nos dessins (licence
+   d'Apple: ne pas les masquer). Leur conteneur, transparent, passe dans le contexte d'empilement de la carte. */
+.ms-apple-sat .mk-map-view { z-index: auto !important; }
+.ms-apple-sat .mk-controls-container { z-index: 5 !important; } /* au-dessus des teintes (3, 4), sous la vue 3D (6) */

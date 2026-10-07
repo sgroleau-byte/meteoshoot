@@ -1,0 +1,8 @@
+{
+  "web": {
+    "www.meteoshoot.com": "COLLER_ICI_LE_JETON_DU_SITE",
+    "meteoshoot-dev.vercel.app": "COLLER_ICI_LE_JETON_DU_SITE_DEV"
+  },
+  "local": "COLLER_ICI_UN_JETON_SANS_RESTRICTION_DE_7_JOURS_(tests_locaux_seulement)",
+  "native": ""
+}

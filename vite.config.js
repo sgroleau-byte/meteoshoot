@@ -28,13 +28,40 @@ function readMapsKey(target) {
   );
 }
 
+// Jetons Plans d'Apple (MapKit JS) pour le bouton SAT2. Apple fait un jeton par site (restriction par domaine): on
+// injecte donc une table { nom d'hôte: jeton } et la page prend celui de son site. Source: variable
+// APPLE_MAPS_TOKENS_WEB ou APPLE_MAPS_TOKENS_NATIVE (texte JSON de cette table), sinon le fichier local
+// apple-maps-token.json, ignoré par git (modèle: apple-maps-token.example.json). Le champ « local » (jeton sans
+// restriction, 7 jours) ne sert qu'au serveur de développement et n'entre jamais dans une compilation. Sans jeton,
+// tout passe: SAT2 est simplement masqué.
+function readAppleMapsTokens(target, command) {
+  const envName = target === 'native' ? 'APPLE_MAPS_TOKENS_NATIVE' : 'APPLE_MAPS_TOKENS_WEB';
+  const usable = (t) => typeof t === 'string' && t && !t.startsWith('COLLER_ICI');
+  const table = {};
+  let file = {};
+  const path = resolve(__dirname, 'apple-maps-token.json');
+  if (existsSync(path)) file = JSON.parse(readFileSync(path, 'utf8'));
+  const source = process.env[envName] ? JSON.parse(process.env[envName]) : file[target];
+  if (source && typeof source === 'object') {
+    for (const [host, t] of Object.entries(source)) if (usable(t)) table[host] = t;
+  } else if (usable(source)) {
+    table['*'] = source;
+  }
+  if (command === 'serve' && usable(file.local)) table['*'] = file.local;
+  return table;
+}
+
 // Compilation de production de MeteoShoot (React précompilé, Tailwind compilé, dépendances embarquées).
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [
     react(),
     { name: 'meteoshoot-google-maps-key', transformIndexHtml: (html) => html.replace(/__GOOGLE_MAPS_KEY__/g, mapsKey) },
   ],
-  define: { __GOOGLE_MAPS_KEY__: JSON.stringify(mapsKey), __MS_TARGET__: JSON.stringify(target) },
+  define: {
+    __GOOGLE_MAPS_KEY__: JSON.stringify(mapsKey),
+    __APPLE_MAPS_TOKENS__: JSON.stringify(readAppleMapsTokens(target, command)),
+    __MS_TARGET__: JSON.stringify(target),
+  },
   // /api -> fonctions serveur jouées en local par scripts/scene3d-dev.mjs (npm run api), ou un déploiement Vercel
   // d'aperçu si MS_API_PROXY le donne (l'analyse des images a besoin de la clé Claude, qui ne vit que sur Vercel).
   server: { port: 5173, strictPort: true, proxy: { '/api': { target: apiProxy, changeOrigin: true } } },
@@ -54,4 +81,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
