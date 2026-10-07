@@ -184,6 +184,27 @@ export const fetchSmoke = async (lat, lng) => {
   return Promise.race([inner, new Promise((res) => setTimeout(() => res({}), 7000))]).catch(() => ({}));
 };
 
+// Brouillard: variables de GFS en plus (visibilité en mètres, humidité au sol et à 1000, 975, 950, 925, 900 et 850 hPa,
+// altitude de ces niveaux en mètres au-dessus de la mer, soit jusqu'à environ 1500 m).
+const FOG_LEVELS = [1000, 975, 950, 925, 900, 850];
+const FOG_KEYS_GFS = ['visibility', 'relative_humidity_2m', ...FOG_LEVELS.map(p => `relative_humidity_${p}hPa`), ...FOG_LEVELS.map(p => `geopotential_height_${p}hPa`)];
+const FOG_RH = 95;
+// Haut d'une nappe de brouillard (mètres au-dessus de la mer): air saturé (humidité de 95 % et plus) depuis le sol
+// jusqu'au premier niveau qui ne l'est plus, l'altitude interpolée entre les deux. Nul si l'air n'est pas saturé au sol.
+// Niveaux espacés d'environ 200 m: estimation grossière, à lire comme un ordre de grandeur. Saturé jusqu'au dernier
+// niveau (ou aucun niveau au-dessus du sol, site en altitude): sommet inconnu, nul (le moteur met une nappe épaisse).
+export const fogTopFrom = (h, i, elev) => {
+  const rh0 = h.relative_humidity_2m?.[i]; if (rh0 == null || rh0 < FOG_RH) return null;
+  let zPrev = elev, rPrev = rh0;
+  for (const p of FOG_LEVELS) {
+    const z = h[`geopotential_height_${p}hPa`]?.[i], r = h[`relative_humidity_${p}hPa`]?.[i];
+    if (z == null || r == null || z <= elev + 5) continue;
+    if (r < FOG_RH) return Math.round(Math.max(elev + 10, zPrev + (z - zPrev) * (rPrev - FOG_RH) / Math.max(1e-3, rPrev - r)));
+    zPrev = z; rPrev = r;
+  }
+  return null;
+};
+
 export const fetchWeather = async (lat, lng) => {
   // Hit mémoire frais (< 30 min): on resserre sans toucher au réseau. Ce sont des données
   // d'un succès récent, donc fraîches (fromCache:false, pas le badge "stale"). Court-circuit
@@ -200,9 +221,12 @@ export const fetchWeather = async (lat, lng) => {
   // garde exactement la meme forme qu'une reponse Open-Meteo unique: ni l'affichage ni le
   // parsing plus bas ne changent.
   const qs = `latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode,windspeed_10m,windgusts_10m,cloudcover,precipitation,precipitation_probability,direct_radiation,diffuse_radiation,cloudcover_low,cloudcover_mid,cloudcover_high&daily=weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=America/Toronto&forecast_days=10`;
+  // Brouillard (vue 3D): seul GFS (avec HRRR, 3 km, sur le sud du Québec) donne la visibilité ici; ICON, GEM et ECMWF
+  // ne la donnent pas. L'humidité au sol et aux niveaux de pression bas (avec leur altitude) donne le haut de la nappe.
+  const qsGfs = qs.replace('cloudcover_high&daily=', `cloudcover_high,${FOG_KEYS_GFS.join(',')}&daily=`);
   const [iconRes, gfsRes, smokeMap] = await Promise.all([
     fetchOpenMeteoModel('dwd-icon', qs),
-    fetchOpenMeteoModel('gfs', qs),
+    fetchOpenMeteoModel('gfs', qsGfs),
     fetchSmoke(lat, lng),   // ne rejette jamais: {} si pas de fumee / hors saison / panne
   ]);
   const icon = iconRes.data || null;
@@ -266,6 +290,18 @@ export const fetchWeather = async (lat, lng) => {
   HOURLY_KEYS.forEach((k) => { data.hourly[k] = []; });
   DAILY_KEYS.forEach((k) => { data.daily[k] = []; });
   data.daily.model = []; // 'icon' ou 'gfs' par jour: l'indice d'opportunite ne sort que sur ICON.
+
+  // Visibilité et épaisseur de la nappe au-dessus du sol (le haut moins l'altitude du lieu): toujours de GFS, quel que
+  // soit le modèle du jour. Une épaisseur plutôt qu'une altitude: la 3D la pose sur son propre sol (relief LiDAR, ou sol
+  // plat en attendant), qui diffère de l'altitude du modèle de quelques mètres à plusieurs dizaines.
+  data.hourly.visibility = []; data.hourly.fogThick = [];
+  const elev = gfsOk ? (gfs.elevation ?? 0) : 0;
+  hourlyTimes.forEach((t) => {
+    const gi = gfsOk ? gfsHourIdx[t] : null;
+    data.hourly.visibility.push(gi != null ? (gfs.hourly.visibility?.[gi] ?? null) : null);
+    const top = gi != null ? fogTopFrom(gfs.hourly, gi, elev) : null;
+    data.hourly.fogThick.push(top != null ? Math.max(10, Math.round(top - elev)) : null);
+  });
 
   hourlyTimes.forEach((t) => {
     const useIcon = iconOk && dateOf(t) <= lastIconDate && (t in iconHourIdx);
@@ -360,7 +396,7 @@ export const fetchWeather = async (lat, lng) => {
   };
 
   const formatted = {
-    hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), gust: data.hourly.windgusts_10m?.[i] != null ? Math.round(data.hourly.windgusts_10m[i]) : null, cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, precipProb: data.hourly.precipitation_probability?.[i] ?? null, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), cloudLow: data.hourly.cloudcover_low?.[i] ?? null, cloudMid: data.hourly.cloudcover_mid?.[i] ?? null, cloudHigh: data.hourly.cloudcover_high?.[i] ?? null, smoke: smokeMap[dateOf(t)] || 0, icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]) })),
+    hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), gust: data.hourly.windgusts_10m?.[i] != null ? Math.round(data.hourly.windgusts_10m[i]) : null, cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, precipProb: data.hourly.precipitation_probability?.[i] ?? null, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), cloudLow: data.hourly.cloudcover_low?.[i] ?? null, cloudMid: data.hourly.cloudcover_mid?.[i] ?? null, cloudHigh: data.hourly.cloudcover_high?.[i] ?? null, visibility: data.hourly.visibility?.[i] ?? null, fogThick: data.hourly.fogThick?.[i] ?? null, smoke: smokeMap[dateOf(t)] || 0, icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]) })),
     daily: data.daily.time.map((t,i) => {
       const stats = getDailyStats(t);
       // Use hourly-derived icon when available, fallback to daily weathercode
