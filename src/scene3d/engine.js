@@ -155,7 +155,45 @@ const BLUR_FRAG = `uniform sampler2D tAO,tDepth;uniform vec2 uDir,uNF;varying ve
 float lin(float z){return (2.0*uNF.x*uNF.y)/(uNF.y+uNF.x-(2.0*z-1.0)*(uNF.y-uNF.x));}
 void main(){float d0=lin(texture2D(tDepth,vUv).x);float s=0.0,w=0.0;for(int i=-3;i<=3;i++){vec2 uv=vUv+uDir*float(i);float d=lin(texture2D(tDepth,uv).x);float k=exp(-float(i*i)/5.0)*(abs(d-d0)<0.06*d0?1.0:0.0);s+=texture2D(tAO,uv).r*k;w+=k;}gl_FragColor=vec4(vec3(s/max(w,1e-4)),1.0);}`;
 const BRIGHT_FRAG = `uniform sampler2D tCol;uniform float uTh;varying vec2 vUv;void main(){vec3 c=texture2D(tCol,vUv).rgb;float l=dot(c,vec3(0.2126,0.7152,0.0722));gl_FragColor=vec4(c*smoothstep(uTh,uTh+0.4,l),1.0);}`;
+// Flou vertical du reflet des flaques: moyenne des seuls voisins mouillés (poids dans l'alpha), remise au poids du pixel
+// lui-même: le reflet ne déborde pas sur le gazon ni sur les murs voisins.
+const RBLUR_FRAG = `uniform sampler2D tSrc;uniform vec2 uDir;varying vec2 vUv;void main(){vec4 c0=texture2D(tSrc,vUv);if(c0.a<=0.0){gl_FragColor=vec4(0.0);return;}float w[5];w[0]=0.227;w[1]=0.195;w[2]=0.122;w[3]=0.054;w[4]=0.016;vec4 s=c0*w[0];for(int i=1;i<5;i++){s+=texture2D(tSrc,vUv+uDir*float(i))*w[i];s+=texture2D(tSrc,vUv-uDir*float(i))*w[i];}gl_FragColor=vec4(s.rgb/max(s.a,1e-4)*c0.a,c0.a);}`;
 const GBLUR_FRAG = `uniform sampler2D tSrc;uniform vec2 uDir;varying vec2 vUv;void main(){float w[5];w[0]=0.227;w[1]=0.195;w[2]=0.122;w[3]=0.054;w[4]=0.016;vec3 s=texture2D(tSrc,vUv).rgb*w[0];for(int i=1;i<5;i++){s+=texture2D(tSrc,vUv+uDir*float(i)).rgb*w[i];s+=texture2D(tSrc,vUv-uDir*float(i)).rgb*w[i];}gl_FragColor=vec4(s,1.0);}`;
+// Reflet des flaques (octobre 2026, seulement après beaucoup de pluie: voir setWeather), à demi-résolution: pour chaque pixel tourné vers le ciel et marqué réfléchissant
+// par son matériau (alpha de l'image de la scène: asphalte, trottoir, toit plat), un rayon part en miroir de la vue et avance dans la
+// profondeur de la scène; là où il touche un objet (façade, arbre, fenêtre allumée), on garde sa couleur, affaiblie par
+// le facteur de Fresnel (fort en vue rasante); un rayon qui ne touche rien, qui sort du cadre ou qui va loin reflète le
+// ciel (carte cubique déjà rendue pour l'éclairage), sinon les bâtiments reflétés sortiraient plus clairs que le ciel.
+// Sur une rue en pente, si le miroir vertical plongerait sous le sol, on prend la normale de la surface; un impact sur
+// un sol (surface tournée vers le ciel) à peine au-dessus du sol de départ n'est que le même sol plus loin (bosse du
+// relief): on garde le ciel. Une façade touchée est toujours gardée, même loin. L'eau forme des
+// flaques par plaques (bruit dans le plan du sol, en mètres), de 30 % de la surface à 75 % sous très forte pluie.
+// Sortie prémultipliée (couleur fois poids, poids). Seulement quand le sol est mouillé, et seulement aux images complètes.
+// Le départ de chaque rayon est décalé d'une fraction de pas, au hasard par pixel (un motif régulier laisserait des bandes).
+const REFL_FRAG = `uniform sampler2D tCol,tDepth;uniform samplerCube tSky;uniform mat4 uProj,uProjInv;uniform mat3 uV2W;uniform vec3 uUp,uCamW;uniform vec2 uTx;uniform float uPud;varying vec2 vUv;
+float hh(vec2 i){return fract(sin(dot(i,vec2(127.1,311.7)))*43758.5453);}
+float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(hh(i),hh(i+vec2(1.0,0.0)),f.x),mix(hh(i+vec2(0.0,1.0)),hh(i+vec2(1.0,1.0)),f.x),f.y);}
+vec3 vp(vec2 uv){float z=texture2D(tDepth,uv).x;vec4 c=uProjInv*vec4(uv*2.0-1.0,z*2.0-1.0,1.0);return c.xyz/c.w;}
+vec2 sp(vec3 q){vec4 c=uProj*vec4(q,1.0);return c.xy/c.w*0.5+0.5;}
+vec3 nrm(vec2 uv){vec3 c=vp(uv),a=vp(uv+vec2(uTx.x,0.0)),b=vp(uv-vec2(uTx.x,0.0)),e=vp(uv+vec2(0.0,uTx.y)),f=vp(uv-vec2(0.0,uTx.y));vec3 dx=length(a-c)<length(c-b)?a-c:c-b,dy=length(e-c)<length(c-f)?e-c:c-f;vec3 m=normalize(cross(dx,dy));return dot(m,c)>0.0?-m:m;}
+void main(){gl_FragColor=vec4(0.0);float z0=texture2D(tDepth,vUv).x;if(z0>=0.99999)return;
+vec3 P=vp(vUv),Px1=vp(vUv+vec2(uTx.x,0.0)),Px2=vp(vUv-vec2(uTx.x,0.0)),Py1=vp(vUv+vec2(0.0,uTx.y)),Py2=vp(vUv-vec2(0.0,uTx.y));
+vec3 dx=length(Px1-P)<length(P-Px2)?Px1-P:P-Px2;vec3 dy=length(Py1-P)<length(P-Py2)?Py1-P:P-Py2;vec3 n=normalize(cross(dx,dy));if(dot(n,P)>0.0)n=-n;
+float upW=smoothstep(0.8,0.92,dot(n,uUp));if(upW<=0.0)return;
+float paved=clamp(texture2D(tCol,vUv).a,0.0,1.0)*upW;if(paved<=0.0)return;
+vec2 xz=(uV2W*P+uCamW).xz;float nz=0.65*vn(xz/7.0)+0.35*vn(xz/2.0),cov=mix(0.3,0.75,uPud);paved*=smoothstep(1.0-cov,1.12-cov,nz);if(paved<=0.0)return;
+vec3 V=normalize(P),Rd=reflect(V,uUp);if(dot(Rd,n)<=0.0)Rd=reflect(V,n);
+float fres=0.04+0.96*pow(1.0-clamp(dot(-V,uUp),0.0,1.0),5.0),w=fres*paved;
+vec3 sky=textureCube(tSky,uV2W*Rd).rgb;gl_FragColor=vec4(sky*w,w);
+float st=0.15-P.z*0.012;vec3 Q=P+n*(0.01-0.001*P.z)+Rd*st*hh(gl_FragCoord.xy),Qp=Q;bool hit=false;
+for(int i=0;i<28;i++){Qp=Q;Q+=Rd*st;st*=1.12;vec2 uv=sp(Q);if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0)break;
+float d=vp(uv).z-Q.z;if(d>0.0&&d<max(1.5,st*1.5)){hit=true;break;}}
+if(!hit)return;
+for(int i=0;i<5;i++){vec3 m=(Qp+Q)*0.5;if(vp(sp(m)).z-m.z>0.0)Q=m;else Qp=m;}
+vec2 h=sp(Q);if(texture2D(tDepth,h).x>=0.99999)return;
+if(dot(nrm(h),uUp)>0.7&&dot(Q-P,n)<0.05*length(Q-P)+0.05)return;
+float k=smoothstep(0.0,0.1,min(min(h.x,1.0-h.x),min(h.y,1.0-h.y)))*smoothstep(80.0,20.0,length(Q-P));
+gl_FragColor=vec4(mix(sky,texture2D(tCol,h).rgb,k)*w,w);}`;
 // Composition: recoins, lueur des fenêtres, flare du soleil bas, tonalité (ACES) et gamma, avec un léger bruit contre les bandes.
 // Flare « photo de drone » quand le soleil est bas: halo serré (presque blanc), lueur moyenne et voile large (couleur du
 // soleil) qui relève les noirs de toute l'image, étoile de 16 branches quand le disque est visible. La visibilité du disque
@@ -165,12 +203,33 @@ const GBLUR_FRAG = `uniform sampler2D tSrc;uniform vec2 uDir;varying vec2 vUv;vo
 // Bleu du ciel désaturé à l'heure bleue et la nuit (réglage Photoshop de Stéphane, Teinte/Saturation: teinte -3, saturation
 // -24): appliqué sur l'image finale, au ciel et au lointain pris dans le brouillard (part du brouillard lue dans la
 // profondeur), aux tons bleus seulement (lueur du couchant, fenêtres et lampadaires intacts); uDs = 0 le jour.
-const COMP_FRAG = `uniform sampler2D tCol,tAO,tBloom,tDepth;uniform float uExp,uAO,uBloom,uAspect,uFlare,uRays,uVeilW,uVis,uDs;uniform vec2 uSunUV,uFog,uNF;uniform vec3 uSunC;varying vec2 vUv;
+// Pluie (octobre 2026): traînées de gouttes dessinées sur l'image finale, en cinq nappes de 2,5 à 40 m de la caméra; une
+// nappe est cachée là où un objet plus proche la masque (profondeur). Longueur, largeur et vitesse à l'écran suivent la
+// distance (chute d'environ 9 m/s, pose d'environ 1/50 s); uRain règle le nombre de gouttes, uRainCol leur teinte (un peu
+// plus claire que l'horizon). Seule cette passe est refaite à chaque image quand il pleut et que rien d'autre ne bouge.
+// uTime boucle sur 60 s: chaque nappe avance alors d'exactement 1000 rangées de cellules (vitesse 9 m/s, cellule de
+// 0,54 m), et le hachage lit la rangée modulo 1000: bouclage invisible. Un temps sans fin perdrait sa précision (nombres
+// à 32 bits) et, après une vingtaine de minutes, les gouttes s'aligneraient en colonnes identiques.
+// Reflet des flaques (reflRT, déjà flouté à la verticale dans frame: une flaque troublée par la pluie ne fait pas un
+// miroir net, et les traînées de nuages près de l'horizon s'y fondent) ajouté tel quel.
+const COMP_FRAG = `uniform sampler2D tCol,tAO,tBloom,tDepth;uniform float uExp,uAO,uBloom,uAspect,uFlare,uRays,uVeilW,uVis,uDs,uRain,uTime,uFocal,uSlant,uRefl;uniform vec2 uSunUV,uFog,uNF;uniform vec3 uSunC,uRainCol;uniform sampler2D tRefl;varying vec2 vUv;
+float lz(float z){return (2.0*uNF.x*uNF.y)/(uNF.y+uNF.x-(2.0*z-1.0)*(uNF.y-uNF.x));}
+float h21(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+float drops(vec2 px,float D,float zs,float sd){if(zs<D)return 0.0;
+float L=0.18*uFocal/D,wd=max(1.0,0.004*uFocal/D),cw=max(4.0,0.2*uFocal/D),ch=L*3.0;
+vec2 q=vec2(px.x+px.y*uSlant,px.y+uTime*9.0*uFocal/D);vec2 cell=floor(q/vec2(cw,ch));vec2 f=q-cell*vec2(cw,ch);
+vec2 hc=vec2(cell.x,cell.y>=1000.0?cell.y-1000.0:cell.y)+sd;
+if(h21(hc)>0.05+0.9*uRain)return 0.0;
+float x0=(0.15+0.7*h21(hc+7.1))*cw,t=(f.y-h21(hc+3.3)*(ch-L))/L;
+if(t<0.0||t>1.0)return 0.0;return smoothstep(wd,0.0,abs(f.x-x0))*sin(t*3.14159);}
+vec3 rain(vec3 g){if(uRain<=0.0)return g;float z=texture2D(tDepth,vUv).x,zs=z>=0.99999?1e9:lz(z);vec2 px=gl_FragCoord.xy;
+float a=drops(px,2.5,zs,1.0)*0.55+drops(px,5.0,zs,2.0)*0.5+drops(px,10.0,zs,3.0)*0.42+drops(px,20.0,zs,4.0)*0.34+drops(px,40.0,zs,5.0)*0.26;
+return mix(g,uRainCol,clamp(a*(0.55+0.45*uRain),0.0,1.0));}
 vec3 rgb2hsl(vec3 c){float mx=max(c.r,max(c.g,c.b)),mn=min(c.r,min(c.g,c.b)),l=(mx+mn)*0.5,d=mx-mn;if(d<1e-5)return vec3(0.0,0.0,l);
 float h=mx==c.r?mod((c.g-c.b)/d,6.0):mx==c.g?(c.b-c.r)/d+2.0:(c.r-c.g)/d+4.0;return vec3(h/6.0,d/(1.0-abs(2.0*l-1.0)),l);}
 vec3 hsl2rgb(vec3 h){vec3 k=clamp(abs(mod(h.x*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0,0.0,1.0);return h.z+h.y*(k-0.5)*(1.0-abs(2.0*h.z-1.0));}
 vec3 desat(vec3 g){if(uDs<=0.0)return g;float z=texture2D(tDepth,vUv).x;
-float w=z>=0.99999?1.0:smoothstep(uFog.x,uFog.y,(2.0*uNF.x*uNF.y)/(uNF.y+uNF.x-(2.0*z-1.0)*(uNF.y-uNF.x)));
+float w=z>=0.99999?1.0:smoothstep(uFog.x,uFog.y,lz(z));
 vec3 h=rgb2hsl(g);float hd=h.x*360.0;w*=uDs*smoothstep(140.0,165.0,hd)*(1.0-smoothstep(285.0,310.0,hd));if(w<=0.0)return g;
 h.x=fract(h.x-3.0/360.0);h.y*=0.76;return mix(g,hsl2rgb(h),w);}
 vec3 aces(vec3 x){x*=uExp/0.6;return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0);}
@@ -184,7 +243,8 @@ vec3 f=core*hCore*1.8*vis+warm*hMid*0.5*(0.3+0.7*vis)+warm*hWide*0.085*(0.5+0.5*
 float a=atan(q.y,q.x),r1=pow(abs(cos(4.0*a+0.2)),110.0),r2=0.5*pow(abs(cos(4.0*a+0.5927)),140.0);
 float rays=(r1+r2)*(0.65+0.35*cos(3.0*a+1.7))*exp(-d/0.17)*smoothstep(0.0,0.02,d);
 f+=core*rays*0.7*uRays*vis*vis;return f*uFlare*(0.6/uExp);}
-void main(){vec3 c=texture2D(tCol,vUv).rgb;float ao=texture2D(tAO,vUv).r;c*=mix(1.0,ao,uAO);c+=texture2D(tBloom,vUv).rgb*uBloom;c+=flare();c=aces(c);gl_FragColor=vec4(desat(pow(c,vec3(1.0/2.2)))+(ign(gl_FragCoord.xy)-0.5)/255.0,1.0);}`;
+void main(){vec3 c=texture2D(tCol,vUv).rgb;float ao=texture2D(tAO,vUv).r;c*=mix(1.0,ao,uAO);
+if(uRefl>0.0){float zr=texture2D(tDepth,vUv).x;c+=texture2D(tRefl,vUv).rgb*uRefl*(1.0-smoothstep(uFog.x,uFog.y,lz(zr)));}c+=texture2D(tBloom,vUv).rgb*uBloom;c+=flare();c=aces(c);gl_FragColor=vec4(rain(desat(pow(c,vec3(1.0/2.2))))+(ign(gl_FragCoord.xy)-0.5)/255.0,1.0);}`;
 
 const PAL_RES = ['#8f4e3a', '#a0624c', '#7a4a3a', '#b07d5e', '#9c7a62', '#6e5a50', '#b8957a', '#d2c2a4', '#8c6b58'];
 const ROOF = ['#57524d', '#5d5a55', '#514e4a', '#625e58'];
@@ -339,8 +399,11 @@ export function createScene3D(container, opts = {}) {
   const sky = new THREE.Mesh(skyGeo, skyMat); sky.renderOrder = -1; S.add(sky);
   const skyScene = new THREE.Scene(); skyScene.add(new THREE.Mesh(skyGeo, skyMat));
   const cubeRT = new THREE.WebGLCubeRenderTarget(64, { type: THREE.HalfFloatType }); const cubeCam = new THREE.CubeCamera(1, 9000, cubeRT); skyScene.add(cubeCam);
+  // Ciel des flaques: plus fin (le reflet rasant l'étire beaucoup: à 64, chaque pixel du ciel y faisait une bande), rendu
+  // seulement sous forte pluie, sans le traitement de l'éclairage (qui coûterait 20 à 50 ms à cette taille).
+  const skyRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType }); const skyCam = new THREE.CubeCamera(1, 9000, skyRT); skyScene.add(skyCam); let skyFresh = false;
   const pmrem = new THREE.PMREMGenerator(R); pmrem.compileCubemapShader(); let envRT = null;
-  function updateEnv() { cubeCam.update(R, skyScene); const nrt = pmrem.fromCubemap(cubeRT.texture); if (envRT) envRT.dispose(); envRT = nrt; S.environment = nrt.texture; }
+  function updateEnv() { skyFresh = false; cubeCam.update(R, skyScene); const nrt = pmrem.fromCubemap(cubeRT.texture); if (envRT) envRT.dispose(); envRT = nrt; S.environment = nrt.texture; }
   const fog = new THREE.Fog(0xcccccc, 300, 1600); S.fog = fog;
   const gndTex = groundTex();
   // Sol en deux pièces: le relief (maillage non uniforme de terrain.js: 2 m au centre, 20 km de rayon; plat et maillé à
@@ -365,6 +428,9 @@ export function createScene3D(container, opts = {}) {
   const leafMask = leafTex();
   const crownMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, envMapIntensity: 0.75, alphaMap: leafMask, alphaTest: 0.5, side: THREE.DoubleSide });
   const waterMat = new THREE.MeshStandardMaterial({ color: L('#2a3b48'), roughness: 0.12, metalness: 0, envMapIntensity: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  // L'eau a déjà son reflet de ciel brillant: alpha 0 dans l'image de la scène, la passe des flaques l'ignore.
+  waterMat.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a=0.0;'); };
+  waterMat.customProgramCacheKey = () => 'eau';
   const crownGeo = lobes(), crownGeoLow = lobes(1), trunkGeo = new THREE.CylinderGeometry(0.16, 0.26, 1, 6); // couronne simplifiée pour le lancer de rayons
   // Éclairage de nuit (7 octobre 2026): lampadaires peints (flaque de lumière au sol, tête lumineuse) et lueur de la
   // ville; ils s'allument avec les fenêtres. Pas de vraies sources de lumière: des centaines resteraient légères.
@@ -372,16 +438,26 @@ export function createScene3D(container, opts = {}) {
   const GLOW = glowTex();
   // Lumière des lampadaires: carte vue du dessus (intensité, et hauteur du sol pour l'éteindre en hauteur), lue par les
   // matériaux du sol, des rues, des murs et des arbres. Diffuse: chaque surface la reçoit dans sa propre couleur.
-  const lampU = { uLampMap: { value: new THREE.DataTexture(new Uint16Array(4), 1, 1, THREE.RGFormat, THREE.HalfFloatType) }, uLampK: { value: 0 }, uLampHalf: { value: LAMP_HALF }, uLampCol: { value: LAMP_COL } };
+  const lampU = { uLampMap: { value: new THREE.DataTexture(new Uint16Array(4), 1, 1, THREE.RGFormat, THREE.HalfFloatType) }, uLampK: { value: 0 }, uLampHalf: { value: LAMP_HALF }, uLampCol: { value: LAMP_COL }, uWet: { value: 0 } };
   lampU.uLampMap.value.needsUpdate = true;
+  // Sol mouillé (pluie de l'heure ou des trois précédentes, uWet de 0 à 1): dark = assombrissement à pleine pluie, gloss =
+  // rugosité visée sur les faces tournées vers le ciel (une rue mouillée reflète le ciel, le gazon à peine, un mur pas).
+  // Le ciel s'y reflète par la lumière d'environnement (un sol très lisse deviendrait gris pâle sous un ciel couvert:
+  // lustre modéré, l'assombrissement domine); les façades, les arbres et les fenêtres, par la passe de reflet. refl = part
+  // du reflet, écrite dans l'alpha de l'image de la scène: les flaques sur l'asphalte, un peu sur les trottoirs et les
+  // toits plats (qui s'égouttent), rien sur le gazon (la couleur ne suffit pas à les distinguer la nuit).
+  const WET = { 'plat-road': [0.42, 0.72, 1], 'plat-asphalt': [0.42, 0.72, 1], 'plat-walk': [0.36, 0.75, 0.6], 'plat-rail': [0.3, 0.78, 0.4], toit: [0.3, 0.8, 0.25], mur: [0.2, 1, 0], tronc: [0.35, 1, 0], feuillage: [0.12, 0.9, 0] };
   const lampLit = (mat, key) => {
-    const prev = mat.onBeforeCompile;
+    const prev = mat.onBeforeCompile, [wDark, wGloss, wRefl] = WET[key] || [0.3, 0.9, 0];
     mat.onBeforeCompile = (sh, r) => {
       if (prev) prev.call(mat, sh, r);
       Object.assign(sh.uniforms, lampU);
+      sh.fragmentShader = sh.fragmentShader.replace('#include <lights_physical_fragment>',
+        `float wetK=0.0;if(uWet>0.0){float upF=smoothstep(0.55,0.9,dot(normal,normalize((viewMatrix*vec4(0.0,1.0,0.0,0.0)).xyz)));wetK=uWet*upF;diffuseColor.rgb*=1.0-${wDark.toFixed(2)}*uWet;roughnessFactor=mix(roughnessFactor,${wGloss.toFixed(2)},wetK);}\n#include <lights_physical_fragment>`)
+        .replace('#include <opaque_fragment>', `#include <opaque_fragment>\ngl_FragColor.a=${wRefl.toFixed(2)};`);
       sh.vertexShader = 'varying vec3 vLampW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvec4 lampWP=vec4(transformed,1.0);\n#ifdef USE_INSTANCING\nlampWP=instanceMatrix*lampWP;\n#endif\nvLampW=(modelMatrix*lampWP).xyz;');
-      sh.fragmentShader = 'uniform sampler2D uLampMap;uniform float uLampK,uLampHalf;uniform vec3 uLampCol;varying vec3 vLampW;\n' + sh.fragmentShader.replace('#include <aomap_fragment>',
-        '{vec2 luv=vec2(vLampW.x,-vLampW.z)/(2.0*uLampHalf)+0.5;if(uLampK>0.0&&luv.x>0.0&&luv.x<1.0&&luv.y>0.0&&luv.y<1.0){vec2 lm=texture2D(uLampMap,luv).rg;totalEmissiveRadiance+=diffuseColor.rgb*uLampCol*(lm.r*uLampK*smoothstep(14.0,2.0,vLampW.y-lm.g));}}\n#include <aomap_fragment>');
+      sh.fragmentShader = 'uniform sampler2D uLampMap;uniform float uLampK,uLampHalf,uWet;uniform vec3 uLampCol;varying vec3 vLampW;\n' + sh.fragmentShader.replace('#include <aomap_fragment>',
+        '{vec2 luv=vec2(vLampW.x,-vLampW.z)/(2.0*uLampHalf)+0.5;if(uLampK>0.0&&luv.x>0.0&&luv.x<1.0&&luv.y>0.0&&luv.y<1.0){vec2 lm=texture2D(uLampMap,luv).rg;totalEmissiveRadiance+=diffuseColor.rgb*uLampCol*(lm.r*uLampK*smoothstep(14.0,2.0,vLampW.y-lm.g))*(1.0+2.2*wetK);}}\n#include <aomap_fragment>');
     };
     mat.customProgramCacheKey = () => 'lamp-' + key; // un programme par matériau (les fonctions se ressemblent)
   };
@@ -415,14 +491,15 @@ export function createScene3D(container, opts = {}) {
   const blobs = pos.map(p => { const g = new THREE.Group(); const n = 3 + Math.floor(rnd() * 3); for (let j = 0; j < n; j++) { const m = new THREE.Mesh(sg, cloudMat); const r = 60 + rnd() * 40; m.scale.set(r, r * 0.3, r); m.position.set((rnd() - 0.5) * 160, 0, (rnd() - 0.5) * 120); m.castShadow = true; g.add(m); } g.userData = p; S.add(g); return g; });
 
   // ---- passes d'image
-  let PW = 0, PH = 0, sceneRT, aoRT, aoRT2, compRT, bloomA, bloomB, BW = 0, BH = 0;
+  let PW = 0, PH = 0, sceneRT, aoRT, aoRT2, compRT, bloomA, bloomB, reflRT, reflRT2, BW = 0, BH = 0;
   function alloc() {
-    PW = Math.round(W * DPR); PH = Math.round(H * DPR); [sceneRT, aoRT, aoRT2, compRT, bloomA, bloomB].forEach(r => r && r.dispose());
+    PW = Math.round(W * DPR); PH = Math.round(H * DPR); [sceneRT, aoRT, aoRT2, compRT, bloomA, bloomB, reflRT, reflRT2].forEach(r => r && r.dispose());
     const dt = new THREE.DepthTexture(PW, PH); dt.type = THREE.UnsignedIntType;
     sceneRT = new THREE.WebGLRenderTarget(PW, PH, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthTexture: dt, depthBuffer: true, stencilBuffer: false });
     const o = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, stencilBuffer: false };
     aoRT = new THREE.WebGLRenderTarget(PW, PH, o); aoRT2 = new THREE.WebGLRenderTarget(PW, PH, o); compRT = new THREE.WebGLRenderTarget(PW, PH, o);
     BW = Math.max(2, Math.round(PW / 4)); BH = Math.max(2, Math.round(PH / 4)); const ob = { ...o, type: THREE.HalfFloatType }; bloomA = new THREE.WebGLRenderTarget(BW, BH, ob); bloomB = new THREE.WebGLRenderTarget(BW, BH, ob);
+    reflRT = new THREE.WebGLRenderTarget(Math.max(2, Math.round(PW / 2)), Math.max(2, Math.round(PH / 2)), ob); reflRT2 = reflRT.clone(); // reflet des flaques, et passe de flou
   }
   alloc();
   const qScene = new THREE.Scene(), qCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)); qScene.add(quad);
@@ -430,16 +507,19 @@ export function createScene3D(container, opts = {}) {
   const kern = []; for (let i = 0; i < 12; i++) { const v = new THREE.Vector3(hsh(i, 3, 1) * 2 - 1, hsh(i, 3, 2) * 2 - 1, 0.15 + 0.85 * hsh(i, 3, 3)).normalize(); const s = i / 12; v.multiplyScalar(0.12 + 0.88 * s * s); kern.push(v); }
   const aoMat = new THREE.ShaderMaterial({ uniforms: { tDepth: { value: null }, uRes: { value: new THREE.Vector2() }, uProj: { value: new THREE.Matrix4() }, uProjInv: { value: new THREE.Matrix4() }, uR: { value: 2.4 }, uBias: { value: 0.04 }, uInt: { value: 1.6 }, uK: { value: kern } }, vertexShader: QV, fragmentShader: AO_FRAG });
   const blurMat = new THREE.ShaderMaterial({ uniforms: { tAO: { value: null }, tDepth: { value: null }, uDir: { value: new THREE.Vector2() }, uNF: { value: new THREE.Vector2(1, 60000) } }, vertexShader: QV, fragmentShader: BLUR_FRAG });
-  const compMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, tAO: { value: null }, tBloom: { value: null }, tDepth: { value: null }, uExp: { value: 1 }, uAO: { value: 0.9 }, uBloom: { value: 0 }, uAspect: { value: 1 }, uFlare: { value: 0 }, uRays: { value: 0 }, uVeilW: { value: 1 }, uVis: { value: 1 }, uSunUV: { value: new THREE.Vector2(0.5, 0.5) }, uSunC: { value: new THREE.Vector3(1, 1, 1) }, uDs: { value: 0 }, uFog: { value: new THREE.Vector2(300, 1600) }, uNF: { value: new THREE.Vector2(1, 60000) } }, vertexShader: QV, fragmentShader: COMP_FRAG });
+  const compMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, tAO: { value: null }, tBloom: { value: null }, tDepth: { value: null }, uExp: { value: 1 }, uAO: { value: 0.9 }, uBloom: { value: 0 }, uAspect: { value: 1 }, uFlare: { value: 0 }, uRays: { value: 0 }, uVeilW: { value: 1 }, uVis: { value: 1 }, uSunUV: { value: new THREE.Vector2(0.5, 0.5) }, uSunC: { value: new THREE.Vector3(1, 1, 1) }, uDs: { value: 0 }, uFog: { value: new THREE.Vector2(300, 1600) }, uNF: { value: new THREE.Vector2(1, 60000) }, uRain: { value: 0 }, uTime: { value: 0 }, uFocal: { value: 1000 }, uSlant: { value: 0.1 }, uRainCol: { value: new THREE.Vector3(0.6, 0.6, 0.6) }, tRefl: { value: null }, uRefl: { value: 0 } }, vertexShader: QV, fragmentShader: COMP_FRAG });
+  const rblurMat = new THREE.ShaderMaterial({ uniforms: { tSrc: { value: null }, uDir: { value: new THREE.Vector2() } }, vertexShader: QV, fragmentShader: RBLUR_FRAG });
+  const reflMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, tDepth: { value: null }, uProj: { value: new THREE.Matrix4() }, uProjInv: { value: new THREE.Matrix4() }, uUp: { value: new THREE.Vector3(0, 1, 0) }, uTx: { value: new THREE.Vector2() }, tSky: { value: skyRT.texture }, uV2W: { value: new THREE.Matrix3() }, uCamW: { value: new THREE.Vector3() }, uPud: { value: 0 } }, vertexShader: QV, fragmentShader: REFL_FRAG });
   const brightMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, uTh: { value: 0.3 } }, vertexShader: QV, fragmentShader: BRIGHT_FRAG });
   const gblurMat = new THREE.ShaderMaterial({ uniforms: { tSrc: { value: null }, uDir: { value: new THREE.Vector2() } }, vertexShader: QV, fragmentShader: GBLUR_FRAG });
   const fxMat = new THREE.ShaderMaterial({ uniforms: THREE.UniformsUtils.clone(FXAAShader.uniforms), vertexShader: FXAAShader.vertexShader, fragmentShader: FXAAShader.fragmentShader });
 
   // ---- état: lieu, heure, météo, caméra
   let lat = 46.8, lng = -71.2, origin = null, projLocal = [], orientation = [], style = null, data = null, dateMs = Date.now();
-  const tg = { cum: 0, mid: 0, high: 0, iv: 1 }, cur = { ...tg };
+  const tg = { cum: 0, mid: 0, high: 0, iv: 1, rain: 0, wet: 0, pud: 0 }, cur = { ...tg };
   let az = Math.PI * 1.2, camH = 1.7, Rr = 75; const ct = new THREE.Vector3(0, 10, 0);
   let rMin = 20; const R_MAX = 450; const clampR = (r) => Math.max(rMin, Math.min(R_MAX, r)); // distance caméra: hors du bâtiment visé, au plus 450 m
+  let rainAt = 0; // dernière image de pluie seule (voir frame)
   let statics = [], treesI = null, dirty = true, running = true, envKey = '', envAt = 0, drag = null, lastInfo = '', weatherRow = null;
   let projInfo = []; // côtés des formes du projet avec hauteur et source (légende)
   let terrain = flatTerrain(), cloudLift = 150; // relief (plat en attendant /api/terrain); hauteur des nuages au-dessus du site
@@ -713,8 +793,13 @@ export function createScene3D(container, opts = {}) {
     if (!running) return; raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     const a = 1 - Math.exp(-dt * 3.5); let moving = false;
-    ['cum', 'mid', 'high', 'iv'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > 0.0005) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; });
-    if (!dirty && !moving && now - envAt > 400) return; // rien à redessiner: on laisse le processeur tranquille
+    ['cum', 'mid', 'high', 'iv', 'rain', 'wet', 'pud'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > 0.0005) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; });
+    if (!dirty && !moving && now - envAt > 400) {
+      // Rien d'autre ne bouge: sous la pluie, seules les gouttes avancent (composition et lissage refaits, pas la scène),
+      // 30 fois par seconde au plus (environ 1,5 ms de calcul graphique chaque fois), et seulement si la 3D est à l'écran.
+      if (cur.rain > 0.005 && compRT && onScreen && now - rainAt >= 32) { rainAt = now; compMat.uniforms.uTime.value = (now / 1000) % 60; pass(compMat, compRT); pass(fxMat, null); }
+      return; // sinon rien à redessiner: on laisse le processeur tranquille
+    }
     dirty = false;
     const cum = cur.cum, mid = cur.mid, high = cur.high, iv = cur.iv, veil = Math.max(mid, high);
     const sp = SunCalc.getPosition(new Date(dateMs), lat, lng); const bearing = sp.azimuth + Math.PI; // azimut depuis le nord, sens horaire
@@ -774,6 +859,8 @@ export function createScene3D(container, opts = {}) {
     const hp = preethamRadiance([fdir.x, fdir.y, fdir.z], sunV, turb, 1.5), lph = Math.max(LUM(hp), 1e-6); let hc = hp.map(v => (v / lph * 0.3 + 0.7) * zenTarget * 2.4); const hl = LUM(hc); hc = hc.map(v => 0.45 * v / (1 + 0.5 * hl));
     let vc = mv([0.88, 0.89, 0.90], [0.64, 0.66, 0.69], thick); vc = mv(vc, mv([0.62, 0.62, 0.66], [0.95, 0.72, 0.55], 0.6), uW * 0.5);
     hc = mv(hc, lin(vc).map(v => v * 0.55), veil * (0.45 + 0.52 * thick * thick)); hc = mv(hc, lin([0.50, 0.54, 0.60]).map(v => v * 0.65), smooth(0.25, 0.85, cum)); hc = mv(hc, lin([0.11, 0.24, 0.50]).map(v => v * (0.72 + 0.55 * cgv)), twi); hc = mv(hc, lin([0.045, 0.07, 0.16]).map(v => v * (0.8 + 0.3 * cgv)), nightF); hc = mv(hc, lin([0.30, 0.21, 0.13]).map(v => v * 0.5), 0.28 * urban * nightF); fog.color.setRGB(hc[0], hc[1], hc[2]); fog.near = 250 + camH * 4; fog.far = 1500 + camH * 14; // dernier mélange: pollution lumineuse au loin, en ville
+    const rainK = cur.rain; if (rainK > 0) { fog.near *= 1 - 0.6 * rainK; fog.far *= 1 - 0.5 * rainK; fog.color.lerp(new THREE.Color().setScalar(fog.color.r * 0.2126 + fog.color.g * 0.7152 + fog.color.b * 0.0722), 0.5 * rainK); } // pluie: visibilité réduite, grisaille
+    lampU.uWet.value = cur.wet;
     R.setRenderTarget(sceneRT); R.render(S, cam);
     aoMat.uniforms.tDepth.value = sceneRT.depthTexture; aoMat.uniforms.uRes.value.set(PW, PH); aoMat.uniforms.uProj.value.copy(cam.projectionMatrix); aoMat.uniforms.uProjInv.value.copy(cam.projectionMatrixInverse); pass(aoMat, aoRT);
     blurMat.uniforms.tDepth.value = sceneRT.depthTexture; blurMat.uniforms.tAO.value = aoRT.texture; blurMat.uniforms.uDir.value.set(1 / PW, 0); pass(blurMat, aoRT2); blurMat.uniforms.tAO.value = aoRT2.texture; blurMat.uniforms.uDir.value.set(0, 1 / PH); pass(blurMat, aoRT);
@@ -790,8 +877,16 @@ export function createScene3D(container, opts = {}) {
       kFl = smooth(22, 4, realDeg) * smooth(-1.5, -0.3, realDeg) * smooth(0.8, 0, Math.hypot(outX, outY));
       if (kFl > 0) visCPU = terrain.blocked(cam.position.x, -cam.position.z, cam.position.y, cam.position.x + sDir.x * 9000, -cam.position.z - sDir.z * 9000, cam.position.y + sDir.y * 9000) ? 0 : 1;
     }
-    const CU = compMat.uniforms; CU.tDepth.value = sceneRT.depthTexture; CU.uSunUV.value.set(sunPx, sunPy); CU.uAspect.value = W / H; CU.uFlare.value = kFl * (0.35 + 0.65 * iv) * (1 - 0.85 * cum); CU.uRays.value = iv * iv * (1 - 0.7 * veil); CU.uVeilW.value = 1 + 1.2 * high + 0.5 * mid; CU.uVis.value = visCPU;
+    // Reflet des flaques (beaucoup de pluie seulement): calculé ici (images complètes); les images de gouttes seules
+    // réutilisent reflRT.
+    const reflK = cur.pud > 0.01 ? 0.8 * cur.pud : 0;
+    if (reflK > 0) { if (!skyFresh) { skyCam.update(R, skyScene); skyFresh = true; } const RU = reflMat.uniforms; RU.tCol.value = sceneRT.texture; RU.tDepth.value = sceneRT.depthTexture; RU.uProj.value.copy(cam.projectionMatrix); RU.uProjInv.value.copy(cam.projectionMatrixInverse); RU.uUp.value.set(0, 1, 0).transformDirection(cam.matrixWorldInverse); RU.uV2W.value.setFromMatrix4(cam.matrixWorld); RU.uCamW.value.copy(cam.position); RU.uPud.value = cur.pud; RU.uTx.value.set(4 / PW, 4 / PH); pass(reflMat, reflRT2); // normale du sol mesurée sur 4 pixels: au loin, la profondeur arrondie la ferait hésiter d'une ligne à l'autre
+      rblurMat.uniforms.tSrc.value = reflRT2.texture; rblurMat.uniforms.uDir.value.set(0, 1.8 / reflRT.height); pass(rblurMat, reflRT); } // flou vertical d'environ ±7 lignes
+    const CU = compMat.uniforms; CU.tRefl.value = reflRT.texture; CU.uRefl.value = reflK; CU.tDepth.value = sceneRT.depthTexture; CU.uSunUV.value.set(sunPx, sunPy); CU.uAspect.value = W / H; CU.uFlare.value = kFl * (0.35 + 0.65 * iv) * (1 - 0.85 * cum); CU.uRays.value = iv * iv * (1 - 0.7 * veil); CU.uVeilW.value = 1 + 1.2 * high + 0.5 * mid; CU.uVis.value = visCPU;
     CU.uDs.value = smooth(1, -4, realDeg); CU.uFog.value.set(fog.near, fog.far); // bleu désaturé: heure bleue et nuit
+    // Gouttes: un peu plus claires que l'horizon (teinte du brouillard, en affichage), penchées selon le vent.
+    CU.uRain.value = rainK > 0.005 ? rainK : 0; CU.uTime.value = (now / 1000) % 60; CU.uFocal.value = PH / (2 * Math.tan(cam.fov * Math.PI / 360)); CU.uSlant.value = 0.06 + 0.22 * clamp((weatherRow?.wind ?? 10) / 50);
+    if (rainK > 0) { const fl = Math.pow(fog.color.r * 0.2126 + fog.color.g * 0.7152 + fog.color.b * 0.0722, 1 / 2.2); CU.uRainCol.value.setScalar(Math.min(1, fl * 1.5 + 0.1)); }
     const sl = rgb(sc0).map(v => Math.pow(v, 2.2)); CU.uSunC.value.set(sl[0], sl[1], sl[2]);
     compMat.uniforms.tCol.value = sceneRT.texture; compMat.uniforms.tAO.value = aoRT.texture; compMat.uniforms.tBloom.value = bloomA.texture; pass(compMat, compRT);
     fxMat.uniforms.tDiffuse.value = compRT.texture; fxMat.uniforms.resolution.value.set(1 / PW, 1 / PH); pass(fxMat, null);
@@ -799,7 +894,11 @@ export function createScene3D(container, opts = {}) {
     // Légende: condition de lumière, parts de nuages, position du soleil
     const w = weatherRow || {}; const low = w.cloudLow ?? null, alt = Math.max(w.cloudMid ?? 0, w.cloudHigh ?? 0), sun = w.sunFraction != null ? Math.round(w.sunFraction * 100) : null;
     const vt = tg.iv >= 0.45 ? 'Voile d’altitude léger : soleil filtré, ombres douces' : tg.iv >= 0.2 ? 'Voile épais : ombres à peine marquées' : 'Lumière plate : presque plus d’ombres';
-    const cond = realDeg < -12 ? 'Nuit' : night ? 'Heure bleue : ciel bleu profond, bâtiments en silhouette' : realDeg < 0.5 ? 'Soleil à l’horizon' : tg.cum >= 0.7 ? 'Nuages bas nombreux : soleil par éclaircies seulement' : Math.max(tg.mid, tg.high) >= 0.3 ? vt + (tg.cum >= 0.15 ? ', quelques nuages bas' : '') : tg.cum >= 0.15 ? 'Nuages bas épars : plein soleil entre les ombres de nuages' : 'Ciel dégagé : soleil franc, ombres nettes';
+    const mm = tg.rain > 0 ? (w.precip >= 10 ? String(Math.round(w.precip)) : String(Math.round(w.precip * 10) / 10).replace('.', ',')) : null;
+    // Seuils d'Environnement Canada: faible sous 2,5 mm/h, modérée jusqu'à 7,5 mm/h, forte au-delà.
+    const rainTxt = mm == null ? '' : `Pluie ${w.precip >= 7.5 ? 'forte' : w.precip >= 2.5 ? 'modérée' : 'faible'}, ${mm} mm en une heure`;
+    const noSun = tg.iv < 0.05 || (weatherRow != null && w.sunFraction == null); // soleil direct nul ou trop faible pour être mesuré
+    const cond = rainTxt && realDeg >= 0.5 ? rainTxt + (noSun ? ' : ciel couvert, aucune ombre' : tg.iv >= 0.45 ? ' : soleil entre les averses' : ' : ombres très douces') : rainTxt ? rainTxt + (realDeg < -0.8 ? ', rues mouillées' : '') : realDeg < -12 ? 'Nuit' : night ? 'Heure bleue : ciel bleu profond, bâtiments en silhouette' : realDeg < 0.5 ? 'Soleil à l’horizon' : tg.cum >= 0.7 ? (noSun ? 'Ciel couvert : aucune ombre' : 'Nuages bas nombreux : soleil par éclaircies seulement') : Math.max(tg.mid, tg.high) >= 0.3 ? vt + (tg.cum >= 0.15 ? ', quelques nuages bas' : '') : tg.cum >= 0.15 ? 'Nuages bas épars : plein soleil entre les ombres de nuages' : 'Ciel dégagé : soleil franc, ombres nettes';
     const parts = low == null ? '' : `Nuages bas ${low} %, nuages d’altitude ${Math.round(alt)} %, soleil direct ${sun == null ? 0 : sun} %`;
     const where = night ? 'Soleil sous l’horizon' : `Soleil à ${Math.max(0, Math.round(realDeg))}° au-dessus de l’horizon, plein ${DIRS[Math.round(((bearing * 180 / Math.PI) % 360) / 45) % 8]}`;
     const est = (0.38 + 0.36 * Math.max(veil * (0.4 + 0.6 * thick), cum * 0.5)) * dk;
@@ -816,6 +915,8 @@ export function createScene3D(container, opts = {}) {
   }
   raf = requestAnimationFrame(frame);
   const ro = new ResizeObserver(() => resize()); ro.observe(container);
+  // Pluie: pas d'animation quand la 3D est hors de l'écran (page défilée); un onglet caché arrête déjà tout.
+  let onScreen = true; const io = new IntersectionObserver(([en]) => { onScreen = en.isIntersecting; }); io.observe(container);
 
   function resize() {
     const w = Math.max(2, container.clientWidth), h = Math.max(2, container.clientHeight); if (w === W && h === H) return;
@@ -834,7 +935,15 @@ export function createScene3D(container, opts = {}) {
       weatherRow = row || null;
       const s = row?.sunFraction == null ? 0.02 : row.sunFraction, cum = (row?.cloudLow ?? 0) / 100;
       tg.cum = cum; tg.mid = (row?.cloudMid ?? 0) / 100; tg.high = (row?.cloudHigh ?? 0) / 100; tg.iv = clamp(s / Math.max(0.1, 1 - cum));
-      if (!row) { tg.cum = 0; tg.mid = 0; tg.high = 0; tg.iv = 1; }
+      // Pluie: nombre de gouttes de 0,1 mm/h (quelques-unes) à 8 mm/h (le maximum), en échelle logarithmique. Sous zéro ou
+      // icône de neige: rien (la neige viendra à part). Sol mouillé: pluie de l'heure, ou des trois précédentes qui sèche.
+      const rk = (h) => h && h.precip >= 0.1 && !(h.temp <= 0) && h.icon !== 'snow' ? clamp(Math.log10(1 + h.precip * 4) / Math.log10(33)) : 0;
+      const pv = row?.prev || []; tg.rain = rk(row); tg.wet = Math.max(tg.rain, 0.75 * rk(pv[0]), 0.5 * rk(pv[1]), 0.3 * rk(pv[2]));
+      // Flaques (reflets): seulement avec beaucoup d'eau. Pluie tombée dans l'heure et les trois précédentes, l'eau
+      // s'écoulant peu à peu: sous 4 mm, le sol est seulement plus foncé; reflet complet à partir de 12 mm.
+      const mmOf = (h) => rk(h) > 0 ? h.precip : 0, acc = mmOf(row) + 0.75 * mmOf(pv[0]) + 0.5 * mmOf(pv[1]) + 0.3 * mmOf(pv[2]);
+      tg.pud = smooth(4, 12, acc);
+      if (!row) { tg.cum = 0; tg.mid = 0; tg.high = 0; tg.iv = 1; tg.rain = 0; tg.wet = 0; tg.pud = 0; }
       dirty = true;
     },
     resize,
@@ -842,9 +951,9 @@ export function createScene3D(container, opts = {}) {
     setView(v) { if (v.az != null) az = v.az; if (v.camH != null) camH = v.camH; if (v.Rr != null) Rr = v.Rr; dirty = true; },
     zoom(f) { Rr = clampR(Rr * f); dirty = true; }, // f < 1: on s'approche
     dispose() {
-      running = false; cancelAnimationFrame(raf); ro.disconnect(); clearStatics();
-      [sceneRT, aoRT, aoRT2, compRT, cubeRT, envRT].forEach(r => r && r.dispose()); pmrem.dispose();
-      [skyMat, aoMat, blurMat, compMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, waterMat, cloudMat, lampHeadMat, ...Object.values(flatMats)].forEach(m => m.dispose()); GLOW.dispose(); if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
+      running = false; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); clearStatics();
+      [sceneRT, aoRT, aoRT2, compRT, reflRT, reflRT2, cubeRT, skyRT, envRT].forEach(r => r && r.dispose()); pmrem.dispose();
+      [skyMat, aoMat, blurMat, compMat, reflMat, rblurMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, waterMat, cloudMat, lampHeadMat, ...Object.values(flatMats)].forEach(m => m.dispose()); GLOW.dispose(); if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
       [skyGeo, crownGeo, crownGeoLow, trunkGeo, sg, gnd && gnd.geometry, gndFar.geometry, quad.geometry].forEach(g => g && g.dispose()); FT.map.dispose(); FT.rough.dispose(); FT.emis.dispose(); gndTex.dispose(); gndTexNear.dispose(); gndMat.dispose(); gndMatFar.dispose(); leafMask.dispose();
       R.dispose(); R.forceContextLoss(); if (el.parentNode) el.parentNode.removeChild(el);
     },
