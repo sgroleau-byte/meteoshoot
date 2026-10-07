@@ -916,8 +916,9 @@ export function createScene3D(container, opts = {}) {
     const noSun = tg.iv < 0.05 || (weatherRow != null && w.sunFraction == null); // soleil direct nul ou trop faible pour être mesuré
     // Brouillard (visibilité sous 1 km) ou brume (1 à 5 km), et épaisseur de la nappe au-dessus du projet.
     const vis = w.visibility, fogRel = w.fogThick ?? null;
-    const fogTxt = tg.fogK > 0 && vis != null && vis < 5000 ? (vis < 1000 ? `Brouillard, visibilité ${Math.max(50, Math.round(vis / 50) * 50)} m` : `Brume, visibilité ${String(Math.round(vis / 100) / 10).replace('.', ',')} km`)
-      + (fogRel == null ? '' : `, nappe d’environ ${Math.max(10, Math.round(fogRel / 10) * 10)} m au-dessus du sol`) : '';
+    // « Risque »: le brouillard est mal prévu par les modèles, on le dit.
+    const fogTxt = tg.fogK > 0 && vis != null && vis < 5000 ? (vis < 1000 ? `Risque de brouillard, visibilité prévue ${Math.max(50, Math.round(vis / 50) * 50)} m` : `Risque de brume, visibilité prévue ${String(Math.round(vis / 100) / 10).replace('.', ',')} km`)
+      + (fogRel == null ? '' : fogRel >= 600 ? ', nappe épaisse' : `, nappe d’environ ${Math.max(10, Math.round(fogRel / 10) * 10)} m au-dessus du sol`) : '';
     const cond0 = rainTxt && realDeg >= 0.5 ? rainTxt + (noSun ? ' : ciel couvert, aucune ombre' : tg.iv >= 0.45 ? ' : soleil entre les averses' : ' : ombres très douces') : rainTxt ? rainTxt + (realDeg < -0.8 ? ', rues mouillées' : '') : realDeg < -12 ? 'Nuit' : night ? 'Heure bleue : ciel bleu profond, bâtiments en silhouette' : realDeg < 0.5 ? 'Soleil à l’horizon' : tg.cum >= 0.7 ? (noSun ? 'Ciel couvert : aucune ombre' : 'Nuages bas nombreux : soleil par éclaircies seulement') : Math.max(tg.mid, tg.high) >= 0.3 ? vt + (tg.cum >= 0.15 ? ', quelques nuages bas' : '') : tg.cum >= 0.15 ? 'Nuages bas épars : plein soleil entre les ombres de nuages' : 'Ciel dégagé : soleil franc, ombres nettes';
     const fogSun = realDeg < 0.5 ? '' : fogT < 0.1 ? ' : soleil caché, aucune ombre' : fogT < 0.5 ? ' : soleil voilé, ombres douces' : '';
     const cond = !fogTxt ? cond0 : rainTxt ? cond0 + ' · ' + fogTxt : fogTxt + fogSun;
@@ -965,10 +966,13 @@ export function createScene3D(container, opts = {}) {
       // s'écoulant peu à peu: sous 4 mm, le sol est seulement plus foncé; reflet complet à partir de 12 mm.
       const mmOf = (h) => rk(h) > 0 ? h.precip : 0, acc = mmOf(row) + 0.75 * mmOf(pv[0]) + 0.5 * mmOf(pv[1]) + 0.3 * mmOf(pv[2]);
       tg.pud = smooth(4, 12, acc);
-      // Brouillard et brume: visibilité prévue (GFS et HRRR) en extinction 3,912 / visibilité (ici par km; 40 m au plus
-      // dense), sensible sous 9 km, entière sous 3 km; épaisseur de la nappe au-dessus du sol d'après l'humidité, sinon
-      // (ou sommet inconnu) 600 m.
-      const V = row?.visibility; tg.fogK = V != null && V >= 0 ? 3912 / Math.max(V, 40) * smooth(9000, 3000, V) : 0; tg.fogTh = Math.min(row?.fogThick ?? 600, 600);
+      // Brouillard et brume, par prudence (Stéphane: « ne pas montrer du faux brouillard »): il faut que les deux modèles
+      // s'accordent: GFS (et HRRR) prévoit une visibilité sous 5 km avec de l'air saturé au sol (une nappe est mesurée),
+      // et ICON voit des nuages bas à 80 % ou plus (un brouillard est un nuage posé au sol); et qu'il ne pleuve pas (la
+      // pluie réduit déjà la visibilité). Effet entier sous 1 km (brouillard au sens météo). Extinction 3,912 /
+      // visibilité, ici par km (40 m au plus dense); épaisseur de la nappe au-dessus du sol, 600 m au plus.
+      const V = row?.visibility, sat = row?.fogThick != null, lowOk = (row?.cloudLow ?? 0) >= 80;
+      tg.fogK = V != null && V >= 0 && sat && lowOk && !(tg.rain > 0) ? 3912 / Math.max(V, 40) * smooth(5000, 1000, V) : 0; tg.fogTh = Math.min(row?.fogThick ?? 600, 600);
       if (!row) { tg.cum = 0; tg.mid = 0; tg.high = 0; tg.iv = 1; tg.rain = 0; tg.wet = 0; tg.pud = 0; tg.fogK = 0; tg.fogTh = 600; }
       // L'épaisseur ne glisse pas pendant que le brouillard apparaît ou disparaît (sinon la vue drone se noie un instant).
       if (!(tg.fogK > 0)) tg.fogTh = cur.fogTh; else if (cur.fogK < 1e-3) cur.fogTh = tg.fogTh;

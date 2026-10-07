@@ -192,7 +192,7 @@ const FOG_RH = 95;
 // Haut d'une nappe de brouillard (mètres au-dessus de la mer): air saturé (humidité de 95 % et plus) depuis le sol
 // jusqu'au premier niveau qui ne l'est plus, l'altitude interpolée entre les deux. Nul si l'air n'est pas saturé au sol.
 // Niveaux espacés d'environ 200 m: estimation grossière, à lire comme un ordre de grandeur. Saturé jusqu'au dernier
-// niveau (ou aucun niveau au-dessus du sol, site en altitude): sommet inconnu, nul (le moteur met une nappe épaisse).
+// niveau (ou aucun niveau au-dessus du sol, site en altitude): sommet inconnu, 2000 m conventionnels (nappe épaisse).
 export const fogTopFrom = (h, i, elev) => {
   const rh0 = h.relative_humidity_2m?.[i]; if (rh0 == null || rh0 < FOG_RH) return null;
   let zPrev = elev, rPrev = rh0;
@@ -202,7 +202,7 @@ export const fogTopFrom = (h, i, elev) => {
     if (r < FOG_RH) return Math.round(Math.max(elev + 10, zPrev + (z - zPrev) * (rPrev - FOG_RH) / Math.max(1e-3, rPrev - r)));
     zPrev = z; rPrev = r;
   }
-  return null;
+  return elev + 2000;
 };
 
 export const fetchWeather = async (lat, lng) => {
