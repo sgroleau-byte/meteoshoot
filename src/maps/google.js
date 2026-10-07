@@ -72,3 +72,32 @@ export const getTravelTime = (originLat, originLng, destLat, destLng) => {
     });
   });
 };
+
+// Champ d'adresse avec suggestions Google: une adresse tapée sans choisir de suggestion n'est plus perdue. Elle est
+// confiée à commit(texte) quand on appuie sur Entrée (Google renvoie alors un lieu sans coordonnées, avec le texte
+// dans name) ou quand on quitte le champ. Le choix d'une suggestion reste prioritaire: cliquer ou toucher une
+// suggestion fait sortir du champ avant que Google renvoie le lieu (parfois plus d'une seconde sur un réseau mobile):
+// cette sortie-là est ignorée, place_changed décide. Après un choix, le texte de la suggestion reste dans le champ:
+// le quitter sans le modifier n'enregistre rien de plus. Retourne de quoi tout détacher.
+export function typedAddressFallback(input, autocomplete, commit) {
+  let lastPick = 0, pickedText = null, pacDown = 0;
+  const pick = autocomplete.addListener('place_changed', () => {
+    lastPick = Date.now();
+    const place = autocomplete.getPlace();
+    if (!place || !place.geometry) commit(((place && place.name) || input.value || '').trim());
+    else pickedText = (input.value || '').trim();
+  });
+  const onPac = (e) => { if (e.target && e.target.closest && e.target.closest('.pac-container')) pacDown = Date.now(); };
+  const onBlur = () => {
+    const t0 = Date.now();
+    if (t0 - pacDown < 1000) return;
+    setTimeout(() => { const v = (input.value || '').trim(); if (lastPick < t0 && v !== pickedText) commit(v); }, 400);
+  };
+  input.addEventListener('blur', onBlur);
+  document.addEventListener('mousedown', onPac, true);
+  document.addEventListener('touchstart', onPac, true);
+  return () => {
+    pick.remove(); input.removeEventListener('blur', onBlur);
+    document.removeEventListener('mousedown', onPac, true); document.removeEventListener('touchstart', onPac, true);
+  };
+}

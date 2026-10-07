@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider.jsx';
 import { useIsMobile } from '../hooks/useIsMobile.js';
 import { useLang } from '../i18n/LangProvider.jsx';
-import { geocodeAddress } from '../maps/google.js';
+import { geocodeAddress, typedAddressFallback } from '../maps/google.js';
 import { EDIT_LIST_DEFAULTS, getEditListPrefs } from '../projects/helpers.js';
 import { useStore } from '../projects/StoreProvider.jsx';
 import { useSubscription } from '../subscription/SubscriptionProvider.jsx';
@@ -51,6 +51,10 @@ export const PreferencesView = () => {
   const [msg, setMsg] = useState(null);
   const homeInputRef = React.useRef(null);
   const autocompleteRef = React.useRef(null);
+  const typedDetach = React.useRef(null);
+  const saveHomeManualRef = React.useRef(null);
+  const lastTypedHome = React.useRef(null); // dernier texte envoyé au géocodage et son résultat (voir la fiche projet)
+  const prefsRef = React.useRef(prefs); prefsRef.current = prefs;
 
   // Setup Google Places Autocomplete for home address
   useEffect(() => {
@@ -72,15 +76,22 @@ export const PreferencesView = () => {
           setMsg({ type: 'success', text: t('addressSaved') });
         }
       });
+      // Adresse tapée sans choisir de suggestion (Entrée ou sortie du champ): géocodée au lieu d'être perdue.
+      typedDetach.current = typedAddressFallback(homeInputRef.current, autocompleteRef.current, (text) => saveHomeManualRef.current(text));
     }
+    return () => { if (typedDetach.current) typedDetach.current(); };
   }, []);
 
-  const saveHomeManual = async () => {
-    const address = homeInputRef.current?.value;
-    if (!address) return;
+  const saveHomeManual = async (typed) => {
+    const address = (typeof typed === 'string' ? typed : homeInputRef.current?.value || '').trim();
+    if (!address || address === (prefsRef.current.homeAddress || '')) return;
+    const last = lastTypedHome.current;
+    if (last && last.text === address && (last.result === undefined || last.result === (prefsRef.current.homeAddress || ''))) return;
+    lastTypedHome.current = { text: address, result: undefined };
     
     try {
       const result = await geocodeAddress(address);
+      lastTypedHome.current = { text: address, result: result.formattedAddress };
       setPrefs({
         homeAddress: result.formattedAddress,
         homeLat: result.lat,
@@ -89,9 +100,11 @@ export const PreferencesView = () => {
       homeInputRef.current.value = result.formattedAddress;
       setMsg({ type: 'success', text: t('addressSavedShort') });
     } catch (e) {
+      lastTypedHome.current = null;
       setMsg({ type: 'error', text: t('addressNotFound') });
     }
   };
+  saveHomeManualRef.current = saveHomeManual;
 
   return (
     <div className="pb-8" style={{ paddingLeft: isMobile ? '0' : 'max(0px, calc((100vw - 1200px) / 2))', paddingTop: isMobile ? 'calc(16px + env(safe-area-inset-top))' : 'calc(100px + env(safe-area-inset-top))' }}>
@@ -247,7 +260,7 @@ export const PreferencesView = () => {
 
           <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
             <div style={{ textAlign: 'center' }}>
-              <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.166</div>
+              <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.167</div>
               <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
             </div>
           </div>

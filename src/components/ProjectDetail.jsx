@@ -6,7 +6,7 @@ import { useIsMobile } from '../hooks/useIsMobile.js';
 import { useViewportWidth } from '../hooks/useViewportWidth.js';
 import { useLang } from '../i18n/LangProvider.jsx';
 import * as AppleSat from '../maps/appleSat.js';
-import { getTravelTime, reverseGeocode } from '../maps/google.js';
+import { geocodeAddress, getTravelTime, reverseGeocode, typedAddressFallback } from '../maps/google.js';
 import { StreetLabels } from '../maps/streetLabels.js';
 import { MandateType, renderMandate } from '../projects/constants.js';
 import { MAX_PROJECT_FILES_MB, fileHelpers } from '../projects/files.js';
@@ -981,6 +981,56 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   // Changer de projet pendant la confirmation: on repart de l'icône copier.
   useEffect(() => { setAddressCopied(false); }, [projectId]);
 
+  // Valeurs à jour pour les écouteurs des suggestions (posés une seule fois: sans ces refs, ils garderaient le projet
+  // et les préférences du premier affichage).
+  const projectRef = React.useRef(project); projectRef.current = project;
+  const prefsRef = React.useRef(prefs); prefsRef.current = prefs;
+  const typedDetachRef = React.useRef([]);
+  useEffect(() => () => typedDetachRef.current.forEach(f => f()), []);
+
+  // Adresse du projet tapée sans choisir de suggestion (Entrée ou sortie du champ): géocodée et enregistrée; introuvable,
+  // le champ revient à l'adresse enregistrée au lieu d'afficher un texte qui ne l'est pas.
+  // Dernier texte envoyé au géocodage (Entrée puis sortie du champ) et son résultat: le même texte n'est ignoré que pendant
+  // l'appel ou tant que son résultat est encore l'adresse enregistrée (retaper une ancienne adresse ou réessayer après
+  // un échec fonctionne).
+  const lastTypedRef = React.useRef({ address: null, departure: null });
+  const commitTypedAddress = async (text) => {
+    const p = projectRef.current, pf = prefsRef.current, el = addressInputRef.current;
+    if (!p || !text || text === (p.address || '')) return;
+    const last = lastTypedRef.current.address;
+    if (last && last.text === text && (last.result === undefined || last.result === (p.address || ''))) { if (el && document.activeElement !== el) el.value = p.address || ''; return; }
+    lastTypedRef.current.address = { text, result: undefined };
+    try {
+      const r = await geocodeAddress(text);
+      const travelTime = await recalcTravel(p.departureLat || pf.homeLat, p.departureLng || pf.homeLng, r.lat, r.lng);
+      lastTypedRef.current.address = { text, result: r.formattedAddress };
+      updateProject(p.id, { address: r.formattedAddress, lat: r.lat, lng: r.lng, travelTime });
+      if (el && document.activeElement !== el) el.value = r.formattedAddress;
+    } catch (e) {
+      lastTypedRef.current.address = null;
+      if (el && document.activeElement !== el) el.value = projectRef.current?.address || '';
+    }
+  };
+  // Départ tapé sans suggestion: même principe. Vide ou égal au domicile: c'est l'onBlur du champ qui revient au domicile.
+  const commitTypedDeparture = async (text) => {
+    const p = projectRef.current, pf = prefsRef.current, el = departureInputRef.current;
+    if (!p || !text || text === (pf.homeAddress || '') || text === (p.departureAddress || '')) return;
+    const last = lastTypedRef.current.departure;
+    if (last && last.text === text && (last.result === undefined || last.result === (p.departureAddress || ''))) { if (el && document.activeElement !== el) el.value = p.departureAddress || pf.homeAddress || ''; return; }
+    lastTypedRef.current.departure = { text, result: undefined };
+    try {
+      const r = await geocodeAddress(text);
+      const travelTime = await recalcTravel(r.lat, r.lng, p.lat, p.lng);
+      lastTypedRef.current.departure = { text, result: r.formattedAddress };
+      updateProject(p.id, { departureAddress: r.formattedAddress, departureLat: r.lat, departureLng: r.lng, travelTime });
+      if (el && document.activeElement !== el) el.value = r.formattedAddress;
+    } catch (e) {
+      lastTypedRef.current.departure = null;
+      const q = projectRef.current;
+      if (el && document.activeElement !== el) el.value = (q && q.departureAddress) || prefsRef.current.homeAddress || '';
+    }
+  };
+
   // Google Places Autocomplete for project address
   useEffect(() => {
     if (addressInputRef.current && !autocompleteRef.current && window.google) {
@@ -991,15 +1041,15 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       });
       autocompleteRef.current.addListener('place_changed', async () => {
         const place = autocompleteRef.current.getPlace();
-        if (place.geometry) {
+        const p = projectRef.current, pf = prefsRef.current;
+        if (place.geometry && p) {
           const lat = place.geometry.location.lat();
           const lng = place.geometry.location.lng();
-          const depLat = project.departureLat || prefs.homeLat;
-          const depLng = project.departureLng || prefs.homeLng;
-          const travelTime = await recalcTravel(depLat, depLng, lat, lng);
-          updateProject(project.id, { address: place.formatted_address, lat, lng, travelTime });
+          const travelTime = await recalcTravel(p.departureLat || pf.homeLat, p.departureLng || pf.homeLng, lat, lng);
+          updateProject(p.id, { address: place.formatted_address, lat, lng, travelTime });
         }
       });
+      typedDetachRef.current.push(typedAddressFallback(addressInputRef.current, autocompleteRef.current, commitTypedAddress));
     }
   }, [projectId]);
 
@@ -1013,11 +1063,12 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       });
       departureAutocompleteRef.current.addListener('place_changed', async () => {
         const place = departureAutocompleteRef.current.getPlace();
-        if (place.geometry) {
+        const p = projectRef.current;
+        if (place.geometry && p) {
           const depLat = place.geometry.location.lat();
           const depLng = place.geometry.location.lng();
-          const travelTime = await recalcTravel(depLat, depLng, project.lat, project.lng);
-          updateProject(project.id, { 
+          const travelTime = await recalcTravel(depLat, depLng, p.lat, p.lng);
+          updateProject(p.id, { 
             departureAddress: place.formatted_address, 
             departureLat: depLat, 
             departureLng: depLng,
@@ -1025,8 +1076,20 @@ export const ProjectDetail = ({ projectId, onClose }) => {
           });
         }
       });
+      typedDetachRef.current.push(typedAddressFallback(departureInputRef.current, departureAutocompleteRef.current, commitTypedDeparture));
     }
   }, [projectId]);
+
+  // Le champ n'est plus recréé à chaque changement d'adresse (il perdait ses suggestions): on y reporte l'adresse
+  // enregistrée (choix d'une suggestion, « Mettre à jour » sur la carte), sauf pendant la saisie.
+  useEffect(() => {
+    const el = addressInputRef.current;
+    if (el && document.activeElement !== el) el.value = project?.address || '';
+  }, [project?.address]);
+  useEffect(() => {
+    const el = departureInputRef.current;
+    if (el && document.activeElement !== el) el.value = project?.departureAddress || prefs.homeAddress || '';
+  }, [project?.departureAddress, prefs.homeAddress]);
 
   // Carte de la fiche: satellite Google (SAT) ou satellite Plans d'Apple (SAT2). SAT2 passe par la couche appleSat,
   // qui reproduit l'interface de Google: tous les dessins ci-dessous servent aux deux.
@@ -2136,7 +2199,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
             <div>
               <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>{t('projectAddress')}</label>
               <div style={{ border: '1px solid rgba(255,255,255,0.15)', padding: '8px 12px', marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <input key={project.address || ''} ref={addressInputRef} type="text" defaultValue={project.address || ''} placeholder={t('enterAddress')} className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1, fontFamily: "'Avenir', sans-serif", fontWeight: 300 }}/>
+                <input ref={addressInputRef} type="text" defaultValue={project.address || ''} placeholder={t('enterAddress')} className="w-full bg-transparent text-charcoal" style={{ fontSize: '15px', outline: 'none', border: 'none', color: 'rgba(255,255,255,0.85)', flex: 1, fontFamily: "'Avenir', sans-serif", fontWeight: 300 }}/>
                 {project.address && <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); copyProjectAddress(); }} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)', background: 'none', cursor: 'pointer' }} title={addressCopied ? t('addressCopied') : t('copyAddress')} aria-label={addressCopied ? t('addressCopied') : t('copyAddress')}><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{addressCopied ? <polyline points="20 6 9 17 4 12"/> : <g><rect x="8" y="8" width="14" height="14" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></g>}</svg></button>}
                 {project.address && <a href={`https://earth.google.com/web/search/${encodeURIComponent(project.address)}`} target="_blank" rel="noopener noreferrer" onClick={rtOpenMap} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Google Earth" aria-label="Google Earth"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></a>}
                 {project.address && <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(project.address)}`} target="_blank" rel="noopener noreferrer" onClick={(e) => { e.preventDefault(); e.stopPropagation(); const tmp = document.createElement('a'); tmp.href = e.currentTarget.href; tmp.target = '_blank'; tmp.rel = 'noopener noreferrer'; document.body.appendChild(tmp); tmp.click(); tmp.remove(); }} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: '2px 2px 2px 8px', borderLeft: '1px solid rgba(255,255,255,0.15)' }} title="Itinéraire"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#7dd3c6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></a>}

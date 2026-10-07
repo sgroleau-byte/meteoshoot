@@ -24,7 +24,8 @@ export const MobileNewProjectScreen = ({ isOpen, onClose, onCreated }) => {
     if (isOpen && !prevOpen.current) {
       setForm({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false, clientFolder: '' });
       if (addressInputRef.current) addressInputRef.current.value = '';
-      autocompleteRef.current = null;
+      // Le champ reste monté d'une ouverture à l'autre: on garde ses suggestions (en recréer à chaque ouverture
+      // empilait les listes et les écouteurs).
       setTimeout(() => nameInputRef.current?.focus(), 500);
     }
     prevOpen.current = isOpen;
@@ -41,7 +42,8 @@ export const MobileNewProjectScreen = ({ isOpen, onClose, onCreated }) => {
       autocompleteRef.current.addListener('place_changed', () => {
         const place = autocompleteRef.current.getPlace();
         if (place.geometry) {
-          setForm(f => ({ ...f, address: place.formatted_address, lat: place.geometry.location.lat(), lng: place.geometry.location.lng() }));
+          // picked: texte affiché dans le champ au moment du choix (souvent différent de l'adresse formatée)
+          setForm(f => ({ ...f, address: place.formatted_address, lat: place.geometry.location.lat(), lng: place.geometry.location.lng(), picked: (addressInputRef.current?.value || '').trim() }));
         }
       });
     }
@@ -50,9 +52,14 @@ export const MobileNewProjectScreen = ({ isOpen, onClose, onCreated }) => {
   const handleSubmit = async () => {
     if (!form.name.trim()) return;
     setLoading(true);
-    let data = { ...form };
-    if (form.address && !form.lat) {
-      try { const result = await geocodeAddress(form.address); data.lat = result.lat; data.lng = result.lng; data.address = result.formattedAddress; } catch (err) { console.warn('Geocoding error:', err); }
+    const { picked, ...data } = form;
+    // Adresse tapée sans choisir de suggestion (ou modifiée après le choix): on la géocode au lieu de la perdre.
+    // Champ vidé après un choix: pas d'adresse.
+    const el = addressInputRef.current, typed = (el?.value || '').trim();
+    if (el && !typed) { data.address = ''; data.lat = null; data.lng = null; }
+    else if (typed && typed !== picked && typed !== form.address) { data.address = typed; data.lat = null; data.lng = null; }
+    if (data.address && !data.lat) {
+      try { const result = await geocodeAddress(data.address); data.lat = result.lat; data.lng = result.lng; data.address = result.formattedAddress; } catch (err) { console.warn('Geocoding error:', err); }
     }
     if (data.lat && data.lng && prefs.homeLat && prefs.homeLng) {
       try { const travel = await getTravelTime(prefs.homeLat, prefs.homeLng, data.lat, data.lng); data.travelTime = travel; data.departureAddress = prefs.homeAddress; data.departureLat = prefs.homeLat; data.departureLng = prefs.homeLng; } catch (err) { console.warn('Travel time error:', err); }
