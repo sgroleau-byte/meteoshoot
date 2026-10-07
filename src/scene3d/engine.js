@@ -253,6 +253,10 @@ function ringsOverlap(a, b) { if (pointInRing(centroid(a), b) || pointInRing(cen
 // Tuile de façade (une travée sur un étage): fenêtre moderne, plus large que haute, cadre fin anthracite, un seul
 // meneau décalé au tiers, verre sombre et réfléchissant; carte de rugosité (verre lisse) et carte d'émission
 // (fenêtre allumée la nuit, lueur douce). La tuile se répète un nombre entier de fois par mur (voir blocks).
+// Version de jour (mapDay, 7 octobre 2026): les fenêtres ne sont pas celles du vrai bâtiment, donc discrètes le jour:
+// un simple vitrage à peine plus foncé que le mur, dans sa teinte, sans cadre ni reflet. Le matériau passe de l'une
+// à l'autre avec la tombée du jour (uNight): la nuit reste exactement comme avant.
+const WIN_DAY = '#cfcdc9'; // vitrage de jour: environ 80 % de la teinte du mur
 function facadeTex() {
   const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
   x.fillStyle = '#ffffff'; x.fillRect(0, 0, 256, 256);
@@ -267,10 +271,13 @@ function facadeTex() {
   const e = document.createElement('canvas'); e.width = e.height = 256; const z = e.getContext('2d'); z.fillStyle = '#000'; z.fillRect(0, 0, 256, 256);
   z.save(); z.shadowColor = '#ffd9a0'; z.shadowBlur = 40; z.globalAlpha = 0.4; z.fillStyle = '#ffd9a0'; z.fillRect(wx, wy, ww, wh); z.restore();
   z.fillStyle = '#ffe2b0'; z.fillRect(wx, wy, ww, wh); z.fillStyle = '#3a3226'; z.fillRect(mull - 2, wy, 4, wh);
+  const dc = document.createElement('canvas'); dc.width = dc.height = 256; const dx = dc.getContext('2d');
+  dx.fillStyle = '#ffffff'; dx.fillRect(0, 0, 256, 256); dx.fillStyle = WIN_DAY; dx.fillRect(wx, wy, ww, wh);
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  const dt = new THREE.CanvasTexture(dc); dt.wrapS = dt.wrapT = THREE.RepeatWrapping; dt.colorSpace = THREE.SRGBColorSpace; dt.anisotropy = 8;
   const rt = new THREE.CanvasTexture(r); rt.wrapS = rt.wrapT = THREE.RepeatWrapping;
   const et = new THREE.CanvasTexture(e); et.wrapS = et.wrapT = THREE.RepeatWrapping; et.colorSpace = THREE.SRGBColorSpace;
-  return { map: t, rough: rt, emis: et };
+  return { map: t, mapDay: dt, rough: rt, emis: et };
 }
 function groundTex() {
   const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d'); const im = x.createImageData(256, 256), d = im.data;
@@ -322,9 +329,14 @@ export function createScene3D(container, opts = {}) {
   const gndFar = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000, 8, 8), gndMatFar); gndFar.rotation.x = -Math.PI / 2; gndFar.position.y = -0.3; gndFar.receiveShadow = true; S.add(gndFar);
   const FT = facadeTex();
   const wallMat = new THREE.MeshStandardMaterial({ vertexColors: true, map: FT.map, roughnessMap: FT.rough, roughness: 1, metalness: 0, envMapIntensity: 0.75, emissive: 0xffffff, emissiveMap: FT.emis, emissiveIntensity: 0 });
+  const uNight = { value: 0 }; // 0 le jour (fenêtres discrètes), 1 la nuit (fenêtres d'origine): voir frame
   wallMat.onBeforeCompile = (sh) => {
+    sh.uniforms.mapDay = { value: FT.mapDay }; sh.uniforms.uNight = uNight;
     sh.vertexShader = 'attribute float aSeed;varying float vSeed;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvSeed=aSeed;');
-    sh.fragmentShader = 'varying float vSeed;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance*=vSeed<0.0?1.0:step(0.5,fract(sin(dot(floor(vEmissiveMapUv)+vec2(vSeed,vSeed*0.37),vec2(12.9898,78.233)))*43758.5453));');
+    sh.fragmentShader = 'varying float vSeed;uniform sampler2D mapDay;uniform float uNight;\n' + sh.fragmentShader
+      .replace('#include <map_fragment>', 'diffuseColor*=mix(texture2D(mapDay,vMapUv),texture2D(map,vMapUv),uNight);')
+      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor=roughness*mix(0.933,texture2D(roughnessMap,vRoughnessMapUv).g,uNight);')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance*=vSeed<0.0?1.0:step(0.5,fract(sin(dot(floor(vEmissiveMapUv)+vec2(vSeed,vSeed*0.37),vec2(12.9898,78.233)))*43758.5453));');
   };
   const roofMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, envMapIntensity: 0.75 });
   const trunkMat = new THREE.MeshStandardMaterial({ color: L('#4a3b2e'), roughness: 0.95, envMapIntensity: 0.75 });
@@ -540,9 +552,10 @@ export function createScene3D(container, opts = {}) {
     const list = []; projInfo = [];
     drawn.forEach((d, i) => {
       const hits = data ? data.bld.filter(([p, , , k]) => k !== 2 && ringsOverlap(d.p, p)) : [];
-      const measured = hits.length ? Math.max(...hits.map(x => x[1])) : null;
+      const top = hits.length ? hits.reduce((a, b) => (b[1] > a[1] ? b : a)) : null; // le plus haut des bâtiments recouverts
+      const measured = top ? top[1] : null;
       let h, src;
-      if (!d.def) { h = d.h; src = 'réglée dans le projet'; } else if (measured != null) { h = measured; src = 'mesurée (Overture)'; } else { h = 9; src = 'par défaut'; }
+      if (!d.def) { h = d.h; src = 'réglée dans le projet'; } else if (measured != null) { h = measured; src = top[4] ? 'mesurée (LiDAR)' : 'estimée (OpenStreetMap)'; } else { h = 9; src = 'par défaut'; }
       h = Math.max(3, h);
       const fl = Math.max(1, Math.floor(h / 3.6)); // une rangée de fenêtres par étage de 3,6 m environ (jamais étirée)
       const wallHex = (projLocal[d.i] && projLocal[d.i].wallColor) || '#7a3f33', base = groundOf(d.p).mean;
@@ -558,12 +571,12 @@ export function createScene3D(container, opts = {}) {
     });
     const others = [];
     if (data) {
-      data.bld.forEach(([p, h, fl, k]) => {
+      data.bld.forEach(([p, h, fl, k, lid]) => {
         // Un voisin recouvert par un bâtiment dessiné disparaît: c'est le même édifice.
         const c = centroid(p);
         if (drawn.some(d => ringsOverlap(d.p, p))) return;
         others.push(p);
-        const q = p[0], r = hsh(q[0], q[1], 5); const hh = k === 0 ? Math.max(h, 6.2) : h;
+        const q = p[0], r = hsh(q[0], q[1], 5); const hh = k === 0 && !lid ? Math.max(h, 6.2) : h; // hauteur mesurée (LiDAR): telle quelle
         list.push({ p, h: hh, fl: Math.max(1, Math.min(k === 0 ? Math.max(fl, Math.round(hh / 3.1)) : fl, Math.floor(hh / 3.2))), col: L(k === 2 ? '#9a9a94' : k === 1 ? '#cfc7b8' : PAL_RES[Math.floor(r * PAL_RES.length)]), rc: L(ROOF[Math.floor(hsh(q[0], q[1], 6) * ROOF.length)]) });
       });
       Object.keys(GC).forEach(k => addFlat(data.green.filter(p => p.k === k).map(p => ({ o: p.p })), flatMats[k], 0.03, 1));
@@ -655,6 +668,7 @@ export function createScene3D(container, opts = {}) {
     const U = skyMat.uniforms, dk = 0.5 + 0.5 * clamp((realDeg + 1) / 14), uW = clamp(1 - (realDeg - 1) / 22);
     U.uCum.value = cum; U.uMid.value = mid; U.uHigh.value = high; U.uDirect.value = iv; U.uWarm.value = uW; U.uTw.value = twi; U.uNight.value = nightF; U.uGlow.value = glow;
     wallMat.emissiveIntensity = 0.62 * smooth(1, -4, realDeg); // fenêtres chaudes, pas blanches
+    uNight.value = smooth(1, -4, realDeg); // fenêtres discrètes le jour, d'origine dès la tombée du jour
     winLights.forEach(l => { l.intensity = 0.32 * wallMat.emissiveIntensity / 0.62; l.visible = l.intensity > 0.01; }); // lumière des fenêtres sur le sol, les arbres et les voisins
     const soft = twi * (1 - nightF); twL.intensity = 1.8 * soft; twL.color.copy(L(mixHex('#9fb0e0', '#e8bc92', glow * 0.5)));
     twL.target.position.copy(T0); twL.position.copy(T0).add(new THREE.Vector3(Math.sin(bearing) * Math.cos(0.17), Math.sin(0.17), -Math.cos(bearing) * Math.cos(0.17)).multiplyScalar(400));
@@ -702,7 +716,8 @@ export function createScene3D(container, opts = {}) {
     let fac = null, best = -Infinity;
     projInfo.forEach(e => { if (e.len < 2.5) return; const dx = cam.position.x - e.mid[0], dz = cam.position.z + e.mid[1], dist = Math.hypot(dx, dz) || 1; const facing = (e.nrm[0] * dx - e.nrm[1] * dz) / dist; if (facing < 0.15) return; const scv = facing * Math.sqrt(e.len) / Math.sqrt(dist); if (scv > best) { best = scv; fac = e; } });
     const height = fac ? `${fac.label}, côté ${fac.dir} : ${Math.round(fac.h)} m, hauteur ${fac.src}` : '';
-    const relief = terrain.flat ? '' : terrain.src.lidar >= 0.5 ? `Relief LiDAR ${terrain.src.lidarRes || 2} m (Ressources naturelles Canada)` : 'Relief du modèle d’élévation du Canada (20 m)';
+    const hLidar = !!(data && data.lidarBld > 0), hLine = 'Hauteurs des bâtiments LiDAR (Ressources naturelles Canada)';
+    const relief = terrain.flat ? (hLidar ? hLine : '') : terrain.src.lidar >= 0.5 ? `Relief LiDAR ${terrain.src.lidarRes || 2} m${hLidar ? ' et hauteurs des bâtiments LiDAR' : ''} (Ressources naturelles Canada)` : 'Relief du modèle d’élévation du Canada (20 m)' + (hLidar ? ' · ' + hLine : '');
     const pavedLine = data && data.paved && data.paved.length ? `Surfaces pavées d’après l’imagerie satellite (${data.pavedSrc || 'Esri'}), approximatives` : '';
     const srcLine = [relief, pavedLine].filter(Boolean).join(' · ');
     const info = cond + '|' + parts + '|' + where + '|' + height + '|' + srcLine + '|' + (est > 0.55 ? 'dark' : 'light');

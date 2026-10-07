@@ -9,10 +9,13 @@
 // v2 (5 octobre 2026): les rues portent leur nom (n) quand Overture le connaît.
 // v3 (6 octobre 2026): surfaces pavées (paved) détectées sur l'imagerie satellite Esri (api/paved.js), hors zone dense.
 // v4 (6 octobre 2026): surfaces pavées avec leurs trous ({ o, h }), asphalte neutre jusqu'à 0,16 de saturation.
+// v5 (7 octobre 2026): hauteur réelle des bâtiments par LiDAR (api/heights.js): bld[i][4] vaut 1 quand la hauteur
+//   et les étages viennent de la mesure (surface moins sol nu), lidarBld donne le nombre de bâtiments mesurés.
 // Essai local: node api/scene3d.js --test 46.8367 -71.2336
 
 import duckdb from 'duckdb';
 import { readFileSync } from 'fs';
+import { lidarHeights } from './heights.js';
 import { pavedFromImagery, PAVED_ATTRIBUTION } from './paved.js';
 
 export const maxDuration = 60;
@@ -274,9 +277,19 @@ export async function buildScene(lat, lng) {
   }
 
   // Surfaces pavées d'après l'imagerie satellite (stationnements, aires, cours), là où les cartes ne les ont pas.
-  let paved = [], pavedSrc = null;
-  try { const r = await pavedFromImagery(lat, lng, bld, roads, (m) => console.log('[scene3d]', m)); paved = r.paved; pavedSrc = r.dense ? null : PAVED_ATTRIBUTION; } catch (e) { console.warn('[scene3d] surfaces pavées indisponibles:', e && e.message); }
-  return { v: 4, release: RELEASE, origin: [lat, lng], bld, roads, trees, green, asphalt, water, paved, pavedSrc, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
+  // En même temps: hauteur réelle des bâtiments par LiDAR (modifie bld en place, après la lecture des surfaces pavées
+  // qui n'utilise que les empreintes).
+  // lidarErr: lecture LiDAR échouée (catalogue ou mosaïque indisponible): la scène sert quand même, mais n'est gardée
+  // ni par le réseau de Vercel ni dans le cache partagé, pour être recalculée au prochain affichage.
+  let paved = [], pavedSrc = null, lidarBld = 0, lidarErr = false;
+  const log = (m) => console.log('[scene3d]', m);
+  await Promise.all([
+    pavedFromImagery(lat, lng, bld, roads, log).then((r) => { paved = r.paved; pavedSrc = r.dense ? null : PAVED_ATTRIBUTION; }).catch((e) => console.warn('[scene3d] surfaces pavées indisponibles:', e && e.message)),
+    lidarHeights(lat, lng, bld, log).then((r) => { lidarBld = r.measured; lidarErr = r.failed; }).catch((e) => { lidarErr = true; console.warn('[scene3d] hauteurs LiDAR indisponibles:', e && e.message); }),
+  ]);
+  const scene = { v: 5, release: RELEASE, origin: [lat, lng], bld, roads, trees, green, asphalt, water, paved, pavedSrc, lidarBld, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
+  if (lidarErr) scene.lidarErr = true;
+  return scene;
 }
 
 export default async function handler(req, res) {
@@ -290,7 +303,7 @@ export default async function handler(req, res) {
     const scene = await buildScene(lat, lng);
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=2592000');
+    res.setHeader('Cache-Control', scene.lidarErr ? 'no-store' : 'public, max-age=86400, s-maxage=2592000');
     res.end(JSON.stringify(scene));
   } catch (e) {
     console.error('[scene3d]', e);

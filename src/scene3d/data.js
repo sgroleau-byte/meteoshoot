@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase.js';
 
 const mem = new Map();
 const TBL = 'scene3d_cache'; // partagé, pas de variante dev
-const SCENE_V = 4; // v2: noms de rues; v3: surfaces pavées d'après l'imagerie satellite; v4: leurs trous, asphalte mieux capté
+const SCENE_V = 5; // v2: noms de rues; v3: surfaces pavées d'après l'imagerie satellite; v4: leurs trous, asphalte mieux capté; v5: hauteurs LiDAR
 const API_BASE = (typeof __MS_TARGET__ !== 'undefined' && __MS_TARGET__ === 'native') ? 'https://www.meteoshoot.com' : '';
 
 export const sceneKey = (lat, lng) => `${Number(lat).toFixed(5)}_${Number(lng).toFixed(5)}`;
@@ -30,6 +30,9 @@ export function loadScene(lat, lng) {
     if (scene?.bld && (scene.v || 1) < SCENE_V) { res = await fetch(url, { cache: 'reload' }); if (res.ok) scene = await res.json(); }
     if (!scene?.bld) throw new Error('scene3d: réponse invalide');
     delete scene.ms;
+    // Hauteurs LiDAR incomplètes (lecture échouée côté serveur): on s'en sert, sans la garder. Le prochain affichage
+    // (même session comprise) la redemande.
+    if (scene.lidarErr) { setTimeout(() => mem.delete(key), 0); return scene; }
     try {
       if (stale) await supabase.from(TBL).update({ version: SCENE_V, data: scene }).eq('key', key);
       else await supabase.from(TBL).insert({ key, lat: la, lng: ln, version: SCENE_V, data: scene });
