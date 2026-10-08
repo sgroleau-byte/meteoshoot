@@ -15,6 +15,7 @@ RectAreaLightUniformsLib.init(); // tables des lumières surfaciques (façades a
 import SunCalc from 'suncalc';
 import { DIRS, centroid, edgesOf, localRings, signedArea } from './footprint.js';
 import { TEX_PERIOD, flatTerrain, makeTerrain } from './terrain.js';
+import { prisms, fitTree, reachOf, sheetCellBlocked, sheetTriTooClose, LOBE_PARTS, CON_TIERS, CON_TIERS_LOW } from './clearance.js';
 
 // Ombres PCSS (percentage-closer soft shadows) greffées sur le mode d'ombre « de base » de three (carte de profondeur en
 // pleine précision, lue directement): pénombre nette au contact et de plus en plus large en s'éloignant de l'objet qui
@@ -262,6 +263,7 @@ c+=texture2D(tBloom,vUv).rgb*uBloom;c+=flare();c=aces(c);gl_FragColor=vec4(rain(
 const PAL_RES = ['#8f4e3a', '#a0624c', '#7a4a3a', '#b07d5e', '#9c7a62', '#6e5a50', '#b8957a', '#d2c2a4', '#8c6b58'];
 const ROOF = ['#57524d', '#5d5a55', '#514e4a', '#625e58'];
 const TREE_PAL = ['#c4652b', '#d08a2e', '#b8973a', '#8e8f3e', '#6f8540', '#5b7a3a', '#a9552b', '#d9a441', '#7d8c3c'];
+const CONIFER_PAL = ['#2f4a33', '#3a5638', '#33503a', '#445e3c']; // sapins, épinettes, pins: vert foncé toute l'année
 const GC = { park: '#66784d', pitch: '#5d8a47', play: '#b8a88e', grass: '#6f8552' };
 // ---- géométrie 2D (x est, n nord); signedArea, centroid et les lettres des volumes viennent de footprint.js
 function pointInRing(p, r) { let inside = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const a = r[i], b = r[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside; } return inside; }
@@ -371,16 +373,31 @@ function groundTex() {
   for (let i = 0; i < 65536; i++) { const px = i & 255, py = i >> 8; const n = 0.55 * hsh(px * 0.37, py * 0.41, 1) + 0.45 * hsh((px >> 3) * 1.3, (py >> 3) * 1.7, 2); const v = 150 + Math.round(n * 85); d[i * 4] = v; d[i * 4 + 1] = v; d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }
   x.putImageData(im, 0, 0); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(6600, 6600); t.anisotropy = 4; return t;
 }
-function lobes(detail = 2) {
-  const parts = [[0, 0, 0, 1], [0.6, 0.2, 0.15, 0.62], [-0.55, 0.1, 0.35, 0.58], [0.1, -0.05, -0.6, 0.6], [-0.1, 0.62, -0.1, 0.55], [0.25, 0.45, 0.5, 0.5]]; const pos = [], uvs = [];
+function lobes(detail = 2, nParts = 6) {
+  const parts = LOBE_PARTS.slice(0, nParts); const pos = [], uvs = []; // mêmes lobes que ceux que clearance.js teste contre les bâtiments
   parts.forEach(([x, y, z, r], k) => { const g = new THREE.IcosahedronGeometry(r, detail); const a = g.attributes.position.array, u = g.attributes.uv.array; for (let i = 0; i < a.length; i += 3) pos.push(a[i] + x, a[i + 1] + y, a[i + 2] + z); for (let i = 0; i < u.length; i += 2) uvs.push(u[i] * 2 + k * 0.37, u[i + 1] + k * 0.61); g.dispose(); });
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); g.computeVertexNormals(); return g;
 }
-// Masque du feuillage: le soleil passe entre les feuilles, l'ombre d'un arbre est parsemée, pas un bloc.
-function leafTex() {
+// Conifère: cônes ouverts empilés en étages (hauteur 0 à 1, rayon 1), bord inférieur dentelé, facettes plates comme les
+// lobes; coordonnées de texture à l'échelle du masque des feuillus.
+function conifer(seg = 10, tiers = CON_TIERS) {
+  const pos = [], uvs = [];
+  tiers.forEach(([y0, y1, r], k) => {
+    for (let i = 0; i < seg; i++) {
+      const a0 = i / seg * Math.PI * 2, a1 = (i + 1) / seg * Math.PI * 2, d0 = i % 2 ? 0.08 : 0, d1 = (i + 1) % 2 ? 0.08 : 0;
+      pos.push(Math.cos(a0) * r, y0 - d0 * (y1 - y0), Math.sin(a0) * r, 0, y1, 0, Math.cos(a1) * r, y0 - d1 * (y1 - y0), Math.sin(a1) * r);
+      const u0 = i / seg * 3 + k * 0.37, u1 = (i + 1) / seg * 3 + k * 0.37, v0 = k * 0.61, v1 = v0 + 1.4 * (y1 - y0) / r;
+      uvs.push(u0, v0, (u0 + u1) / 2, v1, u1, v0);
+    }
+  });
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); g.computeVertexNormals(); return g;
+}
+// Masque du feuillage: le soleil passe entre les feuilles, l'ombre d'un arbre est parsemée, pas un bloc. th plus bas:
+// feuillage plus dense (conifères).
+function leafTex(th = 0.5) {
   const N = 256, c = document.createElement('canvas'); c.width = c.height = N; const x = c.getContext('2d'); const im = x.createImageData(N, N), d = im.data;
   const grid = (gx, gy, gs, k) => { const i0 = Math.floor(gx), j0 = Math.floor(gy), fx = gx - i0, fy = gy - j0, sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy); const v = (i, j) => hsh(((i % gs) + gs) % gs, ((j % gs) + gs) % gs, k); return (v(i0, j0) * (1 - sx) + v(i0 + 1, j0) * sx) * (1 - sy) + (v(i0, j0 + 1) * (1 - sx) + v(i0 + 1, j0 + 1) * sx) * sy; };
-  for (let i = 0; i < N * N; i++) { const px = i & 255, py = i >> 8; const n = 0.3 * grid(px / 12, py / 12, 22, 11) + 0.4 * grid(px / 5, py / 5, 52, 12) + 0.3 * grid(px / 2.5, py / 2.5, 103, 13); const v = n > 0.5 ? 255 : 0; d[i * 4] = v; d[i * 4 + 1] = v; d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }
+  for (let i = 0; i < N * N; i++) { const px = i & 255, py = i >> 8; const n = 0.3 * grid(px / 12, py / 12, 22, 11) + 0.4 * grid(px / 5, py / 5, 52, 12) + 0.3 * grid(px / 2.5, py / 2.5, 103, 13); const v = n > th ? 255 : 0; d[i * 4] = v; d[i * 4 + 1] = v; d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }
   x.putImageData(im, 0, 0); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
 }
 // Tache de lumière ronde et douce (alpha seulement): flaques des lampadaires et têtes lumineuses.
@@ -440,11 +457,25 @@ export function createScene3D(container, opts = {}) {
   const trunkMat = new THREE.MeshStandardMaterial({ color: L('#4a3b2e'), roughness: 0.95, envMapIntensity: 0.75 });
   const leafMask = leafTex();
   const crownMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, envMapIntensity: 0.75, alphaMap: leafMask, alphaTest: 0.5, side: THREE.DoubleSide });
+  // Doublure d'ombre des feuillus proches: n'écrit rien à l'image (ni couleur, ni alpha, ni profondeur), porte seulement
+  // l'ombre, trouée par le même masque. three.js choisit les objets de la carte d'ombre avec les couches de la caméra
+  // principale: une couche à part n'y entrerait jamais.
+  const shadowMat = new THREE.MeshBasicMaterial({ alphaMap: leafMask, alphaTest: 0.5, side: THREE.DoubleSide, colorWrite: false, depthWrite: false });
+  const conMask = leafTex(0.44), conMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, envMapIntensity: 0.75, alphaMap: conMask, alphaTest: 0.5, side: THREE.DoubleSide });
+  // Sous-bois des massifs: nappe de feuillage sombre sous les cimes (on ne voit plus le gazon ni les troncs entre les
+  // arbres d'une forêt fermée) et lisière feuillue en bordure (bande haute, troncs visibles dessous), trouée.
+  const fillMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, envMapIntensity: 0.6 }); // vue du dessus seulement: d'en bas, on voit les couronnes, pas un plafond
+  const edgeMask = leafTex(0.55), edgeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, envMapIntensity: 0.6, alphaMap: edgeMask, alphaTest: 0.5, side: THREE.DoubleSide }); // plus trouée que les couronnes
   const waterMat = new THREE.MeshStandardMaterial({ color: L('#2a3b48'), roughness: 0.12, metalness: 0, envMapIntensity: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   // L'eau a déjà son reflet de ciel brillant: alpha 0 dans l'image de la scène, la passe des flaques l'ignore.
   waterMat.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a=0.0;'); };
   waterMat.customProgramCacheKey = () => 'eau';
-  const crownGeo = lobes(), crownGeoLow = lobes(1), trunkGeo = new THREE.CylinderGeometry(0.16, 0.26, 1, 6); // couronne simplifiée pour le lancer de rayons
+  // Arbres en trois anneaux de détail (moins de 150 m, 150 à 250 m, au-delà): feuillus en 6 lobes, 3 lobes simplifiés,
+  // puis une boule à facettes; conifères en 3 étages de 10 côtés, puis 2 étages de 6; tronc à 6 faces, puis 3.
+  // crownGeoShadow: doublure simplifiée qui porte l'ombre des feuillus proches.
+  const crownGeo = lobes(), crownGeoMid = lobes(1, 3), crownGeoFar = new THREE.IcosahedronGeometry(1, 1), crownGeoShadow = lobes(1);
+  const conGeo = conifer(), conGeoLow = conifer(6, CON_TIERS_LOW);
+  const trunkGeo = new THREE.CylinderGeometry(0.16, 0.26, 1, 6), trunkGeoLow = new THREE.CylinderGeometry(0.16, 0.26, 1, 3, 1, true);
   // Éclairage de nuit (7 octobre 2026): lampadaires peints (flaque de lumière au sol, tête lumineuse) et lueur de la
   // ville; ils s'allument avec les fenêtres. Pas de vraies sources de lumière: des centaines resteraient légères.
   const LAMP_COL = new THREE.Color(1.0, 0.7, 0.42); // blanc chaud (DEL d'environ 3000 K), en linéaire
@@ -459,7 +490,7 @@ export function createScene3D(container, opts = {}) {
   // lustre modéré, l'assombrissement domine); les façades, les arbres et les fenêtres, par la passe de reflet. refl = part
   // du reflet, écrite dans l'alpha de l'image de la scène: les flaques sur l'asphalte, un peu sur les trottoirs et les
   // toits plats (qui s'égouttent), rien sur le gazon (la couleur ne suffit pas à les distinguer la nuit).
-  const WET = { 'plat-road': [0.42, 0.72, 1], 'plat-asphalt': [0.42, 0.72, 1], 'plat-walk': [0.36, 0.75, 0.6], 'plat-rail': [0.3, 0.78, 0.4], toit: [0.3, 0.8, 0.25], mur: [0.2, 1, 0], tronc: [0.35, 1, 0], feuillage: [0.12, 0.9, 0] };
+  const WET = { 'plat-road': [0.42, 0.72, 1], 'plat-asphalt': [0.42, 0.72, 1], 'plat-walk': [0.36, 0.75, 0.6], 'plat-rail': [0.3, 0.78, 0.4], toit: [0.3, 0.8, 0.25], mur: [0.2, 1, 0], tronc: [0.35, 1, 0], feuillage: [0.12, 0.9, 0], 'sous-bois': [0.12, 0.9, 0], lisiere: [0.12, 0.9, 0] };
   const lampLit = (mat, key) => {
     const prev = mat.onBeforeCompile, [wDark, wGloss, wRefl] = WET[key] || [0.3, 0.9, 0];
     mat.onBeforeCompile = (sh, r) => {
@@ -484,7 +515,7 @@ export function createScene3D(container, opts = {}) {
   const flatMats = { road: flat('#383b3e', 3), rail: flat('#7d766c', 3), walk: flat('#9b978d', 4), asphalt: flat('#3a3d40', 2) };
   Object.keys(GC).forEach(k => { flatMats[k] = flat(GC[k], 1); });
   // Matériaux qui reçoivent la lumière des lampadaires (le toit, au-dessus des lampes, n'en reçoit presque pas).
-  [[wallMat, 'mur'], [roofMat, 'toit'], [trunkMat, 'tronc'], [crownMat, 'feuillage'], [gndMat, 'sol'], [gndMatFar, 'sol-loin'], ...Object.entries(flatMats).map(([k, m]) => [m, 'plat-' + k])].forEach(([m, k]) => lampLit(m, k));
+  [[wallMat, 'mur'], [roofMat, 'toit'], [trunkMat, 'tronc'], [crownMat, 'feuillage'], [conMat, 'feuillage'], [fillMat, 'sous-bois'], [edgeMat, 'lisiere'], [gndMat, 'sol'], [gndMatFar, 'sol-loin'], ...Object.entries(flatMats).map(([k, m]) => [m, 'plat-' + k])].forEach(([m, k]) => lampLit(m, k));
 
   // ---- soleil et ombres de nuages
   const sunL = new THREE.DirectionalLight(0xffffff, 10); sunL.castShadow = true; sunL.shadow.mapSize.set(4096, 4096);
@@ -556,8 +587,8 @@ export function createScene3D(container, opts = {}) {
   // brouillard ferme l'horizon. Comme dans un jeu: tout le détail près du sujet, peu au loin.
   const NEAR = 230;
   const nearXY = (x, n) => Math.hypot(x, n) < NEAR;
-  let treeNear = [], winLights = [];
-  function clearStatics() { statics.forEach(m => { S.remove(m); m.geometry && m.geometry.dispose(); }); statics = []; treesI = null; treeNear = []; winLights.forEach(l => { S.remove(l); l.dispose && l.dispose(); }); winLights = []; lampMeshes = []; urban = 0; }
+  let winLights = [];
+  function clearStatics() { statics.forEach(m => { S.remove(m); if (!m.userData.sharedGeo) m.geometry && m.geometry.dispose(); if (m.isInstancedMesh) m.dispose(); }); statics = []; treesI = null; winLights.forEach(l => { S.remove(l); l.dispose && l.dispose(); }); winLights = []; lampMeshes = []; urban = 0; }
   function addMesh(g, mat, y, near, shadows, order = 0) { const m = new THREE.Mesh(g, mat); m.position.y = y; m.renderOrder = order; m.receiveShadow = true; if (shadows) m.castShadow = true; m.userData.pt = !!near; S.add(m); statics.push(m); return m; }
   // Surfaces au sol (parcs, asphalte, eau): items = [{ o: contour, h: trous }], séparés proche/loin, triangulées en 2D
   // puis drapées sur le relief (chaque morceau dans le plan du maillage du sol, voir terrain.drape).
@@ -600,7 +631,7 @@ export function createScene3D(container, opts = {}) {
         const pts = signedArea(b.p) < 0 ? b.p.slice().reverse() : b.p, h = b.h, lv = Math.max(1, b.fl), col = b.col, rc = b.rc; let u0 = 0; const seed0 = Math.floor(hsh(pts[0][0], pts[0][1], 9) * 900);
         // Sur une pente: toit à h au-dessus du sol moyen de l'empreinte, murs descendus jusque sous le point le plus bas
         // (rien ne flotte côté aval, le pied s'enterre côté amont); étages recomptés sur la hauteur réelle du mur.
-        const gb = groundOf(pts), yb = gb.min - 0.5, top = gb.mean + h, lvw = Math.max(1, Math.round(lv * (top - yb) / h));
+        const gb = b.g || groundOf(pts), yb = gb.min - 0.5, top = gb.mean + h, lvw = Math.max(1, Math.round(lv * (top - yb) / h));
         for (let i = 0; i < pts.length; i++) {
           const a = pts[i], c = pts[(i + 1) % pts.length]; const ax = a[0], azz = -a[1], bx = c[0], bz = -c[1]; const ex = bx - ax, ez = bz - azz, len = Math.hypot(ex, ez); if (len < 0.05) continue;
           const nx = -ez / len, nz = ex / len;
@@ -666,30 +697,163 @@ export function createScene3D(container, opts = {}) {
     const hg = new THREE.BufferGeometry(); hg.setAttribute('position', new THREE.BufferAttribute(hp, 3));
     const heads = new THREE.Points(hg, lampHeadMat); heads.renderOrder = 9; heads.visible = false; S.add(heads); statics.push(heads); lampMeshes.push(heads);
   }
-  // Arbres: couronnes détaillées jusqu'à 160 m, simplifiées au-delà (deux lots instanciés); ceux de la zone proche
-  // sont gardés en liste pour le rendu affiné, qui les fusionne en un seul maillage.
-  function trees(list) {
-    if (!list.length) return;
-    const o3 = new THREE.Object3D(), lots = [[], []];
-    list.forEach(([x, n]) => {
-      const h = 7 + 6 * hsh(x, n, 1), cr = 2.1 + 1.5 * hsh(x, n, 2), th = Math.max(2.5, h - cr * 1.4), rot = hsh(x, n, 3) * 6.28, col = TREE_PAL[Math.floor(hsh(x, n, 4) * TREE_PAL.length)];
-      const t = { x, n, y: terrain.hTri(x, n), th, cr, rot, col }; lots[Math.hypot(x, n) < 160 ? 0 : 1].push(t); if (nearXY(x, n)) treeNear.push(t);
+  // Arbres: mesurés par LiDAR ([x, n, h, r, k]: hauteur, rayon de couronne, k 1 conifère; près d'un bâtiment, plus
+  // dx, dn (centre réel de la couronne) et o (feuillage mesuré au-dessus du toit)) ou, à défaut, points d'Overture
+  // ([x, n], taille tirée au sort comme avant). Trois anneaux de détail autour du projet. Les feuillus proches portent
+  // leur ombre par une doublure simplifiée qui n'écrit rien à l'image (shadowMat), avec le même masque: la lumière reste
+  // en taches. Rien ne traverse un bâtiment (clearance.js). Au toucher (iPad), 1500 arbres au plus: les proches, puis
+  // les grands.
+  const TREE_CAP = (window.matchMedia && window.matchMedia('(hover: none)').matches) ? 1500 : 4000;
+  // Feuillu: rayon visible des lobes 1,2 fois l'échelle, sommet à 1,17 fois au-dessus du centre (1 fois pour 3 lobes et
+  // la boule du lointain), bas de la couronne à 1 fois dessous; couronne sur environ la moitié de la hauteur, jamais
+  // sous 2 m. Pas de galette: un arbre bas mais large (souvent deux cimes fusionnées) garde une couronne au moins aux
+  // 4/5 ronde.
+  const broadY = (h, sx, top) => Math.min(Math.max(1.05 * sx, 0.5 * h / (top + 1)), 1.8 * sx, (h - 2) / (top + 1));
+  // Forme dessinée d'un arbre avant dégagement (clearance.js la teste et l'ajuste telle quelle). Conifère: base des
+  // branches à 12 à 25 % de la hauteur, sommet à la hauteur mesurée, rayon d'environ un cinquième de la hauteur (le
+  // rayon mesuré à mi-hauteur déborde sur les voisins en forêt dense), borné par la mesure. Tronc jusqu'au centre de la
+  // couronne (au quart de la hauteur pour un conifère), plus épais pour un grand arbre.
+  function treeShape(t) {
+    const k = Math.max(0.8, Math.min(1.4, 0.5 + t.h / 30)), tr = 0.26 * k;
+    if (t.con) {
+      const base = Math.max(0.8, (0.12 + 0.13 * hsh(t.x, t.n, 5)) * t.h), rb = Math.max(0.9, Math.min(t.h * (0.17 + 0.07 * t.c), t.r * 1.3));
+      return { kind: 'con', cx: t.x, cn: t.n, base, rb, tiers: t.ring ? CON_TIERS_LOW : CON_TIERS, th: t.h * 0.25, k, tr };
+    }
+    const th = Math.max(1.5, t.h - 1.17 * broadY(t.h, t.r / 1.2, 1.17)), off = Math.hypot(t.dx, t.dn);
+    // Centre mesuré de la couronne, à 0,7 fois sa largeur dessinée du tronc au plus (comme les essais de fitTree): le
+    // haut du tronc reste dans la couronne, même pour un arbre bas et large dessiné plus étroit que sa couronne mesurée.
+    const at = sx => { const f = off > 0.7 * sx ? 0.7 * sx / off : 1; return [t.x + t.dx * f, t.n + t.dn * f]; };
+    if (t.ring === 2) { const sy = broadY(t.h, t.r, 1), sx = Math.min(t.r, sy / 0.8), [cx, cn] = at(sx); return { kind: 'ball', cx, cn, sx, sy, top: 1, nl: 1, th, k, tr }; }
+    const top = t.ring === 1 ? 1 : 1.17, sy = broadY(t.h, t.r / 1.2, top), sx = Math.min(t.r / 1.2, sy / 0.8), [cx, cn] = at(sx);
+    return { kind: 'lobes', cx, cn, sx, sy, top, nl: t.ring === 1 ? 3 : 6, th, k, tr };
+  }
+  // P: prismes des bâtiments (formes du projet et voisins, clearance.js). Retourne, pour le point de vue, chaque arbre
+  // dessiné: [x, n] du centre de la couronne, portée, sol, bas de la couronne, sommet.
+  function trees(list, P) {
+    if (!list.length) return [];
+    let all = list.map(t => {
+      const [x, n] = t; let h, r, con = false, dx = 0, dn = 0, over;
+      if (t.length >= 5) { h = t[2]; r = t[3] * 1.15; con = t[4] === 1; if (t.length >= 8) { over = t[7]; if (!con) { dx = t[5]; dn = t[6]; } } } // rayon d'après la surface de la couronne: un peu plus, pour que les cimes voisines se touchent comme en forêt
+      else { const cr = 2.1 + 1.5 * hsh(x, n, 2); h = Math.max(2.5, 7 + 6 * hsh(x, n, 1) - cr * 1.4) + 2.08 * cr; r = 1.2 * cr; } // mêmes arbres qu'avant le LiDAR
+      const d = Math.hypot(x, n);
+      return { x, n, h: Math.max(2.5, h), r: Math.max(0.8, r), con, d, ring: d < 150 ? 0 : d < 250 ? 1 : 2, y: terrain.hTri(x, n), rot: hsh(x, n, 3) * 6.28, c: hsh(x, n, 4), dx, dn, over, lidar: t.length >= 5 };
     });
+    const pr = t => (t.d < 150 ? 2 : 0) + (t.h >= 15 ? 1 : 0) + t.h / 100;
+    const cap = (arr, m) => { if (arr.length <= m) return arr; arr.sort((a, b) => pr(b) - pr(a)); return arr.slice(0, m); };
+    // Dégagement avant le plafond (qui ne compte alors que des arbres dessinés), sur 30 % de plus que le plafond
+    // seulement: l'iPad n'ajuste pas 4000 arbres pour en dessiner 1500.
+    all = cap(all, Math.ceil(TREE_CAP * 1.3)).filter(t => (t.s = fitTree(t, treeShape(t), P)) !== null);
+    all = cap(all, TREE_CAP);
+    const o3 = new THREE.Object3D(), rings = [[], [], []];
+    all.forEach(t => rings[t.ring].push(t));
     treesI = [];
-    lots.forEach((lot, k) => {
+    const inst = (geo, mat, lot, place, cast) => {
       if (!lot.length) return;
-      const trunkI = new THREE.InstancedMesh(trunkGeo, trunkMat, lot.length), crownI = new THREE.InstancedMesh(k ? crownGeoLow : crownGeo, crownMat, lot.length);
-      lot.forEach((t, i) => {
-        o3.position.set(t.x, t.y + t.th / 2, -t.n); o3.scale.set(1, t.th, 1); o3.rotation.set(0, 0, 0); o3.updateMatrix(); trunkI.setMatrixAt(i, o3.matrix);
-        o3.position.set(t.x, t.y + t.th + t.cr * 0.85, -t.n); o3.scale.set(t.cr, t.cr * 1.05, t.cr); o3.rotation.set(0, t.rot, 0); o3.updateMatrix(); crownI.setMatrixAt(i, o3.matrix); crownI.setColorAt(i, L(t.col));
-      });
-      [trunkI, crownI].forEach(m => { m.castShadow = true; m.receiveShadow = true; S.add(m); statics.push(m); treesI.push(m); });
+      const m = new THREE.InstancedMesh(geo, mat, lot.length);
+      lot.forEach((t, i) => { place(t); o3.updateMatrix(); m.setMatrixAt(i, o3.matrix); if (mat !== trunkMat && mat !== shadowMat) m.setColorAt(i, L(t.con ? CONIFER_PAL[Math.floor(t.c * CONIFER_PAL.length)] : TREE_PAL[Math.floor(t.c * TREE_PAL.length)])); });
+      m.castShadow = cast; m.receiveShadow = mat !== shadowMat; m.userData.sharedGeo = true;
+      S.add(m); statics.push(m); treesI.push(m);
+    };
+    const placeCrown = t => { const s = t.s; o3.position.set(s.cx, t.y + t.h - s.top * s.sy, -s.cn); o3.scale.set(s.sx, s.sy, s.sx); o3.rotation.set(0, t.rot, 0); }; // 6 lobes, 3 lobes ou boule
+    const placeCon = t => { const s = t.s; o3.position.set(s.cx, t.y + s.base, -s.cn); o3.scale.set(s.rb, t.h - s.base, s.rb); o3.rotation.set(0, t.rot, 0); };
+    const placeTrunk = t => { const s = t.s; o3.position.set(t.x, t.y + s.th / 2, -t.n); o3.scale.set(s.k, s.th, s.k); o3.rotation.set(0, 0, 0); };
+    rings.forEach((lot, k) => {
+      const broad = lot.filter(t => !t.con), con = lot.filter(t => t.con);
+      inst(k ? trunkGeoLow : trunkGeo, trunkMat, lot, placeTrunk, true);
+      if (k === 0) { inst(crownGeo, crownMat, broad, placeCrown, false); inst(crownGeoShadow, shadowMat, broad, placeCrown, true); }
+      else inst(k === 1 ? crownGeoMid : crownGeoFar, crownMat, broad, placeCrown, true);
+      inst(k ? conGeoLow : conGeo, conMat, con, placeCon, true);
     });
+    return all.map(t => { const s = t.s; return [s.cx, s.cn, reachOf(s), t.y, s.kind === 'con' ? t.y + s.base : t.y + t.h - (s.top + 1) * s.sy, t.y + t.h]; });
+  }
+
+  // Sous-bois: grille de canopée des massifs (api/trees.js, demi-mètres, zéros par plages) en nappe à 60 % de la hauteur
+  // des cimes voisines (les couronnes en sortent), au contour décalé au hasard (pas de marches
+  // de 3 m), plus une lisière trouée du tiers de sa hauteur au bord de la nappe, sous les cimes de la lisière. Teinte de l'intérieur du
+  // feuillage, plus verte là où les conifères dominent. La nappe ne porte pas d'ombre (elle ferait un bloc au bord du
+  // boisé): les cimes et la lisière, trouées, s'en chargent.
+  function canopyFill(cn, treeList, P) {
+    const N = cn.n, res = cn.res, half = cn.half, bin = atob(cn.d), v = new Uint8Array(N * N);
+    for (let p = 0, k = 0; p < bin.length && k < N * N; p++) { const b = bin.charCodeAt(p); if (b) v[k++] = b; else k += bin.charCodeAt(++p); }
+    // Part de conifères par case de 12 m, d'après les arbres mesurés.
+    const share = new Map(), key = (x, n) => `${Math.floor(x / 12)},${Math.floor(n / 12)}`;
+    treeList.forEach(t => { if (t.length < 5) return; const k = key(t[0], t[1]), c = share.get(k) || [0, 0]; c[0]++; c[1] += t[4]; share.set(k, c); });
+    const BROAD = [L('#454826'), L('#4d4427'), L('#3c4a2a')], CON = L('#253826'), cc = new THREE.Color();
+    const pos = [], col = [], ind = [], idx = new Int32Array(N * N).fill(-1), top = new Float32Array(N * N), gy = new Float32Array(N * N), cells = [];
+    const at0 = (i, j) => (i < 0 || j < 0 || i >= N || j >= N) ? 0 : v[j * N + i];
+    // Rentrée d'une case (3 m): la canopée mesurée déborde un peu des couronnes dessinées, la nappe doit rester dessous.
+    const at = (i, j) => at0(i, j) && at0(i - 1, j) && at0(i + 1, j) && at0(i, j - 1) && at0(i, j + 1) ? v[j * N + i] : 0;
+    const vert = (i, j) => {
+      const k = j * N + i; if (idx[k] >= 0) return idx[k];
+      const x = -half + (i + 0.5) * res, n = -half + (j + 0.5) * res; let m = 0, c9 = 0;
+      for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) { const u = at(i + a, j + b); if (u) { m += u; c9++; } }
+      m /= c9 || 1; // moyenne des cases boisées voisines: la nappe reste sous la cime d'un petit arbre voisin d'un grand
+      gy[k] = terrain.hTri(x, n); top[k] = gy[k] + 0.6 * m / 2;
+      const c = share.get(key(x, n)), f = c ? c[1] / c[0] : 0;
+      cc.copy(BROAD[Math.floor(hsh(x, n, 7) * BROAD.length)]).lerp(CON, f).multiplyScalar(0.55 + 0.4 * hsh(x, n, 6)); // taches claires et sombres
+      pos.push(x, top[k], -n); col.push(cc.r, cc.g, cc.b); cells.push([i, j, m]); idx[k] = pos.length / 3 - 1; return idx[k];
+    };
+    // Pas de sous-bois dans un bâtiment ni contre ses murs (formes du projet comprises, que le serveur ne connaît pas):
+    // cases à moins de 0,6 m d'une empreinte retirées; la nappe s'ouvre autour d'une maison du boisé et sa lisière en
+    // fait le tour.
+    const quad = (i, j) => i >= 0 && j >= 0 && i < N - 1 && j < N - 1 && at(i, j) && at(i + 1, j) && at(i + 1, j + 1) && at(i, j + 1);
+    const blk = new Uint8Array(N * N);
+    for (let j = 0; j < N - 1; j++) for (let i = 0; i < N - 1; i++) if (quad(i, j) && sheetCellBlocked(-half + (i + 1) * res, -half + (j + 1) * res, res, P)) blk[j * N + i] = 1;
+    const filled = (i, j) => quad(i, j) && !blk[j * N + i];
+    for (let j = 0; j < N - 1; j++) for (let i = 0; i < N - 1; i++) if (filled(i, j)) { const a = vert(i, j), b = vert(i + 1, j), c = vert(i + 1, j + 1), d = vert(i, j + 1); ind.push(a, b, c, a, c, d); }
+    if (!ind.length) return;
+    // Bord: sommet touché par une case vide, déplacé jusqu'à 1,3 m dans une direction tirée au sort (à la même hauteur:
+    // abaissé, le bord faisait une pente raide dont on voyait le dessus depuis une clairière).
+    const place = (q, dist) => {
+      const [i, j, m] = cells[q], k = j * N + i, x = -half + (i + 0.5) * res, n = -half + (j + 0.5) * res, a = hsh(x, n, 8) * 6.28;
+      pos[q * 3] = x + Math.cos(a) * dist; pos[q * 3 + 2] = -(n + Math.sin(a) * dist);
+      gy[k] = terrain.hTri(pos[q * 3], -pos[q * 3 + 2]); top[k] = gy[k] + 0.6 * m / 2; pos[q * 3 + 1] = top[k];
+    };
+    const moved = new Uint8Array(cells.length);
+    cells.forEach(([i, j], q) => {
+      if (filled(i - 1, j - 1) && filled(i, j - 1) && filled(i - 1, j) && filled(i, j)) return;
+      place(q, 1.3 * hsh(-half + (i + 0.5) * res, -half + (j + 0.5) * res, 9)); moved[q] = 1;
+    });
+    // Un sommet déplacé qui amène un triangle à moins de 0,3 m d'un bâtiment revient au centre de sa case (à 0,6 m au
+    // moins); la lisière suit, elle est bâtie sur ces mêmes sommets.
+    for (let pass = 0, changed = 1; changed && pass < 4; pass++) {
+      changed = 0;
+      for (let t = 0; t < ind.length; t += 3) {
+        const a = ind[t], b = ind[t + 1], c = ind[t + 2]; if (moved[a] !== 1 && moved[b] !== 1 && moved[c] !== 1) continue;
+        if (!sheetTriTooClose([[pos[a * 3], -pos[a * 3 + 2]], [pos[b * 3], -pos[b * 3 + 2]], [pos[c * 3], -pos[c * 3 + 2]]], P)) continue;
+        for (const q of [a, b, c]) if (moved[q] === 1) { place(q, 0); moved[q] = 2; changed++; }
+      }
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(ind); g.computeVertexNormals();
+    const m = new THREE.Mesh(g, fillMat); m.receiveShadow = true; S.add(m); statics.push(m);
+    // Lisière: chaque côté de case remplie qui borde une case vide.
+    const ep = [], ec = [], eu = [], ei = [];
+    const side = (i0, j0, i1, j1) => {
+      const k0 = j0 * N + i0, k1 = j1 * N + i1, p0 = idx[k0] * 3, p1 = idx[k1] * 3, b = ep.length / 3;
+      const x0 = pos[p0], z0 = pos[p0 + 2], x1 = pos[p1], z1 = pos[p1 + 2], u0 = (x0 - z0) / 4, u1 = (x1 - z1) / 4;
+      // Bande de feuillage dans le haut seulement (du tiers de la hauteur à la nappe): on voit les troncs dessous, comme
+      // à la lisière d'un vrai boisé; une lisière pleine jusqu'au sol faisait un mur de haie vu de près.
+      const b0 = gy[k0] + 0.35 * (top[k0] - gy[k0]), b1 = gy[k1] + 0.35 * (top[k1] - gy[k1]);
+      ep.push(x0, b0, z0, x1, b1, z1, x1, top[k1], z1, x0, top[k0], z0);
+      for (const q of [p0, p1, p1, p0]) ec.push(col[q] * 1.3, col[q + 1] * 1.3, col[q + 2] * 1.3);
+      eu.push(u0, 0, u1, 0, u1, (top[k1] - b1) / 4, u0, (top[k0] - b0) / 4);
+      ei.push(b, b + 1, b + 2, b, b + 2, b + 3);
+    };
+    for (let j = 0; j < N - 1; j++) for (let i = 0; i < N - 1; i++) {
+      if (!filled(i, j)) continue;
+      if (!filled(i, j - 1)) side(i, j, i + 1, j);
+      if (!filled(i + 1, j)) side(i + 1, j, i + 1, j + 1);
+      if (!filled(i, j + 1)) side(i + 1, j + 1, i, j + 1);
+      if (!filled(i - 1, j)) side(i, j + 1, i, j);
+    }
+    if (!ei.length) return;
+    const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.Float32BufferAttribute(ep, 3)); ge.setAttribute('color', new THREE.Float32BufferAttribute(ec, 3)); ge.setAttribute('uv', new THREE.Float32BufferAttribute(eu, 2)); ge.setIndex(ei); ge.computeVertexNormals();
+    const me = new THREE.Mesh(ge, edgeMat); me.castShadow = true; me.receiveShadow = true; S.add(me); statics.push(me);
   }
 
   // Point de vue: à hauteur d'oeil, côté soleil du créneau (AM: sud-est, PM: sud-ouest), dans l'espace libre,
   // avec vue dégagée sur le bâtiment principal.
-  function pickView(target, others, roads, treePts) {
+  function pickView(target, others, roads, treePts, subj = []) {
     if (!target.length) { const b0 = terrain.hTri(0, 0); ct.set(0, b0 + 10, 0); T0.set(0, b0, 0); sunL.target.position.copy(T0); return; }
     const tc = centroid(target), base = groundOf(target).mean; let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
     target.forEach(p => { minx = Math.min(minx, p[0]); miny = Math.min(miny, p[1]); maxx = Math.max(maxx, p[0]); maxy = Math.max(maxy, p[1]); });
@@ -697,26 +861,41 @@ export function createScene3D(container, opts = {}) {
     const pref = orientation.includes('PM') && !orientation.includes('AM') ? 215 : orientation.includes('AM') && !orientation.includes('PM') ? 140 : 180;
     const size = Math.max(maxx - minx, maxy - miny); const radPref = Math.max(40, Math.min(110, size * 1.0 + 25)), aimY = base + Math.min(14, 4 + size * 0.1);
     rMin = Math.max(15, Math.hypot(maxx - minx, maxy - miny) / 2 + 8); // on ne peut pas s'approcher au point d'entrer dans le bâtiment (8 m de marge)
-    let best = null;
+    let best = null, bestUnder = null;
     const near = others.filter(r => Math.hypot(centroid(r)[0] - tc[0], centroid(r)[1] - tc[1]) < 260);
+    // Arbres dessinés (trees()): [x, n] du centre de la couronne, portée, sol, bas de la couronne, sommet.
+    const tp = treePts.filter(t => Math.hypot(t[0] - tc[0], t[1] - tc[1]) < radPref + 80);
     for (let bea = pref - 80; bea <= pref + 80; bea += 5) {
       for (let rad = Math.max(30, radPref - 40); rad <= radPref + 50; rad += 6) {
         const px = tc[0] + Math.sin(bea * Math.PI / 180) * rad, py = tc[1] + Math.cos(bea * Math.PI / 180) * rad, p = [px, py];
-        if (near.some(r => pointInRing(p, r)) || pointInRing(p, target)) continue;
+        if (near.some(r => pointInRing(p, r)) || pointInRing(p, target) || subj.some(r => pointInRing(p, r))) continue; // jamais dans le sujet (socle, aile) non plus
         if (near.some(r => segHitsRing(p, tc, r))) continue;
-        // Pas dans un arbre ni le nez dans une couronne: on s'éloigne des troncs proches.
-        let treePen = 0; for (const t of treePts) { const dt = Math.hypot(t[0] - px, t[1] - py); if (dt < 5) { treePen = 1e9; break; } if (dt < 12) treePen += (12 - dt) * 3; }
-        if (treePen > 1e8) continue;
+        // Pas dans un arbre ni le nez dans une couronne (portée dessinée), et le moins d'arbres possible entre
+        // la caméra et le bâtiment. En forêt dense, aucun point n'est libre: on garde le moins encombré, vu de plus haut.
+        // Une couronne ne cache le bâtiment que si la ligne de visée la traverse (on voit sous une couronne haute).
+        let treePen = 0, under = false, screen = 0;
+        const eye = terrain.hTri(px, py) + 1.7, dx = tc[0] - px, dy = tc[1] - py, l2 = dx * dx + dy * dy || 1;
+        for (const t of tp) {
+          const r = t[2], dt = Math.hypot(t[0] - px, t[1] - py);
+          if (dt < Math.max(5, r + 1.5)) under = true; else if (dt < r + 8) treePen += (r + 8 - dt) * 3;
+          const u = Math.max(0, Math.min(1, ((t[0] - px) * dx + (t[1] - py) * dy) / l2)), ly = eye + (aimY - eye) * u;
+          if (Math.hypot(px + u * dx - t[0], py + u * dy - t[1]) < 0.8 * r && ly > t[4] && ly < t[5]) screen++;
+        }
         const blocked = corners.filter(c => near.some(r => segHitsRing(p, c, r))).length;
         const hidden = terrain.blocked(px, py, terrain.hTri(px, py) + 1.7, tc[0], tc[1], aimY) ? 1 : 0; // le relief cache le bâtiment
         let roadD = Infinity; roads.forEach(r => { if (r.k !== 0) return; const P = r.p; for (let i = 0; i < P.length - 1; i++) { const a = P[i], b = P[i + 1]; const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy || 1; let t = ((px - a[0]) * dx + (py - a[1]) * dy) / l2; t = Math.max(0, Math.min(1, t)); roadD = Math.min(roadD, Math.hypot(px - a[0] - t * dx, py - a[1] - t * dy)); } });
-        const score = -Math.abs(bea - pref) * 0.6 - Math.abs(rad - radPref) * 0.8 - blocked * 25 - hidden * 40 + (roadD < 7 ? 8 : 0) - treePen;
-        if (!best || score > best.s) best = { s: score, px, py };
+        const score = -Math.abs(bea - pref) * 0.6 - Math.abs(rad - radPref) * 0.8 - blocked * 25 - hidden * 40 + (roadD < 7 ? 8 : 0) - treePen - Math.min(screen, 8) * 12;
+        if (under) { if (!bestUnder || score > bestUnder.s) bestUnder = { s: score, px, py, screen, under }; }
+        else if (!best || score > best.s) best = { s: score, px, py, screen };
       }
     }
-    if (!best) { best = { px: tc[0] + Math.sin(pref * Math.PI / 180) * radPref, py: tc[1] + Math.cos(pref * Math.PI / 180) * radPref }; }
+    if (!best) best = bestUnder;
+    if (!best) { best = { px: tc[0] + Math.sin(pref * Math.PI / 180) * radPref, py: tc[1] + Math.cos(pref * Math.PI / 180) * radPref, screen: 0, under: true }; } // point non vérifié: au-dessus des cimes voisines
+    // Vue bouchée par les arbres (lot en forêt): au-dessus des cimes voisines plutôt qu'à hauteur d'oeil.
+    let lift = 1.7;
+    if (best.under || best.screen >= 3) { const g0 = terrain.hTri(best.px, best.py); let top = 0; for (const t of tp) if (Math.hypot(t[0] - best.px, t[1] - best.py) < 25) top = Math.max(top, t[5] - g0); lift = Math.max(lift, Math.min(80, top + 5)); }
     ct.set(tc[0], aimY, -tc[1]); T0.set(tc[0], base, -tc[1]); sunL.target.position.copy(T0);
-    az = Math.atan2(best.px - tc[0], best.py - tc[1]); Rr = clampR(Math.hypot(best.px - tc[0], best.py - tc[1])); camH = 1.7;
+    az = Math.atan2(best.px - tc[0], best.py - tc[1]); Rr = clampR(Math.hypot(best.px - tc[0], best.py - tc[1])); camH = lift;
   }
 
   function rebuild() {
@@ -739,7 +918,7 @@ export function createScene3D(container, opts = {}) {
       const fl = Math.max(1, Math.floor(h / 3.6)); // une rangée de fenêtres par étage de 3,6 m environ (jamais étirée)
       const wallHex = (projLocal[d.i] && projLocal[d.i].wallColor) || '#7a3f33', base = groundOf(d.p).mean;
       edgesOf(d.p).forEach(e => projInfo.push({ dir: e.dir, len: e.len, mid: e.mid, nrm: e.nrm, label: `Forme ${i + 1}`, h, src, base }));
-      list.push({ p: d.p, h, fl, bay: 8, col: L(wallHex), rc: L('#5a5650'), allLit: true }); // l'édifice photographié: toutes les fenêtres allumées la nuit
+      list.push({ p: d.p, h, fl, bay: 8, col: L(wallHex), rc: L('#5a5650'), allLit: true, unmapped: !hits.length }); // l'édifice photographié: toutes les fenêtres allumées la nuit; unmapped: absent d'Overture (clearance.js)
     });
     // Les façades allumées éclairent les alentours: une lumière surfacique chaude par façade (les plus longues d'abord),
     // devant le mur, à mi-hauteur, dirigée vers l'extérieur; intensité suivant celle des fenêtres (voir frame).
@@ -748,7 +927,7 @@ export function createScene3D(container, opts = {}) {
       const l = new THREE.RectAreaLight(0xffd9a0, 0, e.len * 0.9, e.h * 0.7); const nx = e.nrm[0], nz = -e.nrm[1];
       l.position.set(e.mid[0] + nx * 0.4, e.base + e.h * 0.5, -e.mid[1] + nz * 0.4); l.lookAt(l.position.x + nx, l.position.y, l.position.z + nz); l.visible = false; S.add(l); winLights.push(l);
     });
-    const others = [];
+    const others = []; let kept = [];
     if (data) {
       data.bld.forEach(([p, h, fl, k, lid]) => {
         // Un voisin recouvert par un bâtiment dessiné disparaît: c'est le même édifice.
@@ -764,7 +943,10 @@ export function createScene3D(container, opts = {}) {
       addFlat((data.paved || []).map(p => { const v = p.o ? p : { o: p, h: [] }; return { o: regularizeRing(v.o), h: (v.h || []).map(h => regularizeRing(h)) }; }), flatMats.asphalt, 0.045, 3);
       addFlat(data.water.map(w => ({ o: w.o, h: w.h, hFn: terrain.waterSurface(w), nFn: terrain.upNormal })), waterMat, 0.05); // surface lisse calée sur les rives
       ribbons(data.roads.filter(r => r.k === 2), 0.1, flatMats.rail, 4); ribbons(data.roads.filter(r => r.k === 0), 0.08, flatMats.road, 5); ribbons(data.roads.filter(r => r.k === 1), 0.12, flatMats.walk, 6);
-      trees(data.trees);
+      const P = prisms(list, groundOf); // formes du projet et voisins, tels que blocks() les dessine
+      if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.P = P; // vérification en développement
+      kept = trees(data.trees, P);
+      if (data.canopy) canopyFill(data.canopy, data.trees, P);
       lamps(data.roads, data.bld);
     }
     blocks(list);
@@ -775,7 +957,11 @@ export function createScene3D(container, opts = {}) {
       const under = cand.find(([p]) => pointInRing([0, 0], p)) || cand.map(b => ({ b, d: Math.hypot(...centroid(b[0])) })).sort((a, b) => a.d - b.d).find(x => x.d < 60)?.b;
       if (under) focus = under[0];
     }
-    pickView(focus || [], others.filter(r => r !== focus), data ? data.roads : [], data ? data.trees : []);
+    // Les autres formes du projet comptent comme obstacles, sauf celles qui chevauchent la première (tour sur un socle,
+    // bâtiment en L dessiné en deux rectangles): c'est le même sujet, on ne place pas la caméra dedans, mais il ne bouche
+    // pas la vue sur lui-même.
+    const subj = focus ? drawn.map(d => d.p).filter(r => r !== focus && ringsOverlap(r, focus)) : [];
+    pickView(focus || [], [...others, ...drawn.map(d => d.p)].filter(r => r !== focus && !subj.includes(r)), data ? data.roads : [], kept, subj);
     cloudLift = Math.max(150, terrain.maxWithin(1000) - T0.y + 60); // les nuages passent au-dessus des collines voisines
     dirty = true;
   }
@@ -959,7 +1145,8 @@ export function createScene3D(container, opts = {}) {
     const hLidar = !!(data && data.lidarBld > 0), hLine = 'Hauteurs des bâtiments LiDAR (Ressources naturelles Canada)';
     const relief = terrain.flat ? (hLidar ? hLine : '') : terrain.src.lidar >= 0.5 ? `Relief LiDAR ${terrain.src.lidarRes || 2} m${hLidar ? ' et hauteurs des bâtiments LiDAR' : ''} (Ressources naturelles Canada)` : 'Relief du modèle d’élévation du Canada (20 m)' + (hLidar ? ' · ' + hLine : '');
     const pavedLine = data && data.paved && data.paved.length ? `Surfaces pavées d’après l’imagerie satellite (${data.pavedSrc || 'Esri'}), approximatives` : '';
-    const srcLine = [relief, pavedLine].filter(Boolean).join(' · ');
+    const ts = data && data.treesSrc, treeLine = ts && ts.n ? `Arbres LiDAR, conifères estimés d’après ${ts.essences && ts.essences.length ? ts.essences.join(' et ') : 'la forme des cimes'}` : '';
+    const srcLine = [relief, treeLine, pavedLine].filter(Boolean).join(' · ');
     const info = cond + '|' + parts + '|' + where + '|' + height + '|' + srcLine + '|' + (est > 0.55 ? 'dark' : 'light');
     if (info !== lastInfo) { lastInfo = info; onInfo({ cond, parts, where, height, srcLine, light: est <= 0.55, northDeg: (Math.atan2(vF.x, -vF.z) * 180 / Math.PI) }); }
   }
@@ -1019,8 +1206,8 @@ export function createScene3D(container, opts = {}) {
     dispose() {
       running = false; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); clearStatics();
       [sceneRT, aoRT, aoRT2, compRT, reflRT, reflRT2, cubeRT, skyRT, envRT].forEach(r => r && r.dispose()); pmrem.dispose();
-      [skyMat, aoMat, blurMat, compMat, reflMat, rblurMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, waterMat, cloudMat, lampHeadMat, ...Object.values(flatMats)].forEach(m => m.dispose()); GLOW.dispose(); if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
-      [skyGeo, crownGeo, crownGeoLow, trunkGeo, sg, gnd && gnd.geometry, gndFar.geometry, quad.geometry].forEach(g => g && g.dispose()); FT.map.dispose(); FT.rough.dispose(); FT.emis.dispose(); gndTex.dispose(); gndTexNear.dispose(); gndMat.dispose(); gndMatFar.dispose(); leafMask.dispose();
+      [skyMat, aoMat, blurMat, compMat, reflMat, rblurMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, shadowMat, conMat, fillMat, edgeMat, waterMat, cloudMat, lampHeadMat, ...Object.values(flatMats)].forEach(m => m.dispose()); GLOW.dispose(); if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
+      [skyGeo, crownGeo, crownGeoMid, crownGeoFar, crownGeoShadow, conGeo, conGeoLow, trunkGeo, trunkGeoLow, sg, gnd && gnd.geometry, gndFar.geometry, quad.geometry].forEach(g => g && g.dispose()); FT.map.dispose(); FT.rough.dispose(); FT.emis.dispose(); gndTex.dispose(); gndTexNear.dispose(); gndMat.dispose(); gndMatFar.dispose(); leafMask.dispose(); conMask.dispose(); edgeMask.dispose();
       R.dispose(); R.forceContextLoss(); if (el.parentNode) el.parentNode.removeChild(el);
     },
   };

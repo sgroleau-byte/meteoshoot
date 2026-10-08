@@ -45,8 +45,9 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   asphalte, plus forte au soleil) par le bas. Ombres douces (VSM) dont la pénombre s'élargit avec le voile et
   les nuages; ombres de nuages qui passent; passes d'image: occlusion ambiante (recoins), tonalité ACES,
   lissage FXAA. Heure bleue et nuit traitées à part (dégradé bleu profond, lueur à l'horizon côté soleil).
-  Bâtiments en un seul tracé (murs avec fenêtres par étage, toits plats); arbres instanciés à lobes avec
-  masque de feuillage (le soleil passe entre les feuilles: ombre parsemée). Point de vue choisi à hauteur
+  Bâtiments en un seul tracé (murs avec fenêtres par étage, toits plats); arbres instanciés (feuillus à lobes,
+  conifères en cônes étagés) avec masque de feuillage (le soleil passe entre les feuilles: ombre parsemée), mesurés
+  par LiDAR depuis la v633.172 (voir plus bas). Point de vue choisi à hauteur
   d'oeil du côté du créneau (AM ou PM), dans l'espace libre, vue dégagée sur le bâtiment principal.
 - `src/scene3d/footprint.js`: empreintes dessinées en mètres (contour antihoraire, hauteur réglée ou défaut)
   et côtés de chaque forme avec leur orientation (légende « Forme 1, côté sud-ouest »).
@@ -118,7 +119,7 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   que le traceur ignore), 20 à 40 s pour 200 échantillons sur un Mac récent. Le 5 octobre 2026, une première
   version sans plafond (600 échantillons, pleine zone) a saturé le Mac de Stéphane: garder le plafond.
 - Zones et détail: `NEAR = 230 m` autour du projet (origine) sépare les maillages proches (userData.pt, rendu
-  affiné) des lointains; arbres détaillés jusqu'à 160 m, couronnes simplifiées au-delà (deux lots instanciés).
+  affiné) des lointains; arbres en trois anneaux de détail depuis la v633.172 (moins de 150 m, 150 à 250 m, au-delà).
   Acné d'ombre (bandes en escalier sur les murs frôlés par le soleil) corrigée par `shadow.normalBias = 0.7`.
 - Retouches du 5 octobre au soir (v633.147), après les retours de Stéphane (« lumière pas mal du tout »):
   bande blanche entre ciel et terre supprimée (épaisseur d'atmosphère bornée à 7° d'élévation dans le modèle,
@@ -247,6 +248,51 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   horizon 2,4 fois plus clair, halo de Mie borné) au lieu de la radiance brute qui saturait en blanc dès 30° à
   travers l'ACES; brouillard recalculé sur le même horizon. Mesures après correction (vue à l'opposé du soleil, haut
   du cadre): 14 octobre 10 h 55 (120,156,196), juillet midi (133,166,202), 17 h 30 (98,130,167), lever (65,93,138).
+- v633.172 (8 octobre 2026), **arbres réels** (« la densité d'arbre n'est vraiment pas réaliste... une forêt presque
+  dense autour des maisons alors que le 3D montre un arbre ici et là », lot de Stoneham). Cause: Overture et
+  OpenStreetMap n'ont que quelques arbres isolés (147 dans la scène de Stoneham). `api/trees.js` lit le LiDAR 1 m
+  (surface moins sol, ±350 m, mêmes mosaïques que les hauteurs des bâtiments) et en tire chaque cime: maximum local
+  (rayon 1,5 à 4 m selon la hauteur), toits écartés (empreintes élargies de 2 m, surface lisse, et règle `roofTops`: pans
+  plans, plateau, toit voisin à la même hauteur, pour les bâtiments absents d'Overture et les empreintes décalées), couronne par partage
+  des eaux de la canopée (chaque pixel à la cime qu'il rejoint en montant, au-dessus du tiers de sa hauteur, 12 m au
+  plus). Stoneham: 2967 arbres, hauteur médiane 18,7 m; Limoilou: 1404. Conifère ou feuillu: inventaire des arbres
+  publics de la Ville de Québec (appariement à 3,5 m), sinon carte écoforestière du Québec (WFS du ministère, part de
+  résineux attendue: R 85 %, M 62 ou 35 % selon l'essence dominante, F 8 %), corrigée par la forme de la cime
+  (régression calibrée sur 2499 cimes de l'inventaire, juste 7 fois sur 10 seule), tirage fixe par cime. Repli:
+  arbres d'Overture (format [x, n]) là où le LiDAR ne voit pas et au-delà de 350 m. Format v6: `[x, n, h, r, k]`, et
+  près d'un bâtiment `[x, n, h, r, k, dx, dn, o]` (centre mesuré de la couronne, feuillage mesuré au-dessus du toit),
+  `treesSrc`, `canopy`. Hauteur maximale d'un arbre 38 m (100 m à l'ouest de -114°): au-delà, pylône, fil ou toit de
+  tour (43 à 84 m mesurés à Ottawa, Outremont, Limoilou), retiré avec ses pixels.
+  **Sous-bois** (idée de Stéphane: « illustrer une forêt sans faire un 3D de chacun des arbres »): dans les
+  peuplements de la carte écoforestière seulement (en ville, les arbres de rue qui se touchent n'en ont pas), une
+  grille de canopée de 3 m (ouverture morphologique de 6 m: ni arbre isolé ni haie) donne une nappe sombre à 60 % de
+  la hauteur des cimes, rentrée de 3 m, plus une lisière trouée sous son bord: plus de gazon ni de
+  troncs entre les arbres d'une forêt fermée. Elle ne porte pas d'ombre (bloc), la lisière oui (trouée).
+  Rendu: rayon de couronne mesuré plus 15 % (les cimes se touchent), couronne sur environ la moitié de la hauteur,
+  jamais en galette (au moins 4/5 ronde); conifères en 3 étages (2 au loin), base des branches à 12 à 25 % de la
+  hauteur, rayon d'environ un cinquième de la hauteur, vert foncé toute l'année. Feuillus proches: ombre portée par
+  une doublure simplifiée qui n'écrit rien à l'image (three.js choisit les objets de la carte d'ombre avec les
+  couches de la caméra principale: une couche à part n'y entrerait jamais). 1500 arbres au plus au toucher.
+  Point de vue: une couronne ne compte comme obstacle que si la ligne de visée la traverse; sous les arbres ou vue
+  bouchée, caméra au-dessus des cimes voisines. Mesure (Mac Studio, cadre 2122 × 1600): scène et ombres à Stoneham
+  1,6 ms sans arbres, 4,1 ms avec à hauteur d'oeil, 2,2 et 6,0 ms en vue de drone; 60 images/s en rotation.
+  Limites: relevé LiDAR daté (arbres coupés ou plantés depuis), arbres de moins de 3 m absents, cimes urbaines qui se
+  touchent comptées en moins d'arbres plus gros, mélèze (jaunit en octobre) non reconnu, couleurs toujours d'automne.
+  **Arbres et bâtiments** (« il ne faut pas que les arbres entrent en conflit avec les bâtiments »): avant, 0,4 % des
+  arbres à Stoneham et 9 à 21 % en ville (Limoilou, Sillery, Montcalm, Outremont, Toronto) traversaient un mur ou un
+  toit, surtout par leur couronne (cercle dessiné trop large du côté de la maison, ou couronne qui descend sous le toit
+  qu'elle surplombe). `src/scene3d/clearance.js` (fonctions pures) teste la forme dessinée de chaque arbre contre les
+  prismes des bâtiments (formes du projet et voisins, comme `blocks()` les extrude) et l'ajuste: tronc dans une
+  empreinte, arbre retiré; couronne qui touche: remontée au-dessus du toit (d'abord quand le relevé montre du feuillage
+  au-dessus de ce toit, `o` dans la scène), décalée à l'opposé du mur (au plus 0,7 fois son rayon depuis le tronc) ou
+  réduite jusqu'à 60 %, sinon retirée; marge de 0,3 m. Le serveur envoie, pour les arbres près d'un bâtiment, le centre
+  réel de la couronne (partage des eaux) et l'indice de surplomb. Formes du projet absentes d'Overture (bâtiment neuf):
+  pas de surplomb, « arbres » LiDAR au plus 1,5 m au-dessus de leur toit retirés (c'est le toit), clairière de 4 m dans
+  le sous-bois. Sous-bois: cases à moins de 0,6 m d'un bâtiment retirées, bord ramené au centre de sa case s'il frôle un
+  mur. Vérifié sur les instances three.js réelles (chaque sommet contre chaque prisme): 0 sommet dans un bâtiment à
+  Montcalm, Outremont, Limoilou et Stoneham (avec une forme dessinée en plein boisé). Lisière ramenée à une bande de
+  feuillage du tiers de sa hauteur à la nappe (on voit les troncs dessous), nappe vue du dessus seulement, sans pente
+  au bord: vue de près, la lisière pleine faisait un mur de haie.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

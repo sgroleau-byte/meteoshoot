@@ -9,7 +9,7 @@ const TYPE_SIZE = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8,
 const UA = 'MeteoShoot (www.meteoshoot.com)';
 
 async function rangeFetch(url, a, b) {
-  const r = await fetch(url, { headers: { Range: `bytes=${a}-${b}`, 'User-Agent': UA } });
+  const r = await fetch(url, { headers: { Range: `bytes=${a}-${b}`, 'User-Agent': UA }, signal: AbortSignal.timeout(20000) }); // une lecture bloquée ne doit pas épuiser les 60 s de la fonction
   if (r.status !== 206 && r.status !== 200) throw new Error(`cog ${r.status} ${url.slice(-40)}`);
   return new Uint8Array(await r.arrayBuffer());
 }
@@ -110,10 +110,19 @@ export function openCog(url) {
   return p;
 }
 
-// Une tuile décodée en Float32Array (tw*th), NaN pour « sans donnée » et hors image.
-async function readTile(cog, lv, tx, ty) {
-  const L = cog.levels[lv]; const key = `${cog.url}#${lv}/${tx}/${ty}`;
-  if (tileCache.has(key)) { const v = tileCache.get(key); tileCache.delete(key); tileCache.set(key, v); return v; }
+// Une tuile décodée en Float32Array (tw*th), NaN pour « sans donnée » et hors image. Deux lecteurs simultanés de la
+// même tuile (hauteurs des bâtiments et arbres, lancés ensemble) partagent la même lecture.
+const pending = new Map();
+function readTile(cog, lv, tx, ty) {
+  const key = `${cog.url}#${lv}/${tx}/${ty}`;
+  if (tileCache.has(key)) { const v = tileCache.get(key); tileCache.delete(key); tileCache.set(key, v); return Promise.resolve(v); }
+  if (pending.has(key)) return pending.get(key);
+  const p = decodeTile(cog, lv, tx, ty, key).finally(() => pending.delete(key));
+  pending.set(key, p);
+  return p;
+}
+async function decodeTile(cog, lv, tx, ty, key) {
+  const L = cog.levels[lv];
   const n = L.tw * L.th, out = new Float32Array(n);
   if (tx < 0 || ty < 0 || tx >= L.across || ty >= Math.ceil(L.height / L.th)) { out.fill(NaN); return out; }
   const idx = ty * L.across + tx, es = TYPE_SIZE[L.offs.type], cs = TYPE_SIZE[L.counts.type];

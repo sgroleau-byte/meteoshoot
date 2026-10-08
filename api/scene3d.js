@@ -11,11 +11,17 @@
 // v4 (6 octobre 2026): surfaces pavées avec leurs trous ({ o, h }), asphalte neutre jusqu'à 0,16 de saturation.
 // v5 (7 octobre 2026): hauteur réelle des bâtiments par LiDAR (api/heights.js): bld[i][4] vaut 1 quand la hauteur
 //   et les étages viennent de la mesure (surface moins sol nu), lidarBld donne le nombre de bâtiments mesurés.
+// v6 (8 octobre 2026): arbres mesurés par LiDAR jusqu'à 350 m (api/trees.js): trees[i] = [x, n, h, r, k] (hauteur,
+//   rayon de couronne, k 1 conifère ou 0 feuillu; près d'un bâtiment, plus dx, dn: centre mesuré de la couronne, et
+//   o: 1 si le relevé montre du feuillage au-dessus du toit voisin); treesSrc { date, res, essences }. Restent au format [x, n] (taille
+//   tirée au sort par le client) les arbres d'Overture là où le LiDAR ne voit pas, et les boisés au-delà de 350 m.
+//   canopy: hauteur de la canopée des boisés en grille de 3 m (sous-bois dessiné sous les cimes), voir api/trees.js.
 // Essai local: node api/scene3d.js --test 46.8367 -71.2336
 
 import duckdb from 'duckdb';
 import { readFileSync } from 'fs';
 import { lidarHeights } from './heights.js';
+import { lidarTrees, R_TREES } from './trees.js';
 import { pavedFromImagery, PAVED_ATTRIBUTION } from './paved.js';
 
 export const maxDuration = 60;
@@ -281,13 +287,30 @@ export async function buildScene(lat, lng) {
   // qui n'utilise que les empreintes).
   // lidarErr: lecture LiDAR échouée (catalogue ou mosaïque indisponible): la scène sert quand même, mais n'est gardée
   // ni par le réseau de Vercel ni dans le cache partagé, pour être recalculée au prochain affichage.
-  let paved = [], pavedSrc = null, lidarBld = 0, lidarErr = false;
+  let paved = [], pavedSrc = null, lidarBld = 0, lidarErr = false, lt = null;
   const log = (m) => console.log('[scene3d]', m);
+  // Délai global des lectures LiDAR: un serveur de Ressources naturelles Canada bloqué ne doit pas faire échouer toute la
+  // scène (60 s pour la fonction, dont 15 à 20 s pour Overture): après 50 s depuis le début, on sert sans ces mesures.
+  const deadline = t0 + 50000;
+  const inTime = (p, what) => { let tm; const t = new Promise((_, rej) => { tm = setTimeout(() => rej(new Error(`${what}: délai dépassé`)), Math.max(1000, deadline - Date.now())); }); return Promise.race([p, t]).finally(() => clearTimeout(tm)); };
   await Promise.all([
     pavedFromImagery(lat, lng, bld, roads, log).then((r) => { paved = r.paved; pavedSrc = r.dense ? null : PAVED_ATTRIBUTION; }).catch((e) => console.warn('[scene3d] surfaces pavées indisponibles:', e && e.message)),
-    lidarHeights(lat, lng, bld, log).then((r) => { lidarBld = r.measured; lidarErr = r.failed; }).catch((e) => { lidarErr = true; console.warn('[scene3d] hauteurs LiDAR indisponibles:', e && e.message); }),
+    inTime(lidarHeights(lat, lng, bld, log), 'hauteurs').then((r) => { lidarBld = r.measured; if (r.failed) lidarErr = true; }).catch((e) => { lidarErr = true; console.warn('[scene3d] hauteurs LiDAR indisponibles:', e && e.message); }),
+    // Les empreintes ne changent pas pendant la mesure des hauteurs: le masque des toits peut se faire en même temps.
+    inTime(lidarTrees(lat, lng, bld, log), 'arbres').then((r) => { lt = r; if (r.failed) lidarErr = true; }).catch((e) => { lidarErr = true; console.warn('[scene3d] arbres LiDAR indisponibles:', e && e.message); }),
   ]);
-  const scene = { v: 5, release: RELEASE, origin: [lat, lng], bld, roads, trees, green, asphalt, water, paved, pavedSrc, lidarBld, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
+  // Arbres mesurés là où le LiDAR voit; ceux d'Overture ailleurs (trou de couverture, au-delà de 350 m), sauf dans un
+  // bâtiment ou à moins de 1 m d'un mur (les boisés sont semés au hasard, sans tenir compte des bâtiments).
+  const boxes = bld.map(([r]) => { let x0 = Infinity, n0 = Infinity, x1 = -Infinity, n1 = -Infinity; for (const [x, n] of r) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); n0 = Math.min(n0, n); n1 = Math.max(n1, n); } return [x0 - 1, n0 - 1, x1 + 1, n1 + 1]; });
+  const segD = (x, n, a, b) => { const dx = b[0] - a[0], dn = b[1] - a[1], l2 = dx * dx + dn * dn || 1e-9, t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (n - a[1]) * dn) / l2)); return Math.hypot(x - a[0] - t * dx, n - a[1] - t * dn); };
+  const clearOfBld = ([x, n]) => !bld.some(([r], k) => { const b = boxes[k]; if (x < b[0] || x > b[2] || n < b[1] || n > b[3]) return false; if (pointInRing([x, n], r)) return true; for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (segD(x, n, r[j], r[i]) < 1) return true; return false; });
+  let treesOut = trees.filter(clearOfBld), treesSrc = null, canopy = null;
+  if (lt && lt.trees) {
+    treesOut = lt.trees.concat(treesOut.filter(([x, n]) => Math.hypot(x, n) > R_TREES || !lt.covered(x, n)));
+    treesSrc = { date: lt.date, res: lt.res, essences: lt.essences, n: lt.trees.length };
+    canopy = lt.canopy;
+  }
+  const scene = { v: 6, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, pavedSrc, lidarBld, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
   if (lidarErr) scene.lidarErr = true;
   return scene;
 }
@@ -316,7 +339,7 @@ if (process.argv.includes('--test')) {
   const lat = parseFloat(process.argv[i + 1] || '46.8367'), lng = parseFloat(process.argv[i + 2] || '-71.2336');
   buildScene(lat, lng).then((s) => {
     const j = JSON.stringify(s);
-    console.log({ bld: s.bld.length, roads: s.roads.length, trees: s.trees.length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, bytes: j.length, ms: s.ms });
+    console.log({ bld: s.bld.length, roads: s.roads.length, trees: s.trees.length, lidarTrees: s.treesSrc && s.treesSrc.n, conifers: s.trees.filter(t => t[4] === 1).length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, bytes: j.length, ms: s.ms });
     if (process.argv.includes('--out')) { import('fs').then(fs => fs.writeFileSync(process.argv[process.argv.indexOf('--out') + 1], j)); }
   }).catch((e) => { console.error(e); process.exit(1); });
 }

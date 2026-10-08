@@ -48,15 +48,15 @@ export function pickHeight(pts, maxH = Infinity) {
 
 // Mosaïques d'une collection qui touchent le cadre. Une erreur (catalogue indisponible, délai) remonte: elle ne doit
 // pas passer pour une absence de LiDAR, sinon la scène serait gardée sans hauteurs mesurées.
-async function items(coll, bbox) {
+export async function items(coll, bbox) {
   const r = await fetch(`${STAC}/${coll}/items?bbox=${bbox.join(',')}&limit=10`, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(12000) });
   if (!r.ok) throw new Error(`catalogue LiDAR ${r.status}`);
   const j = await r.json();
-  return (j.features || []).filter((f) => f.assets && f.assets.dsm && f.assets.dtm).map((f) => ({ dsm: f.assets.dsm.href, dtm: f.assets.dtm.href, coll }));
+  return (j.features || []).filter((f) => f.assets && f.assets.dsm && f.assets.dtm).map((f) => ({ dsm: f.assets.dsm.href, dtm: f.assets.dtm.href, coll, date: String((f.properties && (f.properties.datetime || f.properties.start_datetime)) || '').slice(0, 10) }));
 }
 
 // Fenêtre au mètre (niveau 0) d'une mosaïque qui couvre le cadre [E0, N0, E1, N1] (Lambert du Canada).
-async function window1m(url, E0, N0, E1, N1) {
+export async function window1m(url, E0, N0, E1, N1) {
   const cog = await openCog(url);
   const L = cog.levels[0];
   const c0 = Math.max(0, Math.floor((E0 - L.x0) / L.res)), c1 = Math.min(L.width, Math.ceil((E1 - L.x0) / L.res));
