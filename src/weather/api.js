@@ -207,6 +207,14 @@ export const fetchSmoke = async (lat, lng) => {
   return Promise.race([inner, new Promise((res) => setTimeout(() => res({}), 7000))]).catch(() => ({}));
 };
 
+// Orage et averses (vue 3D, 8 octobre 2026): code météo brut (80 à 82 averses, 95 à 99 orage), rayonnement direct sur le sol
+// horizontal (W/m², moyenne de l'heure précédente) et nuage convectif d'ICON, base et épaisseur en mètres (0: aucun). GFS n'a
+// pas de nuage convectif; les 36 premières heures (celles de la 3D) viennent d'ICON tant qu'il répond.
+const convective = (h, i) => {
+  const b = h.convective_cloud_base?.[i], t = h.convective_cloud_top?.[i];
+  return { wc: h.weathercode?.[i] ?? null, direct: h.direct_radiation?.[i] ?? null, convBase: b > 0 ? Math.round(b) : 0, convDepth: b > 0 && t > b ? Math.round(t - b) : 0 };
+};
+
 // Brouillard: variables de GFS en plus (visibilité en mètres, humidité au sol et à 1000, 975, 950, 925, 900 et 850 hPa,
 // altitude de ces niveaux en mètres au-dessus de la mer, soit jusqu'à environ 1500 m).
 const FOG_LEVELS = [1000, 975, 950, 925, 900, 850];
@@ -243,7 +251,7 @@ export const fetchWeather = async (lat, lng) => {
   // les jours qu'il couvre, GFS (portee 16 j) pour completer jusqu'a 10 jours. La sortie
   // garde exactement la meme forme qu'une reponse Open-Meteo unique: ni l'affichage ni le
   // parsing plus bas ne changent.
-  const qs = `latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode,windspeed_10m,windgusts_10m,cloudcover,precipitation,precipitation_probability,direct_radiation,diffuse_radiation,cloudcover_low,cloudcover_mid,cloudcover_high&daily=weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=America/Toronto&forecast_days=10`;
+  const qs = `latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode,windspeed_10m,windgusts_10m,cloudcover,precipitation,precipitation_probability,direct_radiation,diffuse_radiation,convective_cloud_base,convective_cloud_top,cloudcover_low,cloudcover_mid,cloudcover_high&daily=weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=America/Toronto&forecast_days=10`;
   // Brouillard (vue 3D): seul GFS (avec HRRR, 3 km, sur le sud du Québec) donne la visibilité ici; ICON, GEM et ECMWF
   // ne la donnent pas. L'humidité au sol et aux niveaux de pression bas (avec leur altitude) donne le haut de la nappe.
   const qsGfs = qs.replace('cloudcover_high&daily=', `cloudcover_high,${FOG_KEYS_GFS.join(',')}&daily=`);
@@ -255,7 +263,7 @@ export const fetchWeather = async (lat, lng) => {
   const icon = iconRes.data || null;
   const gfs = gfsRes.data || null;
 
-  const HOURLY_KEYS = ['temperature_2m', 'weathercode', 'windspeed_10m', 'windgusts_10m', 'cloudcover', 'precipitation', 'precipitation_probability', 'direct_radiation', 'diffuse_radiation', 'cloudcover_low', 'cloudcover_mid', 'cloudcover_high'];
+  const HOURLY_KEYS = ['temperature_2m', 'weathercode', 'windspeed_10m', 'windgusts_10m', 'cloudcover', 'precipitation', 'precipitation_probability', 'direct_radiation', 'diffuse_radiation', 'cloudcover_low', 'cloudcover_mid', 'cloudcover_high', 'convective_cloud_base', 'convective_cloud_top'];
   const DAILY_KEYS = ['weathercode', 'temperature_2m_max', 'temperature_2m_min', 'sunrise', 'sunset'];
   const dateOf = (t) => String(t).slice(0, 10);
 
@@ -419,7 +427,7 @@ export const fetchWeather = async (lat, lng) => {
   };
 
   const formatted = {
-    hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), gust: data.hourly.windgusts_10m?.[i] != null ? Math.round(data.hourly.windgusts_10m[i]) : null, cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, precipProb: data.hourly.precipitation_probability?.[i] ?? null, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), cloudLow: data.hourly.cloudcover_low?.[i] ?? null, cloudMid: data.hourly.cloudcover_mid?.[i] ?? null, cloudHigh: data.hourly.cloudcover_high?.[i] ?? null, visibility: data.hourly.visibility?.[i] ?? null, fogThick: data.hourly.fogThick?.[i] ?? null, smoke: smokeMap[dateOf(t)] || 0, icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]) })),
+    hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), gust: data.hourly.windgusts_10m?.[i] != null ? Math.round(data.hourly.windgusts_10m[i]) : null, cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, precipProb: data.hourly.precipitation_probability?.[i] ?? null, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), cloudLow: data.hourly.cloudcover_low?.[i] ?? null, cloudMid: data.hourly.cloudcover_mid?.[i] ?? null, cloudHigh: data.hourly.cloudcover_high?.[i] ?? null, visibility: data.hourly.visibility?.[i] ?? null, fogThick: data.hourly.fogThick?.[i] ?? null, smoke: smokeMap[dateOf(t)] || 0, icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]), ...convective(data.hourly, i) })),
     daily: data.daily.time.map((t,i) => {
       const stats = getDailyStats(t);
       // Use hourly-derived icon when available, fallback to daily weathercode

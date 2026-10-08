@@ -348,6 +348,72 @@ importé, lui, est le fichier de l'architecte.
   Montcalm, Outremont, Limoilou et Stoneham (avec une forme dessinée en plein boisé). Lisière ramenée à une bande de
   feuillage du tiers de sa hauteur à la nappe (on voit les troncs dessous), nappe vue du dessus seulement, sans pente
   au bord: vue de près, la lisière pleine faisait un mur de haie.
+- v633.174 (8 octobre 2026), **orage et percées de soleil** (« quand c'est orageux, les nuages sont souvent très foncés;
+  mélangés à des percées de soleil, ça donne des photos vraiment cool », avec une photo d'orage d'automne). Diagnostic:
+  la base des cumulus avait une couleur fixe et claire, la lumière d'ambiance montait avec les nuages, et au-delà de 53 %
+  de nuages bas les ombres de nuages (60 groupes tirés une fois) couvraient 98 % du terrain autour du projet: aucune
+  percée possible, alors que la légende disait « soleil entre les averses ».
+  - Données: la requête ICON demande aussi `convective_cloud_base` et `convective_cloud_top` (insérés avant
+    `cloudcover_low`, pour que le repère `cloudcover_high&daily=` des champs du brouillard de GFS reste intact); la rangée
+    horaire porte `wc` (code météo brut), `direct` (rayonnement direct, W/m²), `convBase` et `convDepth` (base et épaisseur
+    du nuage convectif, 0 sans nuage convectif). GFS n'a pas ces champs ici; les rangées anciennes du cache donnent 0
+    (ni orage ni percée).
+  - Signal `storm` (0 à 1): code 95 à 99 (orage) = 1, 82 = 0,9, 81 = 0,75, 80 = 0,6, sinon l'épaisseur convective (de 3000
+    à 8000 m, atténuée sans pluie), fois la couverture de la couche qui porte la base (25 à 70 %). Été 2025 à Québec: 0,89 en
+    moyenne pour les heures d'orage, 0,03 pour la pluie ordinaire, 0,02 pour le couvert.
+  - Percée: part de l'heure au soleil `pSun` = direct normal moyen (direct / sinus de la hauteur au milieu de l'heure
+    précédente) rapporté au ciel clair `dniClear(h) = 950 - 710 exp(-h / 20,2)` (ICON, Québec, été 2025). Dès 0,2 (`SUN_ON`), si le voile
+    laisse passer assez de lumière (`iv` au moins 0,3), les groupes d'ombre de nuage qui toucheraient le projet ou un disque de rayon `brkR` autour de lui (60 à 120 m, fixé par
+    le point de vue de départ, ne suit pas le zoom) sont retirés; les autres restent (le lointain reste à l'ombre). Le ciel
+    cohérent avec la caméra (`uSunGap`): à l'ombre d'un nuage, un nuage est toujours devant le soleil (disque, flare et disque
+    dans la fumée éteints, `sunVis`); pendant une percée, caméra au soleil, trouée autour du soleil au bord irrégulier, ouverte
+    selon le soleil direct; sinon, le ciel d'avant. Les flaques reflètent ce même ciel. Cela vaut aussi hors orage
+    (éclaircies): le projet passe au soleil quand la prévision en donne, comme la légende le disait déjà. Orage sans percée
+    (soleil moins du cinquième de l'heure): tous les groupes d'ombre, le projet est à l'ombre des nuages.
+  - Ciel (`uStorm`): base des cumulus gris ardoise (0,30, 0,34, 0,39), plus sombre vers le coeur, relief éclairé gardé en
+    bordure; couverture apparente plus forte vers l'horizon (tours de plusieurs km vues de côté); couche moyenne plus opaque
+    et ardoise; bande plus claire à l'horizon sous la base quand la cellule est locale (nuages bas sous 70 à 95 %); le
+    brouillard du lointain suit. Mesuré à 17 h 11 le 8 octobre (Stoneham): base du ciel à environ 100 sur 255, comme la photo.
+  - Lumière: ambiance hémisphérique réduite de 55 % à pleine force (`AMB_CUT`) et teintée ardoise; carte d'environnement
+    capturée sur le ciel assombri; soleil direct inchangé (déjà entier dans une percée); exposition pour le projet: au soleil
+    s'il y est, pour l'ombre si un nuage d'orage le couvre. Pendant une percée, 85 % de gouttes en moins (`RAIN_BRK`), sol
+    mouillé et flaques inchangés.
+  - Légende: « Orage : nuages très sombres, percées de soleil par moments · Pluie faible, 1,2 mm en une heure » (« base
+    sombre des nuages » pour les averses; « soleil souvent », « la plupart du temps » selon `pSun`; « projet à l'ombre des
+    nuages » quand c'est le cas).
+  - Non-régression vérifiée au pixel près (même vue, avant/après): ciel clair à midi et à 17 h, cumulus épars, couvert, voile
+    d'altitude, heure bleue, nuit et brouillard identiques; seules changent les éclaircies (projet au soleil), l'orage, et un
+    détail infime sous la pluie ordinaire (soleil caché derrière les nuages).
+- v633.174 (8 octobre 2026), **arbres moins présents** (« trop présents, trop gros, ce qui rend la visualisation plus
+  difficile sur des projets de un ou deux étages; les arbres foncent tout le temps dans la caméra », puis « moins larges, un
+  peu plus écrasés »).
+  - Forme des feuillus (`crownY`, `treeShape`): rayon mesuré sans le gonflement de 15 %, surface vue du ciel ramenée à celle
+    de la couronne mesurée (`AREA_K`) puis à 85 % (`CROWN_NARROW`, le partage des eaux réunit souvent deux ou trois
+    couronnes); couronne moins profonde: environ 38 % de la hauteur dans un peuplement de la carte écoforestière, 45 % pour
+    un arbre isolé, jamais plus écrasée qu'aux 3/4 (échelle verticale au moins 0,75 fois l'horizontale, au plus 1,8 fois;
+    la règle « jamais en galette », 0,8 avant, est assouplie à la demande de Stéphane); bas jamais sous 2,5 m (35 % de la hauteur d'un petit arbre). Arbre médian de Stoneham (18,7 m): couronne
+    d'environ 9 × 7 m, du haut du tronc à 11,6 m, au lieu de 11 × 11 m dès 7,6 m. Conifères plus étroits (rayon d'environ un
+    septième de la hauteur). Troncs plus fins (21 cm de rayon au pied pour 18,7 m).
+  - Couronnes vues d'un seul côté (`crownMat` en `FrontSide`, `shadowSide` en `DoubleSide`): par les trous, on voit le ciel
+    et non l'intérieur sombre des lobes; l'ombre garde la même densité. La doublure d'ombre des feuillus proches n'est plus
+    dessinée dans la passe principale (`count = 0` le temps de cette passe).
+  - Effacement près de l'objectif (`nearFade`): feuillage effacé par ses propres trous de 10 m à 3 m de la caméra (rang de
+    chaque pixel de feuille dans le canal rouge du masque; three ne lit que le vert pour la transparence et l'ombre), troncs
+    de 4 m à 1 m en trame. La carte d'ombre ne voit pas ce retrait: les ombres sur la façade et au sol restent. Le flare et le
+    disque du soleil perdent les trois quarts de leur force quand un arbre ainsi effacé est entre l'objectif et le soleil
+    (`treeSun`). Pas d'effacement automatique des arbres entre la caméra et la maison (à proposer en option si besoin).
+  - Point de vue de départ cohérent: distance de l'oeil à l'enveloppe des couronnes (la même que l'effacement), six visées
+    (centre, haut du toit dessiné, quatre coins au pied), tronc devant la façade pénalisé; la caméra monte au-dessus des
+    cimes quand trois couronnes ou plus coupent la ligne du centre (comme avant); arbres loin de toutes les visées écartés
+    d'emblée (même résultat, environ 4 fois plus rapide). Flare inchangé quand le calque SOL SAT cache les arbres.
+  - Sous-bois: la nappe est montée à 72 % de la hauteur des cimes, dans le tiers bas des couronnes de peuplement, et la
+    lisière va du bas des couronnes à la nappe. La nappe ne se dessine que vue nettement de son dessus (plus de 7 à 13° de sa
+    surface, la caméra 2 à 6 m au-dessus d'elle plus 15 % de la distance, pentes de moins de 53°, effacée de près): en vue de
+    drone, elle comble les trous entre les couronnes; à hauteur d'oeil ou à 6 m, elle faisait des planches sombres en l'air
+    (déjà visibles en v633.173 à 6 m de haut).
+  - Mesuré sur un tour complet à 36 m de la maison de test de Stoneham (18 angles): à hauteur d'oeil, arbres de 58 % à 43 %
+    du cadre (pire angle de 74 % à 58 %), ciel de 4 % à 11 %; à 6 m de haut, arbres de 80 % à 56 % (pire angle de 99 % à
+    74 %). Temps de rendu inchangé.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

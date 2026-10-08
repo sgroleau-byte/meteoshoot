@@ -54,6 +54,13 @@ let PCSS_OK = false;
 })();
 if (!PCSS_OK) console.warn('[scene3d] chunk d’ombre de three inattendu: ombres PCF au lieu de PCSS');
 const SHADOW_SPAN = 10000; // plage de profondeur de la carte d'ombre (mètres vers le soleil): le relief lointain porte son ombre
+// Orage et percées de soleil (8 octobre 2026; voir setWeather et frame).
+const SUN_ON = 0.2;    // percée: part de l'heure au soleil (direct rapporté au ciel clair) dès laquelle le projet est montré au soleil
+const BRK_R = 60;      // rayon minimal (m) du dégagement autour du projet pendant une percée; fixe pour une scène (ne suit pas le zoom)
+const BRK_M = 12;      // marge (m) autour des ombres de nuages (pénombre des ombres douces à hauteur d'oeil)
+const AMB_CUT = 0.55;  // baisse de la lumière d'ambiance sous une base d'orage (pleine force)
+const RAIN_BRK = 0.85; // gouttes retirées pendant une percée (soleil entre les averses; le sol reste mouillé)
+const dniClear = (h) => 950 - 710 * Math.exp(-h / 20.2); // direct normal par ciel clair (W/m²) selon la hauteur du soleil (degrés), ICON, Québec, été 2025
 
 const clamp = (x) => Math.max(0, Math.min(1, x));
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
@@ -82,7 +89,7 @@ function sunExtinction(y, turb, ray) {
   return TR.map((r, i) => Math.exp(-(r * ray * 8400 * inv + 0.434 * (0.2 * turb) * 1e-17 * MC[i] * 0.005 * 1250 * inv)));
 }
 
-const SKY_GLSL = `uniform float uCum,uMid,uHigh,uDirect,uWarm,uTw,uNight,uGlow,uTurb,uRay,uSkyK,uZen,uSmoke;uniform vec3 uSun,uSunCol;varying vec3 vDir;
+const SKY_GLSL = `uniform float uCum,uMid,uHigh,uDirect,uWarm,uTw,uNight,uGlow,uTurb,uRay,uSkyK,uZen,uSmoke,uStorm,uSunGap,uGapR;uniform vec3 uSun,uSunCol;varying vec3 vDir;
 const vec3 LUMW=vec3(0.2126,0.7152,0.0722);
 // Ciel clair de Preetham (modèle analytique de lumière du jour, comme Sky.js de three): diffusion de Rayleigh (bleu du ciel) et de
 // Mie (halo blanc autour du soleil, brume à l'horizon), extinction Fex le long du rayon. uTurb = turbidité (brume), uRay = part
@@ -112,26 +119,28 @@ float Lsky=uZen*(1.0+1.4*pow(1.0-yy,2.2))*(1.0+0.6*pow(max(cg,0.0),6.0)+1.5*pow(
 vec3 preL=chroma*Lsky;preL/=1.0+0.5*dot(preL,LUMW);vec3 col=pow(max(preL,vec3(0.0)),vec3(1.0/2.2));
 vec3 horP=preetham(normalize(vec3(rd.x,0.04,rd.z)),sd,FxH);float lh=max(dot(horP,LUMW),1e-6);vec3 horL=mix(horP/lh,vec3(1.0),0.7)*uZen*2.4;horL/=1.0+0.5*dot(horL,LUMW);vec3 hor=pow(max(horL,vec3(0.0)),vec3(1.0/2.2));
 float thick=1.0-uDirect;float blur=0.004+0.02*thick*veil;float disc=smoothstep(cos(0.014+blur),cos(0.010),cg)*step(0.0,y+0.002);
+/* Trouée autour du soleil (8 octobre 2026): ouverte quand la caméra est au soleil, refermée quand un nuage l'ombrage (uSunGap +1 ou -1), bord irrégulier. */
+float ga=acos(clamp(cg,-1.0,1.0)),gR=uGapR*(0.7+0.6*noise(rd.xz/(max(y,0.0)+0.08)*9.0)),gp=1.0-smoothstep(0.35*gR,gR,ga),gpo=max(uSunGap,0.0)*gp;disc*=1.0-max(-uSunGap,0.0);
 float dC=0.0,aMidG=0.0,aHighG=0.0;vec3 cC=vec3(0.0);
-if(y>0.0){vec2 p=rd.xz/(y+0.08)*0.55;float n=fbm(p,lod)*0.74+fbm(p*2.7+vec2(5.0,9.0),lod)*0.26;float th=0.5+(0.5-uCum)*0.62;float sw=0.09+0.14*(1.0-lod);
-dC=smoothstep(th,th+sw,n)*smoothstep(0.0,0.10,y)*step(0.02,uCum);
-float n2=fbm(p+normalize(sd.xz+vec2(1e-4))*0.12,lod);float lit=clamp(0.55+(n-n2)*5.0,0.0,1.0);
-vec3 shd=vec3(0.50,0.54,0.60),li=mix(vec3(1.0),uSunCol,0.55);cC=mix(shd,li,lit)*(1.0-0.22*smoothstep(0.62,0.85,n));cC=mix(cC,hor,0.5*(1.0-smoothstep(0.0,0.25,y)));}
+if(y>0.0){vec2 p=rd.xz/(y+0.08)*0.55;float n=fbm(p,lod)*0.74+fbm(p*2.7+vec2(5.0,9.0),lod)*0.26;float th=0.5+(0.5-uCum)*0.62;th-=0.18*uStorm*(1.0-smoothstep(0.15,0.6,y));th+=gp*uSunGap*(uSunGap>0.0?0.5:0.4);float sw=0.09+0.14*(1.0-lod);
+dC=smoothstep(th,th+sw,n)*smoothstep(0.0,0.10,y)*step(0.02,uCum);dC*=1.0-gpo;dC=max(dC,max(-uSunGap,0.0)*gp*smoothstep(0.0,0.03,y));
+float n2=fbm(p+normalize(sd.xz+vec2(1e-4))*0.12,lod);float dep=smoothstep(th,th+0.30,n);float lit=clamp(0.55+(n-n2)*5.0-0.65*uStorm*dep,0.0,1.0);
+vec3 shd=mix(vec3(0.50,0.54,0.60),vec3(0.30,0.34,0.39)*(1.0-0.25*dep),uStorm),li=mix(vec3(1.0),uSunCol,0.55);cC=mix(shd,li,lit)*(1.0-0.22*(1.0-uStorm)*smoothstep(0.62,0.85,n));cC=mix(cC,hor,0.5*(1.0-0.85*uStorm)*(1.0-smoothstep(0.0,0.25,y)));}
 col+=uSunCol*disc*2.0*(1.0-dC);col+=uSunCol*pow(max(cg,0.0),40.0)*dC*(1.0-dC)*1.6;col=mix(col,cC,dC);
 if(uMid>0.01){float yy=max(y,0.0);vec2 pm=rd.xz/(yy+0.07)*0.42;float nm=fbm(pm*0.9+vec2(3.1,7.7),lod);float cov=smoothstep(0.62-0.5*uMid,0.72,nm+0.1*uMid);
-float a=uMid*mix(0.45*cov,0.96,thick*thick);aMidG=a;vec3 mc=mix(vec3(0.80,0.82,0.85),vec3(0.58,0.60,0.64),thick);mc=mix(mc,vec3(0.86,0.70,0.58),uWarm*0.45);mc*=1.0-0.12*smoothstep(0.7,0.95,nm);
+float a=uMid*mix(0.45*cov,0.96,max(thick*thick,0.75*uStorm))*(1.0-gpo*uStorm);aMidG=a;vec3 mc=mix(vec3(0.80,0.82,0.85),vec3(0.58,0.60,0.64),thick);mc=mix(mc,vec3(0.86,0.70,0.58),uWarm*0.45);mc*=1.0-0.12*smoothstep(0.7,0.95,nm);mc=mix(mc,vec3(0.33,0.36,0.41),0.8*uStorm);
 mc+=uSunCol*(0.35*pow(max(cg,0.0),8.0))*uDirect;col=mix(col,mc,a*(1.0-dC));}
 if(uHigh>0.01){float yy=max(y,0.0);vec2 pv=rd.xz/(yy+0.05)*0.3;vec2 pr=vec2(pv.x*0.35+pv.y*0.25,pv.y*1.9-pv.x*0.5);float nv=fbm(pr*1.3,lod);
 float a=uHigh*mix(0.18+0.55*smoothstep(0.35,0.75,nv),0.97,thick*thick);aHighG=a;
-vec3 vc=mix(vec3(0.88,0.89,0.90),vec3(0.64,0.66,0.69),thick);vc=mix(vc,mix(vec3(0.62,0.62,0.66),vec3(0.95,0.72,0.55),0.6),uWarm*0.5);
+vec3 vc=mix(vec3(0.88,0.89,0.90),vec3(0.64,0.66,0.69),thick);vc=mix(vc,mix(vec3(0.62,0.62,0.66),vec3(0.95,0.72,0.55),0.6),uWarm*0.5);vc=mix(vc,vec3(0.48,0.51,0.55),0.5*uStorm);
 vc+=uSunCol*(0.55*pow(max(cg,0.0),6.0)+0.25*pow(max(cg,0.0),60.0))*uDirect;
 float halo=exp(-pow((acos(clamp(cg,-1.0,1.0))-0.384)/0.012,2.0))*smoothstep(0.25,0.5,uDirect)*(1.0-uDirect)*0.5;
 col=mix(col,vc,a*(1.0-dC))+halo*uHigh*vec3(0.9,0.88,0.85)*0.35;}
 col+=vec3(1.0,0.96,0.88)*disc*veil*uDirect*1.2*(1.0-dC);
 // Sous un ciel couvert, l'horizon n'est pas clair: les nuages lointains se superposent jusqu'au sol (sinon une bande
 // pâle de ciel clair apparaît sous la couche sombre, là où les cumulus s'estompent).
-float hz=1.0-smoothstep(0.0,0.14,y);vec3 hzc=mix(vec3(0.50,0.54,0.60),hor,0.3)*(1.0-0.25*thick);
-col=mix(col,hzc,smoothstep(0.25,0.85,uCum)*hz*0.92);
+float hz=1.0-smoothstep(0.0,0.14,y);vec3 hzc=mix(vec3(0.50,0.54,0.60),hor,0.3)*(1.0-0.25*thick);hzc=mix(hzc*(1.0-0.35*uStorm),hor,0.55*uStorm*(1.0-smoothstep(0.70,0.95,uCum)));
+col=mix(col,hzc,smoothstep(0.25,0.85,uCum)*hz*0.92*(1.0-gpo));
 if(y<0.0){col=mix(col,hor*vec3(0.52,0.55,0.46),smoothstep(0.0,-0.08,y));}
 // Heure bleue puis nuit: dégradé bleu profond, lueur chaude seulement à l'horizon côté soleil, nuages en silhouette.
 vec3 bh=mix(vec3(0.11,0.24,0.50),vec3(0.03,0.07,0.21),t);
@@ -399,7 +408,12 @@ function conifer(seg = 10, tiers = CON_TIERS) {
 function leafTex(th = 0.5) {
   const N = 256, c = document.createElement('canvas'); c.width = c.height = N; const x = c.getContext('2d'); const im = x.createImageData(N, N), d = im.data;
   const grid = (gx, gy, gs, k) => { const i0 = Math.floor(gx), j0 = Math.floor(gy), fx = gx - i0, fy = gy - j0, sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy); const v = (i, j) => hsh(((i % gs) + gs) % gs, ((j % gs) + gs) % gs, k); return (v(i0, j0) * (1 - sx) + v(i0 + 1, j0) * sx) * (1 - sy) + (v(i0, j0 + 1) * (1 - sx) + v(i0 + 1, j0 + 1) * sx) * sy; };
-  for (let i = 0; i < N * N; i++) { const px = i & 255, py = i >> 8; const n = 0.3 * grid(px / 12, py / 12, 22, 11) + 0.4 * grid(px / 5, py / 5, 52, 12) + 0.3 * grid(px / 2.5, py / 2.5, 103, 13); const v = n > th ? 255 : 0; d[i * 4] = v; d[i * 4 + 1] = v; d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }
+  const f = new Float32Array(N * N), leaf = [], rank = new Uint8Array(N * N);
+  for (let i = 0; i < N * N; i++) { const px = i & 255, py = i >> 8; f[i] = 0.3 * grid(px / 12, py / 12, 22, 11) + 0.4 * grid(px / 5, py / 5, 52, 12) + 0.3 * grid(px / 2.5, py / 2.5, 103, 13); if (f[i] > th) leaf.push(i); }
+  // Canal rouge: rang de chaque pixel de feuille (1 à 255, du bord des trous au coeur des taches). L'effacement près de
+  // l'objectif (nearFade) agrandit les trous dans ce même motif; three ne lit que le vert (transparence et ombre).
+  leaf.sort((a, b) => f[a] - f[b]); leaf.forEach((i, k) => { rank[i] = Math.max(1, Math.round(255 * (k + 1) / leaf.length)); });
+  for (let i = 0; i < N * N; i++) { const v = f[i] > th ? 255 : 0; d[i * 4] = rank[i]; d[i * 4 + 1] = v; d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }
   x.putImageData(im, 0, 0); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
 }
 // Tache de lumière ronde et douce (alpha seulement): flaques des lampadaires et têtes lumineuses.
@@ -423,7 +437,7 @@ export function createScene3D(container, opts = {}) {
   container.appendChild(R.domElement);
 
   // ---- ciel, environnement lumineux
-  const skyMat = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: { uCum: { value: 0 }, uMid: { value: 0 }, uHigh: { value: 0 }, uDirect: { value: 1 }, uWarm: { value: 0 }, uTw: { value: 0 }, uNight: { value: 0 }, uGlow: { value: 0 }, uSmoke: { value: 0 }, uTurb: { value: 2.5 }, uRay: { value: 1.5 }, uSkyK: { value: 0.2 }, uZen: { value: 0.1 }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Vector3(1, 1, 1) } }, vertexShader: SKY_VERT, fragmentShader: SKY_GLSL });
+  const skyMat = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: { uCum: { value: 0 }, uMid: { value: 0 }, uHigh: { value: 0 }, uDirect: { value: 1 }, uWarm: { value: 0 }, uTw: { value: 0 }, uNight: { value: 0 }, uGlow: { value: 0 }, uSmoke: { value: 0 }, uTurb: { value: 2.5 }, uRay: { value: 1.5 }, uSkyK: { value: 0.2 }, uZen: { value: 0.1 }, uStorm: { value: 0 }, uSunGap: { value: 0 }, uGapR: { value: 0.1 }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Vector3(1, 1, 1) } }, vertexShader: SKY_VERT, fragmentShader: SKY_GLSL });
   const S = new THREE.Scene();
   const cam = new THREE.PerspectiveCamera(44, W / H, 1, 60000);
   if (import.meta.env.DEV) window.__scene3dCore = { R, S, cam, THREE }; // inspection en développement seulement
@@ -433,7 +447,7 @@ export function createScene3D(container, opts = {}) {
   const cubeRT = new THREE.WebGLCubeRenderTarget(64, { type: THREE.HalfFloatType }); const cubeCam = new THREE.CubeCamera(1, 9000, cubeRT); skyScene.add(cubeCam);
   // Ciel des flaques: plus fin (le reflet rasant l'étire beaucoup: à 64, chaque pixel du ciel y faisait une bande), rendu
   // seulement sous forte pluie, sans le traitement de l'éclairage (qui coûterait 20 à 50 ms à cette taille).
-  const skyRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType }); const skyCam = new THREE.CubeCamera(1, 9000, skyRT); skyScene.add(skyCam); let skyFresh = false;
+  const skyRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType }); const skyCam = new THREE.CubeCamera(1, 9000, skyRT); skyScene.add(skyCam); let skyFresh = false, skyGap = 0;
   const pmrem = new THREE.PMREMGenerator(R); pmrem.compileCubemapShader(); let envRT = null;
   function updateEnv() { skyFresh = false; cubeCam.update(R, skyScene); const nrt = pmrem.fromCubemap(cubeRT.texture); if (envRT) envRT.dispose(); envRT = nrt; S.environment = nrt.texture; }
   const fog = new THREE.Fog(0xcccccc, 300, 1600); S.fog = fog;
@@ -458,7 +472,9 @@ export function createScene3D(container, opts = {}) {
   const roofMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, envMapIntensity: 0.75 });
   const trunkMat = new THREE.MeshStandardMaterial({ color: L('#4a3b2e'), roughness: 0.95, envMapIntensity: 0.75 });
   const leafMask = leafTex();
-  const crownMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, envMapIntensity: 0.75, alphaMap: leafMask, alphaTest: 0.5, side: THREE.DoubleSide });
+  // Couronnes vues d'un seul côté (8 octobre 2026): par les trous on voit le ciel ou ce qui est derrière, pas l'intérieur
+  // sombre des lobes (environ un quart de la lumière passe, comme un feuillage d'octobre); l'ombre garde les deux côtés.
+  const crownMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, envMapIntensity: 0.75, alphaMap: leafMask, alphaTest: 0.5, side: THREE.FrontSide, shadowSide: THREE.DoubleSide });
   // Doublure d'ombre des feuillus proches: n'écrit rien à l'image (ni couleur, ni alpha, ni profondeur), porte seulement
   // l'ombre, trouée par le même masque. three.js choisit les objets de la carte d'ombre avec les couches de la caméra
   // principale: une couche à part n'y entrerait jamais.
@@ -518,6 +534,31 @@ export function createScene3D(container, opts = {}) {
   Object.keys(GC).forEach(k => { flatMats[k] = flat(GC[k], 1); });
   // Matériaux qui reçoivent la lumière des lampadaires (le toit, au-dessus des lampes, n'en reçoit presque pas).
   [[wallMat, 'mur'], [roofMat, 'toit'], [trunkMat, 'tronc'], [crownMat, 'feuillage'], [conMat, 'feuillage'], [fillMat, 'sous-bois'], [edgeMat, 'lisiere'], [gndMat, 'sol'], [gndMatFar, 'sol-loin'], ...Object.entries(flatMats).map(([k, m]) => [m, 'plat-' + k])].forEach(([m, k]) => lampLit(m, k));
+  // Feuillage et troncs tout près de l'objectif (8 octobre 2026, « les arbres foncent dans la caméra »): effacés en douceur
+  // par les trous du feuillage de 10 m à 3 m de la caméra (troncs de 4 m à 1 m, en trame). La carte d'ombre ne voit pas ce
+  // retrait (three ne recopie pas onBeforeCompile dans son matériau de profondeur): les ombres sur la façade et au sol restent.
+  const NEAR_LEAF = [3, 10], NEAR_TRUNK = [1, 4], nearU = { value: 1 };
+  const nearFade = (mat, key, [r0, r1], leaf) => {
+    const prev = mat.onBeforeCompile;
+    mat.onBeforeCompile = (sh, r) => {
+      prev.call(mat, sh, r); sh.uniforms.uNearOn = nearU;
+      sh.fragmentShader = 'uniform float uNearOn;\n' + sh.fragmentShader.replace('#include <alphatest_fragment>', `#include <alphatest_fragment>\n{float nf=uNearOn*(1.0-smoothstep(${r0.toFixed(1)},${r1.toFixed(1)},distance(vLampW,cameraPosition)));`
+        + (leaf ? 'if(nf>0.002&&texture2D(alphaMap,vAlphaMapUv).r<nf*1.004)discard;}' : 'if(nf>0.002&&fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))))<nf)discard;}'));
+    };
+    mat.customProgramCacheKey = () => 'lamp-' + key + '-proche';
+  };
+  nearFade(crownMat, 'couronne', NEAR_LEAF, true); nearFade(conMat, 'conifere', NEAR_LEAF, true); nearFade(edgeMat, 'lisiere', NEAR_LEAF, true); nearFade(trunkMat, 'tronc', NEAR_TRUNK, false);
+  if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.nearU = nearU; // vérification en développement
+  // Nappe du sous-bois vue nettement de son dessus seulement (plus de 7 à 13° au-dessus de sa surface, qui suit la pente;
+  // transition en trame; effacée de près comme le feuillage, voir nearFade), quelle que
+  // soit l'orientation de ses triangles (le bord décalé au hasard en replie quelques-uns): en vue de drone, elle comble les
+  // trous entre les couronnes; d'en bas ou presque à l'horizontale, elle ferait un plafond ou une planche suspendue, et les
+  // couronnes qui se chevauchent suffisent. Les pans de plus de 53° (saut de hauteur de la canopée d'une case à l'autre)
+  // sont écartés: vus de côté, ils faisaient des murs sombres en l'air (déjà visibles avant, caméra à 6 m). Et la caméra doit
+  // être nettement au-dessus d'elle (2 à 6 m, plus 15 % de la distance): à hauteur d'oeil, une pente tournée vers soi
+  // restait une planche.
+  fillMat.side = THREE.DoubleSide;
+  { const prev = fillMat.onBeforeCompile; fillMat.onBeforeCompile = (sh, r) => { prev.call(fillMat, sh, r); sh.fragmentShader = sh.fragmentShader.replace('#include <alphatest_fragment>', '#include <alphatest_fragment>\n{vec3 nv=cameraPosition-vLampW,nn=normalize(cross(dFdx(vLampW),dFdy(vLampW)));nn*=nn.y<0.0?-1.0:1.0;float nk=clamp((dot(nv,nn)/max(length(nv),0.01)-0.12)*10.0,0.0,1.0)*smoothstep(3.0,10.0,length(nv))*step(0.6,nn.y)*smoothstep(2.0,6.0,nv.y+0.15*length(nv));if(nk<1.0&&nk<=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715)))))discard;}'); }; fillMat.customProgramCacheKey = () => 'lamp-sous-bois-dessus'; }
 
   // ---- soleil et ombres de nuages
   const sunL = new THREE.DirectionalLight(0xffffff, 10); sunL.castShadow = true; sunL.shadow.mapSize.set(4096, 4096);
@@ -535,6 +576,17 @@ export function createScene3D(container, opts = {}) {
   const pos = []; for (let i = 0; i < 60; i++) { const gx = (rnd() - 0.5) * 1800, gz = (rnd() - 0.5) * 1800; pos.push({ gx, gz, k: (Math.hypot(gx, gz) < 260 ? 1 : 0) + rnd() * 0.9 }); } pos.sort((a, b) => a.k - b.k);
   const cloudMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }), sg = new THREE.SphereGeometry(1, 12, 8);
   const blobs = pos.map(p => { const g = new THREE.Group(); const n = 3 + Math.floor(rnd() * 3); for (let j = 0; j < n; j++) { const m = new THREE.Mesh(sg, cloudMat); const r = 60 + rnd() * 40; m.scale.set(r, r * 0.3, r); m.position.set((rnd() - 0.5) * 160, 0, (rnd() - 0.5) * 120); m.castShadow = true; g.add(m); } g.userData = p; S.add(g); return g; });
+  // Ombre de nuage en un point P: le rayon vers le soleil d traverse-t-il un ellipsoïde du groupe g (rayons r, 0,3 r, r, groupe
+  // sans rotation, comme dans la carte d'ombre)? m: marge en mètres (pénombre).
+  function blobHit(g, P, d, m) {
+    for (const s of g.children) {
+      const r = s.scale.x + m, ry = s.scale.y + 0.4 * m;
+      const qx = (P.x - g.position.x - s.position.x) / r, qy = (P.y - g.position.y - s.position.y) / ry, qz = (P.z - g.position.z - s.position.z) / r;
+      const dx = d.x / r, dy = d.y / ry, dz = d.z / r, A = dx * dx + dy * dy + dz * dz, B = qx * dx + qy * dy + qz * dz, C = qx * qx + qy * qy + qz * qz - 1, D = B * B - A * C;
+      if (D >= 0 && -B + Math.sqrt(D) > 0) return true;
+    }
+    return false;
+  }
 
   // ---- passes d'image
   let PW = 0, PH = 0, sceneRT, aoRT, aoRT2, compRT, bloomA, bloomB, reflRT, reflRT2, BW = 0, BH = 0;
@@ -562,11 +614,15 @@ export function createScene3D(container, opts = {}) {
 
   // ---- état: lieu, heure, météo, caméra
   let lat = 46.8, lng = -71.2, origin = null, projLocal = [], orientation = [], style = null, data = null, dateMs = Date.now();
-  const tg = { cum: 0, mid: 0, high: 0, iv: 1, rain: 0, wet: 0, pud: 0, fogK: 0, fogTh: 600, smk: 0 }, cur = { ...tg };
+  const tg = { cum: 0, mid: 0, high: 0, iv: 1, rain: 0, wet: 0, pud: 0, fogK: 0, fogTh: 600, smk: 0, storm: 0, brk: 0, pSun: 0 }, cur = { ...tg };
   let smokeUg = null; // fumée de feux au sol (microgrammes par mètre cube, FireWork) à l'heure affichée
   let az = Math.PI * 1.2, camH = 1.7, Rr = 75; const ct = new THREE.Vector3(0, 10, 0);
   let rMin = 20; const R_MAX = 450; const clampR = (r) => Math.max(rMin, Math.min(R_MAX, r)); // distance caméra: hors du bâtiment visé, au plus 450 m
   let rainAt = 0; // dernière image de pluie seule (voir frame)
+  // Percée (voir frame): rayon du disque dégagé autour du projet (fixé par pickView), groupes d'ombre retirés, trouée du ciel
+  // autour du soleil (+1 ouverte, -1 refermée, 0 motif libre) et son état lissé.
+  let brkR = BRK_R, brkKey = '', brkHide = new Set(), gapS = 0;
+  let treeEnv = []; // arbres dessinés (voir trees()): enveloppes pour le flare près de l'objectif
   let statics = [], treesI = null, dirty = true, running = true, envKey = '', envAt = 0, drag = null, lastInfo = '', weatherRow = null;
   let projInfo = []; // côtés des formes du projet avec hauteur et source (légende)
   // Modèle d'architecte importé (GLB allégé, voir modelImport.js). Placement: x, n (mètres autour de l'origine), rot (degrés,
@@ -719,39 +775,45 @@ export function createScene3D(container, opts = {}) {
   // en taches. Rien ne traverse un bâtiment (clearance.js). Au toucher (iPad), 1500 arbres au plus: les proches, puis
   // les grands.
   const TREE_CAP = (window.matchMedia && window.matchMedia('(hover: none)').matches) ? 1500 : 4000;
-  // Feuillu: rayon visible des lobes 1,2 fois l'échelle, sommet à 1,17 fois au-dessus du centre (1 fois pour 3 lobes et
-  // la boule du lointain), bas de la couronne à 1 fois dessous; couronne sur environ la moitié de la hauteur, jamais
-  // sous 2 m. Pas de galette: un arbre bas mais large (souvent deux cimes fusionnées) garde une couronne au moins aux
-  // 4/5 ronde.
-  const broadY = (h, sx, top) => Math.min(Math.max(1.05 * sx, 0.5 * h / (top + 1)), 1.8 * sx, (h - 2) / (top + 1));
+  // Feuillu (8 octobre 2026, Stéphane: « moins larges, un peu plus écrasés »): surface vue du ciel ramenée à 85 % de la
+  // couronne mesurée (le partage des eaux du LiDAR réunit souvent deux ou trois couronnes voisines), couronne moins
+  // profonde et un peu plus large que haute (jamais plus écrasée qu'aux 3/4: sy au moins 0,75 sx), dont le bas remonte: on voit les troncs,
+  // et une maison d'un ou deux étages reste lisible. Dans un peuplement (carte écoforestière), environ 38 % de la hauteur;
+  // isolé (pelouse, rue), 45 %. Lobes: rayon visible 1,24 fois l'échelle, sommet à 1,17 fois au-dessus du centre (1 fois
+  // pour 3 lobes et la boule du lointain), bas à 1 fois dessous, jamais sous 2,5 m (35 % de la hauteur d'un petit arbre).
+  const AREA_K = [0.915, 0.941, 1], CROWN_NARROW = 0.85; // sx qui redonne la surface mesurée (6 lobes, 3 lobes, boule), puis rétrécie
+  const crownY = (h, sx, top, stand) => Math.min(Math.max((stand ? 0.75 : 0.85) * sx, (stand ? 0.38 : 0.45) * h / (top + 1)), 1.8 * sx, (h - Math.min(2.5, 0.35 * h)) / (top + 1));
   // Forme dessinée d'un arbre avant dégagement (clearance.js la teste et l'ajuste telle quelle). Conifère: base des
-  // branches à 12 à 25 % de la hauteur, sommet à la hauteur mesurée, rayon d'environ un cinquième de la hauteur (le
-  // rayon mesuré à mi-hauteur déborde sur les voisins en forêt dense), borné par la mesure. Tronc jusqu'au centre de la
-  // couronne (au quart de la hauteur pour un conifère), plus épais pour un grand arbre.
+  // branches à 12 à 25 % de la hauteur, sommet à la hauteur mesurée, rayon d'environ un septième de la hauteur (sapins et
+  // épinettes de forêt: 3 à 5 m de diamètre; le rayon mesuré à mi-hauteur déborde sur les voisins en forêt dense), borné
+  // par la mesure. Tronc jusqu'au centre de la couronne (au quart de la hauteur pour un conifère), plus épais pour un
+  // grand arbre (21 cm de rayon au pied pour 18,7 m).
   function treeShape(t) {
-    const k = Math.max(0.8, Math.min(1.4, 0.5 + t.h / 30)), tr = 0.26 * k;
+    const k = Math.max(0.6, Math.min(1.1, 0.35 + t.h / 40)), tr = 0.26 * k;
     if (t.con) {
-      const base = Math.max(0.8, (0.12 + 0.13 * hsh(t.x, t.n, 5)) * t.h), rb = Math.max(0.9, Math.min(t.h * (0.17 + 0.07 * t.c), t.r * 1.3));
+      const base = Math.max(0.8, (0.12 + 0.13 * hsh(t.x, t.n, 5)) * t.h), rb = Math.max(0.8, Math.min(t.h * (0.13 + 0.05 * t.c), t.r * 1.1));
       return { kind: 'con', cx: t.x, cn: t.n, base, rb, tiers: t.ring ? CON_TIERS_LOW : CON_TIERS, th: t.h * 0.25, k, tr };
     }
-    const th = Math.max(1.5, t.h - 1.17 * broadY(t.h, t.r / 1.2, 1.17)), off = Math.hypot(t.dx, t.dn);
+    const off = Math.hypot(t.dx, t.dn);
     // Centre mesuré de la couronne, à 0,7 fois sa largeur dessinée du tronc au plus (comme les essais de fitTree): le
     // haut du tronc reste dans la couronne, même pour un arbre bas et large dessiné plus étroit que sa couronne mesurée.
     const at = sx => { const f = off > 0.7 * sx ? 0.7 * sx / off : 1; return [t.x + t.dx * f, t.n + t.dn * f]; };
-    if (t.ring === 2) { const sy = broadY(t.h, t.r, 1), sx = Math.min(t.r, sy / 0.8), [cx, cn] = at(sx); return { kind: 'ball', cx, cn, sx, sy, top: 1, nl: 1, th, k, tr }; }
-    const top = t.ring === 1 ? 1 : 1.17, sy = broadY(t.h, t.r / 1.2, top), sx = Math.min(t.r / 1.2, sy / 0.8), [cx, cn] = at(sx);
+    const top = t.ring === 0 ? 1.17 : 1, sx0 = CROWN_NARROW * (t.lidar ? AREA_K[t.ring] * t.r : t.ring === 2 ? t.r : t.r / 1.2);
+    const sy = crownY(t.h, sx0, top, t.stand), sx = Math.min(sx0, sy / 0.75), th = Math.max(1.5, t.h - top * sy), [cx, cn] = at(sx);
+    if (t.ring === 2) return { kind: 'ball', cx, cn, sx, sy, top: 1, nl: 1, th, k, tr };
     return { kind: 'lobes', cx, cn, sx, sy, top, nl: t.ring === 1 ? 3 : 6, th, k, tr };
   }
-  // P: prismes des bâtiments (formes du projet et voisins, clearance.js). Retourne, pour le point de vue, chaque arbre
-  // dessiné: [x, n] du centre de la couronne, portée, sol, bas de la couronne, sommet.
-  function trees(list, P) {
+  // P: prismes des bâtiments (formes du projet et voisins, clearance.js); cg: peuplements (decodeCanopy). Retourne, pour le
+  // point de vue et le flare, chaque arbre dessiné: [x, n] du centre de la couronne, portée, sol, bas de la couronne,
+  // sommet, [x, n] du tronc, rayon du tronc, haut du tronc, 1 pour un conifère.
+  function trees(list, P, cg) {
     if (!list.length) return [];
     let all = list.map(t => {
       const [x, n] = t; let h, r, con = false, dx = 0, dn = 0, over;
-      if (t.length >= 5) { h = t[2]; r = t[3] * 1.15; con = t[4] === 1; if (t.length >= 8) { over = t[7]; if (!con) { dx = t[5]; dn = t[6]; } } } // rayon d'après la surface de la couronne: un peu plus, pour que les cimes voisines se touchent comme en forêt
+      if (t.length >= 5) { h = t[2]; r = t[3]; con = t[4] === 1; if (t.length >= 8) { over = t[7]; if (!con) { dx = t[5]; dn = t[6]; } } } // rayon d'après la surface de la couronne mesurée (voir treeShape)
       else { const cr = 2.1 + 1.5 * hsh(x, n, 2); h = Math.max(2.5, 7 + 6 * hsh(x, n, 1) - cr * 1.4) + 2.08 * cr; r = 1.2 * cr; } // mêmes arbres qu'avant le LiDAR
       const d = Math.hypot(x, n);
-      return { x, n, h: Math.max(2.5, h), r: Math.max(0.8, r), con, d, ring: d < 150 ? 0 : d < 250 ? 1 : 2, y: terrain.hTri(x, n), rot: hsh(x, n, 3) * 6.28, c: hsh(x, n, 4), dx, dn, over, lidar: t.length >= 5 };
+      return { x, n, h: Math.max(2.5, h), r: Math.max(0.8, r), con, d, ring: d < 150 ? 0 : d < 250 ? 1 : 2, y: terrain.hTri(x, n), rot: hsh(x, n, 3) * 6.28, c: hsh(x, n, 4), dx, dn, over, lidar: t.length >= 5, stand: t.length >= 5 && !!cg && cg.at(x, n) > 0 };
     });
     const pr = t => (t.d < 150 ? 2 : 0) + (t.h >= 15 ? 1 : 0) + t.h / 100;
     const cap = (arr, m) => { if (arr.length <= m) return arr; arr.sort((a, b) => pr(b) - pr(a)); return arr.slice(0, m); };
@@ -767,6 +829,9 @@ export function createScene3D(container, opts = {}) {
       const m = new THREE.InstancedMesh(geo, mat, lot.length);
       lot.forEach((t, i) => { place(t); o3.updateMatrix(); m.setMatrixAt(i, o3.matrix); if (mat !== trunkMat && mat !== shadowMat) m.setColorAt(i, L(t.con ? CONIFER_PAL[Math.floor(t.c * CONIFER_PAL.length)] : TREE_PAL[Math.floor(t.c * TREE_PAL.length)])); });
       m.castShadow = cast; m.receiveShadow = mat !== shadowMat; m.userData.sharedGeo = true;
+      // Doublure d'ombre: dessinée dans la carte d'ombre seulement (aucune instance dans la passe principale, où elle
+      // n'écrivait rien de toute façon).
+      if (mat === shadowMat) { const n = lot.length; m.computeBoundingSphere(); m.onBeforeRender = () => { m.count = 0; }; m.onAfterRender = () => { m.count = n; }; }
       S.add(m); statics.push(m); treesI.push(m);
     };
     const placeCrown = t => { const s = t.s; o3.position.set(s.cx, t.y + t.h - s.top * s.sy, -s.cn); o3.scale.set(s.sx, s.sy, s.sx); o3.rotation.set(0, t.rot, 0); }; // 6 lobes, 3 lobes ou boule
@@ -779,17 +844,24 @@ export function createScene3D(container, opts = {}) {
       else inst(k === 1 ? crownGeoMid : crownGeoFar, crownMat, broad, placeCrown, true);
       inst(k ? conGeoLow : conGeo, conMat, con, placeCon, true);
     });
-    return all.map(t => { const s = t.s; return [s.cx, s.cn, reachOf(s), t.y, s.kind === 'con' ? t.y + s.base : t.y + t.h - (s.top + 1) * s.sy, t.y + t.h]; });
+    return all.map(t => { const s = t.s; return [s.cx, s.cn, reachOf(s), t.y, s.kind === 'con' ? t.y + s.base : t.y + t.h - (s.top + 1) * s.sy, t.y + t.h, t.x, t.n, s.tr, t.y + s.th, s.kind === 'con' ? 1 : 0]; });
   }
 
-  // Sous-bois: grille de canopée des massifs (api/trees.js, demi-mètres, zéros par plages) en nappe à 60 % de la hauteur
-  // des cimes voisines (les couronnes en sortent), au contour décalé au hasard (pas de marches
-  // de 3 m), plus une lisière trouée du tiers de sa hauteur au bord de la nappe, sous les cimes de la lisière. Teinte de l'intérieur du
+  // Sous-bois: grille de canopée des massifs (api/trees.js, demi-mètres, zéros par plages) en nappe à 72 % de la hauteur
+  // des cimes voisines, dans le tiers bas des couronnes de peuplement (voir crownY: vue d'en haut, elle comble les trous
+  // entre les couronnes; d'en bas, elle est invisible), au contour décalé au hasard (pas de marches de 3 m), plus une
+  // lisière trouée au bord, du bas des couronnes à la nappe. Teinte de l'intérieur du
   // feuillage, plus verte là où les conifères dominent. La nappe ne porte pas d'ombre (elle ferait un bloc au bord du
   // boisé): les cimes et la lisière, trouées, s'en chargent.
-  function canopyFill(cn, treeList, P) {
+  const NAPPE_K = 0.72, EDGE_K = 0.75; // nappe dans le tiers bas des couronnes de peuplement (de 62 % à 100 % de la hauteur), lisière juste sous leur bas
+  function decodeCanopy(cn) {
     const N = cn.n, res = cn.res, half = cn.half, bin = atob(cn.d), v = new Uint8Array(N * N);
     for (let p = 0, k = 0; p < bin.length && k < N * N; p++) { const b = bin.charCodeAt(p); if (b) v[k++] = b; else k += bin.charCodeAt(++p); }
+    const at = (x, n) => { const i = Math.floor((x + half) / res), j = Math.floor((n + half) / res); return i < 0 || j < 0 || i >= N || j >= N ? 0 : v[j * N + i]; };
+    return { N, res, half, v, at };
+  }
+  function canopyFill(cg, treeList, P) {
+    const { N, res, half, v } = cg;
     // Part de conifères par case de 12 m, d'après les arbres mesurés.
     const share = new Map(), key = (x, n) => `${Math.floor(x / 12)},${Math.floor(n / 12)}`;
     treeList.forEach(t => { if (t.length < 5) return; const k = key(t[0], t[1]), c = share.get(k) || [0, 0]; c[0]++; c[1] += t[4]; share.set(k, c); });
@@ -803,7 +875,7 @@ export function createScene3D(container, opts = {}) {
       const x = -half + (i + 0.5) * res, n = -half + (j + 0.5) * res; let m = 0, c9 = 0;
       for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) { const u = at(i + a, j + b); if (u) { m += u; c9++; } }
       m /= c9 || 1; // moyenne des cases boisées voisines: la nappe reste sous la cime d'un petit arbre voisin d'un grand
-      gy[k] = terrain.hTri(x, n); top[k] = gy[k] + 0.6 * m / 2;
+      gy[k] = terrain.hTri(x, n); top[k] = gy[k] + NAPPE_K * m / 2;
       const c = share.get(key(x, n)), f = c ? c[1] / c[0] : 0;
       cc.copy(BROAD[Math.floor(hsh(x, n, 7) * BROAD.length)]).lerp(CON, f).multiplyScalar(0.55 + 0.4 * hsh(x, n, 6)); // taches claires et sombres
       pos.push(x, top[k], -n); col.push(cc.r, cc.g, cc.b); cells.push([i, j, m]); idx[k] = pos.length / 3 - 1; return idx[k];
@@ -822,7 +894,7 @@ export function createScene3D(container, opts = {}) {
     const place = (q, dist) => {
       const [i, j, m] = cells[q], k = j * N + i, x = -half + (i + 0.5) * res, n = -half + (j + 0.5) * res, a = hsh(x, n, 8) * 6.28;
       pos[q * 3] = x + Math.cos(a) * dist; pos[q * 3 + 2] = -(n + Math.sin(a) * dist);
-      gy[k] = terrain.hTri(pos[q * 3], -pos[q * 3 + 2]); top[k] = gy[k] + 0.6 * m / 2; pos[q * 3 + 1] = top[k];
+      gy[k] = terrain.hTri(pos[q * 3], -pos[q * 3 + 2]); top[k] = gy[k] + NAPPE_K * m / 2; pos[q * 3 + 1] = top[k];
     };
     const moved = new Uint8Array(cells.length);
     cells.forEach(([i, j], q) => {
@@ -846,9 +918,9 @@ export function createScene3D(container, opts = {}) {
     const side = (i0, j0, i1, j1) => {
       const k0 = j0 * N + i0, k1 = j1 * N + i1, p0 = idx[k0] * 3, p1 = idx[k1] * 3, b = ep.length / 3;
       const x0 = pos[p0], z0 = pos[p0 + 2], x1 = pos[p1], z1 = pos[p1 + 2], u0 = (x0 - z0) / 4, u1 = (x1 - z1) / 4;
-      // Bande de feuillage dans le haut seulement (du tiers de la hauteur à la nappe): on voit les troncs dessous, comme
+      // Bande de feuillage dans le haut seulement (du bas des couronnes à la nappe): on voit les troncs dessous, comme
       // à la lisière d'un vrai boisé; une lisière pleine jusqu'au sol faisait un mur de haie vu de près.
-      const b0 = gy[k0] + 0.35 * (top[k0] - gy[k0]), b1 = gy[k1] + 0.35 * (top[k1] - gy[k1]);
+      const b0 = gy[k0] + EDGE_K * (top[k0] - gy[k0]), b1 = gy[k1] + EDGE_K * (top[k1] - gy[k1]);
       ep.push(x0, b0, z0, x1, b1, z1, x1, top[k1], z1, x0, top[k0], z0);
       for (const q of [p0, p1, p1, p0]) ec.push(col[q] * 1.3, col[q + 1] * 1.3, col[q + 2] * 1.3);
       eu.push(u0, 0, u1, 0, u1, (top[k1] - b1) / 4, u0, (top[k0] - b0) / 4);
@@ -868,8 +940,8 @@ export function createScene3D(container, opts = {}) {
 
   // Point de vue: à hauteur d'oeil, côté soleil du créneau (AM: sud-est, PM: sud-ouest), dans l'espace libre,
   // avec vue dégagée sur le bâtiment principal.
-  function pickView(target, others, roads, treePts, subj = []) {
-    if (!target.length) { const b0 = terrain.hTri(0, 0); ct.set(0, b0 + 10, 0); T0.set(0, b0, 0); sunL.target.position.copy(T0); return; }
+  function pickView(target, others, roads, treePts, subj = [], focusH = 9) {
+    if (!target.length) { const b0 = terrain.hTri(0, 0); ct.set(0, b0 + 10, 0); T0.set(0, b0, 0); sunL.target.position.copy(T0); brkR = BRK_R; return; }
     const tc = centroid(target), base = groundOf(target).mean; let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
     target.forEach(p => { minx = Math.min(minx, p[0]); miny = Math.min(miny, p[1]); maxx = Math.max(maxx, p[0]); maxy = Math.max(maxy, p[1]); });
     const corners = [[minx, miny], [maxx, maxy], [minx, maxy], [maxx, miny]];
@@ -878,8 +950,10 @@ export function createScene3D(container, opts = {}) {
     rMin = Math.max(15, Math.hypot(maxx - minx, maxy - miny) / 2 + 8); // on ne peut pas s'approcher au point d'entrer dans le bâtiment (8 m de marge)
     let best = null, bestUnder = null;
     const near = others.filter(r => Math.hypot(centroid(r)[0] - tc[0], centroid(r)[1] - tc[1]) < 260);
-    // Arbres dessinés (trees()): [x, n] du centre de la couronne, portée, sol, bas de la couronne, sommet.
+    // Arbres dessinés (trees()): couronne, tronc et genre. Visées: le centre, le haut du toit (bande de ciel) et les coins au pied.
     const tp = treePts.filter(t => Math.hypot(t[0] - tc[0], t[1] - tc[1]) < radPref + 80);
+    const aims = [[tc[0], tc[1], aimY], [tc[0], tc[1], base + Math.max(3, focusH) + 2], ...corners.map(([x, y]) => [x, y, base + 1.5])];
+    const hd = Math.max(...corners.map(([x, y]) => Math.hypot(x - tc[0], y - tc[1]))); // écart maximal entre une visée et le centre
     for (let bea = pref - 80; bea <= pref + 80; bea += 5) {
       for (let rad = Math.max(30, radPref - 40); rad <= radPref + 50; rad += 6) {
         const px = tc[0] + Math.sin(bea * Math.PI / 180) * rad, py = tc[1] + Math.cos(bea * Math.PI / 180) * rad, p = [px, py];
@@ -888,29 +962,42 @@ export function createScene3D(container, opts = {}) {
         // Pas dans un arbre ni le nez dans une couronne (portée dessinée), et le moins d'arbres possible entre
         // la caméra et le bâtiment. En forêt dense, aucun point n'est libre: on garde le moins encombré, vu de plus haut.
         // Une couronne ne cache le bâtiment que si la ligne de visée la traverse (on voit sous une couronne haute).
-        let treePen = 0, under = false, screen = 0;
-        const eye = terrain.hTri(px, py) + 1.7, dx = tc[0] - px, dy = tc[1] - py, l2 = dx * dx + dy * dy || 1;
+        // Distance de l'oeil à l'enveloppe d'une couronne mesurée comme l'effacement près de l'objectif (nearFade): sous 3 m
+        // elle serait effacée, jusqu'à 10 m en partie; tronc à moins de 1,2 m ou sous la jupe d'un conifère: trop près.
+        let treePen = 0, under = false, screen = 0, screenC = 0, trunkHit = 0;
+        const eye = terrain.hTri(px, py) + 1.7;
+        const AL = aims.map(([ax, an, ay]) => { const dx = ax - px, dy = an - py; return [dx, dy, dx * dx + dy * dy || 1, ay]; });
+        const gx = tc[0] - px, gy = tc[1] - py, g2 = gx * gx + gy * gy || 1;
         for (const t of tp) {
-          const r = t[2], dt = Math.hypot(t[0] - px, t[1] - py);
-          if (dt < Math.max(5, r + 1.5)) under = true; else if (dt < r + 8) treePen += (r + 8 - dt) * 3;
-          const u = Math.max(0, Math.min(1, ((t[0] - px) * dx + (t[1] - py) * dy) / l2)), ly = eye + (aimY - eye) * u;
-          if (Math.hypot(px + u * dx - t[0], py + u * dy - t[1]) < 0.8 * r && ly > t[4] && ly < t[5]) screen++;
+          const r = t[2], dt = Math.hypot(t[0] - px, t[1] - py), dv = Math.max(eye - t[5], t[4] - eye, 0), de = Math.hypot(Math.max(dt - r, 0), dv), dk = Math.hypot(t[6] - px, t[7] - py) - t[8];
+          if (de < NEAR_LEAF[0] || dk < 1.2 || (t[10] && dt < r + 0.5 && eye < t[5])) under = true; else if (de < NEAR_LEAF[1]) treePen += (NEAR_LEAF[1] - de) * 4;
+          // Aucune ligne de visée à portée de cet arbre (chacune reste à moins de hd de la ligne vers le centre): suivant.
+          const w = clamp(((t[0] - px) * gx + (t[1] - py) * gy) / g2);
+          if (Math.hypot(px + w * gx - t[0], py + w * gy - t[1]) > Math.max(r, Math.hypot(t[0] - t[6], t[1] - t[7]) + t[8] + 0.1) + hd) continue;
+          for (let k = 0; k < AL.length; k++) {
+            const [dx, dy, l2, ay] = AL[k];
+            const u = clamp(((t[0] - px) * dx + (t[1] - py) * dy) / l2), ly = eye + (ay - eye) * u;
+            if (Math.hypot(px + u * dx - t[0], py + u * dy - t[1]) < 0.8 * r && ly > t[4] && ly < t[5]) { screen += 1 / AL.length; if (k === 0) screenC++; } // screenC: couronnes sur la ligne du centre
+            const v = clamp(((t[6] - px) * dx + (t[7] - py) * dy) / l2), lv = eye + (ay - eye) * v;
+            if (v > 0.03 && v < 0.9 && Math.hypot(px + v * dx - t[6], py + v * dy - t[7]) < t[8] + 0.1 && lv < Math.min(t[4], t[9])) trunkHit += 1 / aims.length; // tronc devant la façade
+          }
         }
         const blocked = corners.filter(c => near.some(r => segHitsRing(p, c, r))).length;
         const hidden = terrain.blocked(px, py, terrain.hTri(px, py) + 1.7, tc[0], tc[1], aimY) ? 1 : 0; // le relief cache le bâtiment
         let roadD = Infinity; roads.forEach(r => { if (r.k !== 0) return; const P = r.p; for (let i = 0; i < P.length - 1; i++) { const a = P[i], b = P[i + 1]; const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy || 1; let t = ((px - a[0]) * dx + (py - a[1]) * dy) / l2; t = Math.max(0, Math.min(1, t)); roadD = Math.min(roadD, Math.hypot(px - a[0] - t * dx, py - a[1] - t * dy)); } });
-        const score = -Math.abs(bea - pref) * 0.6 - Math.abs(rad - radPref) * 0.8 - blocked * 25 - hidden * 40 + (roadD < 7 ? 8 : 0) - treePen - Math.min(screen, 8) * 12;
-        if (under) { if (!bestUnder || score > bestUnder.s) bestUnder = { s: score, px, py, screen, under }; }
-        else if (!best || score > best.s) best = { s: score, px, py, screen };
+        const score = -Math.abs(bea - pref) * 0.6 - Math.abs(rad - radPref) * 0.8 - blocked * 25 - hidden * 40 + (roadD < 7 ? 8 : 0) - treePen - Math.min(screen, 8) * 12 - trunkHit * 30;
+        if (under) { if (!bestUnder || score > bestUnder.s) bestUnder = { s: score, px, py, screen, screenC, under }; }
+        else if (!best || score > best.s) best = { s: score, px, py, screen, screenC };
       }
     }
     if (!best) best = bestUnder;
     if (!best) { best = { px: tc[0] + Math.sin(pref * Math.PI / 180) * radPref, py: tc[1] + Math.cos(pref * Math.PI / 180) * radPref, screen: 0, under: true }; } // point non vérifié: au-dessus des cimes voisines
     // Vue bouchée par les arbres (lot en forêt): au-dessus des cimes voisines plutôt qu'à hauteur d'oeil.
     let lift = 1.7;
-    if (best.under || best.screen >= 3) { const g0 = terrain.hTri(best.px, best.py); let top = 0; for (const t of tp) if (Math.hypot(t[0] - best.px, t[1] - best.py) < 25) top = Math.max(top, t[5] - g0); lift = Math.max(lift, Math.min(80, top + 5)); }
+    if (best.under || best.screenC >= 3) { const g0 = terrain.hTri(best.px, best.py); let top = 0; for (const t of tp) if (Math.hypot(t[0] - best.px, t[1] - best.py) < 25) top = Math.max(top, t[5] - g0); lift = Math.max(lift, Math.min(80, top + 5)); }
     ct.set(tc[0], aimY, -tc[1]); T0.set(tc[0], base, -tc[1]); sunL.target.position.copy(T0);
     az = Math.atan2(best.px - tc[0], best.py - tc[1]); Rr = clampR(Math.hypot(best.px - tc[0], best.py - tc[1])); camH = lift;
+    brkR = Math.min(120, Math.max(BRK_R, rMin, Rr)); // percée: le point de vue de départ est dans le disque dégagé
   }
 
   // ---- modèle importé
@@ -1054,7 +1141,7 @@ export function createScene3D(container, opts = {}) {
       const measured = top ? top[1] : null;
       let h, src;
       if (!d.def) { h = d.h; src = 'réglée dans le projet'; } else if (measured != null) { h = measured; src = top[4] ? 'mesurée (LiDAR)' : 'estimée (OpenStreetMap)'; } else { h = 9; src = 'par défaut'; }
-      h = Math.max(3, h);
+      h = Math.max(3, h); d.hEff = h; // hauteur dessinée (sert aussi à la visée du toit dans pickView)
       const fl = Math.max(1, Math.floor(h / 3.6)); // une rangée de fenêtres par étage de 3,6 m environ (jamais étirée)
       const wallHex = (projLocal[d.i] && projLocal[d.i].wallColor) || '#7a3f33', base = groundOf(d.p).mean;
       edgesOf(d.p).forEach(e => projInfo.push({ dir: e.dir, len: e.len, mid: e.mid, nrm: e.nrm, label: `Forme ${i + 1}`, h, src, base }));
@@ -1070,7 +1157,7 @@ export function createScene3D(container, opts = {}) {
       const l = new THREE.RectAreaLight(0xffd9a0, 0, e.len * 0.9, e.h * 0.7); const nx = e.nrm[0], nz = -e.nrm[1];
       l.position.set(e.mid[0] + nx * 0.4, e.base + e.h * 0.5, -e.mid[1] + nz * 0.4); l.lookAt(l.position.x + nx, l.position.y, l.position.z + nz); l.visible = false; S.add(l); winLights.push(l);
     });
-    const others = []; let kept = [];
+    const others = []; let kept = []; treeEnv = [];
     if (data) {
       data.bld.forEach(([p, h, fl, k, lid]) => {
         // Un voisin recouvert par un bâtiment dessiné disparaît: c'est le même édifice.
@@ -1091,23 +1178,25 @@ export function createScene3D(container, opts = {}) {
       const mPrism = mRing ? [{ p: signedArea(mRing) < 0 ? mRing.slice().reverse() : mRing, h: model.h, g: { min: model.group.position.y, mean: model.group.position.y }, unmapped: true }] : [];
       const P = prisms([...list, ...mPrism], groundOf);
       if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.P = P; // vérification en développement
-      kept = trees(mRing ? data.trees.filter(treeFree) : data.trees, P);
-      if (data.canopy) canopyFill(data.canopy, data.trees, P);
+      const cg = data.canopy ? decodeCanopy(data.canopy) : null; // peuplements de la carte écoforestière (sous-bois, forme des couronnes)
+      kept = trees(mRing ? data.trees.filter(treeFree) : data.trees, P, cg);
+      if (cg) canopyFill(cg, data.trees, P);
+      treeEnv = kept;
       lamps(data.roads, data.bld);
     }
     blocks(list);
     // Point de vue sur la première forme dessinée; sans forme, sur l'édifice (Overture) sous le point du projet, sinon le plus proche à moins de 60 m.
-    let focus = mRing || (drawn.length ? drawn[0].p : null);
+    let focus = mRing || (drawn.length ? drawn[0].p : null), focusH = mRing ? model.h : drawn.length ? (drawn[0].hEff ?? 9) : 9;
     if (!focus && data) {
       const cand = data.bld.filter(b => b[3] !== 2);
       const under = cand.find(([p]) => pointInRing([0, 0], p)) || cand.map(b => ({ b, d: Math.hypot(...centroid(b[0])) })).sort((a, b) => a.d - b.d).find(x => x.d < 60)?.b;
-      if (under) focus = under[0];
+      if (under) { focus = under[0]; focusH = under[1]; }
     }
     // Les autres formes du projet comptent comme obstacles, sauf celles qui chevauchent la première (tour sur un socle,
     // bâtiment en L dessiné en deux rectangles): c'est le même sujet, on ne place pas la caméra dedans, mais il ne bouche
     // pas la vue sur lui-même. Avec une maison importée, la forme qu'elle recouvre fait partie du sujet.
     const subj = focus ? drawn.map(d => d.p).filter(r => r !== focus && ringsOverlap(r, focus)) : [];
-    if (!keepView) pickView(focus || [], [...others, ...drawn.map(d => d.p)].filter(r => r !== focus && !subj.includes(r)), data ? data.roads : [], kept, subj);
+    if (!keepView) pickView(focus || [], [...others, ...drawn.map(d => d.p)].filter(r => r !== focus && !subj.includes(r)), data ? data.roads : [], kept, subj, focusH);
     if (sat) { if (!modelOnly || !satObj) placeSat(); else satTrees(); }
     cloudLift = Math.max(150, terrain.maxWithin(1000) - T0.y + 60); // les nuages passent au-dessus des collines voisines
     dirty = true;
@@ -1180,11 +1269,11 @@ export function createScene3D(container, opts = {}) {
     if (!running) return; raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     const a = 1 - Math.exp(-dt * 3.5); let moving = false;
-    ['cum', 'mid', 'high', 'iv', 'rain', 'wet', 'pud', 'fogK', 'fogTh', 'smk'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > 0.0005) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; });
+    ['cum', 'mid', 'high', 'iv', 'rain', 'wet', 'pud', 'fogK', 'fogTh', 'smk', 'storm', 'brk'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > 0.0005) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; });
     if (!dirty && !moving && now - envAt > 400) {
       // Rien d'autre ne bouge: sous la pluie, seules les gouttes avancent (composition et lissage refaits, pas la scène),
       // 30 fois par seconde au plus (environ 1,5 ms de calcul graphique chaque fois), et seulement si la 3D est à l'écran.
-      if (cur.rain > 0.005 && compRT && onScreen && now - rainAt >= 32) { rainAt = now; compMat.uniforms.uTime.value = (now / 1000) % 60; pass(compMat, compRT); pass(fxMat, null); }
+      if (cur.rain * (1 - RAIN_BRK * cur.brk) > 0.005 && compRT && onScreen && now - rainAt >= 32) { rainAt = now; compMat.uniforms.uTime.value = (now / 1000) % 60; pass(compMat, compRT); pass(fxMat, null); }
       return; // sinon rien à redessiner: on laisse le processeur tranquille
     }
     dirty = false;
@@ -1228,16 +1317,45 @@ export function createScene3D(container, opts = {}) {
     sunL.shadow.radius = (1 + 7 * Math.pow(1 - iv, 1.3) + 1.5 * cum) * Math.max(0.35, 150 / SR); // taille apparente du soleil pour la pénombre: vraie au soleil franc, élargie sous le voile et les nuages; en texels, donc ramenée quand la zone s'élargit
     // Biais propre au modèle: demi-texel d'ombre multiplié par le rayon de pénombre (le filtre PCSS lit jusque-là), après le calcul du rayon.
     mdlSun.value.copy(d); mdlGB.value = -sunL.shadow.bias * (sc.far - sc.near); mdlHT.value = 0.5 * (sc.right - sc.left) / sunL.shadow.mapSize.x * Math.max(1, sunL.shadow.radius);
-    fill.intensity = (0.2 + 1.1 * Math.max(cumS, veil) * Math.min(1, Math.sin(el) / 0.3)) * (1 - 0.5 * twi);
-    fill.color.setRGB(0.86, 0.90, 1.0).lerp(new THREE.Color(0.9, 0.9, 0.9), Math.max(cumS, veil)).lerp(new THREE.Color(1.0, 0.86, 0.68), 0.6 * smk); // ciel bleuté, gris sous les nuages ou le brouillard, chaud sous la fumée
-    fill.groundColor.copy(GROUND_TINT).multiplyScalar((0.5 + 1.3 * iv * Math.min(1, Math.sin(el) / 0.5)) * (1 - 0.6 * twi)); // rebond du sol
-    const ambB = (0.3 + 0.55 * Math.min(1, Math.sin(el) / 0.5)) * (1 + 0.3 * Math.max(cumS, veil)); const tot = (Idir / Math.PI * 0.5 + ambB) / 2.2;
-    compMat.uniforms.uExp.value = Math.max(0.5, Math.min(1.15 - 0.4 * twi, 0.64 * Math.pow(1 / Math.max(0.05, Math.min(1, tot)), 0.3)));
-    const nb = Math.min(60, Math.round(cum * 110)), hh = cloudLift / Math.max(d.y, 0.08); blobs.forEach((g, i) => { g.visible = i < nb; const u = g.userData; g.position.set(T0.x + u.gx + d.x * hh, T0.y + cloudLift, T0.z + u.gz + d.z * hh); });
+    // Orage sans percée (soleil moins du cinquième de l'heure): tous les groupes d'ombre, le projet est à l'ombre des nuages.
+    const nb = tg.storm >= 0.45 && !tg.brk ? 60 : Math.min(60, Math.round(cum * 110)), hh = cloudLift / Math.max(d.y, 0.08); blobs.forEach((g, i) => { g.visible = i < nb; const u = g.userData; g.position.set(T0.x + u.gx + d.x * hh, T0.y + cloudLift, T0.z + u.gz + d.z * hh); });
     // Caméra à hauteur camH au-dessus du sol sous elle: elle suit la pente en tournant autour du sujet.
     const cx = ct.x + Math.sin(az) * Rr, cz = ct.z - Math.cos(az) * Rr; cam.position.set(cx, terrain.hTri(cx, -cz) + camH, cz); cam.lookAt(ct); cam.updateMatrixWorld(); cam.getWorldDirection(vF); sky.position.copy(cam.position);
+    // Percée (8 octobre 2026): si la prévision donne du soleil au moins le cinquième de l'heure, les groupes dont l'ombre
+    // toucherait le projet ou le disque de rayon brkR autour de lui sont retirés; les autres restent (la percée est locale,
+    // le lointain reste à l'ombre). Le disque ne suit ni le zoom ni la caméra: tourner ne fait naître aucune ombre.
+    let camSun = 1, subjSun = 1;
+    if (nb > 0 && !night) {
+      const bk = [tg.brk, nb, brkR, d.x.toFixed(3), d.y.toFixed(3), d.z.toFixed(3), T0.x.toFixed(1), T0.y.toFixed(1), T0.z.toFixed(1), ct.y.toFixed(1)].join(',');
+      if (bk !== brkKey) {
+        brkKey = bk; brkHide = new Set();
+        if (tg.brk) {
+          const pts = [new THREE.Vector3(T0.x, T0.y + 2, T0.z), ct.clone(), new THREE.Vector3(T0.x, T0.y + Math.max(2, 2 * (ct.y - T0.y)), T0.z)];
+          for (let k = 0; k < 16; k++) { const q = k * Math.PI / 8, x = T0.x + Math.sin(q) * brkR, z = T0.z - Math.cos(q) * brkR; pts.push(new THREE.Vector3(x, terrain.hTri(x, -z) + 1.7, z)); }
+          blobs.forEach((g, i) => { if (i < nb && pts.some(P => blobHit(g, P, d, BRK_M))) brkHide.add(i); });
+        }
+      }
+      brkHide.forEach(i => { blobs[i].visible = false; });
+      camSun = blobs.some(g => g.visible && blobHit(g, cam.position, d, 0)) ? 0 : 1;
+      subjSun = blobs.some(g => g.visible && blobHit(g, ct, d, 0)) ? 0 : 1;
+    }
+    // Caméra à l'ombre d'un nuage: un nuage cache le soleil dans le ciel (trouée refermée, disque, flare et disque dans la
+    // fumée éteints). Percée prévue et caméra au soleil: trouée ouverte autour du soleil. Sinon, le ciel d'avant.
+    const gapT = nb > 0 && !night ? (!camSun ? -1 : tg.brk ? 1 : 0) : 0;
+    if (Math.abs(gapT - gapS) > 0.002) { gapS += (gapT - gapS) * a; dirty = true; } else gapS = gapT;
+    const sunVis = 1 + Math.min(0, gapS); // comme le disque du ciel (disc *= 1 - max(-uSunGap, 0))
+    // Sous une base d'orage, peu de lumière vient du ciel (la base épaisse ne laisse passer que quelques pour cent): ambiance
+    // réduite et teintée ardoise, le soleil direct de la percée reste entier, d'où le contraste. Exposition pour le projet:
+    // au soleil s'il y est, pour l'ombre si un nuage d'orage le couvre.
+    const ambK = 1 - AMB_CUT * cur.storm;
+    fill.intensity = (0.2 + 1.1 * Math.max(cumS, veil) * Math.min(1, Math.sin(el) / 0.3)) * (1 - 0.5 * twi) * ambK;
+    fill.color.setRGB(0.86, 0.90, 1.0).lerp(new THREE.Color(0.9, 0.9, 0.9), Math.max(cumS, veil)).lerp(new THREE.Color(0.78, 0.84, 0.95), 0.6 * cur.storm).lerp(new THREE.Color(1.0, 0.86, 0.68), 0.6 * smk); // ciel bleuté, gris sous les nuages ou le brouillard, ardoise sous l'orage, chaud sous la fumée
+    fill.groundColor.copy(GROUND_TINT).multiplyScalar((0.5 + 1.3 * iv * (subjSun ? 1 : 1 - 0.7 * cur.storm) * Math.min(1, Math.sin(el) / 0.5)) * (1 - 0.6 * twi)); // rebond du sol
+    const ambB = (0.3 + 0.55 * Math.min(1, Math.sin(el) / 0.5)) * (1 + 0.3 * Math.max(cumS, veil)) * ambK, IdirE = Idir * (subjSun ? 1 : 1 - 0.8 * cur.storm); const tot = (IdirE / Math.PI * 0.5 + ambB) / 2.2;
+    compMat.uniforms.uExp.value = Math.max(0.5, Math.min(1.15 - 0.4 * twi, 0.64 * Math.pow(1 / Math.max(0.05, Math.min(1, tot)), 0.3)));
     const U = skyMat.uniforms, dk = 0.5 + 0.5 * clamp((realDeg + 1) / 14), uW = clamp(1 - (realDeg - 1) / 22);
     U.uCum.value = cam.position.y > fogTopW + 10 ? cum : cumS; U.uMid.value = mid; U.uHigh.value = high; U.uDirect.value = iv; U.uWarm.value = uW; U.uTw.value = twi; U.uNight.value = nightF; U.uGlow.value = glow; // au-dessus de la nappe, le ciel reste celui des nuages
+    U.uStorm.value = cur.storm; U.uSunGap.value = gapS > 0 ? gapS * smooth(0.05, 0.3, iv) : gapS; U.uGapR.value = 0.07 + 0.12 * Math.sin(el); // trouée de 4° au ras de l'horizon à 11° haut dans le ciel
     wallMat.emissiveIntensity = 0.62 * smooth(1, -4, realDeg); // fenêtres chaudes, pas blanches
     uNight.value = smooth(1, -4, realDeg); // fenêtres discrètes le jour, d'origine dès la tombée du jour
     winLights.forEach(l => { l.intensity = 0.32 * wallMat.emissiveIntensity / 0.62; l.visible = l.intensity > 0.01; }); // lumière des fenêtres sur le sol, les arbres et les voisins
@@ -1249,7 +1367,7 @@ export function createScene3D(container, opts = {}) {
     const soft = twi * (1 - nightF); twL.intensity = 1.8 * soft; twL.color.copy(L(mixHex('#9fb0e0', '#e8bc92', glow * 0.5)));
     twL.target.position.copy(T0); twL.position.copy(T0).add(new THREE.Vector3(Math.sin(bearing) * Math.cos(0.17), Math.sin(0.17), -Math.cos(bearing) * Math.cos(0.17)).multiplyScalar(400));
     const sDir = new THREE.Vector3(Math.sin(bearing) * Math.cos(sp.altitude), Math.sin(sp.altitude), -Math.cos(bearing) * Math.cos(sp.altitude)); U.uSun.value.copy(sDir); const sc1 = rgb(sc0); U.uSunCol.value.set(sc1[0], sc1[1], sc1[2]);
-    const key = [cumS, mid, high, iv, uW, dk, sDir.x, sDir.y, smk].map(v => v.toFixed(2)).join(','); if (key !== envKey && now - envAt > 120) { envKey = key; envAt = now; const uc = U.uCum.value; U.uCum.value = cumS; updateEnv(); U.uCum.value = uc; }
+    const key = [cumS, mid, high, iv, uW, dk, sDir.x, sDir.y, smk, cur.storm].map(v => v.toFixed(2)).join(','); if (key !== envKey && now - envAt > 120) { envKey = key; envAt = now; const uc = U.uCum.value, ug = U.uSunGap.value; U.uCum.value = cumS; U.uSunGap.value = 0; updateEnv(); U.uCum.value = uc; U.uSunGap.value = ug; } // la trouée autour du soleil ne compte pas dans la lumière d'ambiance
     const cgv = Math.max(0, new THREE.Vector3(vF.x, 0, vF.z).normalize().dot(sDir)), thick = 1 - iv;
     // Brouillard: couleur de l'horizon du même ciel physique dans la direction regardée (épaule comme dans le shader),
     // puis voile, cumulus, heure bleue et nuit comme le ciel; tout en linéaire.
@@ -1257,11 +1375,11 @@ export function createScene3D(container, opts = {}) {
     // Le sol lointain est nettement plus sombre que le ciel juste au-dessus de l'horizon (sinon brume blanche): 0,45 fois l'horizon;
     // sous un voile ou des cumulus, la base grise des nuages, comme dans le ciel.
     // Brouillard: même horizon que le ciel (chromaticité adoucie à 70 %, luminance 2,4 fois le zénith), un peu plus sombre (0,45).
-    const hp = preethamRadiance([fdir.x, fdir.y, fdir.z], sunV, turb, 1.5), lph = Math.max(LUM(hp), 1e-6); let hc = hp.map(v => (v / lph * 0.3 + 0.7) * zenTarget * 2.4); const hl = LUM(hc); hc = hc.map(v => 0.45 * v / (1 + 0.5 * hl));
+    const hp = preethamRadiance([fdir.x, fdir.y, fdir.z], sunV, turb, 1.5), lph = Math.max(LUM(hp), 1e-6); let hc = hp.map(v => (v / lph * 0.3 + 0.7) * zenTarget * 2.4); const hl = LUM(hc); hc = hc.map(v => 0.45 * v / (1 + 0.5 * hl)); const hc0 = hc.slice();
     let vc = mv([0.88, 0.89, 0.90], [0.64, 0.66, 0.69], thick); vc = mv(vc, mv([0.62, 0.62, 0.66], [0.95, 0.72, 0.55], 0.6), uW * 0.5);
-    hc = mv(hc, lin(vc).map(v => v * 0.55), veil * (0.45 + 0.52 * thick * thick)); hc = mv(hc, lin([0.50, 0.54, 0.60]).map(v => v * 0.65), smooth(0.25, 0.85, cumS)); hc = mv(hc, lin([0.11, 0.24, 0.50]).map(v => v * (0.72 + 0.55 * cgv)), twi); hc = mv(hc, lin([0.045, 0.07, 0.16]).map(v => v * (0.8 + 0.3 * cgv)), nightF); hc = mv(hc, lin([0.30, 0.21, 0.13]).map(v => v * 0.5), 0.28 * urban * nightF); fog.color.setRGB(hc[0], hc[1], hc[2]); fog.near = 250 + camH * 4; fog.far = 1500 + camH * 14; // dernier mélange: pollution lumineuse au loin, en ville
+    hc = mv(hc, lin(vc).map(v => v * 0.55), veil * (0.45 + 0.52 * thick * thick)); hc = mv(hc, lin([0.50, 0.54, 0.60]).map(v => v * 0.65), smooth(0.25, 0.85, cumS)); if (cur.storm > 0) hc = mv(hc.map(v => v * (1 - 0.35 * cur.storm)), hc0, 0.55 * cur.storm * (1 - smooth(0.70, 0.95, cumS))); hc = mv(hc, lin([0.11, 0.24, 0.50]).map(v => v * (0.72 + 0.55 * cgv)), twi); hc = mv(hc, lin([0.045, 0.07, 0.16]).map(v => v * (0.8 + 0.3 * cgv)), nightF); hc = mv(hc, lin([0.30, 0.21, 0.13]).map(v => v * 0.5), 0.28 * urban * nightF); fog.color.setRGB(hc[0], hc[1], hc[2]); fog.near = 250 + camH * 4; fog.far = 1500 + camH * 14; // dernier mélange: pollution lumineuse au loin, en ville
     if (cur.smk > 0) { const sl = LUM([fog.color.r, fog.color.g, fog.color.b]); fog.color.lerp(new THREE.Color(sl * 1.15, sl * 0.85, sl * 0.55), 0.6 * cur.smk); } // fumée: le voile du lointain prend aussi la teinte brun-orangé
-    const rainK = cur.rain; if (rainK > 0) { fog.near *= 1 - 0.6 * rainK; fog.far *= 1 - 0.5 * rainK; fog.color.lerp(new THREE.Color().setScalar(fog.color.r * 0.2126 + fog.color.g * 0.7152 + fog.color.b * 0.0722), 0.5 * rainK); } // pluie: visibilité réduite, grisaille
+    const rainK = cur.rain * (1 - RAIN_BRK * cur.brk); if (rainK > 0) { fog.near *= 1 - 0.6 * rainK; fog.far *= 1 - 0.5 * rainK; fog.color.lerp(new THREE.Color().setScalar(fog.color.r * 0.2126 + fog.color.g * 0.7152 + fog.color.b * 0.0722), 0.5 * rainK); } // pluie: visibilité réduite, grisaille
     lampU.uWet.value = cur.wet;
     R.setRenderTarget(sceneRT); R.render(S, cam);
     aoMat.uniforms.tDepth.value = sceneRT.depthTexture; aoMat.uniforms.uRes.value.set(PW, PH); aoMat.uniforms.uProj.value.copy(cam.projectionMatrix); aoMat.uniforms.uProjInv.value.copy(cam.projectionMatrixInverse); pass(aoMat, aoRT);
@@ -1279,12 +1397,26 @@ export function createScene3D(container, opts = {}) {
       kFl = smooth(22, 4, realDeg) * smooth(-1.5, -0.3, realDeg) * smooth(0.8, 0, Math.hypot(outX, outY));
       if (kFl > 0) visCPU = terrain.blocked(cam.position.x, -cam.position.z, cam.position.y, cam.position.x + sDir.x * 9000, -cam.position.z - sDir.z * 9000, cam.position.y + sDir.y * 9000) ? 0 : 1;
     }
+    // Arbre effacé tout près de l'objectif (nearFade) qui cache le soleil: le flare et le disque perdent la part que son
+    // feuillage arrête vraiment (environ les trois quarts), sinon l'étoile passerait à travers un arbre réel.
+    let treeSun = 1;
+    if (!sat && nearU.value > 0 && (kFl > 0 || (smk > 0.1 && fwd > 0.08))) { // SOL SAT allumé: arbres cachés, rien ne fait écran
+      const ex = cam.position.x, ey = cam.position.y, en = -cam.position.z, ux = sDir.x, uy = sDir.y, un = -sDir.z;
+      for (const t of treeEnv) {
+        const r = t[2], cy = 0.5 * (t[4] + t[5]), ry = Math.max(0.5, 0.5 * (t[5] - t[4]));
+        if (Math.hypot(t[0] - ex, t[1] - en) - r > NEAR_LEAF[1] || ey < t[4] - NEAR_LEAF[1] || ey > t[5] + NEAR_LEAF[1]) continue;
+        const qx = (ex - t[0]) / r, qy = (ey - cy) / ry, qn = (en - t[1]) / r, dx = ux / r, dy = uy / ry, dn = un / r;
+        const A = dx * dx + dy * dy + dn * dn, B = qx * dx + qy * dy + qn * dn, C = qx * qx + qy * qy + qn * qn - 1, D = B * B - A * C;
+        if (D < 0 || (-B + Math.sqrt(D)) / A <= 0) continue;
+        treeSun *= 1 - 0.75 * (1 - smooth(NEAR_LEAF[0], NEAR_LEAF[1], Math.max(0, (-B - Math.sqrt(D)) / A))); // distance au feuillage le long du rayon
+      }
+    }
     // Reflet des flaques (beaucoup de pluie seulement): calculé ici (images complètes); les images de gouttes seules
     // réutilisent reflRT.
     const reflK = cur.pud > 0.01 ? 0.8 * cur.pud : 0;
-    if (reflK > 0) { if (!skyFresh) { const uc = skyMat.uniforms.uCum.value; skyMat.uniforms.uCum.value = cumS; skyCam.update(R, skyScene); skyMat.uniforms.uCum.value = uc; skyFresh = true; } const RU = reflMat.uniforms; RU.tCol.value = sceneRT.texture; RU.tDepth.value = sceneRT.depthTexture; RU.uProj.value.copy(cam.projectionMatrix); RU.uProjInv.value.copy(cam.projectionMatrixInverse); RU.uUp.value.set(0, 1, 0).transformDirection(cam.matrixWorldInverse); RU.uV2W.value.setFromMatrix4(cam.matrixWorld); RU.uCamW.value.copy(cam.position); RU.uPud.value = cur.pud; RU.uTx.value.set(4 / PW, 4 / PH); pass(reflMat, reflRT2); // normale du sol mesurée sur 4 pixels: au loin, la profondeur arrondie la ferait hésiter d'une ligne à l'autre
+    if (reflK > 0) { if (!skyFresh || skyGap !== U.uSunGap.value) { const uc = skyMat.uniforms.uCum.value; skyMat.uniforms.uCum.value = cumS; skyCam.update(R, skyScene); skyMat.uniforms.uCum.value = uc; skyFresh = true; skyGap = U.uSunGap.value; } // les flaques reflètent le ciel affiché, trouée comprise const RU = reflMat.uniforms; RU.tCol.value = sceneRT.texture; RU.tDepth.value = sceneRT.depthTexture; RU.uProj.value.copy(cam.projectionMatrix); RU.uProjInv.value.copy(cam.projectionMatrixInverse); RU.uUp.value.set(0, 1, 0).transformDirection(cam.matrixWorldInverse); RU.uV2W.value.setFromMatrix4(cam.matrixWorld); RU.uCamW.value.copy(cam.position); RU.uPud.value = cur.pud; RU.uTx.value.set(4 / PW, 4 / PH); pass(reflMat, reflRT2); // normale du sol mesurée sur 4 pixels: au loin, la profondeur arrondie la ferait hésiter d'une ligne à l'autre
       rblurMat.uniforms.tSrc.value = reflRT2.texture; rblurMat.uniforms.uDir.value.set(0, 1.8 / reflRT.height); pass(rblurMat, reflRT); } // flou vertical d'environ ±7 lignes
-    const CU = compMat.uniforms; CU.tRefl.value = reflRT.texture; CU.uRefl.value = reflK; CU.tDepth.value = sceneRT.depthTexture; CU.uSunUV.value.set(sunPx, sunPy); CU.uAspect.value = W / H; CU.uFlare.value = kFl * (0.35 + 0.65 * iv) * (1 - 0.85 * cum) * Math.sqrt(smokeT) * (fogSig > 0 ? Math.exp(-fogSig * Math.max(0, fogTopW - cam.position.y) / Math.max(Math.sin(el), 0.05)) : 1); CU.uRays.value = iv * iv * (1 - 0.7 * veil); CU.uVeilW.value = 1 + 1.2 * high + 0.5 * mid; CU.uVis.value = visCPU;
+    const CU = compMat.uniforms; CU.tRefl.value = reflRT.texture; CU.uRefl.value = reflK; CU.tDepth.value = sceneRT.depthTexture; CU.uSunUV.value.set(sunPx, sunPy); CU.uAspect.value = W / H; CU.uFlare.value = kFl * (0.35 + 0.65 * iv) * (1 - 0.85 * cum) * sunVis * treeSun * (1 - 0.5 * rainK) * Math.sqrt(smokeT) * (fogSig > 0 ? Math.exp(-fogSig * Math.max(0, fogTopW - cam.position.y) / Math.max(Math.sin(el), 0.05)) : 1); CU.uRays.value = iv * iv * (1 - 0.7 * veil); CU.uVeilW.value = 1 + 1.2 * high + 0.5 * mid; CU.uVis.value = visCPU;
     CU.uDs.value = smooth(1, -4, realDeg); CU.uFog.value.set(fog.near, fog.far); // bleu désaturé: heure bleue et nuit
     // Brouillard en nappe: gris neutre plus clair que le voile habituel (lumière du ciel diffusée), lueur de la ville la nuit.
     CU.uFogSig.value = fogSig; CU.uFogTop.value = fogTopW; CU.uCamW.value.copy(cam.position); CU.uV2W.value.setFromMatrix4(cam.matrixWorld); CU.uProjInv.value.copy(cam.projectionMatrixInverse);
@@ -1296,7 +1428,7 @@ export function createScene3D(container, opts = {}) {
     if (smk > 0.1 && smokeUg > 0 && fwd > 0.08 && realDeg > -0.5) {
       // Jamais à travers les nuages, le brouillard ou la pluie (comme le flare): pas de soleil direct, pas de disque.
       const fogSunT = fogSig > 0 ? Math.exp(-fogSig * Math.max(0, fogTopW - cam.position.y) / Math.max(Math.sin(el), 0.05)) : 1;
-      const tau = Math.min(3, 0.008 * smokeUg) * smk, sn = Math.max(Math.sin(sp.altitude), 0.02), T = [0.7, 1, 1.6].map(k => Math.exp(-tau * k / sn)), mx = Math.max(...T), br = Math.min(5, 3e4 * mx) * smooth(0.1, 0.4, smk) * iv * (1 - cum) * fogSunT * (1 - cur.rain);
+      const tau = Math.min(3, 0.008 * smokeUg) * smk, sn = Math.max(Math.sin(sp.altitude), 0.02), T = [0.7, 1, 1.6].map(k => Math.exp(-tau * k / sn)), mx = Math.max(...T), br = Math.min(5, 3e4 * mx) * smooth(0.1, 0.4, smk) * iv * (1 - cum) * sunVis * treeSun * fogSunT * (1 - rainK);
       if (br > 0.01) { CU.uSunR.value = 1.3 * Math.tan(0.0047) / (2 * Math.tan(cam.fov * Math.PI / 360)); CU.uSunDisc.value.set(T[0] / mx * br, T[1] / mx * br, T[2] / mx * br); }
     }
     if (CU.uSmkSig.value > 0) { const scl = LUM([fog.color.r, fog.color.g, fog.color.b]) * (1.25 + 0.5 * (1 - twi)); CU.uSmkCol.value.set(scl * 1.15, scl * 0.85, scl * 0.55); }
@@ -1307,6 +1439,7 @@ export function createScene3D(container, opts = {}) {
     const sl = rgb(sc0).map(v => Math.pow(v, 2.2)); CU.uSunC.value.set(sl[0], sl[1], sl[2]);
     compMat.uniforms.tCol.value = sceneRT.texture; compMat.uniforms.tAO.value = aoRT.texture; compMat.uniforms.tBloom.value = bloomA.texture; pass(compMat, compRT);
     fxMat.uniforms.tDiffuse.value = compRT.texture; fxMat.uniforms.resolution.value.set(1 / PW, 1 / PH); pass(fxMat, null);
+    if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.dbg = { storm: cur.storm, brk: cur.brk, pSun: tg.pSun, camSun, subjSun, gap: gapS, uExp: compMat.uniforms.uExp.value, hidden: brkHide.size }; // vérification en développement
     if (import.meta.env.DEV && window.__scene3dCore && window.__scene3dCore.afterFrame) window.__scene3dCore.afterFrame(PW, PH); // mesure en développement
     // Légende: condition de lumière, parts de nuages, position du soleil
     const w = weatherRow || {}; const low = w.cloudLow ?? null, alt = Math.max(w.cloudMid ?? 0, w.cloudHigh ?? 0), sun = w.sunFraction != null ? Math.round(w.sunFraction * 100) : null;
@@ -1320,17 +1453,22 @@ export function createScene3D(container, opts = {}) {
     // « Risque »: le brouillard est mal prévu par les modèles, on le dit.
     const fogTxt = tg.fogK > 0 && vis != null && vis < 5000 ? (vis < 1000 ? `Risque de brouillard, visibilité prévue ${Math.max(50, Math.round(vis / 50) * 50)} m` : `Risque de brume, visibilité prévue ${String(Math.round(vis / 100) / 10).replace('.', ',')} km`)
       + (fogRel == null ? '' : fogRel >= 600 ? ', nappe épaisse' : `, nappe d’environ ${Math.max(10, Math.round(fogRel / 10) * 10)} m au-dessus du sol`) : '';
-    const cond0 = rainTxt && realDeg >= 0.5 ? rainTxt + (noSun ? ' : ciel couvert, aucune ombre' : tg.iv >= 0.45 ? ' : soleil entre les averses' : ' : ombres très douces') : rainTxt ? rainTxt + (realDeg < -0.8 ? ', rues mouillées' : '') : realDeg < -12 ? 'Nuit' : night ? 'Heure bleue : ciel bleu profond, bâtiments en silhouette' : realDeg < 0.5 ? 'Soleil à l’horizon' : tg.cum >= 0.7 ? (noSun ? 'Ciel couvert : aucune ombre' : 'Nuages bas nombreux : soleil par éclaircies seulement') : Math.max(tg.mid, tg.high) >= 0.3 ? vt + (tg.cum >= 0.15 ? ', quelques nuages bas' : '') : tg.cum >= 0.15 ? 'Nuages bas épars : plein soleil entre les ombres de nuages' : 'Ciel dégagé : soleil franc, ombres nettes';
+    // Orage ou averses (base épaisse et sombre): « très sombres » réservé à l'orage; avec la percée, la part de l'heure au soleil
+    // reste qualitative (une estimation, pas un pourcentage).
+    const wcv = w.wc ?? 0, orage = wcv >= 95, stType = orage ? 'Orage' : wcv >= 80 && wcv <= 82 ? 'Averses' : 'Gros cumulus';
+    const sunWords = tg.pSun >= 0.7 ? 'soleil la plupart du temps' : tg.pSun >= 0.45 ? 'soleil souvent' : 'percées de soleil par moments';
+    const stormTxt = tg.storm >= 0.45 && realDeg >= 0.5 ? `${stType} : ${orage ? 'nuages très sombres' : 'base sombre des nuages'}, ` + (tg.brk ? sunWords : noSun ? 'aucune ombre' : !subjSun ? 'projet à l’ombre des nuages' : 'soleil rare') : '';
+    const cond0 = stormTxt ? stormTxt + (rainTxt ? ' · ' + rainTxt : '') : rainTxt && realDeg >= 0.5 ? rainTxt + (noSun ? ' : ciel couvert, aucune ombre' : !subjSun ? ' : projet à l’ombre des nuages' : tg.iv >= 0.45 ? ' : soleil entre les averses' : ' : ombres très douces') : rainTxt ? rainTxt + (realDeg < -0.8 ? ', rues mouillées' : '') : realDeg < -12 ? 'Nuit' : night ? 'Heure bleue : ciel bleu profond, bâtiments en silhouette' : realDeg < 0.5 ? 'Soleil à l’horizon' : !subjSun && !noSun && tg.cum >= 0.15 ? 'Nuages bas : projet à l’ombre des nuages, soleil rare' : tg.cum >= 0.7 ? (noSun ? 'Ciel couvert : aucune ombre' : tg.brk ? 'Nuages bas nombreux : éclaircie sur le projet, ' + sunWords : 'Nuages bas nombreux : soleil par éclaircies seulement') : Math.max(tg.mid, tg.high) >= 0.3 ? vt + (tg.cum >= 0.15 ? ', quelques nuages bas' : '') : tg.cum >= 0.15 ? 'Nuages bas épars : plein soleil entre les ombres de nuages' : 'Ciel dégagé : soleil franc, ombres nettes';
     const fogSun = realDeg < 0.5 ? '' : fogT < 0.1 ? ' : soleil caché, aucune ombre' : fogT < 0.5 ? ' : soleil voilé, ombres douces' : '';
-    const cond1 = !fogTxt ? cond0 : rainTxt ? cond0 + ' · ' + fogTxt : fogTxt + fogSun;
+    const cond1 = !fogTxt ? cond0 : rainTxt ? cond0 + ' · ' + fogTxt : fogTxt + fogSun + (stormTxt ? ` · ${stType} : ${orage ? 'nuages très sombres' : 'base sombre des nuages'}` : '');
     // Fumée de feux (mêmes niveaux que l'icône du soleil de l'app), seulement quand elle est dessinée (20 microgrammes et
     // plus). La phrase sur le soleil seulement s'il y a vraiment du soleil direct; sinon, la condition du ciel suit.
-    const smokeSun = realDeg >= 0.5 && !rainTxt && !fogTxt && tg.iv >= 0.45 && tg.cum < 0.7;
+    const smokeSun = realDeg >= 0.5 && !rainTxt && !fogTxt && !stormTxt && tg.iv >= 0.45 && tg.cum < 0.7;
     const smokeTxt = tg.smk > 0 && smokeUg != null ? `Fumée de feux ${smokeUg >= 60 ? 'dense' : 'modérée'} prévue (FireWork, Environnement Canada)` + (smokeSun ? (smokeT < 0.4 ? ' : soleil orangé, ombres douces' : ' : soleil légèrement voilé') : '') : '';
     const cond = smokeTxt ? (smokeSun ? smokeTxt : smokeTxt + ' · ' + cond1) : cond1;
     const parts = low == null ? '' : `Nuages bas ${low} %, nuages d’altitude ${Math.round(alt)} %, soleil direct ${sun == null ? 0 : sun} %`;
     const where = night ? 'Soleil sous l’horizon' : `Soleil à ${Math.max(0, Math.round(realDeg))}° au-dessus de l’horizon, plein ${DIRS[Math.round(((bearing * 180 / Math.PI) % 360) / 45) % 8]}`;
-    const est = (0.38 + 0.36 * Math.max(veil * (0.4 + 0.6 * thick), cum * 0.5)) * dk;
+    const est = (0.38 + 0.36 * Math.max(veil * (0.4 + 0.6 * thick), cum * 0.5)) * dk * (1 - 0.45 * cur.storm); // ciel d'orage sombre: texte clair
     // Forme du projet la plus en face de la caméra: sa hauteur et d'où elle vient (réglée, mesurée, par défaut).
     let fac = null, best = -Infinity;
     projInfo.forEach(e => { if (e.len < 2.5) return; const dx = cam.position.x - e.mid[0], dz = cam.position.z + e.mid[1], dist = Math.hypot(dx, dz) || 1; const facing = (e.nrm[0] * dx - e.nrm[1] * dz) / dist; if (facing < 0.15) return; const scv = facing * Math.sqrt(e.len) / Math.sqrt(dist); if (scv > best) { best = scv; fac = e; } });
@@ -1380,6 +1518,20 @@ export function createScene3D(container, opts = {}) {
       // s'écoulant peu à peu: sous 4 mm, le sol est seulement plus foncé; reflet complet à partir de 12 mm.
       const mmOf = (h) => rk(h) > 0 ? h.precip : 0, acc = mmOf(row) + 0.75 * mmOf(pv[0]) + 0.5 * mmOf(pv[1]) + 0.3 * mmOf(pv[2]);
       tg.pud = smooth(4, 12, acc);
+      // Orage ou averses (8 octobre 2026), d'après ICON: code météo, sinon épaisseur du nuage convectif (atténuée sans pluie),
+      // fois la couverture de la couche qui porte la base (la couche moyenne si la base est à 2500 m ou plus). Presque nul pour
+      // la pluie ordinaire, le crachin et le couvert gris (été 2025 à Québec: 2 % des heures de pluie au-dessus de 0,45).
+      const wc = row?.wc ?? 0, Dc = row?.convDepth ?? 0, cb = row?.convBase ?? 0;
+      const sCode = wc >= 95 ? 1 : wc === 82 ? 0.9 : wc === 81 ? 0.75 : wc === 80 ? 0.6 : 0;
+      const conv = Math.max(sCode, smooth(3000, 8000, Dc) * ((row?.precip ?? 0) >= 0.1 ? 1 : 0.7));
+      const layer = cb >= 2500 ? Math.max(row?.cloudLow ?? 0, row?.cloudMid ?? 0) : (row?.cloudLow ?? 0);
+      tg.storm = conv * smooth(25, 70, layer);
+      // Part de l'heure au soleil: direct normal moyen rapporté à celui d'un ciel clair (au soleil, un point reçoit tout le
+      // direct; à l'ombre d'un nuage, presque rien), soleil au milieu de l'heure précédente (moyenne d'Open-Meteo). Percée:
+      // le projet est montré au soleil, comme la légende le dit (voir frame).
+      const tMid = row?.time ? new Date(row.time).getTime() - 1800000 : dateMs, hMid = SunCalc.getPosition(new Date(tMid), lat, lng).altitude * 180 / Math.PI;
+      tg.pSun = row?.direct != null && hMid >= 2 ? clamp(row.direct / Math.sin(hMid * Math.PI / 180) / dniClear(hMid)) : 0;
+      tg.brk = tg.pSun >= SUN_ON && tg.iv >= 0.3 ? 1 : 0;
       // Brouillard et brume, par prudence (Stéphane: « ne pas montrer du faux brouillard »): il faut que les deux modèles
       // s'accordent: GFS (et HRRR) prévoit une visibilité sous 5 km avec de l'air saturé au sol (une nappe est mesurée),
       // et ICON voit des nuages bas à 80 % ou plus (un brouillard est un nuage posé au sol); et qu'il ne pleuve pas (la
@@ -1387,7 +1539,7 @@ export function createScene3D(container, opts = {}) {
       // visibilité, ici par km (40 m au plus dense); épaisseur de la nappe au-dessus du sol, 600 m au plus.
       const V = row?.visibility, sat = row?.fogThick != null, lowOk = (row?.cloudLow ?? 0) >= 80;
       tg.fogK = V != null && V >= 0 && sat && lowOk && !(tg.rain > 0) ? 3912 / Math.max(V, 40) * smooth(5000, 1000, V) : 0; tg.fogTh = Math.min(row?.fogThick ?? 600, 600);
-      if (!row) { tg.cum = 0; tg.mid = 0; tg.high = 0; tg.iv = 1; tg.rain = 0; tg.wet = 0; tg.pud = 0; tg.fogK = 0; tg.fogTh = 600; }
+      if (!row) { tg.cum = 0; tg.mid = 0; tg.high = 0; tg.iv = 1; tg.rain = 0; tg.wet = 0; tg.pud = 0; tg.fogK = 0; tg.fogTh = 600; tg.storm = 0; tg.pSun = 1; tg.brk = 0; }
       // L'épaisseur ne glisse pas pendant que le brouillard apparaît ou disparaît (sinon la vue drone se noie un instant).
       if (!(tg.fogK > 0)) tg.fogTh = cur.fogTh; else if (cur.fogK < 1e-3) cur.fogTh = tg.fogTh;
       dirty = true;
