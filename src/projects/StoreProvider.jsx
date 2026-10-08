@@ -4,6 +4,8 @@ import { TBL_PREFS, TBL_PROJECTS, TBL_ROUTES, supabase } from '../lib/supabase.j
 import { useSubscription } from '../subscription/SubscriptionProvider.jsx';
 import { ProjectStatus } from './constants.js';
 import { fileHelpers } from './files.js';
+import { cloudDelete } from '../scene3d/modelCloud.js';
+import { deleteModel } from '../scene3d/modelStore.js';
 import { generateId } from './helpers.js';
 
 // ===== STORE =====
@@ -286,7 +288,11 @@ export const StoreProvider = ({ children }) => {
   const purgePendingFiles = () => {
     const pid = pendingFilePurgeRef.current;
     pendingFilePurgeRef.current = null;
-    if (pid && user) fileHelpers.deleteAllForProject(pid).catch(e => console.error('File cleanup error:', e));
+    if (!pid) return;
+    if (user) fileHelpers.deleteAllForProject(pid).catch(e => console.error('File cleanup error:', e));
+    // Modèle 3D importé (vue 3D): copie en ligne et copie locale du navigateur. Un échec ne bloque rien.
+    if (user) cloudDelete(pid).catch(e => console.warn('3D model cleanup error:', e?.message || e));
+    deleteModel(pid).catch(e => console.warn('Local 3D model cleanup error:', e));
   };
 
   const deleteProject = (id) => {

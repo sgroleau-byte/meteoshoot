@@ -1096,6 +1096,47 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     if (el && document.activeElement !== el) el.value = project?.departureAddress || prefs.homeAddress || '';
   }, [project?.departureAddress, prefs.homeAddress]);
 
+  // Dévoilement de la fenêtre de la carte, une seule fois par fiche (tuiles chargées ou repli de 6 s), avec
+  // l'animation du curseur vers le milieu de la journée.
+  const revealMap = useCallback(() => {
+    if (mapRevealedRef.current) return;
+    mapRevealedRef.current = true;
+    setMapRevealed(true);
+    // Set slider to start of range (far left)
+    const st2 = (project?.lat && project?.lng && SunCalc) ? SunCalc.getTimes(new Date(), project.lat, project.lng) : null;
+    const sr2 = st2?.sunrise ? st2.sunrise.getHours() + st2.sunrise.getMinutes()/60 : 6;
+    const ss2 = st2?.sunset ? st2.sunset.getHours() + st2.sunset.getMinutes()/60 : 18;
+    const range2 = (ss2 - sr2) / (4/6);
+    const min2 = sr2 - (1/6) * range2;
+    setSunHour(min2);
+    setSunHourDisplay(min2);
+    sunHourTargetRef.current = min2;
+
+    // Animate slider to center of range
+    setTimeout(() => {
+      const targetH = min2 + range2 / 2;
+      const sliderDur = 1000;
+      const sT0 = performance.now();
+      const startH = min2;
+      const animSlider = (now2) => {
+        const p = Math.min(1, (now2 - sT0) / sliderDur);
+        // Match clip easing: cubic-bezier(0.22, 0.61, 0.36, 1)
+        const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+        setSunHour(startH + (targetH - startH) * ease);
+        if (p < 1) requestAnimationFrame(animSlider);
+      };
+      requestAnimationFrame(animSlider);
+    }, 200);
+  }, [project?.lat, project?.lng]);
+
+  // Repli après 6 s sans tuiles (clé refusée, réseau, script Google jamais chargé): la fenêtre se dévoile quand même,
+  // sinon la vue 3D, le menu SAT/SAT2/3D et le curseur, qui ne dépendent pas de Google, resteraient cachés.
+  useEffect(() => {
+    if (mapRevealedRef.current || !project?.lat || !project?.lng) return;
+    const timer = setTimeout(revealMap, 6000);
+    return () => clearTimeout(timer);
+  }, [project?.lat, project?.lng, revealMap]);
+
   // Carte de la fiche: satellite Google (SAT) ou satellite Plans d'Apple (SAT2). SAT2 passe par la couche appleSat,
   // qui reproduit l'interface de Google: tous les dessins ci-dessous servent aux deux.
   useEffect(() => {
@@ -1173,40 +1214,9 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     }
     mapInstanceRef.current = map;
     const handles = []; // écouteurs posés ici, retirés au démontage (la carte Google, elle, peut resservir)
-    
-    // Reveal animation: start after tiles load
-    if (!mapRevealedRef.current) {
-      handles.push(gm().event.addListenerOnce(map, 'tilesloaded', () => {
-        if (mapRevealedRef.current) return;
-        mapRevealedRef.current = true;
-        setMapRevealed(true);
-        // Set slider to start of range (far left)
-        const st2 = (project?.lat && project?.lng && SunCalc) ? SunCalc.getTimes(new Date(), project.lat, project.lng) : null;
-        const sr2 = st2?.sunrise ? st2.sunrise.getHours() + st2.sunrise.getMinutes()/60 : 6;
-        const ss2 = st2?.sunset ? st2.sunset.getHours() + st2.sunset.getMinutes()/60 : 18;
-        const range2 = (ss2 - sr2) / (4/6);
-        const min2 = sr2 - (1/6) * range2;
-        setSunHour(min2);
-        setSunHourDisplay(min2);
-        sunHourTargetRef.current = min2;
-        
-        // Animate slider to center of range
-        setTimeout(() => {
-          const targetH = min2 + range2 / 2;
-          const sliderDur = 1000;
-          const sT0 = performance.now();
-          const startH = min2;
-          const animSlider = (now2) => {
-            const p = Math.min(1, (now2 - sT0) / sliderDur);
-            // Match clip easing: cubic-bezier(0.22, 0.61, 0.36, 1)
-            const ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
-            setSunHour(startH + (targetH - startH) * ease);
-            if (p < 1) requestAnimationFrame(animSlider);
-          };
-          requestAnimationFrame(animSlider);
-        }, 200);
-      }));
-    }
+
+    // Reveal animation: start after tiles load (le repli de 6 s est armé par l'effet qui précède, même sans Google).
+    if (!mapRevealedRef.current) handles.push(gm().event.addListenerOnce(map, 'tilesloaded', revealMap));
     // Desaturation: CSS filter on container, counter-filter on all overlay panes
     // (SAT2: la couche appleSat compense elle-même sur ses calques)
     const counterOverlay = new (gm().OverlayView)();
@@ -2680,7 +2690,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                 {/* Map controls - stacked vertically with subtle border */}
                 <div ref={mapContainerRef} className="detail-map-keep" style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#181b1e', filter: activeEngine === 'apple' ? 'none' : 'saturate(0.50)' }}/>
                 {/* Vue 3D par-dessus la carte (la carte reste montée, avec son état): même curseur, même météo */}
-                <Scene3D visible={view3d} lat={project?.lat} lng={project?.lng} buildings={buildings} orientation={project?.orientation} timeMs={sceneTimeMs} weatherRow={sceneWeatherRow} zoomRef={scene3dZoom}/>
+                <Scene3D visible={view3d} lat={project?.lat} lng={project?.lng} buildings={buildings} orientation={project?.orientation} timeMs={sceneTimeMs} weatherRow={sceneWeatherRow} zoomRef={scene3dZoom} projectId={project?.id}/>
                 <canvas ref={flareCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}/>
                 {nightOpacity > 0 && <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 3, background: `radial-gradient(ellipse at center, transparent 30%, rgba(0,0,15,${0.4 * nightOpacity}) 70%, rgba(0,0,15,${0.7 * nightOpacity}) 100%)`, transition: 'opacity 0.5s ease' }}/>}
                 {/* Fixed center pin */}

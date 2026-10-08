@@ -64,14 +64,54 @@ Apple fait un jeton par site (restriction par domaine) et refuse « localhost »
 3. Copier le jeton dans le champ `local` de `apple-maps-token.json`, puis relancer `npm run dev`.
 
 Pour ne plus renouveler: fabriquer des jetons à la demande à partir d'une clé privée Apple (fichier .p8, « Keys »
-avec MapKit JS coché). C'est aussi la piste pour l'app iPhone (voir plus bas).
+avec MapKit JS coché). La clé existe depuis octobre 2026 (« MeteoShoot Plans », section suivante). C'est aussi la
+piste pour l'app iPhone (voir plus bas).
+
+## Clé privée Apple « MeteoShoot Plans » (images statiques, octobre 2026)
+
+Le calque SOL SAT de la vue 3D (voir `docs/vue-3d.md`, « Modèle d'architecte importé ») demande une image satellite au
+service d'images statiques de Plans (« Snapshots »). Apple exige que chaque adresse d'image soit signée avec une clé
+privée de l'équipe. La signature se fait sur le serveur, dans `api/apple-snapshot.js`: la clé ne quitte jamais le
+serveur et n'apparaît ni dans les réponses ni dans les journaux.
+
+| Élément | Valeur |
+|---|---|
+| Nom de la clé (Certificates, Identifiers & Profiles, « Keys ») | MeteoShoot Plans |
+| Key ID (identifiant de la clé) | A6X3F4XKYH |
+| Identifiant Plans (Maps ID) | maps.com.meteoshoot |
+| Équipe (Team ID) | 89HN379C53 |
+| Fichier .p8 | hors du dépôt, dans `_METEOSHOOT/cles-apple/` (dossier parent du dépôt), jamais versionné |
+
+- Apple ne laisse télécharger le fichier .p8 qu'une seule fois: en garder une copie de sauvegarde hors du dépôt.
+- Sur Vercel, projets meteoshoot et meteoshoot-dev: `APPLE_MAPS_TEAM_ID` (89HN379C53), `APPLE_MAPS_KEY_ID`
+  (A6X3F4XKYH) et `APPLE_MAPS_PRIVATE_KEY`: le texte PEM complet (le contenu texte du fichier .p8), lignes « BEGIN PRIVATE KEY » et
+  « END PRIVATE KEY » comprises (des retours de ligne écrits `\n` sont acceptés).
+- En local: `APPLE_MAPS_PRIVATE_KEY_PATH` (chemin du fichier .p8) à la place du texte PEM, avec les deux identifiants,
+  donnés au lancement du serveur des fonctions (il ne lit pas `.env.local`):
+  `APPLE_MAPS_TEAM_ID=89HN379C53 APPLE_MAPS_KEY_ID=A6X3F4XKYH APPLE_MAPS_PRIVATE_KEY_PATH=../cles-apple/<fichier>.p8 npm run api`.
+- Sans clé ou identifiants, le service répond 503 et SOL SAT affiche une erreur; le reste de la 3D n'est pas touché.
+- Protection du quota: le service est public, mais il ne répond qu'aux pages de MeteoShoot (en-tête Origin, sinon
+  Referer): www.meteoshoot.com, meteoshoot.com, meteoshoot-dev.vercel.app et les aperçus Vercel (tout hôte qui
+  commence par « meteoshoot » et finit par « .vercel.app »), localhost et 127.0.0.1 (développement),
+  capacitor://localhost (app iPhone) et https://localhost (app Android). Les autres reçoivent 403. C'est un contrôle
+  de bonne foi: un script peut imiter ces en-têtes, mais la page d'un autre site ne peut pas se servir de l'image.
+  Un navigateur réglé pour ne jamais envoyer de Referer (rare) est refusé aussi.
+- Zoom borné de 16 à 20 (18 par défaut: environ 260 m de côté à Québec). Image gardée une semaine par le navigateur
+  seulement (`Cache-Control: private`), jamais par le réseau de Vercel; les erreurs ne sont jamais gardées.
+- Clé perdue ou exposée: la révoquer dans « Keys », en créer une nouvelle (MapKit JS coché, identifiant Plans
+  maps.com.meteoshoot), remplacer `APPLE_MAPS_KEY_ID` et `APPLE_MAPS_PRIVATE_KEY` sur les deux projets Vercel, puis
+  redéployer.
+- Piste pour l'app iPhone: cette même clé pourra signer des jetons MapKit à la demande (petit texte signé, de courte
+  durée, que Plans vérifie) par une fonction serveur, pour l'origine `capacitor://localhost` que les jetons par
+  domaine ne couvrent pas (voir « Limites et points ouverts »). Elle remplacerait aussi le jeton de tests de 7 jours.
 
 ## Limites et points ouverts
 
 - Gratuit chez Apple: 250 000 affichages de carte par jour, inclus dans le compte développeur.
 - App iPhone et iPad: SAT2 n'y apparaît pas encore. L'app tourne à l'adresse `capacitor://localhost`, qu'un jeton
-  par domaine ne couvre pas. Deux pistes: des jetons signés par une fonction serveur avec la clé privée Apple, ou
-  la carte Plans native (gratuite et sans jeton) par un module Capacitor.
+  par domaine ne couvre pas. Deux pistes: des jetons signés par une fonction serveur avec la clé privée Apple (la clé
+  « MeteoShoot Plans » existe déjà, voir plus haut), ou la carte Plans native (gratuite et sans jeton) par un module
+  Capacitor.
 - Conditions de Google: SAT2 affiche sur une carte Apple le point du projet obtenu par la recherche d'adresse
   Google, ce que les conditions de Google interdisent. Risque accepté par Stéphane le 7 octobre 2026 pour l'usage
   actuel; à revoir avant la mise en vente (seule voie entièrement permise: le champ de recherche « Places UI Kit »

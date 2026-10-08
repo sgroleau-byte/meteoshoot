@@ -86,6 +86,61 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   lumière très diffuse sans ombre, quelques fenêtres allumées avec une lueur douce.
 - Fenêtres sobres et génériques; pas de reproduction du vrai bâtiment.
 
+## Modèle d'architecte importé (octobre 2026)
+
+Construit le 8 octobre 2026: le vrai modèle 3D de l'architecte remplace la forme dessinée, pour juger la lumière
+sur le bâtiment tel qu'il sera. La règle « fenêtres génériques » ci-dessus vise les bâtiments générés; le modèle
+importé, lui, est le fichier de l'architecte.
+
+- **Import**: pastille MODÈLE 3D (en haut à gauche de la 3D, sous la boussole), puis un fichier .kmz. Dans SketchUp:
+  Fichier, Exporter, Modèle 3D, type Google Earth (.kmz). Ne pas passer par l'export IFC de SketchUp (format des
+  logiciels d'architecture): il sort vide quand les objets ne sont pas classés, ce qui est le cas courant.
+- **Préparation dans le navigateur**, une fois, à l'import (« PRÉPARATION n % »), sans serveur (`modelImport.js`):
+  - retrait de l'intérieur par visibilité: chaque triangle est dessiné sous des centaines de vues tout autour et à
+    hauteur d'oeil; ce qui n'est jamais vu de l'extérieur (cloisons, planchers, meubles, face intérieure des murs)
+    est retiré;
+  - pièges de SketchUp: faces recto-verso exportées en deux triangles superposés (recto seul gardé), composants en
+    miroir (sens corrigé), doublons, faces simples tournées vers l'intérieur (retournées);
+  - détourages retirés (images percées: arbres, plantes, personnages) et objets égarés écartés (voiture, personnage,
+    bloc oublié loin de la maison); un garage ou un deuxième bâtiment à moins de 60 m est gardé;
+  - verre vu des deux côtés (garde-corps): transparent; vu d'un seul côté (fenêtre): opaque, foncé, allumé la nuit
+    comme les fenêtres des murs;
+  - simplification au centimètre et couleurs unies (moyenne de chaque texture): un GLB (fichier 3D compact)
+    d'environ 150 Ko. Banc d'essai: 194 000 triangles ramenés à 6 000, 14,4 Mo à 0,15 Mo, sans différence visible.
+- **Pose**: calée sur la première forme dessinée (sinon l'édifice Overture sous le point du projet), centres
+  superposés et rotation qui recouvre le mieux la forme; sans forme, la position inscrite dans le .kmz si elle tombe à
+  moins de 2 km, sinon le point du projet. Toujours collée au sol: le bas du modèle au point le plus bas du relief sous
+  son emprise; à flanc de colline, l'arrière s'enfonce et le relief cache la partie enterrée. La maison remplace la
+  forme et l'édifice Overture qu'elle recouvre; les arbres sous elle disparaissent, ceux qui la touchent sont ajustés
+  (`clearance.js`). Si la position du projet est corrigée de moins d'un kilomètre, la maison reste au même endroit
+  du terrain; au-delà, pose par défaut.
+- **Pastille MAISON** (une fois le modèle posé): glisser la maison dans la vue pour la déplacer (Échap annule);
+  rotation en glissant la pastille des degrés à gauche ou à droite (Maj: par 15°); hauteur en glissant la pastille
+  suivante vers le haut ou le bas; flèche « recoller au sol » quand la hauteur n'est pas nulle; croix pour retirer le
+  modèle (la forme dessinée revient).
+- **Calque SOL SAT** (`satDrape.js`): image satellite de Plans d'Apple (1280 pixels, environ 260 m de côté à Québec,
+  20 cm par pixel) drapée sur le relief autour du projet, comme repère pour poser la maison (entrée, chemin,
+  clairière). Éteint à chaque ouverture de la 3D. Allumé, il masque les arbres et le sous-bois, et la légende ajoute
+  « Image satellite © Plans d'Apple ». L'image vient de `api/apple-snapshot.js`, qui signe l'adresse avec la clé
+  privée Apple et ne répond qu'aux pages de MeteoShoot: clé, variables Vercel et règles dans `docs/sat2-plans-apple.md`.
+- **Stockage**: le GLB dans le seau Supabase `project-files` (celui des fichiers des projets), ses informations et son
+  placement dans la table `project_models`, une ligne par projet (`project_models_dev` pour le site de développement,
+  comme `projects_dev`); le placement s'enregistre à part du fichier (déplacer la maison n'écrit que quelques octets). Copie
+  dans le navigateur (IndexedDB, le stockage interne du navigateur: base `meteoshoot-modeles`, trois clés par projet:
+  le modèle, `:placement` et `:retrait`) pour l'affichage immédiat et le travail hors ligne, sans retélécharger le modèle
+  à chaque ouverture. La copie locale s'affiche d'abord, puis la ligne en ligne la met d'accord (le placement le plus
+  récent l'emporte; un import pas encore envoyé part en ligne, sauf si un modèle plus récent a été déposé ailleurs). La
+  table est créée par la migration `supabase/migrations/20261008120000_modeles_3d.sql`, à appliquer (`supabase db push`)
+  avant de déployer le code: `setup.sql` n'est jamais appliqué tout seul.
+- **Fichiers**: `src/scene3d/modelImport.js` (préparation, chargée seulement à l'import), `src/scene3d/modelStore.js`
+  (cache dans le navigateur), `src/scene3d/modelCloud.js` (copie en ligne: seau et table), `src/lib/supabase.js`
+  (`TBL_MODELS`), `src/projects/StoreProvider.jsx` (modèle effacé avec le projet), `src/scene3d/engine.js` (`setModel`, `setModelPlacement`, `autoPlaceModel`,
+  `getModelPlacement`, `setSatellite`, glisser la maison), `src/scene3d/Scene3D.jsx` (pastilles MODÈLE 3D, MAISON et
+  SOL SAT), `src/scene3d/satDrape.js` (image et maillage drapé), `api/apple-snapshot.js` (image Plans signée).
+- **Limites**: .kmz de SketchUp seulement; textures ramenées à leur couleur moyenne (pas de motif de brique ou de
+  bardeau); image satellite datée selon Apple et limitée au carré autour du projet; conditions d'Apple pour les images
+  statiques à relire avant la vente, comme celles de Google pour SAT2.
+
 ## Vercel
 
 - Fluid compute activé le 5 octobre 2026 sur le projet meteoshoot: sans lui, les fonctions étaient coupées à

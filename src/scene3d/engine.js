@@ -11,6 +11,8 @@
 import * as THREE from 'three';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { SAT_CREDIT, satMesh } from './satDrape.js';
 RectAreaLightUniformsLib.init(); // tables des lumières surfaciques (façades allumées la nuit)
 import SunCalc from 'suncalc';
 import { DIRS, centroid, edgesOf, localRings, signedArea } from './footprint.js';
@@ -567,6 +569,19 @@ export function createScene3D(container, opts = {}) {
   let rainAt = 0; // dernière image de pluie seule (voir frame)
   let statics = [], treesI = null, dirty = true, running = true, envKey = '', envAt = 0, drag = null, lastInfo = '', weatherRow = null;
   let projInfo = []; // côtés des formes du projet avec hauteur et source (légende)
+  // Modèle d'architecte importé (GLB allégé, voir modelImport.js). Placement: x, n (mètres autour de l'origine), rot (degrés,
+  // sens horaire depuis le nord), dy (mètres au-dessus de la pose au sol). Pose au sol: le bas du modèle au point le plus bas
+  // du relief sous son emprise; à flanc de colline, l'arrière s'enfonce et le relief cache la partie enterrée.
+  let model = null, modelPl = null, modelDrag = null, modelTimer = 0;
+  // Calque satellite temporaire (satDrape.js): image drapée sur le relief, arbres masqués tant qu'il est allumé.
+  let sat = null, satObj = null;
+  const satTrees = () => { (treesI || []).forEach(m => { m.visible = !sat; }); statics.forEach(m => { if (m.material === fillMat || m.material === edgeMat) m.visible = !sat; }); dirty = true; };
+  function placeSat() {
+    if (satObj) { S.remove(satObj); satObj.geometry.dispose(); satObj.material.map.dispose(); satObj.material.dispose(); satObj = null; }
+    if (sat && origin) { const mLng = 111320 * Math.cos(origin[0] * Math.PI / 180); satObj = satMesh(terrain, sat, (sat.lng - origin[1]) * mLng, (sat.lat - origin[0]) * 111320); S.add(satObj); }
+    satTrees();
+  }
+  const onModel = opts.onModel || (() => {});
   let terrain = flatTerrain(), cloudLift = 150; // relief (plat en attendant /api/terrain); hauteur des nuages au-dessus du site
   function buildGround() {
     if (gnd) { S.remove(gnd); gnd.geometry.dispose(); gnd = null; }
@@ -898,10 +913,134 @@ export function createScene3D(container, opts = {}) {
     az = Math.atan2(best.px - tc[0], best.py - tc[1]); Rr = clampR(Math.hypot(best.px - tc[0], best.py - tc[1])); camH = lift;
   }
 
-  function rebuild() {
+  // ---- modèle importé
+  const rotXY = (x, n, deg) => { const r = -deg * Math.PI / 180, c = Math.cos(r), sn = Math.sin(r); return [x * c - n * sn, x * sn + n * c]; }; // sens horaire vu du ciel
+  // Centre de surface (formule du lacet), pas la moyenne des sommets: un arc découpé en 24 segments ne le tire pas vers lui.
+  const areaCenter = (r) => { let a = 0, cx = 0, cn = 0; for (let i = 0; i < r.length; i++) { const p = r[i], q = r[(i + 1) % r.length], k = p[0] * q[1] - q[0] * p[1]; a += k; cx += (p[0] + q[0]) * k; cn += (p[1] + q[1]) * k; } return Math.abs(a) > 1e-6 ? [cx / (3 * a), cn / (3 * a)] : centroid(r); };
+  // Enveloppe allégée: sommets à moins de 5 cm de la droite de leurs voisins retirés (arrondi au centimètre sur un mur en biais).
+  const slimHull = (h) => { const s = h && h.length >= 4 ? dpClosed(h, 0.05) : h; return s && s.length >= 3 ? s : h; };
+  // Ombre reçue par le modèle: décalage le long de la normale plafonné (environ 0,7 pixel d'ombre, 5 cm de près; celui du
+  // décor, 0,5 m et plus, effacerait l'ombre d'un avant-toit ou d'une embrasure), normale tournée vers la caméra sur les
+  // faces vues des deux côtés (une face à l'envers au soleil ne se fait plus d'ombre à elle-même). Voir frame pour uMdlNB.
+  // Biais de profondeur: celui du décor (sunL.shadow.bias, environ 0,29 m le long des rayons) efface aussi l'ombre d'une
+  // fenêtre en retrait de 15 cm ou la bande sous un avant-toit. Le point lu dans la carte d'ombre recule donc vers l'opposé
+  // du soleil de (biais du décor moins biais du modèle): la caméra d'ombre est orthographique et regarde le long des rayons,
+  // ce recul ne change que la profondeur, pas le pixel lu. Reste le biais du modèle: 2 cm, plus un demi-pixel d'ombre x
+  // tan(angle entre la normale et le soleil) (écart de profondeur d'une face en biais dans un pixel), tangente plafonnée à 6,
+  // jamais plus que celui du décor. Normale déjà tournée vers la caméra (faces vues des deux côtés); le soleil est la seule
+  // lumière directionnelle qui porte ombre. Voir frame pour uMdlSun (vers le soleil), uMdlGB et uMdlHT (en mètres).
+  const mdlNB = { value: 0.05 }, mdlSun = { value: new THREE.Vector3(0, 1, 0) }, mdlGB = { value: 0 }, mdlHT = { value: 0.02 };
+  const MDL_DIR_COORD = 'vDirectionalShadowCoord[ i ] = directionalShadowMatrix[ i ] * shadowWorldPosition;';
+  const MDL_SHADOW_HEAD = 'uniform float uMdlNB;\nuniform float uMdlGB;\nuniform float uMdlHT;\nuniform vec3 uMdlSun;\n' +
+    'vec3 mdlSunBack( vec3 n ) { float c = clamp( dot( n, uMdlSun ), 0.0, 1.0 ); float t = min( 6.0, sqrt( 1.0 - c * c ) / max( c, 1e-3 ) ); return - uMdlSun * ( uMdlGB - min( uMdlGB, 0.02 + uMdlHT * t ) ); }\n';
+  const MDL_SHADOW_VERT = THREE.ShaderChunk.shadowmap_vertex
+    .replace(/directionalLightShadows\[ i \]\.shadowNormalBias/g, 'min( directionalLightShadows[ i ].shadowNormalBias, uMdlNB )')
+    .replace('vec4 shadowWorldPosition;', 'vec4 shadowWorldPosition;\n#ifdef DOUBLE_SIDED\nif ( dot( shadowWorldNormal, cameraPosition - worldPosition.xyz ) < 0.0 ) shadowWorldNormal = - shadowWorldNormal;\n#endif')
+    .replace(MDL_DIR_COORD, '#if UNROLLED_LOOP_INDEX == 0\n\t\t\tshadowWorldPosition.xyz += mdlSunBack( shadowWorldNormal );\n\t\t\t#endif\n\t\t\t' + MDL_DIR_COORD); // le soleil seulement (seule lumière qui porte ombre: indice 0)
+  if (MDL_SHADOW_VERT.split('mdlSunBack').length !== 2 || !MDL_SHADOW_VERT.includes('uMdlNB') || !MDL_SHADOW_VERT.includes('DOUBLE_SIDED')) console.warn('[scene3d] chunk d’ombre de three inattendu: biais d’ombre du modèle importé incomplet');
+  const modelShadow = (mat, key) => {
+    const prev = mat.onBeforeCompile;
+    mat.onBeforeCompile = (sh, r) => {
+      if (prev) prev.call(mat, sh, r);
+      Object.assign(sh.uniforms, { uMdlNB: mdlNB, uMdlGB: mdlGB, uMdlHT: mdlHT, uMdlSun: mdlSun });
+      sh.vertexShader = MDL_SHADOW_HEAD + sh.vertexShader.replace('#include <shadowmap_vertex>', MDL_SHADOW_VERT);
+    };
+    mat.customProgramCacheKey = () => key; // programme propre au modèle: le décor garde son biais
+  };
+  function modelRing(pl = modelPl) { if (!model || !pl) return null; return model.hull.map(([x, n]) => { const q = rotXY(x, n, pl.rot); return [pl.x + q[0], pl.n + q[1]]; }); }
+  function modelBase(pl = modelPl) { // sol sous le modèle: point le plus bas du relief sous l'emprise (sommets et grille de 2 m)
+    const ring = modelRing(pl); if (!ring) return 0;
+    let mn = Infinity, minx = Infinity, maxx = -Infinity, minn = Infinity, maxn = -Infinity;
+    ring.forEach(q => { mn = Math.min(mn, terrain.hTri(q[0], q[1])); minx = Math.min(minx, q[0]); maxx = Math.max(maxx, q[0]); minn = Math.min(minn, q[1]); maxn = Math.max(maxn, q[1]); });
+    for (let x = minx + 1; x < maxx; x += 2) for (let n = minn + 1; n < maxn; n += 2) if (pointInRing([x, n], ring)) mn = Math.min(mn, terrain.hTri(x, n));
+    return mn;
+  }
+  function placeModel() {
+    if (!model || !modelPl) return;
+    model.group.position.set(modelPl.x, modelBase() + modelPl.dy, -modelPl.n); model.group.rotation.set(0, -modelPl.rot * Math.PI / 180, 0); model.group.updateMatrixWorld(true);
+    dirty = true;
+  }
+  // Axe principal d'un contour (côté long du plus petit rectangle qui l'entoure), en degrés depuis le nord, modulo 180.
+  function mainAxis(ring) {
+    let best = null;
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i], b = ring[(i + 1) % ring.length], L0 = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L0 < 0.3) continue;
+      const ux = (b[0] - a[0]) / L0, un = (b[1] - a[1]) / L0; let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+      ring.forEach(q => { const u = q[0] * ux + q[1] * un, v = -q[0] * un + q[1] * ux; u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); });
+      const area = (u1 - u0) * (v1 - v0); if (!best || area < best.area) best = { area, deg: (Math.atan2(u1 - u0 >= v1 - v0 ? ux : -un, u1 - u0 >= v1 - v0 ? un : ux) * 180 / Math.PI + 360) % 180 };
+    }
+    return best ? best.deg : 0;
+  }
+  // Placement par défaut: calé sur la première forme dessinée (sinon l'édifice Overture sous le point du projet): centres
+  // superposés, et parmi les quatre rotations qui alignent les axes principaux, celle qui recouvre le mieux la forme. Sans
+  // forme: la géolocalisation du fichier si elle tombe à moins de 2 km du projet, sinon le point du projet. Toujours au sol.
+  function defaultPlacement() {
+    const drawn = origin ? localRings(projLocal, origin) : [];
+    let target = drawn.length ? drawn[0].p : null;
+    if (!target && data) { const under = data.bld.filter(b => b[3] !== 2).find(([q]) => pointInRing([0, 0], q)); if (under) target = under[0]; }
+    if (target) {
+      const tc = areaCenter(target), ta = mainAxis(target), ma = mainAxis(model.hull);
+      let best = null;
+      for (let k = 0; k < 4; k++) {
+        const rot = (((ta - ma + 90 * k) % 360) + 360) % 360, r0 = modelRing({ x: 0, n: 0, rot }), hc = areaCenter(r0), pl = { x: tc[0] - hc[0], n: tc[1] - hc[1], rot, dy: 0 }, ring = modelRing(pl);
+        let minx = Infinity, maxx = -Infinity, minn = Infinity, maxn = -Infinity; [...ring, ...target].forEach(q => { minx = Math.min(minx, q[0]); maxx = Math.max(maxx, q[0]); minn = Math.min(minn, q[1]); maxn = Math.max(maxn, q[1]); });
+        let both = 0, any = 0; for (let x = minx; x <= maxx; x += 0.5) for (let n = minn; n <= maxn; n += 0.5) { const a = pointInRing([x, n], ring), b = pointInRing([x, n], target); if (a && b) both++; if (a || b) any++; }
+        const iou = any ? both / any : 0; if (!best || iou > best.iou + 1e-6) best = { iou, pl };
+      }
+      return best.pl;
+    }
+    const g = model.geo;
+    if (g && origin) {
+      const mLng = 111320 * Math.cos(origin[0] * Math.PI / 180), gx = (g.lon - origin[1]) * mLng, gn = (g.lat - origin[0]) * 111320;
+      if (Math.hypot(gx, gn) < 2000) { const o = rotXY(model.offset[0], model.offset[1], g.heading || 0); return { x: gx + o[0], n: gn + o[1], rot: ((g.heading || 0) % 360 + 360) % 360, dy: 0 }; }
+    }
+    return { x: 0, n: 0, rot: 0, dy: 0 };
+  }
+  const gltfLoader = new GLTFLoader();
+  async function modelGroup(glb) {
+    const gltf = await gltfLoader.parseAsync(glb, '');
+    const group = new THREE.Group(); group.add(gltf.scene);
+    const done = new Set(), win = []; // matériaux déjà préparés (un matériau peut servir à plusieurs maillages); vitres « -fenetre »
+    gltf.scene.traverse(o => {
+      if (!o.isMesh) return;
+      // Normales plates calculées au chargement (le fichier n'en porte pas): ombrage net et biais d'ombre le long de la normale.
+      if (o.geometry.index) { const g = o.geometry.toNonIndexed(); o.geometry.dispose(); o.geometry = g; }
+      o.geometry.computeVertexNormals();
+      const m = o.material;
+      if (!done.has(m)) {
+        done.add(m); m.flatShading = false; m.envMapIntensity = 0.75;
+        if (m.transparent) {
+          // Verre libre: l'alpha de l'image de la scène (masque des flaques) reste celui de ce qui est derrière.
+          m.depthWrite = false; m.blending = THREE.CustomBlending; m.blendSrc = THREE.SrcAlphaFactor; m.blendDst = THREE.OneMinusSrcAlphaFactor; m.blendSrcAlpha = THREE.ZeroFactor; m.blendDstAlpha = THREE.OneFactor;
+          modelShadow(m, 'verre-modele');
+        } else {
+          lampLit(m, 'modele'); modelShadow(m, 'lamp-modele');
+          // Vitre de fenêtre: allumée la nuit comme les fenêtres des murs (même teinte, même courbe, voir frame).
+          if (/-fenetre$/.test(m.name || '')) { m.emissive.set('#ffe2b0'); m.emissiveIntensity = 0; win.push(m); }
+        }
+      }
+      o.castShadow = !m.transparent; if (m.transparent) o.renderOrder = 2;
+      o.receiveShadow = true;
+    });
+    return { group, win };
+  }
+  function dropModel() {
+    modelDrag = null;
+    if (!model) return;
+    S.remove(model.group); model.group.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); model = null;
+  }
+  // Après un déplacement: voisins, formes et arbres sous la maison recalculés (sans bouger la caméra), un peu plus tard.
+  function modelChanged() { clearTimeout(modelTimer); modelTimer = setTimeout(() => { if (running) rebuild(true, true); }, 350); }
+
+  // modelOnly: seul le modèle a changé (place, rotation, hauteur, ajout, retrait): relief et eau gardés tels quels.
+  function rebuild(keepView, modelOnly) {
     clearStatics();
-    terrain.carveWater(data ? data.water : []); buildGround(); // le relief est creusé sous les plans d'eau connus
+    if (!modelOnly) { terrain.carveWater(data ? data.water : []); buildGround(); } // le relief est creusé sous les plans d'eau connus
     if (!origin) return;
+    if (model) placeModel();
+    // La maison importée remplace la forme dessinée et l'édifice Overture qu'elle recouvre; les arbres sous elle disparaissent.
+    const mRing = model ? modelRing() : null, underModel = (ring) => !!mRing && ringsOverlap(mRing, ring);
+    const treeFree = ([x, n]) => !mRing || (!pointInRing([x, n], mRing) && !mRing.some((q, i) => segDist([x, n], q, mRing[(i + 1) % mRing.length]) < 2));
     // Formes dessinées (Forme 1, Forme 2... dans l'ordre du projet), en mètres autour de l'origine.
     const drawn = localRings(projLocal, origin);
     // Hauteur: valeur réglée dans la pastille FORME, sinon hauteur mesurée Overture du même édifice (30 m est le défaut du
@@ -909,6 +1048,7 @@ export function createScene3D(container, opts = {}) {
     // sinon brique. Fenêtres sobres: une rangée par étage de 3,6 m, une travée par 8 m.
     const list = []; projInfo = [];
     drawn.forEach((d, i) => {
+      if (underModel(d.p)) return;
       const hits = data ? data.bld.filter(([p, , , k]) => k !== 2 && ringsOverlap(d.p, p)) : [];
       const top = hits.length ? hits.reduce((a, b) => (b[1] > a[1] ? b : a)) : null; // le plus haut des bâtiments recouverts
       const measured = top ? top[1] : null;
@@ -922,7 +1062,10 @@ export function createScene3D(container, opts = {}) {
     });
     // Les façades allumées éclairent les alentours: une lumière surfacique chaude par façade (les plus longues d'abord),
     // devant le mur, à mi-hauteur, dirigée vers l'extérieur; intensité suivant celle des fenêtres (voir frame).
-    const walls = []; projInfo.forEach(e => { if (e.len >= 4) walls.push(e); }); walls.sort((a, b) => b.len - a.len);
+    const walls = []; projInfo.forEach(e => { if (e.len >= 4) walls.push(e); });
+    // La maison importée aussi: côtés de son enveloppe, sur la hauteur du modèle, depuis sa pose au sol.
+    if (mRing) { const r = signedArea(mRing) < 0 ? mRing.slice().reverse() : mRing, base = model.group.position.y; edgesOf(r).forEach(e => { if (e.len >= 4) walls.push({ ...e, h: model.h, base }); }); }
+    walls.sort((a, b) => b.len - a.len);
     walls.slice(0, (window.matchMedia && window.matchMedia('(hover: none)').matches) ? 6 : 12).forEach(e => {
       const l = new THREE.RectAreaLight(0xffd9a0, 0, e.len * 0.9, e.h * 0.7); const nx = e.nrm[0], nz = -e.nrm[1];
       l.position.set(e.mid[0] + nx * 0.4, e.base + e.h * 0.5, -e.mid[1] + nz * 0.4); l.lookAt(l.position.x + nx, l.position.y, l.position.z + nz); l.visible = false; S.add(l); winLights.push(l);
@@ -932,7 +1075,7 @@ export function createScene3D(container, opts = {}) {
       data.bld.forEach(([p, h, fl, k, lid]) => {
         // Un voisin recouvert par un bâtiment dessiné disparaît: c'est le même édifice.
         const c = centroid(p);
-        if (drawn.some(d => ringsOverlap(d.p, p))) return;
+        if (drawn.some(d => ringsOverlap(d.p, p)) || underModel(p)) return;
         others.push(p);
         const q = p[0], r = hsh(q[0], q[1], 5); const hh = k === 0 && !lid ? Math.max(h, 6.2) : h; // hauteur mesurée (LiDAR): telle quelle
         list.push({ p, h: hh, fl: Math.max(1, Math.min(k === 0 ? Math.max(fl, Math.round(hh / 3.1)) : fl, Math.floor(hh / 3.2))), col: L(k === 2 ? '#9a9a94' : k === 1 ? '#cfc7b8' : PAL_RES[Math.floor(r * PAL_RES.length)]), rc: L(ROOF[Math.floor(hsh(q[0], q[1], 6) * ROOF.length)]) });
@@ -943,15 +1086,18 @@ export function createScene3D(container, opts = {}) {
       addFlat((data.paved || []).map(p => { const v = p.o ? p : { o: p, h: [] }; return { o: regularizeRing(v.o), h: (v.h || []).map(h => regularizeRing(h)) }; }), flatMats.asphalt, 0.045, 3);
       addFlat(data.water.map(w => ({ o: w.o, h: w.h, hFn: terrain.waterSurface(w), nFn: terrain.upNormal })), waterMat, 0.05); // surface lisse calée sur les rives
       ribbons(data.roads.filter(r => r.k === 2), 0.1, flatMats.rail, 4); ribbons(data.roads.filter(r => r.k === 0), 0.08, flatMats.road, 5); ribbons(data.roads.filter(r => r.k === 1), 0.12, flatMats.walk, 6);
-      const P = prisms(list, groundOf); // formes du projet et voisins, tels que blocks() les dessine
+      // Formes du projet et voisins, tels que blocks() les dessine, plus la maison importée (prisme de son enveloppe, de sa
+      // pose à son faîte, sans surplomb permis): ni arbre ni sous-bois ne la traversent.
+      const mPrism = mRing ? [{ p: signedArea(mRing) < 0 ? mRing.slice().reverse() : mRing, h: model.h, g: { min: model.group.position.y, mean: model.group.position.y }, unmapped: true }] : [];
+      const P = prisms([...list, ...mPrism], groundOf);
       if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.P = P; // vérification en développement
-      kept = trees(data.trees, P);
+      kept = trees(mRing ? data.trees.filter(treeFree) : data.trees, P);
       if (data.canopy) canopyFill(data.canopy, data.trees, P);
       lamps(data.roads, data.bld);
     }
     blocks(list);
     // Point de vue sur la première forme dessinée; sans forme, sur l'édifice (Overture) sous le point du projet, sinon le plus proche à moins de 60 m.
-    let focus = drawn.length ? drawn[0].p : null;
+    let focus = mRing || (drawn.length ? drawn[0].p : null);
     if (!focus && data) {
       const cand = data.bld.filter(b => b[3] !== 2);
       const under = cand.find(([p]) => pointInRing([0, 0], p)) || cand.map(b => ({ b, d: Math.hypot(...centroid(b[0])) })).sort((a, b) => a.d - b.d).find(x => x.d < 60)?.b;
@@ -959,9 +1105,10 @@ export function createScene3D(container, opts = {}) {
     }
     // Les autres formes du projet comptent comme obstacles, sauf celles qui chevauchent la première (tour sur un socle,
     // bâtiment en L dessiné en deux rectangles): c'est le même sujet, on ne place pas la caméra dedans, mais il ne bouche
-    // pas la vue sur lui-même.
+    // pas la vue sur lui-même. Avec une maison importée, la forme qu'elle recouvre fait partie du sujet.
     const subj = focus ? drawn.map(d => d.p).filter(r => r !== focus && ringsOverlap(r, focus)) : [];
-    pickView(focus || [], [...others, ...drawn.map(d => d.p)].filter(r => r !== focus && !subj.includes(r)), data ? data.roads : [], kept, subj);
+    if (!keepView) pickView(focus || [], [...others, ...drawn.map(d => d.p)].filter(r => r !== focus && !subj.includes(r)), data ? data.roads : [], kept, subj);
+    if (sat) { if (!modelOnly || !satObj) placeSat(); else satTrees(); }
     cloudLift = Math.max(150, terrain.maxWithin(1000) - T0.y + 60); // les nuages passent au-dessus des collines voisines
     dirty = true;
   }
@@ -969,23 +1116,63 @@ export function createScene3D(container, opts = {}) {
   // ---- interaction: un doigt (ou la souris) tourne et monte, deux doigts pincent pour s'approcher, molette ou
   // trackpad aussi; les boutons + et - de la fenêtre passent par zoom(). Distance bornée par clampR.
   const el = R.domElement; const ptrs = new Map(); let pinch = null;
+  // La maison importée se déplace en la glissant; ailleurs, la vue tourne. Le déplacement à l'écran devient un déplacement
+  // au sol: gauche-droite le long de la droite de la caméra, haut-bas le long de son avant (vers le haut = plus loin), à
+  // l'échelle de la maison saisie (distance / focale en pixels). Pas de plan à la hauteur du point saisi: à hauteur d'oeil,
+  // il passe au-dessus de la caméra (sens inversé, maison figée ou projetée à des centaines de mètres).
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), rtV = new THREE.Vector3();
+  const pickModel = (e) => { if (!model) return null; const r = el.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, cam); const h = ray.intersectObject(model.group, true); return h.length ? h[0] : null; };
+  const startModelDrag = (e, hit) => {
+    const f = el.getBoundingClientRect().height / (2 * Math.tan(cam.fov * Math.PI / 360)); // focale en pixels (CSS)
+    rtV.setFromMatrixColumn(cam.matrixWorld, 0); rtV.y = 0; if (rtV.lengthSq() < 1e-8) rtV.set(1, 0, 0); rtV.normalize();
+    // Droite et avant horizontaux en (est, nord): three z = -n, avant = vertical x droite.
+    return { id: e.pointerId, x0: e.clientX, y0: e.clientY, lx: e.clientX, ly: e.clientY, moved: false, k: Math.max(5, cam.position.distanceTo(hit.point)) / f, rt: [rtV.x, -rtV.z], fw: [rtV.z, rtV.x], pl0: { ...modelPl } };
+  };
+  // Glisser annulé (Échap, deuxième doigt, pointeur perdu): la maison revient à sa place d'avant, rien n'est enregistré.
+  const cancelModelDrag = () => {
+    const md = modelDrag; if (!md) return; modelDrag = null;
+    if (md.moved && model && modelPl) { modelPl.x = md.pl0.x; modelPl.n = md.pl0.n; placeModel(); }
+    el.style.cursor = 'grab';
+  };
   el.addEventListener('pointerdown', e => {
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); try { el.setPointerCapture(e.pointerId); } catch (err) { /* pointeur déjà parti */ }
-    if (ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, r0: Rr }; drag = null; }
-    else { drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; el.style.cursor = 'grabbing'; }
+    if (ptrs.size >= 2) { cancelModelDrag(); const [a, b] = [...ptrs.values()]; pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, r0: Rr }; drag = null; return; }
+    const hit = e.button === 0 ? pickModel(e) : null;
+    if (hit) { modelDrag = startModelDrag(e, hit); el.style.cursor = 'move'; return; }
+    drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; el.style.cursor = 'grabbing';
   });
   el.addEventListener('pointermove', e => {
     const p = ptrs.get(e.pointerId); if (p) { p.x = e.clientX; p.y = e.clientY; }
+    if (modelDrag && e.pointerId === modelDrag.id) {
+      const md = modelDrag;
+      if (!md.moved) { if (Math.hypot(e.clientX - md.x0, e.clientY - md.y0) < 4) return; md.moved = true; } // simple clic: rien ne bouge
+      let dx = e.clientX - md.lx, dy = e.clientY - md.ly; md.lx = e.clientX; md.ly = e.clientY;
+      const l = Math.hypot(dx, dy); if (l > 80) { dx *= 80 / l; dy *= 80 / l; } // garde: un saut du pointeur ne projette pas la maison au loin
+      let x = modelPl.x + (dx * md.rt[0] - dy * md.fw[0]) * md.k, n = modelPl.n + (dx * md.rt[1] - dy * md.fw[1]) * md.k;
+      const ox = x - md.pl0.x, on = n - md.pl0.n, d = Math.hypot(ox, on); if (d > 400) { x = md.pl0.x + ox * 400 / d; n = md.pl0.n + on * 400 / d; } // au plus 400 m par geste
+      modelPl.x = x; modelPl.n = n; placeModel();
+      return;
+    }
+    if (!ptrs.size && model) el.style.cursor = pickModel(e) ? 'move' : 'grab';
     if (pinch && ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y) || 1; Rr = clampR(pinch.r0 * pinch.d0 / d); dirty = true; return; }
     if (!drag || e.pointerId !== drag.id) return;
     az += (e.clientX - drag.x) * 0.008; camH = Math.max(1.2, Math.min(320, camH + (e.clientY - drag.y) * 0.6)); drag = { x: e.clientX, y: e.clientY, id: drag.id }; dirty = true;
   });
-  const endPtr = e => {
+  const endPtr = (e, cancel) => {
+    if (modelDrag && e.pointerId === modelDrag.id) {
+      if (cancel) cancelModelDrag();
+      else { const moved = modelDrag.moved; modelDrag = null; if (moved) { rebuild(true, true); onModel({ ...modelPl }); } } // validé seulement s'il a bougé
+    }
     ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (drag && e.pointerId === drag.id) drag = null;
     if (ptrs.size === 1 && !drag) { const [[id, p]] = [...ptrs.entries()]; drag = { x: p.x, y: p.y, id }; } // le doigt restant continue à tourner
     if (!ptrs.size) el.style.cursor = 'grab';
   };
-  el.addEventListener('pointerup', endPtr); el.addEventListener('pointercancel', endPtr);
+  el.addEventListener('pointerup', e => endPtr(e, false)); el.addEventListener('pointercancel', e => endPtr(e, true));
+  // Capture perdue en plein glisser (elle est relâchée d'office après pointerup, le glisser est alors déjà fini): annulé.
+  el.addEventListener('lostpointercapture', e => { if (modelDrag && e.pointerId === modelDrag.id) cancelModelDrag(); });
+  // Échap pendant le glisser: annulé, et la touche ne va pas plus loin (elle fermerait la carte plein écran).
+  const onKey = (e) => { if (e.key === 'Escape' && modelDrag) { e.preventDefault(); e.stopPropagation(); cancelModelDrag(); } };
+  window.addEventListener('keydown', onKey, true);
   el.addEventListener('wheel', e => { e.preventDefault(); Rr = clampR(Rr * Math.exp(e.deltaY * 0.0015)); dirty = true; }, { passive: false });
 
   const vF = new THREE.Vector3(); let last = performance.now(), raf = 0;
@@ -1035,7 +1222,12 @@ export function createScene3D(container, opts = {}) {
     // sa valeur en mètres et le shader PCSS est calé sur cette plage.
     const dist = SHADOW_SPAN + 200; sunL.position.copy(T0).addScaledVector(d, dist); sc.far = dist + 1.75 * SR; sc.near = sc.far - SHADOW_SPAN; sc.updateProjectionMatrix();
     sunL.shadow.bias = -0.0006 * 487.5 / SHADOW_SPAN; sunL.shadow.normalBias = 0.5 * Math.min(2.5, SR / 150);
+    mdlNB.value = Math.max(0.04, 1.4 * SR / sunL.shadow.mapSize.x); // modèle importé: 0,7 pixel d'ombre, 4 cm au moins
+    // Modèle importé (voir modelShadow): direction du soleil, biais du décor en mètres (profondeur normalisée x plage de la
+    // caméra d'ombre, environ 0,29 m) et demi-pixel d'ombre en mètres (4 à 17 cm selon la zone).
     sunL.shadow.radius = (1 + 7 * Math.pow(1 - iv, 1.3) + 1.5 * cum) * Math.max(0.35, 150 / SR); // taille apparente du soleil pour la pénombre: vraie au soleil franc, élargie sous le voile et les nuages; en texels, donc ramenée quand la zone s'élargit
+    // Biais propre au modèle: demi-texel d'ombre multiplié par le rayon de pénombre (le filtre PCSS lit jusque-là), après le calcul du rayon.
+    mdlSun.value.copy(d); mdlGB.value = -sunL.shadow.bias * (sc.far - sc.near); mdlHT.value = 0.5 * (sc.right - sc.left) / sunL.shadow.mapSize.x * Math.max(1, sunL.shadow.radius);
     fill.intensity = (0.2 + 1.1 * Math.max(cumS, veil) * Math.min(1, Math.sin(el) / 0.3)) * (1 - 0.5 * twi);
     fill.color.setRGB(0.86, 0.90, 1.0).lerp(new THREE.Color(0.9, 0.9, 0.9), Math.max(cumS, veil)).lerp(new THREE.Color(1.0, 0.86, 0.68), 0.6 * smk); // ciel bleuté, gris sous les nuages ou le brouillard, chaud sous la fumée
     fill.groundColor.copy(GROUND_TINT).multiplyScalar((0.5 + 1.3 * iv * Math.min(1, Math.sin(el) / 0.5)) * (1 - 0.6 * twi)); // rebond du sol
@@ -1049,6 +1241,7 @@ export function createScene3D(container, opts = {}) {
     wallMat.emissiveIntensity = 0.62 * smooth(1, -4, realDeg); // fenêtres chaudes, pas blanches
     uNight.value = smooth(1, -4, realDeg); // fenêtres discrètes le jour, d'origine dès la tombée du jour
     winLights.forEach(l => { l.intensity = 0.32 * wallMat.emissiveIntensity / 0.62; l.visible = l.intensity > 0.01; }); // lumière des fenêtres sur le sol, les arbres et les voisins
+    if (model) model.win.forEach(m => { m.emissiveIntensity = wallMat.emissiveIntensity; }); // vitres du modèle importé
     // Lampadaires et lueur de la ville: même allumage que les fenêtres, à petite dose (on devine les rues et les volumes).
     const lampK = uNight.value, city = urban * lampK;
     lampU.uLampK.value = LAMP_LIGHT * lampK; lampHeadMat.opacity = lampK; lampMeshes.forEach(m => { m.visible = lampK > 0.01; });
@@ -1146,7 +1339,7 @@ export function createScene3D(container, opts = {}) {
     const relief = terrain.flat ? (hLidar ? hLine : '') : terrain.src.lidar >= 0.5 ? `Relief LiDAR ${terrain.src.lidarRes || 2} m${hLidar ? ' et hauteurs des bâtiments LiDAR' : ''} (Ressources naturelles Canada)` : 'Relief du modèle d’élévation du Canada (20 m)' + (hLidar ? ' · ' + hLine : '');
     const pavedLine = data && data.paved && data.paved.length ? `Surfaces pavées d’après l’imagerie satellite (${data.pavedSrc || 'Esri'}), approximatives` : '';
     const ts = data && data.treesSrc, treeLine = ts && ts.n ? `Arbres LiDAR, conifères estimés d’après ${ts.essences && ts.essences.length ? ts.essences.join(' et ') : 'la forme des cimes'}` : '';
-    const srcLine = [relief, treeLine, pavedLine].filter(Boolean).join(' · ');
+    const srcLine = [relief, treeLine, pavedLine, sat ? SAT_CREDIT : ''].filter(Boolean).join(' · ');
     const info = cond + '|' + parts + '|' + where + '|' + height + '|' + srcLine + '|' + (est > 0.55 ? 'dark' : 'light');
     if (info !== lastInfo) { lastInfo = info; onInfo({ cond, parts, where, height, srcLine, light: est <= 0.55, northDeg: (Math.atan2(vF.x, -vF.z) * 180 / Math.PI) }); }
   }
@@ -1203,8 +1396,25 @@ export function createScene3D(container, opts = {}) {
     getView() { return { az, camH, Rr, ct: ct.toArray(), time: new Date(dateMs).toString().slice(0, 24) }; },
     setView(v) { if (v.az != null) az = v.az; if (v.camH != null) camH = v.camH; if (v.Rr != null) Rr = v.Rr; dirty = true; },
     zoom(f) { Rr = clampR(Rr * f); dirty = true; }, // f < 1: on s'approche
+    // Modèle importé: glb (ArrayBuffer) et info de modelImport.js, placement gardé ou null (placement par défaut). Renvoie le placement.
+    async setModel(glb, info, placement) {
+      dropModel();
+      if (!glb) { modelPl = null; rebuild(true, true); return null; }
+      const { group, win } = await modelGroup(glb);
+      if (!running) return null;
+      const h = info.size && info.size[2] > 0 ? info.size[2] : 6; // hauteur du modèle (lumières de façade la nuit)
+      dropModel(); model = { group, win, h, hull: slimHull(info.hull), geo: info.geo || null, offset: info.offset || [0, 0] }; S.add(group);
+      modelPl = placement ? { x: 0, n: 0, rot: 0, dy: 0, ...placement } : defaultPlacement();
+      rebuild(false, true);
+      return { ...modelPl };
+    },
+    setModelPlacement(p) { if (!model) return null; modelPl = { ...modelPl, ...p }; placeModel(); modelChanged(); return { ...modelPl }; },
+    autoPlaceModel() { if (!model) return null; modelPl = defaultPlacement(); rebuild(true, true); return { ...modelPl }; },
+    getModelPlacement() { return modelPl ? { ...modelPl } : null; },
+    // Calque satellite: image de loadSatImage (satDrape.js) ou null pour l'éteindre.
+    setSatellite(s) { sat = s || null; placeSat(); return !!satObj; },
     dispose() {
-      running = false; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); clearStatics();
+      running = false; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); window.removeEventListener('keydown', onKey, true); clearStatics(); clearTimeout(modelTimer); dropModel(); sat = null; placeSat();
       [sceneRT, aoRT, aoRT2, compRT, reflRT, reflRT2, cubeRT, skyRT, envRT].forEach(r => r && r.dispose()); pmrem.dispose();
       [skyMat, aoMat, blurMat, compMat, reflMat, rblurMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, shadowMat, conMat, fillMat, edgeMat, waterMat, cloudMat, lampHeadMat, ...Object.values(flatMats)].forEach(m => m.dispose()); GLOW.dispose(); if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
       [skyGeo, crownGeo, crownGeoMid, crownGeoFar, crownGeoShadow, conGeo, conGeoLow, trunkGeo, trunkGeoLow, sg, gnd && gnd.geometry, gndFar.geometry, quad.geometry].forEach(g => g && g.dispose()); FT.map.dispose(); FT.rough.dispose(); FT.emis.dispose(); gndTex.dispose(); gndTexNear.dispose(); gndMat.dispose(); gndMatFar.dispose(); leafMask.dispose(); conMask.dispose(); edgeMask.dispose();
