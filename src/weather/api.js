@@ -152,7 +152,7 @@ export const fetchSmokePoint = async (layer, time, lat, lng) => {
     const d = 0.05;
     const bbox = `${(lng - d).toFixed(3)},${(lat - d).toFixed(3)},${(lng + d).toFixed(3)},${(lat + d).toFixed(3)}`;
     const url = `https://geo.weather.gc.ca/geomet?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo&LAYERS=${layer}&QUERY_LAYERS=${layer}&SRS=EPSG:4326&BBOX=${bbox}&WIDTH=10&HEIGHT=10&X=5&Y=5&INFO_FORMAT=application/json&TIME=${time}`;
-    const r = await fetch(url);
+    const r = await fetch(url, { signal: AbortSignal.timeout(4000) }); // GeoMet muet: on n'attend pas
     if (!r.ok) return null;
     const j = await r.json();              // une erreur GeoMet est renvoyee en XML -> throw -> catch
     const p = j.features && j.features[0] && j.features[0].properties;
@@ -160,22 +160,45 @@ export const fetchSmokePoint = async (layer, time, lat, lng) => {
     return p.value * 1e9;                  // kg/m3 -> microgrammes/m3
   } catch (e) { return null; }
 };
+// Fumée d'une heure précise (vue 3D): la couche horaire de FireWork couvre environ 72 h, une heure par demande (une
+// liste ou une plage d'heures est refusée). Attention: ce n'est pas la fumée seule, mais toutes les particules fines
+// (microgrammes par mètre cube, au sol) là où le modèle reconnaît un panache de feux, et 0 ailleurs; le fond urbain y
+// entre (le soir, le chauffage au bois allume le masque à 10 ou 15). Null hors de la période prévue ou en panne.
+// Gardée une heure en mémoire (le modèle tourne deux fois par jour).
+const smokeHourCache = new Map();
+export const smokeHourCached = (lat, lng, isoHourZ) => { const c = smokeHourCache.get(`${lat.toFixed(2)},${lng.toFixed(2)},${isoHourZ}`); return c && Date.now() - c.t < 3600000 ? c.v : undefined; };
+export const fetchSmokeHour = async (lat, lng, isoHourZ) => {
+  const k = `${lat.toFixed(2)},${lng.toFixed(2)},${isoHourZ}`, c = smokeHourCache.get(k);
+  if (c && Date.now() - c.t < 3600000) return c.v;
+  const v = await fetchSmokePoint(SMOKE_HOURLY, isoHourZ, lat, lng);
+  smokeHourCache.set(k, { v, t: Date.now() });
+  return v;
+};
 // Niveau de fumee par jour (cle "YYYY-MM-DD" locale) pour aujourd'hui + 3 jours. Jamais bloquant:
 // tout echec (hors saison, reseau, pas de couche) laisse simplement le jour sans fumee.
 export const fetchSmoke = async (lat, lng) => {
   const inner = (async () => {
     const out = {};
     const base = new Date();
+    const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    // Icône de fumée: dès qu'il y en a (Stéphane: la fumée gâche un tournage, toujours laid). Chaque moyenne couvre
+    // les 24 heures qui précèdent son heure, et cette heure dépend du dernier calcul du modèle: 12:00 UTC après celui de
+    // midi, 00:00 UTC après celui de minuit (l'ancienne lecture, toujours à 12:00, ne trouvait rien la moitié du temps).
+    // On demande les deux heures sur cinq jours (ce qui n'existe pas revient vide) et, pour chaque journée (6 h à 20 h),
+    // on garde la plus forte des moyennes qui la couvrent au moins 3 heures.
+    const stamps = [];
+    for (let k = -1; k <= 4; k++) for (const hh of [0, 12]) stamps.push(new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate() + k, hh)));
+    const vals = await Promise.all(stamps.map(d => fetchSmokePoint(SMOKE_DAVG, d.toISOString().slice(0, 19) + 'Z', lat, lng)));
     const jobs = [0, 1, 2, 3].map(async (i) => {
-      const dt = new Date(base.getTime() + i * 86400000);
-      const dateStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-      let ug = await fetchSmokePoint(SMOKE_DAVG, `${dateStr}T12:00:00Z`, lat, lng);
+      const day = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i), dStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 6).getTime(), dEnd = dStart + 14 * 3600000;
+      let ug = null;
+      stamps.forEach((st, k) => { const v = vals[k], wEnd = st.getTime(), wStart = wEnd - 86400000; if (v != null && Math.min(dEnd, wEnd) - Math.max(dStart, wStart) >= 3 * 3600000) ug = Math.max(ug ?? 0, v); });
       if (ug == null && i === 0) {           // aujourd'hui n'est pas couvert par la moyenne journaliere
         const h = new Date();
         const hUTC = `${h.getUTCFullYear()}-${String(h.getUTCMonth() + 1).padStart(2, '0')}-${String(h.getUTCDate()).padStart(2, '0')}T${String(h.getUTCHours()).padStart(2, '0')}:00:00Z`;
         ug = await fetchSmokePoint(SMOKE_HOURLY, hUTC, lat, lng);
       }
-      if (ug != null) out[dateStr] = smokeLevelFromUg(ug);
+      if (ug != null) out[ymd(day)] = smokeLevelFromUg(ug);
     });
     await Promise.all(jobs);
     return out;

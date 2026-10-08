@@ -7,6 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { loadScene } from './data.js';
 import { loadTerrain } from './terrain.js';
 import { isChunkLoadError, reloadForUpdate } from '../shared/updateReload.js';
+import { fetchSmokeHour, smokeHourCached } from '../weather/api.js';
 
 export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, visible, zoomRef }) => { // zoomRef.current(f) : les boutons + et - de la fenêtre
   const box = useRef(null);
@@ -24,7 +25,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
       eng.current = e; if (zoomRef) zoomRef.current = (f) => e.zoom(f);
       if (import.meta.env.DEV) window.__scene3d = e; // inspection en développement seulement
       e.setProject({ lat, lng, buildings, orientation });
-      e.setTime(timeMs); e.setWeather(weatherRow);
+      e.setTime(timeMs); e.setWeather(weatherRow); setEngReady(n => n + 1);
       setStatus({ text: 'Environs en préparation', busy: true });
       // Environs (Overture) et relief (LiDAR) arrivent chacun de leur côté; l'anneau d'attente reste tant qu'il en manque un.
       let pending = 2, failed = false; const done = () => { pending--; if (pending <= 0 && !failed && !cancelled && eng.current === e) setStatus(null); };
@@ -43,6 +44,23 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
   useEffect(() => { if (eng.current) eng.current.setProject({ lat, lng, buildings, orientation }); }, [buildings, orientation]);
   useEffect(() => { if (eng.current) eng.current.setTime(timeMs); }, [timeMs]);
   useEffect(() => { if (eng.current) eng.current.setWeather(weatherRow); }, [weatherRow?.time, weatherRow?.cloudLow, weatherRow?.cloudMid, weatherRow?.cloudHigh, weatherRow?.sunFraction]);
+  // Fumée de feux (FireWork) à l'heure affichée, seulement dans la fenêtre de prévision de la 3D (comme la météo) et un
+  // jour où l'app en signale déjà (moyenne du jour, icône du soleil): par prudence, la couche horaire seule mêle le fond
+  // urbain. Demandée un court instant après l'arrêt du curseur; une heure déjà lue s'affiche tout de suite, une réponse
+  // qui tarde efface la fumée de l'heure précédente.
+  const smokeHour = weatherRow && weatherRow.smoke > 0 ? new Date(Math.floor(timeMs / 3600000) * 3600000).toISOString().slice(0, 13) + ':00:00Z' : null;
+  const [engReady, setEngReady] = useState(0);
+  useEffect(() => {
+    if (!eng.current) return;
+    if (!smokeHour || !lat || !lng) { eng.current.setSmoke(null); return; }
+    let off = false, clr = null; const e = eng.current;
+    const known = smokeHourCached(lat, lng, smokeHour); if (known !== undefined) { e.setSmoke(known); return; }
+    const id = setTimeout(() => {
+      clr = setTimeout(() => { if (!off && eng.current === e) e.setSmoke(null); }, 1000);
+      fetchSmokeHour(lat, lng, smokeHour).then(ug => { clearTimeout(clr); if (!off && eng.current === e) e.setSmoke(ug); });
+    }, 350);
+    return () => { off = true; clearTimeout(id); clearTimeout(clr); };
+  }, [smokeHour, lat, lng, engReady]);
 
   if (!visible) return null;
   const color = info?.light === false ? '#23282b' : '#f4f4f2';

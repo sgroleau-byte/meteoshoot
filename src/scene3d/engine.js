@@ -79,7 +79,7 @@ function sunExtinction(y, turb, ray) {
   return TR.map((r, i) => Math.exp(-(r * ray * 8400 * inv + 0.434 * (0.2 * turb) * 1e-17 * MC[i] * 0.005 * 1250 * inv)));
 }
 
-const SKY_GLSL = `uniform float uCum,uMid,uHigh,uDirect,uWarm,uTw,uNight,uGlow,uTurb,uRay,uSkyK,uZen;uniform vec3 uSun,uSunCol;varying vec3 vDir;
+const SKY_GLSL = `uniform float uCum,uMid,uHigh,uDirect,uWarm,uTw,uNight,uGlow,uTurb,uRay,uSkyK,uZen,uSmoke;uniform vec3 uSun,uSunCol;varying vec3 vDir;
 const vec3 LUMW=vec3(0.2126,0.7152,0.0722);
 // Ciel clair de Preetham (modèle analytique de lumière du jour, comme Sky.js de three): diffusion de Rayleigh (bleu du ciel) et de
 // Mie (halo blanc autour du soleil, brume à l'horizon), extinction Fex le long du rayon. uTurb = turbidité (brume), uRay = part
@@ -138,6 +138,7 @@ bh=mix(bh,vec3(0.92,0.52,0.30),pow(cgh,3.0)*pow(1.0-clamp(y*4.0,0.0,1.0),2.0)*uG
 vec3 night=mix(vec3(0.045,0.07,0.16),vec3(0.016,0.03,0.09),t)*(0.8+0.3*cgh*(1.0-0.7*t));
 vec3 tw=mix(bh,night,uNight)*(1.0-0.45*dC-0.25*aMidG-0.15*aHighG);
 col=mix(col,tw,uTw);
+col=mix(col,dot(col,LUMW)*vec3(1.12,0.9,0.66),uSmoke*0.75)*(1.0-0.2*uSmoke);
 col=pow(max(col,0.0),vec3(2.2));
 gl_FragColor=vec4(col,1.0);}`;
 const SKY_VERT = `varying vec3 vDir;void main(){vec4 wp=modelMatrix*vec4(position,1.0);vDir=wp.xyz-cameraPosition;gl_Position=projectionMatrix*viewMatrix*wp;}`;
@@ -214,12 +215,15 @@ gl_FragColor=vec4(mix(sky,texture2D(tCol,h).rgb,k)*w,w);}`;
 // uFogTop (hauteur dans la scène: sol du projet plus l'épaisseur prévue, 600 m sans nappe mesurée; bord adouci sur 25 m). On mesure la
 // longueur de chaque rayon de vue passée sous ce niveau: d'en haut (drone), on voit la nappe et ce qui en sort; dedans,
 // le lointain et le ciel disparaissent. Appliqué avant la lueur des fenêtres et le flare (leurs halos restent visibles).
+// Même calcul pour la fumée de feux (uSmk*): voile brun-orangé épais de 2500 m, extinction d'après la fumée au sol.
+// Sous la fumée, le soleil reste un disque net (uSunDisc, rayon uSunR): la fumée absorbe plus le bleu que le rouge, il
+// rougit, et ne s'éteint qu'au ras de l'horizon; dessiné seulement sur le ciel (un relief ou un bâtiment le cache).
 // Reflet des flaques (reflRT, déjà flouté à la verticale dans frame: une flaque troublée par la pluie ne fait pas un
 // miroir net, et les traînées de nuages près de l'horizon s'y fondent) ajouté tel quel.
-const COMP_FRAG = `uniform sampler2D tCol,tAO,tBloom,tDepth;uniform float uExp,uAO,uBloom,uAspect,uFlare,uRays,uVeilW,uVis,uDs,uRain,uTime,uFocal,uSlant,uRefl,uFogSig,uFogTop;uniform vec2 uSunUV,uFog,uNF;uniform vec3 uSunC,uRainCol,uFogCol,uCamW;uniform mat3 uV2W;uniform mat4 uProjInv;uniform sampler2D tRefl;varying vec2 vUv;
-vec3 hfog(vec3 c){if(uFogSig<=0.0)return c;float z=texture2D(tDepth,vUv).x;vec4 pv=uProjInv*vec4(vUv*2.0-1.0,z*2.0-1.0,1.0);vec3 P=pv.xyz/pv.w;
+const COMP_FRAG = `uniform sampler2D tCol,tAO,tBloom,tDepth;uniform float uExp,uAO,uBloom,uAspect,uFlare,uRays,uVeilW,uVis,uDs,uRain,uTime,uFocal,uSlant,uRefl,uFogSig,uFogTop,uSmkSig,uSmkTop,uSunR;uniform vec2 uSunUV,uFog,uNF;uniform vec3 uSunC,uRainCol,uFogCol,uSmkCol,uCamW,uSunDisc;uniform mat3 uV2W;uniform mat4 uProjInv;uniform sampler2D tRefl;varying vec2 vUv;
+vec3 lfog(vec3 c,float sig,float top,vec3 col){if(sig<=0.0)return c;float z=texture2D(tDepth,vUv).x;vec4 pv=uProjInv*vec4(vUv*2.0-1.0,z*2.0-1.0,1.0);vec3 P=pv.xyz/pv.w;
 vec3 d=uV2W*normalize(P);float dist=z>=0.99999?1e5:length(P);float hc=uCamW.y,hp=hc+d.y*dist,lo=min(hc,hp),hi=max(hc,hp),sp=max(hi-lo,1e-3);
-float L=dist*0.5*(clamp((uFogTop-lo)/sp,0.0,1.0)+clamp((uFogTop+25.0-lo)/sp,0.0,1.0));return mix(c,uFogCol,1.0-exp(-uFogSig*L));}
+float L=dist*0.5*(clamp((top-lo)/sp,0.0,1.0)+clamp((top+25.0-lo)/sp,0.0,1.0));return mix(c,col,1.0-exp(-sig*L));}
 float lz(float z){return (2.0*uNF.x*uNF.y)/(uNF.y+uNF.x-(2.0*z-1.0)*(uNF.y-uNF.x));}
 float h21(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
 float drops(vec2 px,float D,float zs,float sd){if(zs<D)return 0.0;
@@ -251,7 +255,9 @@ float a=atan(q.y,q.x),r1=pow(abs(cos(4.0*a+0.2)),110.0),r2=0.5*pow(abs(cos(4.0*a
 float rays=(r1+r2)*(0.65+0.35*cos(3.0*a+1.7))*exp(-d/0.17)*smoothstep(0.0,0.02,d);
 f+=core*rays*0.7*uRays*vis*vis;return f*uFlare*(0.6/uExp);}
 void main(){vec3 c=texture2D(tCol,vUv).rgb;float ao=texture2D(tAO,vUv).r;c*=mix(1.0,ao,uAO);
-if(uRefl>0.0){float zr=texture2D(tDepth,vUv).x;c+=texture2D(tRefl,vUv).rgb*uRefl*(1.0-smoothstep(uFog.x,uFog.y,lz(zr)));}c=hfog(c);c+=texture2D(tBloom,vUv).rgb*uBloom;c+=flare();c=aces(c);gl_FragColor=vec4(rain(desat(pow(c,vec3(1.0/2.2))))+(ign(gl_FragCoord.xy)-0.5)/255.0,1.0);}`;
+if(uRefl>0.0){float zr=texture2D(tDepth,vUv).x;c+=texture2D(tRefl,vUv).rgb*uRefl*(1.0-smoothstep(uFog.x,uFog.y,lz(zr)));}c=lfog(c,uFogSig,uFogTop,uFogCol);c=lfog(c,uSmkSig,uSmkTop,uSmkCol);
+if(uSunR>0.0&&texture2D(tDepth,vUv).x>=0.99999)c+=uSunDisc*smoothstep(uSunR,uSunR*0.8,length((vUv-uSunUV)*vec2(uAspect,1.0)));
+c+=texture2D(tBloom,vUv).rgb*uBloom;c+=flare();c=aces(c);gl_FragColor=vec4(rain(desat(pow(c,vec3(1.0/2.2))))+(ign(gl_FragCoord.xy)-0.5)/255.0,1.0);}`;
 
 const PAL_RES = ['#8f4e3a', '#a0624c', '#7a4a3a', '#b07d5e', '#9c7a62', '#6e5a50', '#b8957a', '#d2c2a4', '#8c6b58'];
 const ROOF = ['#57524d', '#5d5a55', '#514e4a', '#625e58'];
@@ -398,7 +404,7 @@ export function createScene3D(container, opts = {}) {
   container.appendChild(R.domElement);
 
   // ---- ciel, environnement lumineux
-  const skyMat = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: { uCum: { value: 0 }, uMid: { value: 0 }, uHigh: { value: 0 }, uDirect: { value: 1 }, uWarm: { value: 0 }, uTw: { value: 0 }, uNight: { value: 0 }, uGlow: { value: 0 }, uTurb: { value: 2.5 }, uRay: { value: 1.5 }, uSkyK: { value: 0.2 }, uZen: { value: 0.1 }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Vector3(1, 1, 1) } }, vertexShader: SKY_VERT, fragmentShader: SKY_GLSL });
+  const skyMat = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: { uCum: { value: 0 }, uMid: { value: 0 }, uHigh: { value: 0 }, uDirect: { value: 1 }, uWarm: { value: 0 }, uTw: { value: 0 }, uNight: { value: 0 }, uGlow: { value: 0 }, uSmoke: { value: 0 }, uTurb: { value: 2.5 }, uRay: { value: 1.5 }, uSkyK: { value: 0.2 }, uZen: { value: 0.1 }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Vector3(1, 1, 1) } }, vertexShader: SKY_VERT, fragmentShader: SKY_GLSL });
   const S = new THREE.Scene();
   const cam = new THREE.PerspectiveCamera(44, W / H, 1, 60000);
   if (import.meta.env.DEV) window.__scene3dCore = { R, S, cam, THREE }; // inspection en développement seulement
@@ -514,7 +520,7 @@ export function createScene3D(container, opts = {}) {
   const kern = []; for (let i = 0; i < 12; i++) { const v = new THREE.Vector3(hsh(i, 3, 1) * 2 - 1, hsh(i, 3, 2) * 2 - 1, 0.15 + 0.85 * hsh(i, 3, 3)).normalize(); const s = i / 12; v.multiplyScalar(0.12 + 0.88 * s * s); kern.push(v); }
   const aoMat = new THREE.ShaderMaterial({ uniforms: { tDepth: { value: null }, uRes: { value: new THREE.Vector2() }, uProj: { value: new THREE.Matrix4() }, uProjInv: { value: new THREE.Matrix4() }, uR: { value: 2.4 }, uBias: { value: 0.04 }, uInt: { value: 1.6 }, uK: { value: kern } }, vertexShader: QV, fragmentShader: AO_FRAG });
   const blurMat = new THREE.ShaderMaterial({ uniforms: { tAO: { value: null }, tDepth: { value: null }, uDir: { value: new THREE.Vector2() }, uNF: { value: new THREE.Vector2(1, 60000) } }, vertexShader: QV, fragmentShader: BLUR_FRAG });
-  const compMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, tAO: { value: null }, tBloom: { value: null }, tDepth: { value: null }, uExp: { value: 1 }, uAO: { value: 0.9 }, uBloom: { value: 0 }, uAspect: { value: 1 }, uFlare: { value: 0 }, uRays: { value: 0 }, uVeilW: { value: 1 }, uVis: { value: 1 }, uSunUV: { value: new THREE.Vector2(0.5, 0.5) }, uSunC: { value: new THREE.Vector3(1, 1, 1) }, uDs: { value: 0 }, uFog: { value: new THREE.Vector2(300, 1600) }, uNF: { value: new THREE.Vector2(1, 60000) }, uRain: { value: 0 }, uTime: { value: 0 }, uFocal: { value: 1000 }, uSlant: { value: 0.1 }, uRainCol: { value: new THREE.Vector3(0.6, 0.6, 0.6) }, tRefl: { value: null }, uRefl: { value: 0 }, uFogSig: { value: 0 }, uFogTop: { value: 9000 }, uFogCol: { value: new THREE.Vector3(0.5, 0.5, 0.5) }, uCamW: { value: new THREE.Vector3() }, uV2W: { value: new THREE.Matrix3() }, uProjInv: { value: new THREE.Matrix4() } }, vertexShader: QV, fragmentShader: COMP_FRAG });
+  const compMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, tAO: { value: null }, tBloom: { value: null }, tDepth: { value: null }, uExp: { value: 1 }, uAO: { value: 0.9 }, uBloom: { value: 0 }, uAspect: { value: 1 }, uFlare: { value: 0 }, uRays: { value: 0 }, uVeilW: { value: 1 }, uVis: { value: 1 }, uSunUV: { value: new THREE.Vector2(0.5, 0.5) }, uSunC: { value: new THREE.Vector3(1, 1, 1) }, uDs: { value: 0 }, uFog: { value: new THREE.Vector2(300, 1600) }, uNF: { value: new THREE.Vector2(1, 60000) }, uRain: { value: 0 }, uTime: { value: 0 }, uFocal: { value: 1000 }, uSlant: { value: 0.1 }, uRainCol: { value: new THREE.Vector3(0.6, 0.6, 0.6) }, tRefl: { value: null }, uRefl: { value: 0 }, uFogSig: { value: 0 }, uFogTop: { value: 9000 }, uFogCol: { value: new THREE.Vector3(0.5, 0.5, 0.5) }, uSmkSig: { value: 0 }, uSmkTop: { value: 2500 }, uSmkCol: { value: new THREE.Vector3(0.5, 0.4, 0.3) }, uSunR: { value: 0 }, uSunDisc: { value: new THREE.Vector3() }, uCamW: { value: new THREE.Vector3() }, uV2W: { value: new THREE.Matrix3() }, uProjInv: { value: new THREE.Matrix4() } }, vertexShader: QV, fragmentShader: COMP_FRAG });
   const rblurMat = new THREE.ShaderMaterial({ uniforms: { tSrc: { value: null }, uDir: { value: new THREE.Vector2() } }, vertexShader: QV, fragmentShader: RBLUR_FRAG });
   const reflMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, tDepth: { value: null }, uProj: { value: new THREE.Matrix4() }, uProjInv: { value: new THREE.Matrix4() }, uUp: { value: new THREE.Vector3(0, 1, 0) }, uTx: { value: new THREE.Vector2() }, tSky: { value: skyRT.texture }, uV2W: { value: new THREE.Matrix3() }, uCamW: { value: new THREE.Vector3() }, uPud: { value: 0 } }, vertexShader: QV, fragmentShader: REFL_FRAG });
   const brightMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, uTh: { value: 0.3 } }, vertexShader: QV, fragmentShader: BRIGHT_FRAG });
@@ -523,7 +529,8 @@ export function createScene3D(container, opts = {}) {
 
   // ---- état: lieu, heure, météo, caméra
   let lat = 46.8, lng = -71.2, origin = null, projLocal = [], orientation = [], style = null, data = null, dateMs = Date.now();
-  const tg = { cum: 0, mid: 0, high: 0, iv: 1, rain: 0, wet: 0, pud: 0, fogK: 0, fogTh: 600 }, cur = { ...tg };
+  const tg = { cum: 0, mid: 0, high: 0, iv: 1, rain: 0, wet: 0, pud: 0, fogK: 0, fogTh: 600, smk: 0 }, cur = { ...tg };
+  let smokeUg = null; // fumée de feux au sol (microgrammes par mètre cube, FireWork) à l'heure affichée
   let az = Math.PI * 1.2, camH = 1.7, Rr = 75; const ct = new THREE.Vector3(0, 10, 0);
   let rMin = 20; const R_MAX = 450; const clampR = (r) => Math.max(rMin, Math.min(R_MAX, r)); // distance caméra: hors du bâtiment visé, au plus 450 m
   let rainAt = 0; // dernière image de pluie seule (voir frame)
@@ -800,7 +807,7 @@ export function createScene3D(container, opts = {}) {
     if (!running) return; raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     const a = 1 - Math.exp(-dt * 3.5); let moving = false;
-    ['cum', 'mid', 'high', 'iv', 'rain', 'wet', 'pud', 'fogK', 'fogTh'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > 0.0005) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; });
+    ['cum', 'mid', 'high', 'iv', 'rain', 'wet', 'pud', 'fogK', 'fogTh', 'smk'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > 0.0005) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; });
     if (!dirty && !moving && now - envAt > 400) {
       // Rien d'autre ne bouge: sous la pluie, seules les gouttes avancent (composition et lissage refaits, pas la scène),
       // 30 fois par seconde au plus (environ 1,5 ms de calcul graphique chaque fois), et seulement si la 3D est à l'écran.
@@ -814,17 +821,19 @@ export function createScene3D(container, opts = {}) {
     const d = new THREE.Vector3(Math.sin(bearing) * Math.cos(el), Math.sin(el), -Math.cos(bearing) * Math.cos(el));
     const night = realDeg < -0.8, twi = smooth(2, -5, realDeg), nightF = smooth(-7, -15, realDeg), glow = 1 - smooth(-5, -10, realDeg);
     // Brume (turbidité) un peu plus forte sous le voile; extinction du soleil direct selon sa hauteur.
-    const turb = 2.3 + 2.0 * high + 0.8 * mid, Fx = sunExtinction(Math.sin(el), turb, 1.5), fxm = Math.max(Fx[0], Fx[1], Fx[2], 1e-4);
-    // Brouillard: le soleil direct traverse la nappe au-dessus du projet (sans nappe mesurée, 600 m de brume).
-    // Nappe posée sur le sol du projet, 600 m au plus (sans nappe mesurée: brume de 600 m). Sous une nappe, la lumière d'ambiance
+    // Fumée de feux (smk, 0 à 1): air plus trouble (soleil plus rouge, ciel plus blanc), soleil direct affaibli selon
+    // l'épaisseur de fumée traversée (épaisseur optique d'environ 0,008 par microgramme, 3 au plus), lumière plus chaude.
+    const smk = cur.smk, smokeT = smk > 0 && smokeUg > 0 ? Math.exp(-Math.min(3, 0.008 * smokeUg) * smk / Math.max(Math.sin(el), 0.05)) : 1;
+    const turb = Math.min(10, 2.3 + 2.0 * high + 0.8 * mid + 6 * smk), Fx = sunExtinction(Math.sin(el), turb, 1.5), fxm = Math.max(Fx[0], Fx[1], Fx[2], 1e-4);
+    // Brouillard: nappe posée sur le sol du projet, 600 m au plus (sans nappe mesurée: brume de 600 m). Sous une nappe, la lumière d'ambiance
     // devient grise comme sous un ciel couvert (cumS), selon l'épaisseur traversée à la verticale.
     const fogSig = cur.fogK / 1000, g0 = terrain.hTri(0, 0), fogThick = cur.fogTh, fogTopW = g0 + fogThick;
     const fogT = fogSig > 0 ? Math.exp(-fogSig * fogThick / Math.max(Math.sin(el), 0.05)) : 1;
     const cumS = Math.max(cum, fogSig > 0 ? 1 - Math.exp(-fogSig * fogThick) : 0);
-    const fe = Math.pow(0.2126 * Fx[0] + 0.7152 * Fx[1] + 0.0722 * Fx[2], 0.7), Idir = night ? 0 : 10 * fe * iv * fogT; sunL.intensity = Idir;
+    const fe = Math.pow(0.2126 * Fx[0] + 0.7152 * Fx[1] + 0.0722 * Fx[2], 0.7), Idir = night ? 0 : 10 * fe * iv * fogT * smokeT; sunL.intensity = Idir;
     // Couleur du soleil direct: extinction adoucie (Preetham rougit trop au ras de l'horizon) et un peu de blanc gardé.
-    const sunRGB = Fx.map(v => 0.85 * Math.pow(v / fxm, 0.45) + 0.15), sc0 = mixHex('#' + sunRGB.map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join(''), '#eeebe4', (1 - iv) * 0.6); sunL.color.copy(L(sc0));
-    skyMat.uniforms.uTurb.value = turb;
+    const sunRGB = Fx.map((v, i) => (0.85 * Math.pow(v / fxm, 0.45) + 0.15) * (1 - [0, 0.18, 0.4][i] * smk)), sc0 = mixHex('#' + sunRGB.map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join(''), '#eeebe4', (1 - iv) * 0.6); sunL.color.copy(L(sc0));
+    skyMat.uniforms.uTurb.value = turb; skyMat.uniforms.uSmoke.value = smk;
     // Niveau du ciel: le modèle donne les couleurs et leur répartition, notre courbe donne la luminance du zénith
     // (0,17 en plein jour, encore 0,04 au ras de l'horizon), sinon le zénith s'éteint au soleil bas et l'horizon blanchit.
     const sunV = [Math.sin(bearing) * Math.cos(el), Math.sin(el), -Math.cos(bearing) * Math.cos(el)];
@@ -842,7 +851,7 @@ export function createScene3D(container, opts = {}) {
     sunL.shadow.bias = -0.0006 * 487.5 / SHADOW_SPAN; sunL.shadow.normalBias = 0.5 * Math.min(2.5, SR / 150);
     sunL.shadow.radius = (1 + 7 * Math.pow(1 - iv, 1.3) + 1.5 * cum) * Math.max(0.35, 150 / SR); // taille apparente du soleil pour la pénombre: vraie au soleil franc, élargie sous le voile et les nuages; en texels, donc ramenée quand la zone s'élargit
     fill.intensity = (0.2 + 1.1 * Math.max(cumS, veil) * Math.min(1, Math.sin(el) / 0.3)) * (1 - 0.5 * twi);
-    fill.color.setRGB(0.86, 0.90, 1.0).lerp(new THREE.Color(0.9, 0.9, 0.9), Math.max(cumS, veil)); // ciel bleuté, gris sous les nuages ou le brouillard
+    fill.color.setRGB(0.86, 0.90, 1.0).lerp(new THREE.Color(0.9, 0.9, 0.9), Math.max(cumS, veil)).lerp(new THREE.Color(1.0, 0.86, 0.68), 0.6 * smk); // ciel bleuté, gris sous les nuages ou le brouillard, chaud sous la fumée
     fill.groundColor.copy(GROUND_TINT).multiplyScalar((0.5 + 1.3 * iv * Math.min(1, Math.sin(el) / 0.5)) * (1 - 0.6 * twi)); // rebond du sol
     const ambB = (0.3 + 0.55 * Math.min(1, Math.sin(el) / 0.5)) * (1 + 0.3 * Math.max(cumS, veil)); const tot = (Idir / Math.PI * 0.5 + ambB) / 2.2;
     compMat.uniforms.uExp.value = Math.max(0.5, Math.min(1.15 - 0.4 * twi, 0.64 * Math.pow(1 / Math.max(0.05, Math.min(1, tot)), 0.3)));
@@ -861,7 +870,7 @@ export function createScene3D(container, opts = {}) {
     const soft = twi * (1 - nightF); twL.intensity = 1.8 * soft; twL.color.copy(L(mixHex('#9fb0e0', '#e8bc92', glow * 0.5)));
     twL.target.position.copy(T0); twL.position.copy(T0).add(new THREE.Vector3(Math.sin(bearing) * Math.cos(0.17), Math.sin(0.17), -Math.cos(bearing) * Math.cos(0.17)).multiplyScalar(400));
     const sDir = new THREE.Vector3(Math.sin(bearing) * Math.cos(sp.altitude), Math.sin(sp.altitude), -Math.cos(bearing) * Math.cos(sp.altitude)); U.uSun.value.copy(sDir); const sc1 = rgb(sc0); U.uSunCol.value.set(sc1[0], sc1[1], sc1[2]);
-    const key = [cumS, mid, high, iv, uW, dk, sDir.x, sDir.y].map(v => v.toFixed(2)).join(','); if (key !== envKey && now - envAt > 120) { envKey = key; envAt = now; const uc = U.uCum.value; U.uCum.value = cumS; updateEnv(); U.uCum.value = uc; }
+    const key = [cumS, mid, high, iv, uW, dk, sDir.x, sDir.y, smk].map(v => v.toFixed(2)).join(','); if (key !== envKey && now - envAt > 120) { envKey = key; envAt = now; const uc = U.uCum.value; U.uCum.value = cumS; updateEnv(); U.uCum.value = uc; }
     const cgv = Math.max(0, new THREE.Vector3(vF.x, 0, vF.z).normalize().dot(sDir)), thick = 1 - iv;
     // Brouillard: couleur de l'horizon du même ciel physique dans la direction regardée (épaule comme dans le shader),
     // puis voile, cumulus, heure bleue et nuit comme le ciel; tout en linéaire.
@@ -872,6 +881,7 @@ export function createScene3D(container, opts = {}) {
     const hp = preethamRadiance([fdir.x, fdir.y, fdir.z], sunV, turb, 1.5), lph = Math.max(LUM(hp), 1e-6); let hc = hp.map(v => (v / lph * 0.3 + 0.7) * zenTarget * 2.4); const hl = LUM(hc); hc = hc.map(v => 0.45 * v / (1 + 0.5 * hl));
     let vc = mv([0.88, 0.89, 0.90], [0.64, 0.66, 0.69], thick); vc = mv(vc, mv([0.62, 0.62, 0.66], [0.95, 0.72, 0.55], 0.6), uW * 0.5);
     hc = mv(hc, lin(vc).map(v => v * 0.55), veil * (0.45 + 0.52 * thick * thick)); hc = mv(hc, lin([0.50, 0.54, 0.60]).map(v => v * 0.65), smooth(0.25, 0.85, cumS)); hc = mv(hc, lin([0.11, 0.24, 0.50]).map(v => v * (0.72 + 0.55 * cgv)), twi); hc = mv(hc, lin([0.045, 0.07, 0.16]).map(v => v * (0.8 + 0.3 * cgv)), nightF); hc = mv(hc, lin([0.30, 0.21, 0.13]).map(v => v * 0.5), 0.28 * urban * nightF); fog.color.setRGB(hc[0], hc[1], hc[2]); fog.near = 250 + camH * 4; fog.far = 1500 + camH * 14; // dernier mélange: pollution lumineuse au loin, en ville
+    if (cur.smk > 0) { const sl = LUM([fog.color.r, fog.color.g, fog.color.b]); fog.color.lerp(new THREE.Color(sl * 1.15, sl * 0.85, sl * 0.55), 0.6 * cur.smk); } // fumée: le voile du lointain prend aussi la teinte brun-orangé
     const rainK = cur.rain; if (rainK > 0) { fog.near *= 1 - 0.6 * rainK; fog.far *= 1 - 0.5 * rainK; fog.color.lerp(new THREE.Color().setScalar(fog.color.r * 0.2126 + fog.color.g * 0.7152 + fog.color.b * 0.0722), 0.5 * rainK); } // pluie: visibilité réduite, grisaille
     lampU.uWet.value = cur.wet;
     R.setRenderTarget(sceneRT); R.render(S, cam);
@@ -895,10 +905,22 @@ export function createScene3D(container, opts = {}) {
     const reflK = cur.pud > 0.01 ? 0.8 * cur.pud : 0;
     if (reflK > 0) { if (!skyFresh) { const uc = skyMat.uniforms.uCum.value; skyMat.uniforms.uCum.value = cumS; skyCam.update(R, skyScene); skyMat.uniforms.uCum.value = uc; skyFresh = true; } const RU = reflMat.uniforms; RU.tCol.value = sceneRT.texture; RU.tDepth.value = sceneRT.depthTexture; RU.uProj.value.copy(cam.projectionMatrix); RU.uProjInv.value.copy(cam.projectionMatrixInverse); RU.uUp.value.set(0, 1, 0).transformDirection(cam.matrixWorldInverse); RU.uV2W.value.setFromMatrix4(cam.matrixWorld); RU.uCamW.value.copy(cam.position); RU.uPud.value = cur.pud; RU.uTx.value.set(4 / PW, 4 / PH); pass(reflMat, reflRT2); // normale du sol mesurée sur 4 pixels: au loin, la profondeur arrondie la ferait hésiter d'une ligne à l'autre
       rblurMat.uniforms.tSrc.value = reflRT2.texture; rblurMat.uniforms.uDir.value.set(0, 1.8 / reflRT.height); pass(rblurMat, reflRT); } // flou vertical d'environ ±7 lignes
-    const CU = compMat.uniforms; CU.tRefl.value = reflRT.texture; CU.uRefl.value = reflK; CU.tDepth.value = sceneRT.depthTexture; CU.uSunUV.value.set(sunPx, sunPy); CU.uAspect.value = W / H; CU.uFlare.value = kFl * (0.35 + 0.65 * iv) * (1 - 0.85 * cum) * (fogSig > 0 ? Math.exp(-fogSig * Math.max(0, fogTopW - cam.position.y) / Math.max(Math.sin(el), 0.05)) : 1); CU.uRays.value = iv * iv * (1 - 0.7 * veil); CU.uVeilW.value = 1 + 1.2 * high + 0.5 * mid; CU.uVis.value = visCPU;
+    const CU = compMat.uniforms; CU.tRefl.value = reflRT.texture; CU.uRefl.value = reflK; CU.tDepth.value = sceneRT.depthTexture; CU.uSunUV.value.set(sunPx, sunPy); CU.uAspect.value = W / H; CU.uFlare.value = kFl * (0.35 + 0.65 * iv) * (1 - 0.85 * cum) * Math.sqrt(smokeT) * (fogSig > 0 ? Math.exp(-fogSig * Math.max(0, fogTopW - cam.position.y) / Math.max(Math.sin(el), 0.05)) : 1); CU.uRays.value = iv * iv * (1 - 0.7 * veil); CU.uVeilW.value = 1 + 1.2 * high + 0.5 * mid; CU.uVis.value = visCPU;
     CU.uDs.value = smooth(1, -4, realDeg); CU.uFog.value.set(fog.near, fog.far); // bleu désaturé: heure bleue et nuit
     // Brouillard en nappe: gris neutre plus clair que le voile habituel (lumière du ciel diffusée), lueur de la ville la nuit.
     CU.uFogSig.value = fogSig; CU.uFogTop.value = fogTopW; CU.uCamW.value.copy(cam.position); CU.uV2W.value.setFromMatrix4(cam.matrixWorld); CU.uProjInv.value.copy(cam.projectionMatrixInverse);
+    // Voile de fumée: 4 m² par gramme (environ 10 km de visibilité à 100 microgrammes), brun-orangé plus clair au soleil.
+    CU.uSmkSig.value = smk > 0 && smokeUg > 0 ? 4e-6 * smokeUg * smk : 0; CU.uSmkTop.value = g0 + 2500;
+    // Disque du soleil dans la fumée: transmission par couleur (le bleu s'éteint 1,6 fois plus vite que le vert, le rouge
+    // 0,7 fois), brillance plafonnée pour rester regardable; taille réelle (0,27 degré de rayon) un peu grossie.
+    CU.uSunR.value = 0;
+    if (smk > 0.1 && smokeUg > 0 && fwd > 0.08 && realDeg > -0.5) {
+      // Jamais à travers les nuages, le brouillard ou la pluie (comme le flare): pas de soleil direct, pas de disque.
+      const fogSunT = fogSig > 0 ? Math.exp(-fogSig * Math.max(0, fogTopW - cam.position.y) / Math.max(Math.sin(el), 0.05)) : 1;
+      const tau = Math.min(3, 0.008 * smokeUg) * smk, sn = Math.max(Math.sin(sp.altitude), 0.02), T = [0.7, 1, 1.6].map(k => Math.exp(-tau * k / sn)), mx = Math.max(...T), br = Math.min(5, 3e4 * mx) * smooth(0.1, 0.4, smk) * iv * (1 - cum) * fogSunT * (1 - cur.rain);
+      if (br > 0.01) { CU.uSunR.value = 1.3 * Math.tan(0.0047) / (2 * Math.tan(cam.fov * Math.PI / 360)); CU.uSunDisc.value.set(T[0] / mx * br, T[1] / mx * br, T[2] / mx * br); }
+    }
+    if (CU.uSmkSig.value > 0) { const scl = LUM([fog.color.r, fog.color.g, fog.color.b]) * (1.25 + 0.5 * (1 - twi)); CU.uSmkCol.value.set(scl * 1.15, scl * 0.85, scl * 0.55); }
     if (fogSig > 0) { const fcl = LUM([fog.color.r, fog.color.g, fog.color.b]); CU.uFogCol.value.set(fog.color.r, fog.color.g, fog.color.b).lerp(new THREE.Vector3(fcl, fcl, fcl), 0.65).multiplyScalar(1.6); }
     // Gouttes: un peu plus claires que l'horizon (teinte du brouillard, en affichage), penchées selon le vent.
     CU.uRain.value = rainK > 0.005 ? rainK : 0; CU.uTime.value = (now / 1000) % 60; CU.uFocal.value = PH / (2 * Math.tan(cam.fov * Math.PI / 360)); CU.uSlant.value = 0.06 + 0.22 * clamp((weatherRow?.wind ?? 10) / 50);
@@ -921,7 +943,12 @@ export function createScene3D(container, opts = {}) {
       + (fogRel == null ? '' : fogRel >= 600 ? ', nappe épaisse' : `, nappe d’environ ${Math.max(10, Math.round(fogRel / 10) * 10)} m au-dessus du sol`) : '';
     const cond0 = rainTxt && realDeg >= 0.5 ? rainTxt + (noSun ? ' : ciel couvert, aucune ombre' : tg.iv >= 0.45 ? ' : soleil entre les averses' : ' : ombres très douces') : rainTxt ? rainTxt + (realDeg < -0.8 ? ', rues mouillées' : '') : realDeg < -12 ? 'Nuit' : night ? 'Heure bleue : ciel bleu profond, bâtiments en silhouette' : realDeg < 0.5 ? 'Soleil à l’horizon' : tg.cum >= 0.7 ? (noSun ? 'Ciel couvert : aucune ombre' : 'Nuages bas nombreux : soleil par éclaircies seulement') : Math.max(tg.mid, tg.high) >= 0.3 ? vt + (tg.cum >= 0.15 ? ', quelques nuages bas' : '') : tg.cum >= 0.15 ? 'Nuages bas épars : plein soleil entre les ombres de nuages' : 'Ciel dégagé : soleil franc, ombres nettes';
     const fogSun = realDeg < 0.5 ? '' : fogT < 0.1 ? ' : soleil caché, aucune ombre' : fogT < 0.5 ? ' : soleil voilé, ombres douces' : '';
-    const cond = !fogTxt ? cond0 : rainTxt ? cond0 + ' · ' + fogTxt : fogTxt + fogSun;
+    const cond1 = !fogTxt ? cond0 : rainTxt ? cond0 + ' · ' + fogTxt : fogTxt + fogSun;
+    // Fumée de feux (mêmes niveaux que l'icône du soleil de l'app), seulement quand elle est dessinée (20 microgrammes et
+    // plus). La phrase sur le soleil seulement s'il y a vraiment du soleil direct; sinon, la condition du ciel suit.
+    const smokeSun = realDeg >= 0.5 && !rainTxt && !fogTxt && tg.iv >= 0.45 && tg.cum < 0.7;
+    const smokeTxt = tg.smk > 0 && smokeUg != null ? `Fumée de feux ${smokeUg >= 60 ? 'dense' : 'modérée'} prévue (FireWork, Environnement Canada)` + (smokeSun ? (smokeT < 0.4 ? ' : soleil orangé, ombres douces' : ' : soleil légèrement voilé') : '') : '';
+    const cond = smokeTxt ? (smokeSun ? smokeTxt : smokeTxt + ' · ' + cond1) : cond1;
     const parts = low == null ? '' : `Nuages bas ${low} %, nuages d’altitude ${Math.round(alt)} %, soleil direct ${sun == null ? 0 : sun} %`;
     const where = night ? 'Soleil sous l’horizon' : `Soleil à ${Math.max(0, Math.round(realDeg))}° au-dessus de l’horizon, plein ${DIRS[Math.round(((bearing * 180 / Math.PI) % 360) / 45) % 8]}`;
     const est = (0.38 + 0.36 * Math.max(veil * (0.4 + 0.6 * thick), cum * 0.5)) * dk;
@@ -954,6 +981,13 @@ export function createScene3D(container, opts = {}) {
     setData(scene) { data = scene; if (scene && scene.origin) origin = scene.origin; rebuild(); },
     setTerrain(t) { terrain = makeTerrain(t); rebuild(); },
     setTime(ms) { if (ms !== dateMs) { dateMs = ms; dirty = true; } },
+    // Fumée de feux au sol à l'heure affichée (FireWork, microgrammes par mètre cube), ou null. Dessinée à partir de
+    // 20 seulement (prudence: la couche mêle le fond urbain, 5 à 15 en ville), entière vers 150.
+    setSmoke(ug) {
+      smokeUg = ug != null && ug >= 0 ? ug : null;
+      tg.smk = smokeUg != null && smokeUg >= 20 ? clamp(Math.log10(smokeUg / 20) / Math.log10(7.5)) : 0;
+      dirty = true;
+    },
     setWeather(row) {
       weatherRow = row || null;
       const s = row?.sunFraction == null ? 0.02 : row.sunFraction, cum = (row?.cloudLow ?? 0) / 100;
