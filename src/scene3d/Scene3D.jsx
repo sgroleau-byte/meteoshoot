@@ -97,66 +97,11 @@ async function doSync(pid, onFetch) {
   return null;
 }
 
-// Chargement (v633.181): courbes de niveau qui s'écoulent par-dessus la scène en construction. Un champ de bruit lissé
-// (trois octaves) dérive lentement; ses isolignes (marching squares, chaînées en polylignes) sont redessinées à chaque
-// image: des courbes comme sur une carte topographique, jamais les mêmes, qui se tracent une à une à l'ouverture puis
-// glissent tant que les environs se calculent, et s'effacent quand la scène apparaît (la scène pousse alors, engine.js).
-// Montées seulement après 0,5 s d'attente: un chargement déjà en cache ne les montre pas.
-function ContourLines({ fading }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    const svg = ref.current; if (!svg) return undefined;
-    const NX = 56, NY = 40, W = 1100, H = 800, X0 = -550, Y0 = -400, W1 = NX + 1, LV = [-0.42, -0.3, -0.18, -0.06, 0.06, 0.18, 0.3, 0.42];
-    const hash = (i, j, k) => { const v = Math.sin(i * 127.1 + j * 311.7 + k * 74.7) * 43758.5453; return v - Math.floor(v); };
-    const sm = (t) => t * t * (3 - 2 * t);
-    const vnoise = (x, y, k) => { const i = Math.floor(x), j = Math.floor(y), fx = sm(x - i), fy = sm(y - j), a = hash(i, j, k), b = hash(i + 1, j, k), c = hash(i, j + 1, k), d = hash(i + 1, j + 1, k); return (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy; };
-    const F = new Float32Array(W1 * (NY + 1));
-    const field = (t) => { for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) { const x = i / NX * 4.2, y = j / NY * 3.05; F[j * W1 + i] = (vnoise(x + t * 0.045, y + t * 0.025, 1) - 0.5) * 0.9 + (vnoise(x * 2.1 - t * 0.035, y * 2.1 + t * 0.02, 2) - 0.5) * 0.35 + (vnoise(x * 4.3 + t * 0.02, y * 4.3 - t * 0.015, 3) - 0.5) * 0.12; } };
-    const key = (p) => Math.round(p[0] * 50) + ',' + Math.round(p[1] * 50);
-    const iso = (lv) => { // segments par cellule, puis chaînage par les bouts
-      const segs = [], sx = W / NX, sy = H / NY;
-      for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
-        const v0 = F[j * W1 + i], v1 = F[j * W1 + i + 1], v2 = F[(j + 1) * W1 + i + 1], v3 = F[(j + 1) * W1 + i];
-        const c = (v0 > lv ? 8 : 0) | (v1 > lv ? 4 : 0) | (v2 > lv ? 2 : 0) | (v3 > lv ? 1 : 0); if (c === 0 || c === 15) continue;
-        const X = X0 + i * sx, Y = Y0 + j * sy, top = [X + sx * (lv - v0) / (v1 - v0), Y], right = [X + sx, Y + sy * (lv - v1) / (v2 - v1)], bottom = [X + sx * (lv - v3) / (v2 - v3), Y + sy], left = [X, Y + sy * (lv - v0) / (v3 - v0)];
-        const T = { 1: [[left, bottom]], 2: [[bottom, right]], 3: [[left, right]], 4: [[top, right]], 5: [[left, top], [bottom, right]], 6: [[top, bottom]], 7: [[left, top]], 8: [[left, top]], 9: [[top, bottom]], 10: [[left, bottom], [top, right]], 11: [[top, right]], 12: [[left, right]], 13: [[bottom, right]], 14: [[left, bottom]] };
-        for (const sg of T[c]) segs.push(sg);
-      }
-      const ends = new Map(); segs.forEach((sg, k) => { for (const p of sg) { const kk = key(p); if (!ends.has(kk)) ends.set(kk, []); ends.get(kk).push(k); } });
-      const used = new Uint8Array(segs.length), out = [];
-      for (let k = 0; k < segs.length; k++) {
-        if (used[k]) continue; used[k] = 1; const line = [segs[k][0], segs[k][1]];
-        for (const dir of [1, -1]) for (;;) { const e = dir === 1 ? line[line.length - 1] : line[0], cand = (ends.get(key(e)) || []).find(q => !used[q]); if (cand === undefined) break; used[cand] = 1; const sg = segs[cand], nx = key(sg[0]) === key(e) ? sg[1] : sg[0]; if (dir === 1) line.push(nx); else line.unshift(nx); }
-        if (line.length >= 4) out.push(line);
-      }
-      return out;
-    };
-    const paths = LV.map((lv, k) => { const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('fill', 'none'); p.setAttribute('stroke', '#fff'); p.setAttribute('stroke-width', (0.75 + 0.2 * (k % 3)).toFixed(2)); p.setAttribute('stroke-linejoin', 'round'); p.setAttribute('stroke-linecap', 'round'); p.setAttribute('opacity', (0.32 + 0.06 * (k % 4)).toFixed(2)); svg.appendChild(p); return p; });
-    const t0 = performance.now(); let raf = 0, drawn = false, tick2 = 0;
-    const tick = (now) => {
-      raf = requestAnimationFrame(tick);
-      if (tick2++ % 2) return; // 30 images par seconde suffisent
-      field((now - t0) / 1000);
-      paths.forEach((p, k) => p.setAttribute('d', iso(LV[k]).map(l => 'M' + l.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L')).join('')));
-      if (!drawn) { // premier tracé: chaque courbe se dessine d'un bout à l'autre, les niveaux l'un après l'autre
-        drawn = true;
-        paths.forEach((p, k) => { const len = p.getTotalLength() || 1; p.style.strokeDasharray = `${len}`; p.style.strokeDashoffset = `${len}`; p.style.animation = `scene3dWireDraw ${(1.4 + 0.3 * (k % 3)).toFixed(1)}s ease-out ${(0.22 * k).toFixed(2)}s forwards`; setTimeout(() => { p.style.strokeDasharray = 'none'; p.style.animation = 'none'; }, 2400 + 220 * k); });
-      }
-    };
-    raf = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(raf); paths.forEach(p => p.remove()); };
-  }, []);
-  return <svg ref={ref} viewBox="-550 -400 1100 800" preserveAspectRatio="xMidYMid slice" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', filter: 'drop-shadow(0 0 1px rgba(0,0,0,0.5))', opacity: fading ? 0 : 1, transition: 'opacity 0.7s ease' }} />;
-}
-
-export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, visible, zoomRef, projectId, sunny, onToggleSunny }) => { // sunny: météo coupée (journée ensoleillée) // zoomRef.current(f) : les boutons + et - de la fenêtre
+export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, visible, zoomRef, projectId, sunny, onToggleSunny, onHorizon }) => { // sunny: météo coupée (journée ensoleillée) // zoomRef.current(f) : les boutons + et - de la fenêtre
   const box = useRef(null);
   const eng = useRef(null);
   const [info, setInfo] = useState(null);
-  const [status, setStatus] = useState(null); // { text, busy }: busy = courbes de niveau du chargement (ContourLines), sinon message seul (erreur)
-  const busy = !!(status && status.busy);
-  const [wire, setWire] = useState(0); // courbes de niveau du chargement: 0 absentes, 1 visibles (après 0,5 s d'attente), 2 en train de s'effacer
-  useEffect(() => { if (busy) { const id = setTimeout(() => setWire(1), 500); return () => clearTimeout(id); } setWire(w => (w === 1 ? 2 : 0)); const id = setTimeout(() => setWire(0), 750); return () => clearTimeout(id); }, [busy]);
+  const [status, setStatus] = useState(null); // { text, busy }: busy = anneau d'attente, sinon message seul (erreur)
   const [engReady, setEngReady] = useState(0); // compte des moteurs créés: relance les effets qui en dépendent
   // Modèle d'architecte importé: { info, pl } une fois posé; prep = progression des préparations en cours (0 à 1) par
   // projet: la préparation continue si la vue se ferme ou si l'on passe à un autre projet. dl = projet dont le modèle
@@ -218,7 +163,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
       let pending = 2, failed = false; const done = () => { pending--; if (pending <= 0 && !failed && !cancelled && eng.current === e) setStatus(null); };
       loadScene(lat, lng).then(d => { if (!cancelled && eng.current === e) { e.setData(d); done(); } })
         .catch(err => { console.warn('[scene3d] environs indisponibles:', err); failed = true; if (!cancelled) setStatus({ text: 'Environs indisponibles, bâtiments du projet seulement', busy: false }); });
-      loadTerrain(lat, lng).then(t => { if (!cancelled && eng.current === e) { e.setTerrain(t); done(); } })
+      loadTerrain(lat, lng).then(t => { if (!cancelled && eng.current === e) { e.setTerrain(t); if (onHorizon) { const h = e.horizonProfile(); if (h) onHorizon(h); } done(); } }) // profil d'horizon du relief réel vers la fiche (ombre du terrain)
         .catch(err => { console.warn('[scene3d] relief indisponible, sol plat:', err); done(); });
     }).catch(err => {
       console.error('[scene3d] moteur:', err); if (cancelled) return;
@@ -422,8 +367,11 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
           <text x="17" y="4.2" textAnchor="middle" fontSize="7" fontFamily="Avenir Next, Avenir, sans-serif" fontWeight="600" fill="#fff" transform={`rotate(${info.northDeg.toFixed(1)} 17 2)`}>N</text>
         </g>
       </svg>}
-      {wire > 0 && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}><ContourLines fading={wire === 2} /></div>}
       {status && <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', pointerEvents: 'none', animation: 'msFade 0.4s ease both' }}>
+        {status.busy && <svg width="34" height="34" viewBox="0 0 30 30" style={{ animation: 'scene3dSpin 1.1s linear infinite', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.35))' }}>
+          <circle cx="15" cy="15" r="12" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5"/>
+          <circle cx="15" cy="15" r="12" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="22 53.4"/>
+        </svg>}
         <div className="font-bebas-book" style={{ fontSize: '13px', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.8)', textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}>{status.text.toUpperCase()}</div>
       </div>}
     </div>

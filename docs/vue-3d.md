@@ -587,6 +587,27 @@ importé, lui, est le fichier de l'architecte.
     À l'ouverture elles se tracent une à une (`stroke-dashoffset`, niveaux décalés de 0,22 s), puis glissent; elles
     s'effacent en 0,7 s quand la scène apparaît. Montées après 0,5 s d'attente seulement (un chargement en cache ne les
     montre pas, ou à peine). Les traits fins de la v633.180 sont retirés.
+- **v633.182 (10 octobre 2026): retours de Stéphane sur la v633.181.** « Loading des courbes de niveau on enlève »,
+  « enlève le genre de drap vert, pas très utile ni très beau », régressions SOL SAT, « ombre terrain possible » et
+  « on a perdu le sapin entre nos deux maisons ».
+  - **Courbes de niveau retirées**, l'anneau d'attente d'avant revient (le mot CHARGEMENT reste); la pousse de la scène
+    (v633.181) reste.
+  - **Nappe du sous-bois et lisière retirées** (`canopyFill` supprimé; les peuplements de la carte écoforestière servent
+    encore à la forme des couronnes). `fillMat` et `edgeMat` restent déclarés (listes des matériaux), sans maillage.
+  - **SOL SAT:** le calage (`satShift`) se refait quand les environs changent (`sat.shiftFor`): allumé avant leur
+    arrivée, il valait zéro et restait en mémoire sur l'image mise en cache (depuis la v633.179). Vérifié: image allumée
+    pendant le chargement, calage 2 m est et 10 m sud une fois les environs arrivés.
+  - **Sapins près des maisons:** le dégagement des arbres (`prisms`, clearance.js) reprend la hauteur des murs (`b.h`),
+    pas le faîte (`hTop`, v633.179): avec le faîte, un sapin collé à une maison ne trouvait plus de place et disparaissait.
+    Les couronnes peuvent de nouveau frôler un toit en pente.
+  - **Ombre du terrain (barre rouge de la bande horaire):** pas une régression de la 3D. Le profil d'horizon de la
+    fiche venait d'open-elevation (`src/weather/elevation.js`, 36 directions, échantillons dès 15 m sur un relevé de
+    30 m), mis en cache le 1er mars 2026: à Stoneham il donne 29 à 35° vers l'est, contre 14 à 20° au relief LiDAR (à
+    250 à 340 m); en octobre, le soleil passe sous 35° jusqu'à midi, d'où le rouge jusqu'à 12 h 34 alors que la 3D (relief
+    LiDAR) montre la maison au soleil. Désormais, quand la 3D a chargé son relief, `engine.horizonProfile()` (36
+    directions, 10 m à 5 km, vu de 1,6 m au-dessus du sol; mesuré: 14 à 20° vers l'est à Stoneham) remonte par
+    `onHorizon` à la fiche, qui s'en sert à la place du profil d'open-elevation (`lidarHorizonRef`). Le cache Supabase
+    n'est pas réécrit (le client n'a pas le droit d'écraser une entrée): sans la 3D ouverte, l'ancien profil reste.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

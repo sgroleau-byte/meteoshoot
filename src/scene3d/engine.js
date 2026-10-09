@@ -593,8 +593,9 @@ export function createScene3D(container, opts = {}) {
     if (satObj) { S.remove(satObj); satObj.geometry.dispose(); satObj.material.map.dispose(); satObj.material.dispose(); satObj = null; }
     if (sat && origin) {
       const mLng = 111320 * Math.cos(origin[0] * Math.PI / 180), cx = (sat.lng - origin[1]) * mLng, cn = (sat.lat - origin[0]) * 111320;
-      // Image recalée sur les empreintes (satShift, v633.179), une fois par image.
-      if (!sat.shift) sat.shift = satShift(sat, data ? data.bld : [], cx, cn);
+      // Image recalée sur les empreintes (satShift, v633.179), refaite quand les environs changent (image allumée avant
+      // leur arrivée: sans empreintes, le calage valait zéro et restait en mémoire, v633.182).
+      if (!sat.shift || sat.shiftFor !== data) { sat.shift = satShift(sat, data ? data.bld : [], cx, cn); sat.shiftFor = data; }
       if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.satShift = sat.shift; // vérification en développement
       satObj = satMesh(terrain, sat, cx + sat.shift[0], cn + sat.shift[1]); S.add(satObj);
     }
@@ -852,95 +853,14 @@ export function createScene3D(container, opts = {}) {
     return all.map(t => { const s = t.s; return [s.cx, s.cn, reachOf(s), t.y, s.kind === 'con' ? t.y + s.base : t.y + t.h - (s.top + 1) * s.sy, t.y + t.h, t.x, t.n, s.tr, t.y + s.th, s.kind === 'con' ? 1 : 0]; });
   }
 
-  // Sous-bois: grille de canopée des massifs (api/trees.js, demi-mètres, zéros par plages) en nappe à 72 % de la hauteur
-  // des cimes voisines, dans le tiers bas des couronnes de peuplement (voir crownY: vue d'en haut, elle comble les trous
-  // entre les couronnes; d'en bas, elle est invisible), au contour décalé au hasard (pas de marches de 3 m), plus une
-  // lisière trouée au bord, du bas des couronnes à la nappe. Teinte de l'intérieur du
-  // feuillage, plus verte là où les conifères dominent. La nappe ne porte pas d'ombre (elle ferait un bloc au bord du
-  // boisé): les cimes et la lisière, trouées, s'en chargent.
-  const NAPPE_K = 0.72, EDGE_K = 0.75; // nappe dans le tiers bas des couronnes de peuplement (de 62 % à 100 % de la hauteur), lisière juste sous leur bas
+  // Peuplements de la carte écoforestière (grille de canopée des massifs, api/trees.js, demi-mètres, zéros par plages):
+  // servent à la forme des couronnes (treeShape). La nappe de sous-bois et la lisière qu'on en tirait (v633.172) sont
+  // retirées depuis la v633.182 (Stéphane: « le genre de drap vert, pas très utile ni très beau »).
   function decodeCanopy(cn) {
     const N = cn.n, res = cn.res, half = cn.half, bin = atob(cn.d), v = new Uint8Array(N * N);
     for (let p = 0, k = 0; p < bin.length && k < N * N; p++) { const b = bin.charCodeAt(p); if (b) v[k++] = b; else k += bin.charCodeAt(++p); }
     const at = (x, n) => { const i = Math.floor((x + half) / res), j = Math.floor((n + half) / res); return i < 0 || j < 0 || i >= N || j >= N ? 0 : v[j * N + i]; };
     return { N, res, half, v, at };
-  }
-  function canopyFill(cg, treeList, P) {
-    const { N, res, half, v } = cg;
-    // Part de conifères par case de 12 m, d'après les arbres mesurés.
-    const share = new Map(), key = (x, n) => `${Math.floor(x / 12)},${Math.floor(n / 12)}`;
-    treeList.forEach(t => { if (t.length < 5) return; const k = key(t[0], t[1]), c = share.get(k) || [0, 0]; c[0]++; c[1] += t[4]; share.set(k, c); });
-    const BROAD = [L('#454826'), L('#4d4427'), L('#3c4a2a')], CON = L('#253826'), cc = new THREE.Color();
-    const pos = [], col = [], ind = [], idx = new Int32Array(N * N).fill(-1), top = new Float32Array(N * N), gy = new Float32Array(N * N), cells = [];
-    const at0 = (i, j) => (i < 0 || j < 0 || i >= N || j >= N) ? 0 : v[j * N + i];
-    // Rentrée d'une case (3 m): la canopée mesurée déborde un peu des couronnes dessinées, la nappe doit rester dessous.
-    const at = (i, j) => at0(i, j) && at0(i - 1, j) && at0(i + 1, j) && at0(i, j - 1) && at0(i, j + 1) ? v[j * N + i] : 0;
-    const vert = (i, j) => {
-      const k = j * N + i; if (idx[k] >= 0) return idx[k];
-      const x = -half + (i + 0.5) * res, n = -half + (j + 0.5) * res; let m = 0, c9 = 0;
-      for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) { const u = at(i + a, j + b); if (u) { m += u; c9++; } }
-      m /= c9 || 1; // moyenne des cases boisées voisines: la nappe reste sous la cime d'un petit arbre voisin d'un grand
-      gy[k] = terrain.hTri(x, n); top[k] = gy[k] + NAPPE_K * m / 2;
-      const c = share.get(key(x, n)), f = c ? c[1] / c[0] : 0;
-      cc.copy(BROAD[Math.floor(hsh(x, n, 7) * BROAD.length)]).lerp(CON, f).multiplyScalar(0.55 + 0.4 * hsh(x, n, 6)); // taches claires et sombres
-      pos.push(x, top[k], -n); col.push(cc.r, cc.g, cc.b); cells.push([i, j, m]); idx[k] = pos.length / 3 - 1; return idx[k];
-    };
-    // Pas de sous-bois dans un bâtiment ni contre ses murs (formes du projet comprises, que le serveur ne connaît pas):
-    // cases à moins de 0,6 m d'une empreinte retirées; la nappe s'ouvre autour d'une maison du boisé et sa lisière en
-    // fait le tour.
-    const quad = (i, j) => i >= 0 && j >= 0 && i < N - 1 && j < N - 1 && at(i, j) && at(i + 1, j) && at(i + 1, j + 1) && at(i, j + 1);
-    const blk = new Uint8Array(N * N);
-    for (let j = 0; j < N - 1; j++) for (let i = 0; i < N - 1; i++) if (quad(i, j) && sheetCellBlocked(-half + (i + 1) * res, -half + (j + 1) * res, res, P)) blk[j * N + i] = 1;
-    const filled = (i, j) => quad(i, j) && !blk[j * N + i];
-    for (let j = 0; j < N - 1; j++) for (let i = 0; i < N - 1; i++) if (filled(i, j)) { const a = vert(i, j), b = vert(i + 1, j), c = vert(i + 1, j + 1), d = vert(i, j + 1); ind.push(a, b, c, a, c, d); }
-    if (!ind.length) return;
-    // Bord: sommet touché par une case vide, déplacé jusqu'à 1,3 m dans une direction tirée au sort (à la même hauteur:
-    // abaissé, le bord faisait une pente raide dont on voyait le dessus depuis une clairière).
-    const place = (q, dist) => {
-      const [i, j, m] = cells[q], k = j * N + i, x = -half + (i + 0.5) * res, n = -half + (j + 0.5) * res, a = hsh(x, n, 8) * 6.28;
-      pos[q * 3] = x + Math.cos(a) * dist; pos[q * 3 + 2] = -(n + Math.sin(a) * dist);
-      gy[k] = terrain.hTri(pos[q * 3], -pos[q * 3 + 2]); top[k] = gy[k] + NAPPE_K * m / 2; pos[q * 3 + 1] = top[k];
-    };
-    const moved = new Uint8Array(cells.length);
-    cells.forEach(([i, j], q) => {
-      if (filled(i - 1, j - 1) && filled(i, j - 1) && filled(i - 1, j) && filled(i, j)) return;
-      place(q, 1.3 * hsh(-half + (i + 0.5) * res, -half + (j + 0.5) * res, 9)); moved[q] = 1;
-    });
-    // Un sommet déplacé qui amène un triangle à moins de 0,3 m d'un bâtiment revient au centre de sa case (à 0,6 m au
-    // moins); la lisière suit, elle est bâtie sur ces mêmes sommets.
-    for (let pass = 0, changed = 1; changed && pass < 4; pass++) {
-      changed = 0;
-      for (let t = 0; t < ind.length; t += 3) {
-        const a = ind[t], b = ind[t + 1], c = ind[t + 2]; if (moved[a] !== 1 && moved[b] !== 1 && moved[c] !== 1) continue;
-        if (!sheetTriTooClose([[pos[a * 3], -pos[a * 3 + 2]], [pos[b * 3], -pos[b * 3 + 2]], [pos[c * 3], -pos[c * 3 + 2]]], P)) continue;
-        for (const q of [a, b, c]) if (moved[q] === 1) { place(q, 0); moved[q] = 2; changed++; }
-      }
-    }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(ind); g.computeVertexNormals();
-    const m = new THREE.Mesh(g, fillMat); m.receiveShadow = true; S.add(m); statics.push(m);
-    // Lisière: chaque côté de case remplie qui borde une case vide.
-    const ep = [], ec = [], eu = [], ei = [];
-    const side = (i0, j0, i1, j1) => {
-      const k0 = j0 * N + i0, k1 = j1 * N + i1, p0 = idx[k0] * 3, p1 = idx[k1] * 3, b = ep.length / 3;
-      const x0 = pos[p0], z0 = pos[p0 + 2], x1 = pos[p1], z1 = pos[p1 + 2], u0 = (x0 - z0) / 4, u1 = (x1 - z1) / 4;
-      // Bande de feuillage dans le haut seulement (du bas des couronnes à la nappe): on voit les troncs dessous, comme
-      // à la lisière d'un vrai boisé; une lisière pleine jusqu'au sol faisait un mur de haie vu de près.
-      const b0 = gy[k0] + EDGE_K * (top[k0] - gy[k0]), b1 = gy[k1] + EDGE_K * (top[k1] - gy[k1]);
-      ep.push(x0, b0, z0, x1, b1, z1, x1, top[k1], z1, x0, top[k0], z0);
-      for (const q of [p0, p1, p1, p0]) ec.push(col[q] * 1.3, col[q + 1] * 1.3, col[q + 2] * 1.3);
-      eu.push(u0, 0, u1, 0, u1, (top[k1] - b1) / 4, u0, (top[k0] - b0) / 4);
-      ei.push(b, b + 1, b + 2, b, b + 2, b + 3);
-    };
-    for (let j = 0; j < N - 1; j++) for (let i = 0; i < N - 1; i++) {
-      if (!filled(i, j)) continue;
-      if (!filled(i, j - 1)) side(i, j, i + 1, j);
-      if (!filled(i + 1, j)) side(i + 1, j, i + 1, j + 1);
-      if (!filled(i, j + 1)) side(i + 1, j + 1, i, j + 1);
-      if (!filled(i - 1, j)) side(i, j + 1, i, j);
-    }
-    if (!ei.length) return;
-    const ge = new THREE.BufferGeometry(); ge.setAttribute('position', new THREE.Float32BufferAttribute(ep, 3)); ge.setAttribute('color', new THREE.Float32BufferAttribute(ec, 3)); ge.setAttribute('uv', new THREE.Float32BufferAttribute(eu, 2)); ge.setIndex(ei); ge.computeVertexNormals();
-    const me = new THREE.Mesh(ge, edgeMat); me.castShadow = true; me.receiveShadow = true; S.add(me); statics.push(me);
   }
 
   // Point de vue: à hauteur d'oeil, côté soleil du créneau (AM: sud-est, PM: sud-ouest), dans l'espace libre,
@@ -1188,7 +1108,6 @@ export function createScene3D(container, opts = {}) {
       if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.P = P; // vérification en développement
       const cg = data.canopy ? decodeCanopy(data.canopy) : null; // peuplements de la carte écoforestière (sous-bois, forme des couronnes)
       kept = trees(mRing ? data.trees.filter(treeFree) : data.trees, P, cg);
-      if (cg) canopyFill(cg, data.trees, P);
       treeEnv = kept;
       lamps(data.roads, data.bld);
     }
@@ -1508,6 +1427,24 @@ export function createScene3D(container, opts = {}) {
       rebuild();
     },
     setData(scene) { data = scene; if (scene && scene.origin) origin = scene.origin; growNext = !!(scene && scene.bld && scene.bld.length); rebuild(); },
+    // Profil d'horizon d'après le relief chargé (LiDAR ou modèle d'élévation, terrain.js): pour 36 directions, l'angle le
+    // plus haut que fait le sol jusqu'à 5 km (pas de 10 m jusqu'à 300 m, puis 25 m jusqu'à 1,5 km, puis 100 m), vu de
+    // 1,6 m au-dessus du sol du projet. Remplace, dans la fiche projet, le profil tiré d'open-elevation (relevé grossier:
+    // 29 à 35° vers l'est à Stoneham contre 14 à 20° au LiDAR, d'où une « ombre du terrain » jusqu'à midi en octobre).
+    // null sans relief réel.
+    horizonProfile() {
+      if (!terrain || terrain.flat) return null;
+      const z0 = terrain.hTri(0, 0) + 1.6, out = [];
+      for (let d = 0; d < 36; d++) {
+        const br = d * 10 * Math.PI / 180, sx = Math.sin(br), cx = Math.cos(br); let maxAngle = 0;
+        for (let dist = 10; dist <= 5000; dist += dist < 300 ? 10 : dist < 1500 ? 25 : 100) {
+          const z = terrain.hTri(dist * sx, dist * cx); if (!(z > z0)) continue;
+          const ang = Math.atan2(z - z0, dist) * 180 / Math.PI; if (ang > maxAngle) maxAngle = ang;
+        }
+        out.push({ bearing: d * 10, maxAngle: Math.round(maxAngle * 100) / 100 });
+      }
+      return out;
+    },
     setTerrain(t) { terrain = makeTerrain(t); rebuild(); },
     setTime(ms) { if (ms !== dateMs) { dateMs = ms; dirty = true; } },
     // Fumée de feux au sol à l'heure affichée (FireWork, microgrammes par mètre cube), ou null. Dessinée à partir de

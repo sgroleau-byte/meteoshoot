@@ -376,6 +376,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   const [terrainProfile, setTerrainProfile] = useState(null);
   const [terrainShadow, setTerrainShadow] = useState(false);
   const terrainProfileRef = React.useRef(null);
+  const lidarHorizonRef = React.useRef(null); // profil d'horizon du relief réel (vue 3D, engine.horizonProfile): prime sur open-elevation
   
   // === Buildings & Shadow Simulation ===
   const [buildings, setBuildings] = useState(() => project?.buildings || []);
@@ -1501,8 +1502,9 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   React.useEffect(() => {
     if (!elevLat || !elevLng) return;
     let cancelled = false;
+    lidarHorizonRef.current = null;
     getElevationProfile(elevLat, elevLng).then(profile => {
-      if (!cancelled && profile) {
+      if (!cancelled && profile && !lidarHorizonRef.current) { // le profil du relief réel, s'il est déjà là, reste
         terrainProfileRef.current = profile;
         setTerrainProfile(profile);
       }
@@ -2694,7 +2696,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                 {/* Map controls - stacked vertically with subtle border */}
                 <div ref={mapContainerRef} className="detail-map-keep" style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#181b1e', filter: activeEngine === 'apple' ? 'none' : 'saturate(0.50)' }}/>
                 {/* Vue 3D par-dessus la carte (la carte reste montée, avec son état): même curseur, même météo */}
-                <Scene3D visible={view3d} lat={project?.lat} lng={project?.lng} buildings={buildings} orientation={project?.orientation} timeMs={sceneTimeMs} weatherRow={sceneWeatherRow} zoomRef={scene3dZoom} projectId={project?.id} sunny={sceneSunny} onToggleSunny={toggleSceneSunny}/>
+                <Scene3D visible={view3d} lat={project?.lat} lng={project?.lng} buildings={buildings} orientation={project?.orientation} timeMs={sceneTimeMs} weatherRow={sceneWeatherRow} zoomRef={scene3dZoom} projectId={project?.id} sunny={sceneSunny} onToggleSunny={toggleSceneSunny} onHorizon={(p) => { lidarHorizonRef.current = p; terrainProfileRef.current = p; setTerrainProfile(p); }}/>
                 <canvas ref={flareCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}/>
                 {nightOpacity > 0 && <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 3, background: `radial-gradient(ellipse at center, transparent 30%, rgba(0,0,15,${0.4 * nightOpacity}) 70%, rgba(0,0,15,${0.7 * nightOpacity}) 100%)`, transition: 'opacity 0.5s ease' }}/>}
                 {/* Fixed center pin */}
