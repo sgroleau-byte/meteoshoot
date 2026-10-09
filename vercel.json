@@ -8,6 +8,9 @@
     },
     "api/terrain.js": {
       "maxDuration": 60
+    },
+    "api/horizon.js": {
+      "maxDuration": 60
     }
   },
   "github": {

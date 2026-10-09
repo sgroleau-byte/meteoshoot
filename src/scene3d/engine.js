@@ -17,6 +17,7 @@ RectAreaLightUniformsLib.init(); // tables des lumières surfaciques (façades a
 import SunCalc from 'suncalc';
 import { DIRS, centroid, edgesOf, localRings, signedArea } from './footprint.js';
 import { TEX_PERIOD, flatTerrain, makeTerrain } from './terrain.js';
+import { horizonProfile } from './horizon.js';
 import { prisms, fitTree, reachOf, sheetCellBlocked, sheetTriTooClose, LOBE_PARTS, CON_TIERS, CON_TIERS_LOW } from './clearance.js';
 import { segDist, dpClosed, regularizeRing } from './ring.js';
 import { roofFaces, roofTop } from './roof.js';
@@ -1453,24 +1454,12 @@ export function createScene3D(container, opts = {}) {
       rebuild();
     },
     setData(scene) { data = scene; if (scene && scene.origin) origin = scene.origin; growNext = !!(scene && scene.bld && scene.bld.length); rebuild(); },
-    // Profil d'horizon d'après le relief chargé (LiDAR ou modèle d'élévation, terrain.js): pour 36 directions, l'angle le
-    // plus haut que fait le sol jusqu'à 5 km (pas de 10 m jusqu'à 300 m, puis 25 m jusqu'à 1,5 km, puis 100 m), vu de
-    // 1,6 m au-dessus du sol du projet. Remplace, dans la fiche projet, le profil tiré d'open-elevation (relevé grossier:
-    // 29 à 35° vers l'est à Stoneham contre 14 à 20° au LiDAR, d'où une « ombre du terrain » jusqu'à midi en octobre).
-    // null sans relief réel.
-    horizonProfile() {
-      if (!terrain || terrain.flat) return null;
-      const z0 = terrain.hTri(0, 0) + 1.6, out = [];
-      for (let d = 0; d < 36; d++) {
-        const br = d * 10 * Math.PI / 180, sx = Math.sin(br), cx = Math.cos(br); let maxAngle = 0;
-        for (let dist = 10; dist <= 5000; dist += dist < 300 ? 10 : dist < 1500 ? 25 : 100) {
-          const z = terrain.hTri(dist * sx, dist * cx); if (!(z > z0)) continue;
-          const ang = Math.atan2(z - z0, dist) * 180 / Math.PI; if (ang > maxAngle) maxAngle = ang;
-        }
-        out.push({ bearing: d * 10, maxAngle: Math.round(maxAngle * 100) / 100 });
-      }
-      return out;
-    },
+    // Profil d'horizon d'après le relief chargé (LiDAR ou modèle d'élévation, terrain.js), par le calcul partagé de
+    // horizon.js (le même que /api/horizon, qui alimente la barre « ombre du terrain » de la fiche projet depuis la
+    // v633.186): vers la fiche, où il remplace le profil déjà affiché s'il diffère (relief chargé sans le serveur).
+    // Historique: open-elevation donnait 29 à 35° vers l'est à Stoneham contre 14 à 20° au LiDAR, d'où une « ombre du
+    // terrain » jusqu'à midi en octobre. null sans relief réel.
+    horizonProfile() { return !terrain || terrain.flat ? null : horizonProfile(terrain.hTri); },
     setTerrain(t) { terrain = makeTerrain(t); rebuild(); },
     setTime(ms) { if (ms !== dateMs) { dateMs = ms; dirty = true; } },
     // Fumée de feux au sol à l'heure affichée (FireWork, microgrammes par mètre cube), ou null. Dessinée à partir de

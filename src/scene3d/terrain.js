@@ -6,6 +6,7 @@
 // s'enfoncer.
 import { supabase } from '../lib/supabase.js';
 import { sceneKey } from './data.js';
+import { HORIZON_V } from './horizon.js';
 
 const mem = new Map();
 const TBL = 'scene3d_cache'; // même table que les environs, clés préfixées
@@ -35,6 +36,38 @@ export function loadTerrain(lat, lng) {
       else await supabase.from(TBL).insert({ key, lat: la, lng: ln, version: TERRAIN_V, data: t });
     } catch (e) { /* non connecté ou déjà en cache */ }
     return t;
+  })();
+  mem.set(key, p);
+  p.catch(() => mem.delete(key));
+  return p;
+}
+
+// Profil d'horizon du relief réel (/api/horizon: même relief et même calcul que la 3D, voir horizon.js), pour la barre
+// « ombre du terrain » de la bande horaire de la fiche projet; même cache partagé que le relief (clé « hor_ ») et en
+// mémoire le temps de la session. Rejette (le secours open-elevation de src/weather/elevation.js prend le relais) si le
+// serveur est injoignable.
+export function loadHorizon(lat, lng) {
+  const key = 'hor_' + sceneKey(lat, lng);
+  if (mem.has(key)) return mem.get(key);
+  const la = Number(Number(lat).toFixed(5)), ln = Number(Number(lng).toFixed(5));
+  const p = (async () => {
+    let stale = false;
+    try {
+      const { data } = await supabase.from(TBL).select('data').eq('key', key).maybeSingle();
+      if (Array.isArray(data?.data?.profile)) { if ((data.data.v || 1) >= HORIZON_V) return data.data; stale = true; }
+    } catch (e) { /* cache indisponible: on calcule */ }
+    const url = `${API_BASE}/api/horizon?lat=${la}&lng=${ln}&v=${HORIZON_V}`;
+    let res = await fetch(url);
+    if (!res.ok) throw new Error('horizon ' + res.status);
+    let h = await res.json();
+    if (h?.profile && (h.v || 1) < HORIZON_V) { res = await fetch(url, { cache: 'reload' }); if (res.ok) h = await res.json(); }
+    if (!Array.isArray(h?.profile) || h.profile.length !== 36) throw new Error('horizon: réponse invalide');
+    delete h.ms;
+    try {
+      if (stale) await supabase.from(TBL).update({ version: HORIZON_V, data: h }).eq('key', key);
+      else await supabase.from(TBL).insert({ key, lat: la, lng: ln, version: HORIZON_V, data: h });
+    } catch (e) { /* non connecté ou déjà en cache */ }
+    return h;
   })();
   mem.set(key, p);
   p.catch(() => mem.delete(key));

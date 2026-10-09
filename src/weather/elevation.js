@@ -1,4 +1,5 @@
 import { TBL_ELEVATION, supabase } from '../lib/supabase.js';
+import { loadHorizon } from '../scene3d/terrain.js';
 
 // ===== TERRAIN ELEVATION PROFILE =====
 // Fetches horizon profile around a point (24 directions, 3km radius)
@@ -12,6 +13,11 @@ export const ELEV_RADIUS_M = 5000; // 5km
 export const roundGrid = (v) => parseFloat(v.toFixed(ELEV_GRID_PRECISION));
 
 export const getElevationProfile = async (lat, lng) => {
+  // Relief réel d'abord (v633.186): LiDAR ou modèle d'élévation par /api/horizon, même relief et même calcul que la vue
+  // 3D, donc la barre « ombre du terrain » est la même dans la fiche et dans la 3D, sans avoir à ouvrir la 3D.
+  // Open-elevation (ci-dessous) ne sert plus que de secours, serveur injoignable: son relevé grossier donnait 29 à 35°
+  // vers l'est à Stoneham contre 14 à 20° au LiDAR (ombre jusqu'à midi en octobre).
+  try { const h = await loadHorizon(lat, lng); if (h?.profile) return h.profile; } catch (e) { console.warn('[HORIZON] relief réel indisponible, secours open-elevation:', e && e.message); }
   const gLat = roundGrid(lat), gLng = roundGrid(lng);
   
   // Check Supabase cache

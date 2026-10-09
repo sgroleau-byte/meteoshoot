@@ -643,6 +643,24 @@ importé, lui, est le fichier de l'architecte.
   la vue même en saisissant la maison (cadenas ouvert). `setView` accepte `ct` pour les tests. Vérifié en local
   par des événements de pointeur synthétiques: 200 px vers la droite = 48 m vers la gauche de la caméra, azimut,
   hauteur et distance inchangés; rotation et pincement intacts.
+- **v633.186 (9 octobre 2026): barre « ombre du terrain » sur le relief réel, sans ouvrir la 3D.** Stéphane, capture à
+  l'appui: en vue satellite, la barre rouge de la bande horaire allait du lever à midi (« trop longue pour la période »),
+  devenait courte en 3D et restait correcte au retour au satellite. Cause: la fiche tirait son profil d'horizon
+  d'open-elevation (`src/weather/elevation.js`, relevé grossier) et la 3D le remplaçait par le sien (relief LiDAR) à
+  l'arrivée du relief (v633.182). Correctif: nouvelle fonction serveur `api/horizon.js` (`GET /api/horizon?lat&lng`):
+  même relief que la 3D (`buildTerrain` de `api/terrain.js`, grille quantifiée au décimètre comme celle que la 3D
+  reçoit) et même calcul, sorti dans `src/scene3d/horizon.js` (module sans dépendance, importé par le serveur et par
+  `engine.js`): 36 directions, 5 km, oeil à 1,6 m. Côté client, `loadHorizon` (`src/scene3d/terrain.js`) garde le
+  résultat dans le cache partagé `scene3d_cache` (clé « hor_ », version `HORIZON_V`) et en mémoire; `getElevationProfile`
+  l'appelle d'abord et ne retombe sur open-elevation que si le serveur est injoignable. Mesuré sur le projet de test
+  Manac: profil serveur et profil de la 3D identiques sur les 36 directions, segments rouges identiques avant, pendant et
+  après la 3D (20,5 % + 5,3 % et 78,5 % + 1,1 %); Stoneham: 19,9° vers l'est au lieu de 29 à 35°. Route locale ajoutée
+  dans `scripts/scene3d-dev.mjs`, durée de 60 s dans `vercel.json`. Les profils open-elevation déjà en cache
+  (`elevation_cache`) ne servent plus que de secours. Découvert au passage: le déclencheur de validation de
+  `scene3d_cache` n'acceptait que la clé nue « lat_lng », donc les entrées « dem_ » du relief (v633.162) étaient
+  refusées en silence depuis le début (aucune en base le 9 octobre; le relief était recalculé à chaque ouverture,
+  masqué par le cache du navigateur et de Vercel). Migration `20261009200000_cache_scene_3d_cles_prefixees.sql`
+  appliquée par `supabase db push`: préfixe optionnel dem_ ou hor_, vérifié par une insertion d'essai annulée.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
