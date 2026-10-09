@@ -42,6 +42,10 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   const [mapEpoch, setMapEpoch] = useState(0); // +1 à chaque carte créée: les dessins se refont sur la nouvelle
   const [activeEngine, setActiveEngine] = useState('google'); // moteur de la carte affichée (SAT2: désaturation des images seulement)
   const [view3d, setView3d] = useState(false); // vue 3D dans la fenêtre de la carte (SAT / SAT2 / 3D)
+  // Météo de la 3D coupée (pastille SOLEIL): journée ensoleillée quelle que soit la prévision, pour lire les ombres; gardé
+  // pour la session (sessionStorage), comme au-delà de 36 h de prévision.
+  const [sceneSunny, setSceneSunny] = useState(() => { try { return sessionStorage.getItem('scene3d-sunny') === '1'; } catch (e) { return false; } });
+  const toggleSceneSunny = () => setSceneSunny(v => { try { sessionStorage.setItem('scene3d-sunny', v ? '0' : '1'); } catch (e) { /* stockage refusé */ } return !v; });
   const scene3dZoom = useRef(null); // zoom de la vue 3D (boutons + et -), rempli par Scene3D
   const [mapZoom, setMapZoom] = useState(project?.mapZoom || 16);
   const [showMapFull, setShowMapFull] = useState(false);
@@ -68,7 +72,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   // météo n'est affichée près du curseur: la prévision horaire n'est plus assez sûre pour piloter la lumière.
   const sceneRowCache = React.useRef(new WeakMap()); // même objet pour la même heure: la 3D ne se recalcule pas à chaque pas du curseur
   const sceneWeatherRow = React.useMemo(() => {
-    if (!weather?.hourly?.length) return null;
+    if (sceneSunny || !weather?.hourly?.length) return null;
     const now = Date.now(); if (sceneTimeMs > now + 36 * 3600000 || sceneTimeMs < now - 24 * 3600000) return null;
     let best = null, bd = Infinity;
     for (const h of weather.hourly) { const dd = Math.abs(new Date(h.time).getTime() - sceneTimeMs); if (dd < bd) { bd = dd; best = h; } }
@@ -77,7 +81,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     let row = sceneRowCache.current.get(best);
     if (!row) { const i = weather.hourly.indexOf(best); row = { ...best, prev: [1, 2, 3].map(k => weather.hourly[i - k] || null) }; sceneRowCache.current.set(best, row); }
     return row;
-  }, [weather, sceneTimeMs]);
+  }, [weather, sceneTimeMs, sceneSunny]);
   const sunHourTargetRef = React.useRef(sunHour);
   const sunTimesSnapRef = React.useRef({ sr: 6, ss: 18 });
   
@@ -2690,7 +2694,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                 {/* Map controls - stacked vertically with subtle border */}
                 <div ref={mapContainerRef} className="detail-map-keep" style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: '#181b1e', filter: activeEngine === 'apple' ? 'none' : 'saturate(0.50)' }}/>
                 {/* Vue 3D par-dessus la carte (la carte reste montée, avec son état): même curseur, même météo */}
-                <Scene3D visible={view3d} lat={project?.lat} lng={project?.lng} buildings={buildings} orientation={project?.orientation} timeMs={sceneTimeMs} weatherRow={sceneWeatherRow} zoomRef={scene3dZoom} projectId={project?.id}/>
+                <Scene3D visible={view3d} lat={project?.lat} lng={project?.lng} buildings={buildings} orientation={project?.orientation} timeMs={sceneTimeMs} weatherRow={sceneWeatherRow} zoomRef={scene3dZoom} projectId={project?.id} sunny={sceneSunny} onToggleSunny={toggleSceneSunny}/>
                 <canvas ref={flareCanvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 2 }}/>
                 {nightOpacity > 0 && <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 3, background: `radial-gradient(ellipse at center, transparent 30%, rgba(0,0,15,${0.4 * nightOpacity}) 70%, rgba(0,0,15,${0.7 * nightOpacity}) 100%)`, transition: 'opacity 0.5s ease' }}/>}
                 {/* Fixed center pin */}

@@ -449,6 +449,12 @@ importé, lui, est le fichier de l'architecte.
   - Mesuré sur un tour complet à 36 m de la maison de test de Stoneham (18 angles): à hauteur d'oeil, arbres de 58 % à 43 %
     du cadre (pire angle de 74 % à 58 %), ciel de 4 % à 11 %; à 6 m de haut, arbres de 80 % à 56 % (pire angle de 99 % à
     74 %). Temps de rendu inchangé.
+- v633.177 (9 octobre 2026), **pastille MÉTÉO / SOLEIL** (« pouvoir désactiver l'effet météo sur le 3D, comme quand on
+  avance la date de plusieurs jours »): sous SOL SAT dans la colonne de gauche (tracé Lucide sun). SOLEIL coupe la prévision:
+  `sceneWeatherRow` devient nul (exactement le cas au-delà de 36 h), donc journée ensoleillée, pas d'icône météo près du
+  curseur, légende « Ciel dégagé : soleil franc, ombres nettes »; MÉTÉO remet la prévision de l'heure. Choix gardé pour la
+  session (`sessionStorage` `scene3d-sunny`), état dans ProjectDetail (`sceneSunny`), pastille dans Scene3D (`sunny`,
+  `onToggleSunny`).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
