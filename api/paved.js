@@ -79,6 +79,69 @@ function simplify(pts, eps) {
   return pts.filter((p, i) => keep[i]);
 }
 
+// Entrée en bande (v633.179): la tache de gravier est redessinée comme une bande de largeur constante (médiane de la
+// largeur mesurée, 2,5 à 7 m) le long du chemin qui va de la rue au bout de la tache (plus court chemin dans la tache
+// jusqu'au pixel le plus éloigné qui touche un bâtiment, segments droits), plus, si la tache déborde largement de la
+// bande (aire de stationnement devant la maison), le rectangle de ce qui reste. Sans chemin trouvé, la tache elle-même.
+// Retourne des anneaux en mètres locaux. Les contours de taches avaient des bords ondulés et des excroissances; une
+// entrée réelle est une bande droite.
+function driveBands(comp, id, glab, nearRoad, nearBld, inBld, W2, H2, mp2, toM) {
+  const inC = (j) => glab[j] === id;
+  const srcs = comp.filter(j => nearRoad[j]);
+  if (!srcs.length) { const o = contourOf(comp, W2, H2, mp2, toM); return o ? [o] : []; }
+  // Plus court chemin (4 voisins) depuis les pixels contre la rue; le bout de l'entrée est le pixel le plus éloigné
+  // parmi ceux qui touchent un bâtiment (sinon le plus éloigné de tous): la bande suit toute la longueur de la tache.
+  const parent = new Map(), dist = new Map(), queue = srcs.slice(); let end = -1, endAll = -1, dBest = -1, dAll = -1;
+  for (const j of srcs) { parent.set(j, -1); dist.set(j, 0); }
+  for (let qi = 0; qi < queue.length; qi++) {
+    const j = queue[qi], dj = dist.get(j);
+    if (nearBld[j] && dj > dBest) { dBest = dj; end = j; }
+    if (dj > dAll) { dAll = dj; endAll = j; }
+    const jx = j % W2, jy = (j - jx) / W2;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = jx + dx, ny = jy + dy; if (nx < 0 || ny < 0 || nx >= W2 || ny >= H2) continue; const q = ny * W2 + nx; if (inC(q) && !parent.has(q)) { parent.set(q, j); dist.set(q, dj + 1); queue.push(q); } }
+  }
+  if (end < 0) end = endAll;
+  if (end < 0) { const o = contourOf(comp, W2, H2, mp2, toM); return o ? [o] : []; }
+  const path = []; for (let j = end; j >= 0; j = parent.get(j)) path.push([j % W2, (j - j % W2) / W2]);
+  path.reverse();
+  const pl = simplify(path, 1.5 / mp2); // polyligne en pixels, segments droits
+  let len = 0; for (let i = 0; i + 1 < pl.length; i++) len += Math.hypot(pl[i + 1][0] - pl[i][0], pl[i + 1][1] - pl[i][1]);
+  if (len < 2 / mp2) { const o = contourOf(comp, W2, H2, mp2, toM); return o ? [o] : []; }
+  // Largeur: médiane de la largeur locale (pixels de la tache sur la perpendiculaire, à ±8 m), 2,5 à 7 m: un
+  // stationnement au bout ne gonfle pas la bande.
+  const widths = [];
+  for (let i = 0; i + 1 < pl.length; i++) {
+    const a = pl[i], b = pl[i + 1], ex = b[0] - a[0], ey = b[1] - a[1], l = Math.hypot(ex, ey) || 1, px = -ey / l, py = ex / l, nS = Math.max(1, Math.round(l / (2 / mp2)));
+    for (let s = 0; s < nS; s++) { const t = (s + 0.5) / nS, cx = a[0] + ex * t, cy = a[1] + ey * t; let wl = 0; for (let k = 1; k <= 8 / mp2; k++) { const x = Math.round(cx + px * k), y = Math.round(cy + py * k); if (x < 0 || y < 0 || x >= W2 || y >= H2 || !inC(y * W2 + x)) break; wl++; } let wr = 0; for (let k = 1; k <= 8 / mp2; k++) { const x = Math.round(cx - px * k), y = Math.round(cy - py * k); if (x < 0 || y < 0 || x >= W2 || y >= H2 || !inC(y * W2 + x)) break; wr++; } widths.push(wl + wr + 1); }
+  }
+  widths.sort((p, q) => p - q);
+  const wPx = Math.max(2.5 / mp2, Math.min(7 / mp2, widths.length ? widths[widths.length >> 1] : comp.length / len));
+  // Bande: prolongée de 3 m au bout côté bâtiment (le chemin s'arrête à 3 m du mur) et de 1 m côté rue.
+  const ext = (a, b, d) => { const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [b[0] + (b[0] - a[0]) / l * d, b[1] + (b[1] - a[1]) / l * d]; };
+  const P = pl.slice(); P[P.length - 1] = ext(P[P.length - 2], P[P.length - 1], 3 / mp2); P[0] = ext(P[1], P[0], 1 / mp2);
+  const left = [], right = [];
+  for (let i = 0; i < P.length; i++) {
+    const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
+    left.push([P[i][0] + nx * wPx / 2, P[i][1] + ny * wPx / 2]); right.push([P[i][0] - nx * wPx / 2, P[i][1] - ny * wPx / 2]);
+  }
+  const band = left.concat(right.reverse()), out = [toM(band)];
+  // Reste hors de la bande (plus de 25 m²): rectangle englobant minimal de ces pixels.
+  const far = comp.filter(j => { const x = j % W2, y = (j - x) / W2; let dmin = Infinity; for (let i = 0; i + 1 < pl.length; i++) { const a = pl[i], b = pl[i + 1], ex = b[0] - a[0], ey = b[1] - a[1], l2 = ex * ex + ey * ey || 1, t = Math.max(0, Math.min(1, ((x - a[0]) * ex + (y - a[1]) * ey) / l2)); dmin = Math.min(dmin, Math.hypot(x - a[0] - t * ex, y - a[1] - t * ey)); } return dmin > wPx / 2 + 1 / mp2; });
+  if (far.length * mp2 * mp2 >= 25) {
+    const pts = far.map(j => [j % W2, (j - j % W2) / W2]);
+    let best = null;
+    for (let k = 0; k < 18; k++) { const th = k * Math.PI / 18, cs = Math.cos(th), sn = Math.sin(th); let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity; for (const [x, y] of pts) { const u = x * cs + y * sn, v = -x * sn + y * cs; u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); } const area = (u1 - u0 + 1) * (v1 - v0 + 1); if (!best || area < best.area) best = { area, ring: [[u0, v0], [u1 + 1, v0], [u1 + 1, v1 + 1], [u0, v1 + 1]].map(([u, v]) => [u * cs - v * sn, u * sn + v * cs]) }; }
+    const hitsBld = (r) => [...r, [r.reduce((t, p) => t + p[0] / 4, 0), r.reduce((t, p) => t + p[1] / 4, 0)]].some(([x, y]) => { const i = Math.round(x), j = Math.round(y); return i >= 0 && j >= 0 && i < W2 && j < H2 && inBld[j * W2 + i]; });
+    if (best && far.length / best.area >= 0.45 && !hitsBld(best.ring)) out.push(toM(best.ring)); // au moins à moitié plein (sinon une traînée), hors des bâtiments
+  }
+  return out;
+}
+function contourOf(comp, W2, H2, mp2, toM) {
+  const cm = new Uint8Array(W2 * H2); let sx = -1, sy = -1;
+  for (const j of comp) { cm[j] = 1; const x = j % W2, y = (j - x) / W2; if (sy < 0 || y < sy || (y === sy && x < sx)) { sx = x; sy = y; } }
+  const c = simplify(traceContour(cm, W2, H2, sx, sy), 1 / mp2); return c.length >= 3 ? toM(c) : null;
+}
+
 // Surfaces pavées en mètres locaux autour de (lat, lng); bld = [[ring, h, fl, kind]], roads = [{w, k, p}] (mètres locaux).
 export async function pavedFromImagery(lat, lng, bld, roads, log = () => {}) {
   const mLat = 111320, mLng = 111320 * Math.cos(lat * Math.PI / 180);
@@ -163,7 +226,7 @@ export async function pavedFromImagery(lat, lng, bld, roads, log = () => {}) {
       const id = gravel.length + 1, stack = [i], comp = []; glab[i] = id; let tr = false, tb = false;
       while (stack.length) { const j = stack.pop(); comp.push(j); if (nearRoad[j]) tr = true; if (nearBld[j]) tb = true; const jx = j % W2, jy = (j - jx) / W2; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = jx + dx, ny = jy + dy; if (nx < 0 || ny < 0 || nx >= W2 || ny >= H2) continue; const q2 = ny * W2 + nx; if (gm[q2] && !glab[q2]) { glab[q2] = id; stack.push(q2); } } }
       if (comp.length < minG || comp.length > maxG || !tr || !tb) continue;
-      const o = ring(comp, x, y); if (o) gravel.push({ o, h: [] });
+      for (const o of driveBands(comp, id, glab, nearRoad, nearBld, bmd, W2, H2, mp2, toM)) gravel.push({ o, h: [] }); // bandes droites (v633.179)
     }
     log(`entrées en gravier: ${gravel.length} (seuils saturation < ${sTh}, clarté > ${vTh})`);
   } catch (e) { log(`entrées en gravier: ${e && e.message}`); }

@@ -26,6 +26,7 @@ import { readFileSync } from 'fs';
 import { lidarHeights } from './heights.js';
 import { lidarTrees, readCanopy, R_TREES } from './trees.js';
 import { lidarFootprints } from './footprints.js';
+import { lidarRoofs } from './roofs.js';
 import { pavedFromImagery, PAVED_ATTRIBUTION } from './paved.js';
 
 export const maxDuration = 60;
@@ -303,6 +304,9 @@ export async function buildScene(lat, lng) {
   // hauteurs et les arbres s'appuient ensuite sur ces empreintes.
   const win = await inTime(readCanopy(lat, lng, log), 'LiDAR').catch((e) => { lidarErr = true; console.warn('[scene3d] fenêtre LiDAR indisponible:', e && e.message); return null; });
   if (win) { try { const fp = lidarFootprints(win, win.fr, bld, log, bld.map((_, i) => osmIdx.has(i))); bld = fp.bld; lidarFp = fp.replaced + fp.added; } catch (e) { console.warn('[scene3d] empreintes LiDAR:', e && e.message); } }
+  // Pentes des toits (v633.179): surface LiDAR ajustée dans chaque empreinte (bld[i][6], voir api/roofs.js).
+  let roofs = 0;
+  if (win) { try { roofs = lidarRoofs(win, bld, log).n; } catch (e) { console.warn('[scene3d] toits LiDAR:', e && e.message); } }
   await Promise.all([
     pavedFromImagery(lat, lng, bld, roads, log).then((r) => { paved = r.paved; gravel = r.gravel || []; imgShift = r.shift || [0, 0]; pavedSrc = r.dense ? null : PAVED_ATTRIBUTION; }).catch((e) => console.warn('[scene3d] surfaces pavées indisponibles:', e && e.message)),
     inTime(lidarHeights(lat, lng, bld, log), 'hauteurs').then((r) => { lidarBld = r.measured; if (r.failed) lidarErr = true; }).catch((e) => { lidarErr = true; console.warn('[scene3d] hauteurs LiDAR indisponibles:', e && e.message); }),
@@ -321,7 +325,7 @@ export async function buildScene(lat, lng) {
     treesSrc = { date: lt.date, res: lt.res, essences: lt.essences, n: lt.trees.length };
     canopy = lt.canopy;
   }
-  const scene = { v: 7, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, imgShift, pavedSrc, lidarBld, lidarFp, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
+  const scene = { v: 8, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, imgShift, pavedSrc, lidarBld, lidarFp, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
   if (lidarErr) scene.lidarErr = true;
   return scene;
 }
@@ -350,7 +354,7 @@ if (process.argv.includes('--test')) {
   const lat = parseFloat(process.argv[i + 1] || '46.8367'), lng = parseFloat(process.argv[i + 2] || '-71.2336');
   buildScene(lat, lng).then((s) => {
     const j = JSON.stringify(s);
-    console.log({ bld: s.bld.length, lidarFp: s.lidarFp, roads: s.roads.length, trees: s.trees.length, lidarTrees: s.treesSrc && s.treesSrc.n, conifers: s.trees.filter(t => t[4] === 1).length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, gravel: s.gravel.length, imgShift: s.imgShift, bytes: j.length, ms: s.ms });
+    console.log({ bld: s.bld.length, lidarFp: s.lidarFp, roofs: s.roofs, roads: s.roads.length, trees: s.trees.length, lidarTrees: s.treesSrc && s.treesSrc.n, conifers: s.trees.filter(t => t[4] === 1).length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, gravel: s.gravel.length, imgShift: s.imgShift, bytes: j.length, ms: s.ms });
     if (process.argv.includes('--out')) { import('fs').then(fs => fs.writeFileSync(process.argv[process.argv.indexOf('--out') + 1], j)); }
   }).catch((e) => { console.error(e); process.exit(1); });
 }

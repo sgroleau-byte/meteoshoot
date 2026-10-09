@@ -345,8 +345,9 @@ const hsh = (x, n, k) => { const s = Math.sin(x * 12.9898 + n * 78.233 + k * 37.
 
 // Arbres autour de (lat, lng): { trees: [[x, n, h, r, k]] (k 1 conifère, 0 feuillu; près d'un bâtiment, plus dx, dn, o), covered(x, n) (le LiDAR voit-il ce
 // point), canopy (boisés, voir canopyGrid), date, essences (sources utilisées), failed }. trees null: pas de LiDAR ici (repli sur Overture).
-// Fenêtre LiDAR de la hauteur de canopée (surface moins sol nu) sur ±350 m: { raw, seen, W, H, res, fr, date } ou null
-// sans relevé ici. Partagée par les empreintes des bâtiments (api/footprints.js) et les arbres.
+// Fenêtre LiDAR de la hauteur de canopée (surface moins sol nu) sur ±350 m: { raw, seen, W, H, res, fr, date, dsm, dtm }
+// ou null sans relevé ici (dsm, dtm: surface et sol nu en mètres d'altitude, pour les pentes des toits, api/roofs.js).
+// Partagée par les empreintes des bâtiments (api/footprints.js), les toits et les arbres.
 export async function readCanopy(lat, lng, log = () => {}) {
   const R = R_TREES + 8, mLat = 111320, mLng = 111320 * Math.cos(lat * Math.PI / 180);
   const bbox = [lng - R / mLng, lat - R / mLat, lng + R / mLng, lat + R / mLat];
@@ -364,7 +365,7 @@ export async function readCanopy(lat, lng, log = () => {}) {
   let nSeen = 0;
   for (let k = 0; k < raw.length; k++) { const v = dsm.data[k] - dtm.data[k]; if (v === v) { raw[k] = Math.max(0, v); seen[k] = 1; nSeen++; } }
   if (nSeen < raw.length * 0.05) { log('LiDAR: absent de la fenêtre'); return null; }
-  return { raw, seen, W, H, res, fr: frame(lat, lng, dsm), date: it.date, bbox };
+  return { raw, seen, W, H, res, fr: frame(lat, lng, dsm), date: it.date, bbox, dsm: dsm.data, dtm: dtm.data };
 }
 
 export async function lidarTrees(lat, lng, bld, log = () => {}, win = undefined) {

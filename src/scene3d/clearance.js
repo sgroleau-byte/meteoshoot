@@ -43,7 +43,7 @@ export function prisms(list, groundOf, CELL = 16, HALF = 520) {
   const P = list.map(b => {
     const g = b.g || (b.g = groundOf(b.p)); let x0 = Infinity, n0 = Infinity, x1 = -Infinity, n1 = -Infinity;
     for (const q of b.p) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < n0) n0 = q[1]; if (q[1] > n1) n1 = q[1]; }
-    return { p: b.p, holes: b.holes || null, yb: g.min - 0.5, T: g.mean + b.h, bb: [x0, n0, x1, n1], unmapped: !!b.unmapped };
+    return { p: b.p, holes: b.holes || null, yb: g.min - 0.5, T: g.mean + (b.hTop ?? b.h), bb: [x0, n0, x1, n1], unmapped: !!b.unmapped }; // hTop: faîte d'un toit en pente
   });
   const G = Math.ceil(2 * HALF / CELL), cells = new Array(G * G), stamp = new Int32Array(P.length); let tick = 0;
   const ci = (v) => Math.max(0, Math.min(G - 1, Math.floor((v + HALF) / CELL)));

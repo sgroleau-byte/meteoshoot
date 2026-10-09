@@ -19,7 +19,12 @@
 // hors de toute empreinte devient un bâtiment (remise si moins de 45 m²). Un tracé OpenStreetMap (locked, fait à la main,
 // exact en ville) n'est jamais remplacé: un toit reconnu dedans ne change rien. La hauteur vient du même relevé
 // (pickHeight, api/heights.js) et le 5e champ passe à 1 (mesuré), le 6e à 1 (empreinte LiDAR).
-import { regularizeRing } from '../src/scene3d/ring.js';
+// Mise d'équerre (v633.179, orthogonalizeRing dans src/scene3d/ring.js): le contour tracé sur la grille fait des
+// escaliers et des coins coupés; les côtés sont ramenés à deux directions (celle qui porte le plus de longueur et sa
+// perpendiculaire), les coins rognés par un arbre deviennent des coins droits, les décalages des marches; seul un pan
+// coupé de 6 m et plus à plus de 35° reste en biais. Stoneham: 54 rectangles sur 101 (15 avant), 4 pentagones (31 à
+// 7 côtés avant).
+import { regularizeRing, orthogonalizeRing } from '../src/scene3d/ring.js';
 import { pickHeight } from './heights.js';
 
 const MIN_H = 2.5; // m: en dessous, pas un toit (terrasse, remise basse, buisson)
@@ -147,6 +152,7 @@ export function lidarFootprints(win, fr, bld, log = () => {}, locked = []) {
     let reg = regularizeRing(cpx, 0.8, 15, 2); if (reg.length < 3) continue;
     const mr = minRect(reg), A0 = Math.abs(signedArea(reg)), rect = A0 / Math.max(1e-6, mr.area);
     if (rect >= RECT_SNAP && reg.length > 4) reg = mr.ring; // maison rectangulaire: le rectangle, pas l'octogone
+    { const o = orthogonalizeRing(cpx); if (o) reg = o; } // mise d'équerre (v633.179): coins droits, marches, pans coupés gardés
     const A = Math.abs(signedArea(reg)), cc = centroid(reg);
     const ov = []; bld.forEach((b, i) => { if (inRing(cc[0], cc[1], b[0]) || inRing(ovCen[i][0], ovCen[i][1], reg)) ov.push(i); });
     const matched = ov.length === 1;

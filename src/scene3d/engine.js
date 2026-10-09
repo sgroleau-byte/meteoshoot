@@ -12,13 +12,14 @@ import * as THREE from 'three';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { SAT_CREDIT, satMesh } from './satDrape.js';
+import { SAT_CREDIT, satMesh, satShift } from './satDrape.js';
 RectAreaLightUniformsLib.init(); // tables des lumières surfaciques (façades allumées la nuit)
 import SunCalc from 'suncalc';
 import { DIRS, centroid, edgesOf, localRings, signedArea } from './footprint.js';
 import { TEX_PERIOD, flatTerrain, makeTerrain } from './terrain.js';
 import { prisms, fitTree, reachOf, sheetCellBlocked, sheetTriTooClose, LOBE_PARTS, CON_TIERS, CON_TIERS_LOW } from './clearance.js';
 import { segDist, dpClosed, regularizeRing } from './ring.js';
+import { roofFaces, roofTop } from './roof.js';
 
 // Ombres PCSS (percentage-closer soft shadows) greffées sur le mode d'ombre « de base » de three (carte de profondeur en
 // pleine précision, lue directement): pénombre nette au contact et de plus en plus large en s'éloignant de l'objet qui
@@ -572,7 +573,13 @@ export function createScene3D(container, opts = {}) {
   const satTrees = () => { (treesI || []).forEach(m => { m.visible = !sat; }); statics.forEach(m => { if (m.material === fillMat || m.material === edgeMat) m.visible = !sat; }); dirty = true; };
   function placeSat() {
     if (satObj) { S.remove(satObj); satObj.geometry.dispose(); satObj.material.map.dispose(); satObj.material.dispose(); satObj = null; }
-    if (sat && origin) { const mLng = 111320 * Math.cos(origin[0] * Math.PI / 180); satObj = satMesh(terrain, sat, (sat.lng - origin[1]) * mLng, (sat.lat - origin[0]) * 111320); S.add(satObj); }
+    if (sat && origin) {
+      const mLng = 111320 * Math.cos(origin[0] * Math.PI / 180), cx = (sat.lng - origin[1]) * mLng, cn = (sat.lat - origin[0]) * 111320;
+      // Image recalée sur les empreintes (satShift, v633.179), une fois par image.
+      if (!sat.shift) sat.shift = satShift(sat, data ? data.bld : [], cx, cn);
+      if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.satShift = sat.shift; // vérification en développement
+      satObj = satMesh(terrain, sat, cx + sat.shift[0], cn + sat.shift[1]); S.add(satObj);
+    }
     satTrees();
   }
   const onModel = opts.onModel || (() => {});
@@ -637,10 +644,11 @@ export function createScene3D(container, opts = {}) {
       part.forEach(b => {
         // Contour en sens trigonométrique (vu du ciel): l'extérieur est à droite du sens de parcours, ce qui vaut
         // aussi pour les formes concaves (en L, en U), contrairement à un test sur le centre de la forme.
-        const pts = signedArea(b.p) < 0 ? b.p.slice().reverse() : b.p, h = b.h, lv = Math.max(1, b.fl), col = b.col, rc = b.rc; let u0 = 0; const seed0 = Math.floor(hsh(pts[0][0], pts[0][1], 9) * 900);
+        const pts = signedArea(b.p) < 0 ? b.p.slice().reverse() : b.p, h = b.h, lv = Math.max(1, b.fl), col = b.col, rc = b.rc, roof = b.roof || null; let u0 = 0; const seed0 = Math.floor(hsh(pts[0][0], pts[0][1], 9) * 900);
         // Sur une pente: toit à h au-dessus du sol moyen de l'empreinte, murs descendus jusque sous le point le plus bas
         // (rien ne flotte côté aval, le pied s'enterre côté amont); étages recomptés sur la hauteur réelle du mur.
-        const gb = b.g || groundOf(pts), yb = gb.min - 0.5, top = gb.mean + h, lvw = Math.max(1, Math.round(lv * (top - yb) / h));
+        // Toit en pente mesuré (LiDAR, v633.179): murs jusqu'à l'égout le plus bas, versants et pignons par-dessus (roof.js).
+        const gb = b.g || groundOf(pts), yb = gb.min - 0.5, top = gb.mean + (roof ? roof.he : h), lvw = Math.max(1, Math.round(lv * (top - yb) / h));
         for (let i = 0; i < pts.length; i++) {
           const a = pts[i], c = pts[(i + 1) % pts.length]; const ax = a[0], azz = -a[1], bx = c[0], bz = -c[1]; const ex = bx - ax, ez = bz - azz, len = Math.hypot(ex, ez); if (len < 0.05) continue;
           const nx = -ez / len, nz = ex / len;
@@ -649,6 +657,24 @@ export function createScene3D(container, opts = {}) {
           [[0, 1, 2], [0, 2, 3]].forEach(t => t.forEach(k => { const v = q[k]; P.push(v[0], v[1], v[2]); N.push(nx, 0, nz); U.push(v[3], v[4]); C.push(col.r, col.g, col.b); SD.push(b.allLit ? -1 : seed0 + i); })); u0 = u1;
         }
         const rg = new THREE.ShapeGeometry(shapeOf(pts)); rg.rotateX(-Math.PI / 2); const ra = rg.toNonIndexed().attributes.position.array; for (let i = 0; i < ra.length; i += 3) { RP.push(ra[i], top, ra[i + 2]); RN.push(0, 1, 0); RC.push(rc.r, rc.g, rc.b); } rg.dispose();
+        if (!roof) return;
+        roofFaces(pts, roof).forEach(f => {
+          const q = f.p.map(([x, n, z]) => [x, gb.mean + z, -n]); // repère du moteur (rotation: le sens des sommets est gardé)
+          let nx = 0, ny = 0, nz = 0; for (let i = 0; i < q.length; i++) { const a = q[i], c = q[(i + 1) % q.length]; nx += (a[1] - c[1]) * (a[2] + c[2]); ny += (a[2] - c[2]) * (a[0] + c[0]); nz += (a[0] - c[0]) * (a[1] + c[1]); }
+          const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+          const ys = q.map(v => v[1]), yLo = Math.min(...ys), yHi = Math.max(...ys);
+          if (f.strip && yHi - yLo >= 2.4 && q.length === 4) { // bandeau d'égout assez haut: un mur avec ses fenêtres
+            const bot = q.filter(v => v[1] <= yLo + 1e-3); if (bot.length === 2) {
+              let [a, c] = bot; if (-(c[2] - a[2]) * nx + (c[0] - a[0]) * nz < 0) [a, c] = [c, a];
+              const len = Math.hypot(c[0] - a[0], c[2] - a[2]), nb = Math.max(1, Math.round(len / (b.bay || 6.5))), u1 = u0 + nb, rows = Math.max(1, Math.round((yHi - yLo) / 3.3));
+              const w = [[a[0], yLo, a[2], u0, 0], [c[0], yLo, c[2], u1, 0], [c[0], yHi, c[2], u1, rows], [a[0], yHi, a[2], u0, rows]];
+              [[0, 1, 2], [0, 2, 3]].forEach(t => t.forEach(k => { const v = w[k]; P.push(v[0], v[1], v[2]); N.push(nx, 0, nz); U.push(v[3], v[4]); C.push(col.r, col.g, col.b); SD.push(b.allLit ? -1 : seed0 + 50 + u0); })); u0 = u1;
+              return;
+            }
+          }
+          const cc = f.wall ? col : rc;
+          for (let i = 1; i + 1 < q.length; i++) [q[0], q[i], q[i + 1]].forEach(v => { RP.push(v[0], v[1], v[2]); RN.push(nx, ny, nz); RC.push(cc.r, cc.g, cc.b); });
+        });
       });
       if (!P.length) return;
       const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); wg.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); wg.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); wg.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); wg.setAttribute('aSeed', new THREE.Float32BufferAttribute(SD, 1));
@@ -1098,13 +1124,13 @@ export function createScene3D(container, opts = {}) {
     });
     const others = []; let kept = []; treeEnv = [];
     if (data) {
-      data.bld.forEach(([p, h, fl, k, lid]) => {
+      data.bld.forEach(([p, h, fl, k, lid, , roof]) => {
         // Un voisin recouvert par un bâtiment dessiné disparaît: c'est le même édifice.
         const c = centroid(p);
         if (drawn.some(d => ringsOverlap(d.p, p)) || underModel(p)) return;
         others.push(p);
         const q = p[0], r = hsh(q[0], q[1], 5); const hh = k === 0 && !lid ? Math.max(h, 6.2) : h; // hauteur mesurée (LiDAR): telle quelle
-        list.push({ p, h: hh, fl: Math.max(1, Math.min(k === 0 ? Math.max(fl, Math.round(hh / 3.1)) : fl, Math.floor(hh / 3.2))), col: L(k === 2 ? '#9a9a94' : k === 1 ? '#cfc7b8' : PAL_RES[Math.floor(r * PAL_RES.length)]), rc: L(ROOF[Math.floor(hsh(q[0], q[1], 6) * ROOF.length)]) });
+        list.push({ p, h: hh, fl: Math.max(1, Math.min(k === 0 ? Math.max(fl, Math.round(hh / 3.1)) : fl, Math.floor(hh / 3.2))), col: L(k === 2 ? '#9a9a94' : k === 1 ? '#cfc7b8' : PAL_RES[Math.floor(r * PAL_RES.length)]), rc: L(ROOF[Math.floor(hsh(q[0], q[1], 6) * ROOF.length)]), roof: roof || null, hTop: roof ? Math.max(hh, roofTop(roof) || 0) : hh });
       });
       Object.keys(GC).forEach(k => addFlat(data.green.filter(p => p.k === k).map(p => ({ o: p.p })), flatMats[k], 0.03, 1));
       addFlat(data.asphalt.map(p => ({ o: p })), flatMats.asphalt, 0.05, 2);
@@ -1131,7 +1157,7 @@ export function createScene3D(container, opts = {}) {
     if (!focus && data) {
       const cand = data.bld.filter(b => b[3] !== 2);
       const under = cand.find(([p]) => pointInRing([0, 0], p)) || cand.map(b => ({ b, d: Math.hypot(...centroid(b[0])) })).sort((a, b) => a.d - b.d).find(x => x.d < 60)?.b;
-      if (under) { focus = under[0]; focusH = under[1]; }
+      if (under) { focus = under[0]; focusH = under[6] ? Math.max(under[1], roofTop(under[6]) || 0) : under[1]; }
     }
     // Les autres formes du projet comptent comme obstacles, sauf celles qui chevauchent la première (tour sur un socle,
     // bâtiment en L dessiné en deux rectangles): c'est le même sujet, on ne place pas la caméra dedans, mais il ne bouche
@@ -1414,7 +1440,7 @@ export function createScene3D(container, opts = {}) {
     let fac = null, best = -Infinity;
     projInfo.forEach(e => { if (e.len < 2.5) return; const dx = cam.position.x - e.mid[0], dz = cam.position.z + e.mid[1], dist = Math.hypot(dx, dz) || 1; const facing = (e.nrm[0] * dx - e.nrm[1] * dz) / dist; if (facing < 0.15) return; const scv = facing * Math.sqrt(e.len) / Math.sqrt(dist); if (scv > best) { best = scv; fac = e; } });
     const height = fac ? `${fac.label}, côté ${fac.dir} : ${Math.round(fac.h)} m, hauteur ${fac.src}` : '';
-    const hLidar = !!(data && data.lidarBld > 0), fpLidar = !!(data && data.lidarFp > 0), hWhat = fpLidar ? 'formes et hauteurs des bâtiments LiDAR' : 'hauteurs des bâtiments LiDAR', hLine = hWhat[0].toUpperCase() + hWhat.slice(1) + ' (Ressources naturelles Canada)';
+    const hLidar = !!(data && data.lidarBld > 0), fpLidar = !!(data && data.lidarFp > 0), hWhat = fpLidar ? (data.roofs > 0 ? 'formes, toits et hauteurs des bâtiments LiDAR' : 'formes et hauteurs des bâtiments LiDAR') : 'hauteurs des bâtiments LiDAR', hLine = hWhat[0].toUpperCase() + hWhat.slice(1) + ' (Ressources naturelles Canada)';
     const relief = terrain.flat ? (hLidar ? hLine : '') : terrain.src.lidar >= 0.5 ? `Relief LiDAR ${terrain.src.lidarRes || 2} m${hLidar ? ' et ' + hWhat : ''} (Ressources naturelles Canada)` : 'Relief du modèle d’élévation du Canada (20 m)' + (hLidar ? ' · ' + hLine : '');
     const nPav = data && data.paved ? data.paved.length : 0, nGrav = data && data.gravel ? data.gravel.length : 0;
     const pavedLine = nPav || nGrav ? `${nPav && nGrav ? 'Surfaces pavées et entrées en gravier' : nGrav ? 'Entrées en gravier' : 'Surfaces pavées'} d’après l’imagerie satellite (${data.pavedSrc || 'Esri'}), approximatives` : '';

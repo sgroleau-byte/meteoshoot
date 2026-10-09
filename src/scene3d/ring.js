@@ -64,3 +64,96 @@ export function regularizeRing(r, eps = 1.2, tol = 12, half = 4) { // half: port
   if (res.length > 3 && Math.hypot(res[0][0] - res[res.length - 1][0], res[0][1] - res[res.length - 1][1]) <= 0.4) res.pop();
   return res.length >= 3 ? res : P;
 }
+
+// Mise d'équerre d'une empreinte de toit (9 octobre 2026): le contour tracé sur la grille LiDAR a des escaliers sur les
+// bords d'un toit tourné par rapport à la grille, et la mise au net ci-dessus prend leurs diagonales pour des côtés
+// (coins coupés, octogones, biseaux). Ici, l'axe principal du toit est celui de son rectangle englobant minimal, et
+// seules deux directions sont admises, l'axe et sa perpendiculaire, sauf un vrai côté en biais (plus de minDiag mètres
+// à plus de 35° des axes: pan coupé; plus court, c'est un coin rogné par un arbre; moins incliné, un escalier de maisons
+// en rangée décalées, rendu par une marche). Côtés
+// consécutifs de même direction fusionnés (moyenne pondérée) s'ils sont presque alignés, sinon reliés par une marche;
+// sommets aux intersections; côtés de moins de 1 m retirés; un rectangle rempli à 86 % devient le rectangle (coin rogné
+// par un arbre). Retourne null si le résultat n'est pas un polygone sain (moins de 4 sommets, aire qui s'écarte de plus
+// de 30 % de celle du contour): l'appelant garde alors la mise au net ordinaire.
+const polyArea = (r) => Math.abs(r.reduce((s, p, i) => { const q = r[(i + 1) % r.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2;
+export function minAreaRect(r) {
+  let best = { area: Infinity, th: 0, ring: null };
+  for (let i = 0; i < r.length; i++) {
+    const p = r[i], q = r[(i + 1) % r.length]; if (Math.hypot(q[0] - p[0], q[1] - p[1]) < 0.3) continue;
+    const th = Math.atan2(q[1] - p[1], q[0] - p[0]), cs = Math.cos(th), sn = Math.sin(th);
+    let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+    for (const [x, n] of r) { const u = x * cs + n * sn, v = -x * sn + n * cs; u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); }
+    const area = (u1 - u0) * (v1 - v0);
+    if (area < best.area) best = { area, th, ring: [[u0, v0], [u1, v0], [u1, v1], [u0, v1]].map(([u, v]) => [u * cs - v * sn, u * sn + v * cs]) };
+  }
+  return best;
+}
+// Direction dominante d'un contour (radians, modulo 90°): celle des côtés qui, à 10° près, totalisent le plus de longueur.
+export function dominantAngle(r) {
+  const sides = [];
+  for (let i = 0; i < r.length; i++) { const p = r[i], q = r[(i + 1) % r.length], len = Math.hypot(q[0] - p[0], q[1] - p[1]); if (len > 0.3) sides.push({ a: Math.atan2(q[1] - p[1], q[0] - p[0]), len }); }
+  const diff = (a, b) => { let d = Math.abs(a - b) % (Math.PI / 2); return Math.min(d, Math.PI / 2 - d); };
+  let best = 0, bs = -1;
+  for (const s of sides) { let sc = 0; for (const t of sides) if (diff(s.a, t.a) < Math.PI / 18) sc += t.len; if (sc > bs) { bs = sc; best = s.a; } }
+  return best;
+}
+// Rectangle englobant d'un contour dans le repère d'angle th: { area, th, ring }.
+export function frameRect(r, th) {
+  const cs = Math.cos(th), sn = Math.sin(th);
+  let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+  for (const [x, n] of r) { const u = x * cs + n * sn, v = -x * sn + n * cs; u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); }
+  if (!(u1 > u0 && v1 > v0)) return { area: Infinity, th, ring: null };
+  return { area: (u1 - u0) * (v1 - v0), th, ring: [[u0, v0], [u1, v0], [u1, v1], [u0, v1]].map(([u, v]) => [u * cs - v * sn, u * sn + v * cs]) };
+}
+export function orthogonalizeRing(raw, { eps = 0.8, half = 2, minDiag = 6, tol = 35, minSide = 1.0, minStep = 0.8, rectFill = 0.86 } = {}, dbg = {}) {
+  const P = dpClosed(smoothRing(raw, 1, half), eps); if (P.length < 4) { dbg.why = 'P<4'; return null; }
+  // Axe: la direction (modulo 90°) qui porte le plus de longueur de côtés (à 10° près). Le rectangle englobant minimal
+  // s'aligne parfois sur la diagonale d'un coin coupé, et les vrais murs passeraient pour des biais.
+  const th = dominantAngle(P), A0 = polyArea(P), mr = frameRect(P, th); if (!mr.ring) { dbg.why = 'rect'; return null; }
+  if (A0 / mr.area >= rectFill) return mr.ring;
+  const cs = Math.cos(th), sn = Math.sin(th), toF = ([x, n]) => [x * cs + n * sn, -x * sn + n * cs], fromF = ([u, v]) => [u * cs - v * sn, u * sn + v * cs];
+  const Q = P.map(toF), n = Q.length, mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  // Côtés: classe 0 (le long de u, v constant c), 1 (le long de v, u constant c), 2 (biais long, droite par son milieu).
+  // Un biais court est retiré: ses voisins se rejoignent en coin (ou en marche s'ils sont parallèles) à son milieu.
+  let S = [];
+  for (let i = 0; i < n; i++) {
+    const a = Q[i], b = Q[(i + 1) % n], dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy);
+    const ang = Math.abs(Math.atan2(dy, dx) * 180 / Math.PI) % 180, dH = Math.min(ang, 180 - ang), dV = Math.abs(ang - 90);
+    const cls = dH <= tol ? 0 : dV <= tol ? 1 : len >= minDiag ? 2 : -1;
+    S.push({ cls, len, a, b, c: cls === 0 ? (a[1] + b[1]) / 2 : cls === 1 ? (a[0] + b[0]) / 2 : 0, m: mid(a, b), th: Math.atan2(dy, dx) });
+  }
+  for (let i = 0; i < S.length; i++) if (S[i].cls === -1) { const m = S[i].m, A = S[(i + S.length - 1) % S.length], B = S[(i + 1) % S.length]; A.b = m; B.a = m; S.splice(i, 1); i--; }
+  if (S.length < 3) { dbg.why = 'sides<3 (' + n + ' côtés)'; return null; }
+  const lineOf = (s) => (s.cls === 0 ? { p: [0, s.c], d: [1, 0] } : s.cls === 1 ? { p: [s.c, 0], d: [0, 1] } : { p: s.m, d: [Math.cos(s.th), Math.sin(s.th)] });
+  const merge = (A, B) => { const wt = A.len + B.len || 1; return { cls: A.cls, len: wt, a: A.a, b: B.b, c: (A.c * A.len + B.c * B.len) / wt, m: mid(A.m, B.m), th: A.th }; };
+  let V = [];
+  for (let pass = 0; pass < 10; pass++) {
+    // Côtés consécutifs de même classe: fusionnés s'ils sont presque alignés, sinon une marche (côté perpendiculaire) les relie.
+    for (let i = 0; i < S.length && S.length > 2; i++) {
+      const A = S[i], B = S[(i + 1) % S.length]; if (A === B || A.cls !== B.cls || A.cls === 2) continue;
+      if (Math.abs(A.c - B.c) < minStep) { const M = merge(A, B); S.splice(i, 1, M); S.splice(S.indexOf(B), 1); i--; continue; }
+      const j = mid(A.b, B.a), riser = { cls: 1 - A.cls, len: Math.abs(A.c - B.c), a: A.b, b: B.a, c: A.cls === 0 ? j[0] : j[1], m: j, th: 0 };
+      S.splice(i + 1, 0, riser); i++;
+    }
+    if (S.length < 3) { dbg.why = 'fusion<3'; return null; }
+    // Sommets: intersection de chaque côté avec le suivant.
+    V = [];
+    for (let i = 0; i < S.length; i++) {
+      const A = S[i], B = S[(i + 1) % S.length], L1 = lineOf(A), L2 = lineOf(B), det = L1.d[0] * L2.d[1] - L1.d[1] * L2.d[0];
+      if (Math.abs(det) < 1e-6) { V.push(mid(A.b, B.a)); continue; }
+      const t = ((L2.p[0] - L1.p[0]) * L2.d[1] - (L2.p[1] - L1.p[1]) * L2.d[0]) / det;
+      V.push([L1.p[0] + L1.d[0] * t, L1.p[1] + L1.d[1] * t]);
+    }
+    // Longueurs réelles; le plus court sous minSide est retiré (ses voisins parallèles fusionnent, sinon ils se rejoignent en coin).
+    let si = -1, sl = minSide;
+    for (let i = 0; i < S.length; i++) { const a = V[(i + S.length - 1) % S.length], b = V[i]; S[i].len = Math.hypot(b[0] - a[0], b[1] - a[1]); if (S[i].len < sl) { sl = S[i].len; si = i; } }
+    if (si < 0 || S.length <= 4) break;
+    const X = S[si], A = S[(si + S.length - 1) % S.length], B = S[(si + 1) % S.length];
+    if (A.cls === B.cls && A.cls !== 2) { const M = merge(A, B); S[S.indexOf(A)] = M; S.splice(S.indexOf(B), 1); S.splice(S.indexOf(X), 1); }
+    else { A.b = X.m; B.a = X.m; S.splice(si, 1); }
+  }
+  if (V.length < 4) { dbg.why = 'R<4'; return null; }
+  const A1 = polyArea(V); if (!(A1 > 0) || Math.abs(A1 - A0) > 0.3 * A0) { dbg.why = 'aire ' + Math.round(A0) + ' -> ' + Math.round(A1) + ' (' + V.length + ' sommets)'; dbg.R = V.map(fromF); return null; }
+  if (A1 / mr.area >= rectFill) return mr.ring;
+  return V.map(fromF);
+}

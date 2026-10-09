@@ -498,6 +498,59 @@ importé, lui, est le fichier de l'architecte.
     gardé en carré; contour au mètre; gravier clair seulement (une entrée en terre ou en asphalte sombre n'est pas une
     entrée en gravier); une cour de gravier qui touche la rue et une remise passe pour une entrée; imagerie Esri datée
     autrement que le LiDAR.
+- **v633.179 (9 octobre 2026): toits en pente, empreintes d'équerre, entrées en bandes, SOL SAT recalé.** Demandes de
+  Stéphane: « beaucoup de maisons un peu rondes », « les entrées ne sont pas très précises », l'image Plans d'Apple décalée
+  d'un bâtiment en biseau, « il faut que ça ne soit pas juste calibré pour Stoneham », puis « si tu peux simuler les
+  pentes des toits ça serait encore mieux ». Banc de dix lieux (Stoneham, Limoilou, Sillery, Valcartier, Outremont,
+  Ottawa, Toronto, Sainte-Adèle, Gaspé, Calgary): scène complète de chacun, image de contrôle sur l'imagerie Esri
+  recalée (empreintes, toits, gravier), rien n'est réglé sur un seul lieu.
+  - **Mise d'équerre des empreintes** (`orthogonalizeRing`, `src/scene3d/ring.js`, appelée par `api/footprints.js`): le
+    contour tracé sur la grille LiDAR fait des escaliers et des coins coupés que la mise au net prenait pour des côtés
+    (octogones, pentagones). L'axe est la direction (modulo 90°) qui porte le plus de longueur de côtés (le rectangle
+    englobant minimal s'alignait parfois sur la diagonale d'un coin coupé); les côtés sont ramenés à cet axe et à sa
+    perpendiculaire, un coin rogné (biais de moins de 6 m) devient un coin droit, un décalage entre deux côtés
+    parallèles devient une marche, les côtés de moins de 1 m sont retirés; seul un pan coupé de 6 m et plus à plus de
+    35° des axes reste en biais (en dessous de 35°, c'est l'escalier d'une rangée de maisons décalées). Rectangle si
+    rempli à 86 %. Renonce (mise au net ordinaire gardée) si moins de 4 sommets ou aire à plus de 30 % du contour.
+    Stoneham: 54 rectangles sur 101 empreintes (15 avant), 4 pentagones (31 heptagones avant); Limoilou 174 sur 289;
+    Sainte-Adèle 109 sur 204.
+  - **Pentes des toits** (`api/roofs.js`, géométrie partagée `src/scene3d/roof.js`, 7e champ `bld[i][6]`, environs
+    version 8): la surface LiDAR (altitude, `dsm` et `dtm` ajoutés à la fenêtre de `readCanopy`) lue dans chaque
+    empreinte (pixels à 0,7 m au moins du bord) est ajustée aile par aile. Une aile est un rectangle maximal de
+    l'empreinte dans son repère; le toit d'une aile a un faîte parallèle à l'un des côtés, deux versants (faîte à 0, 20,
+    30, 40, 50, 60, 70, 80 ou 100 % de la largeur; 0 ou 100 = un seul versant), des bouts en pignon ou en croupe, au
+    besoin un sommet plat (70 % de la montée). Chaque variante est une régression linéaire (égout, montée) sur une forme
+    normalisée, pixels à plus de 1 m écartés (cheminées, lucarnes, branches) et modèle refait; pénalités de complexité
+    (sommet plat 0,06, faîte décentré 0,03, un seul versant 0,02, bouts mixtes 0,02, croupes 0,01, faîte le long du
+    petit côté 0,04) pour que le modèle simple l'emporte; le toit plat (médiane) ne cède que si le toit en pente
+    explique 10 points de plus des pixels à 0,5 m près (erreur réduite d'un dixième) ou réduit l'erreur de 40 %; montée
+    d'au moins 1 m, égout à 2 m au moins du sol moyen, pentes de 4,5° à 70°. Ailes retenues par couverture (au plus
+    quatre); une aile secondaire qui croise le faîte d'une aile plus haute s'arrête à ce faîte (bout caché). Hauteurs
+    rapportées au sol moyen de l'empreinte (sol nu aux sommets et au centre), le repère de `groundOf` dans le moteur.
+    Le moteur monte les murs à l'égout (`roof.he`), garde le plat à l'égout, pose les faces (versants dans la couleur du
+    toit, pignons dans celle des murs, bandeau d'égout d'une aile plus haute dessiné comme un mur avec ses fenêtres s'il
+    fait 2,4 m et plus); un côté en biais de l'empreinte (pan coupé) rogne les faces de l'aile dont il coupe le coin.
+    Le dégagement des arbres (`prisms`) et la visée du sujet utilisent le faîte (`hTop`, `roofTop`). Empreintes de plus
+    de 12 sommets ou de plus de 40 rectangles: toit plat (immeubles complexes). Stoneham: 93 toits en pente sur 122 (43 à
+    deux versants, 9 à croupes, 21 à un versant, 20 mixtes, 10 à sommet plat), la maison du projet en appentis à 7°
+    comme le relevé le montre; Limoilou 197, Sillery 179, Toronto 484, Gaspé 93; 65 à 100 ms. Pièges: à 1 m, le faîte
+    est arrondi, un sommet plat ajustait mieux presque partout (d'où la pénalité); un terrain en pente (2,6 m sous une
+    maison à Stoneham) fausse les pentes si on lit la hauteur de canopée au lieu de l'altitude; la croupe a la pente du
+    côté le plus raide. Légende: « formes, toits et hauteurs des bâtiments LiDAR ».
+  - **Entrées en bandes** (`driveBands`, `api/paved.js`): la tache de gravier est redessinée comme une bande de largeur
+    constante (médiane de la largeur mesurée en travers, 2,5 à 7 m) le long du plus court chemin dans la tache depuis la
+    rue jusqu'au pixel le plus éloigné qui touche un bâtiment (segments droits, prolongée de 3 m côté bâtiment et de
+    1 m côté rue), plus le rectangle de ce qui déborde (stationnement, 25 m² et plus, rempli à 45 % au moins, hors des
+    bâtiments). Stoneham: 44 entrées.
+  - **SOL SAT recalé** (`satShift`, `src/scene3d/satDrape.js`): même méthode que le calage de l'imagerie Esri côté
+    serveur, côté client: pixels sombres de l'image Plans d'Apple (clarté sous son 25e centile) contre les empreintes
+    sur une grille au mètre, ±12 m, gardé s'il fait 1,5 fois mieux que sans décalage et couvre 50 pixels; l'image drapée
+    recule d'autant, une fois par image. En ville (toits clairs), rien ne change. Stoneham: l'image Plans d'Apple
+    était 10 m trop au nord (recul de 2 m est et 10 m sud; vérifié hors ligne sur la même image: 950 pixels sombres
+    sous les empreintes contre 340 sans décalage, les empreintes LiDAR tombent sur les toits). Test local: l'API
+    `meteoshoot-api` n'a pas les identifiants Plans d'Apple; lancer `scripts/scene3d-dev.mjs` avec les variables
+    `APPLE_MAPS_TEAM_ID`, `APPLE_MAPS_KEY_ID` et `APPLE_MAPS_PRIVATE_KEY_PATH` (le sandbox des aperçus refuse de lire
+    le dossier des clés), et l'appel doit porter une origine localhost (`origine non autorisée` sinon).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
