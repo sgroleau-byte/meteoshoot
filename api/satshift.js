@@ -1,4 +1,4 @@
-// Calage de l'image Plans d'Apple sur les empreintes des bâtiments, côté serveur (10 octobre 2026).
+// Calage de l'image Plans d'Apple sur les empreintes des bâtiments, côté serveur (9 octobre 2026).
 //
 // L'image satellite d'Apple est décalée de quelques mètres par rapport au LiDAR (Stoneham: 10 m trop au nord). Le
 // calage se faisait dans le navigateur (satDrape.js, satShift) et ne s'appliquait pas chez Stéphane sans qu'on sache

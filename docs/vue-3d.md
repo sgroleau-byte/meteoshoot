@@ -587,7 +587,7 @@ importé, lui, est le fichier de l'architecte.
     À l'ouverture elles se tracent une à une (`stroke-dashoffset`, niveaux décalés de 0,22 s), puis glissent; elles
     s'effacent en 0,7 s quand la scène apparaît. Montées après 0,5 s d'attente seulement (un chargement en cache ne les
     montre pas, ou à peine). Les traits fins de la v633.180 sont retirés.
-- **v633.182 (10 octobre 2026): retours de Stéphane sur la v633.181.** « Loading des courbes de niveau on enlève »,
+- **v633.182 (9 octobre 2026): retours de Stéphane sur la v633.181.** « Loading des courbes de niveau on enlève »,
   « enlève le genre de drap vert, pas très utile ni très beau », régressions SOL SAT, « ombre terrain possible » et
   « on a perdu le sapin entre nos deux maisons ».
   - **Courbes de niveau retirées**, l'anneau d'attente d'avant revient (le mot CHARGEMENT reste); la pousse de la scène
@@ -608,7 +608,7 @@ importé, lui, est le fichier de l'architecte.
     directions, 10 m à 5 km, vu de 1,6 m au-dessus du sol; mesuré: 14 à 20° vers l'est à Stoneham) remonte par
     `onHorizon` à la fiche, qui s'en sert à la place du profil d'open-elevation (`lidarHorizonRef`). Le cache Supabase
     n'est pas réécrit (le client n'a pas le droit d'écraser une entrée): sans la 3D ouverte, l'ancien profil reste.
-- **v633.183 (10 octobre 2026): calage de l'image Plans d'Apple fait par le serveur.** Stéphane, SOL SAT allumé:
+- **v633.183 (9 octobre 2026): calage de l'image Plans d'Apple fait par le serveur.** Stéphane, SOL SAT allumé:
   « l'image au sol est ultra décalée, c'est toutes les maisons » (gros plans: chaque bloc à une maison de son toit),
   alors que le même build de production en local plaçait les blocs sur leurs toits et que la scène servie par
   www.meteoshoot.com est identique à la scène locale (96 empreintes LiDAR, même `imgShift`). Le calage dans le
@@ -621,7 +621,7 @@ importé, lui, est le fichier de l'architecte.
   10 m sud (823 contre 331). La légende dit maintenant « Image satellite © Plans d'Apple (recalée de 2 m est et 10 m
   sud) » ou « (non recalée) »: on voit ce qui s'applique. Vérifié dans le build de production local avec la clé:
   légende « recalée de 2 m est et 10 m sud », blocs sur leurs toits.
-- **v633.184 (10 octobre 2026): calage de l'image Plans d'Apple par contraste.** Stéphane, légende à l'appui:
+- **v633.184 (9 octobre 2026): calage de l'image Plans d'Apple par contraste.** Stéphane, légende à l'appui:
   « recalée de 8 m est et 12 m nord », « rues, maisons, tout est décalé ». Son projet est à 47.01031, -71.37338 (trouvé
   dans `scene3d_cache`), 30 m du centre de test; là, le compte de pixels sombres sous les empreintes a deux pics à 1 %
   l'un de l'autre: le vrai (2 m est, 10 m sud) et un faux en bord de fenêtre (8 m est, 12 m nord: les empreintes
