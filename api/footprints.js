@@ -11,8 +11,11 @@
 // (plan à 0,15 m sur plus du tiers des pixels: une cime est bosselée). Une tache de canopée fermée n'a pas de chute en
 // bordure; un arbre isolé est bombé et bosselé. Pour un toit absent d'Overture, en plus: 14 m au plus (un bâtiment
 // plus haut est toujours cartographié) et un entourage qui tranche (du sol dans l'anneau de 6 à 14 m autour, ou des
-// arbres bien plus hauts): une tache de canopée est à la hauteur de la canopée autour. Mesuré à Stoneham (relevé 2024,
-// 1 m): 55 bâtiments d'Overture retrouvés avec leur vraie forme, 46 ajoutés, aucune cime acceptée.
+// arbres bien plus hauts): une tache de canopée est à la hauteur de la canopée autour; et une hauteur plausible pour sa
+// surface (3 m plus la racine de la surface, sauf toit net et plat d'au moins 100 m²: surface fine sur la moitié des
+// pixels et pas de dôme; un bouquet d'arbres isolé sur une pelouse passe les autres tests, mais il fait 14 m pour 64 m²;
+// à Limoilou, 30 arbres de rue de 24 à 95 m² passaient ainsi pour des tours, dont 6 à cime lisse, v633.180). Mesuré à
+// Stoneham (relevé 2024, 1 m): 55 bâtiments d'Overture retrouvés avec leur vraie forme, 46 ajoutés, aucune cime acceptée.
 //
 // Un bâtiment d'Overture sans toit reconnu (toit sous les arbres, bâti après le relevé) est gardé tel quel; un toit
 // reconnu dans son empreinte la remplace (sauf s'il n'en fait pas 40 %: un coin de toit vu entre les arbres); un toit
@@ -34,6 +37,8 @@ const MIN_PAN = 8, MIN_AREA = 16, MAX_AREA = 2500, MIN_HOLE = 40; // m²
 const EDGE_RAY = 3, DROP = 2; // m: chute en bordure
 const RING0 = 6, RING1 = 14; // m: anneau d'entourage
 const NEW_MAX_H = 14; // m: toit absent d'Overture
+const TALL_K = 3; // m: un toit absent d'Overture ne dépasse pas TALL_K plus la racine de sa surface (64 m²: 11 m)
+const TALL_FLAT_A = 100; // m²: à partir de cette surface, un toit net et plat peut être plus haut (immeuble étroit)
 const SHED_AREA = 45; // m²: en dessous, remise (comme scene3d.js)
 
 const signedArea = (r) => r.reduce((s, p, i) => { const q = r[(i + 1) % r.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0) / 2;
@@ -157,7 +162,7 @@ export function lidarFootprints(win, fr, bld, log = () => {}, locked = []) {
     const ov = []; bld.forEach((b, i) => { if (inRing(cc[0], cc[1], b[0]) || inRing(ovCen[i][0], ovCen[i][1], reg)) ov.push(i); });
     const matched = ov.length === 1;
     const ok = A >= MIN_AREA && A <= MAX_AREA && h >= MIN_H && dome < 0.8 && p15 >= (matched ? 0.3 : 0.35) && chute >= (matched ? 0.25 : 0.35) && rect >= (matched ? 0.5 : 0.6)
-      && (matched || (h <= NEW_MAX_H && (gnd >= 0.2 || env - h >= 4)));
+      && (matched || (h <= NEW_MAX_H && (h <= TALL_K + Math.sqrt(A) || (A >= TALL_FLAT_A && p15 >= 0.5 && dome <= 0.2)) && (gnd >= 0.2 || env - h >= 4)));
     if (ok) cands.push({ comp, ring: reg, A, h, ov });
   }
   // Remplacement et ajouts. Un toit par empreinte d'Overture (le plus grand); les autres toits de la même empreinte

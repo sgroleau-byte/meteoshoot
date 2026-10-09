@@ -551,6 +551,22 @@ importé, lui, est le fichier de l'architecte.
     `meteoshoot-api` n'a pas les identifiants Plans d'Apple; lancer `scripts/scene3d-dev.mjs` avec les variables
     `APPLE_MAPS_TEAM_ID`, `APPLE_MAPS_KEY_ID` et `APPLE_MAPS_PRIVATE_KEY_PATH` (le sandbox des aperçus refuse de lire
     le dossier des clés), et l'appel doit porter une origine localhost (`origine non autorisée` sinon).
+- **v633.180 (9 octobre 2026): chargement en traits fins, bouquets d'arbres plus pris pour des bâtiments.**
+  - **Chargement** (`WireLines`, `Scene3D.jsx`): à la place de l'anneau, un réseau de traits blancs fins qui se tracent
+    par-dessus la scène en construction (demande de Stéphane: « comme quand un mandat est confirmé dans BudgetShoot »):
+    26 points dispersés dans un cadre 1100 × 800 (recadré en `slice`), un trait entre deux points à moins de 360, au
+    plus 70 traits, chacun avec son épaisseur (0,4 à 1,2), son opacité (0,18 à 0,5), son délai (0,02 s par trait) et sa
+    durée (0,4 à 0,8 s), tracé par `stroke-dashoffset` (`scene3dWireDraw`), ombre légère pour rester lisible sur le
+    ciel. Un nouveau réseau toutes les 3 s tant que `status.busy` (deux couches à la fois, l'ancienne s'efface par
+    `scene3dWireOut` à 2,4 s). Le mot CHARGEMENT reste; les petits anneaux des pastilles aussi (`scene3dSpin`).
+  - **Faux bâtiments** (`api/footprints.js`, environs version 9): trois « bâtiments » de 11 à 14 m à Stoneham (et 30 à
+    Limoilou, tous des arbres de rue) étaient des bouquets d'arbres isolés sur une pelouse: ils passent la chute en
+    bordure, la finesse et le sol autour. Règle: un toit absent d'Overture ne dépasse pas 3 m plus la racine de sa
+    surface (64 m²: 11 m), sauf toit net et plat d'au moins 100 m² (surface fine sur la moitié des pixels et dôme à
+    0,2 au plus: un immeuble étroit de 13 m à toit plat reste accepté). Mesuré: Stoneham 50 → 45 ajoutés (les 4
+    bouquets et une plaque de 27 m² à 7 m), Limoilou 65 → 35 (30 arbres de rue, vérifiés sur l'imagerie), Outremont,
+    Toronto, Ottawa, Sillery: arbres de rue retirés. Piège rencontré: un `git checkout` du fichier pour retirer une
+    sonde de débogage a aussi effacé la règle non commise; relire les comptes avant de commettre.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

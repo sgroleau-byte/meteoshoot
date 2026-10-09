@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase.js';
 
 const mem = new Map();
 const TBL = 'scene3d_cache'; // partagé, pas de variante dev
-const SCENE_V = 8; // v2: noms de rues; v3: surfaces pavées d'après l'imagerie satellite; v4: leurs trous, asphalte mieux capté; v5: hauteurs LiDAR; v6: arbres LiDAR; v7: empreintes LiDAR, entrées en gravier; v8: pentes des toits, empreintes d'équerre
+const SCENE_V = 9; // v2: noms de rues; v3: surfaces pavées d'après l'imagerie satellite; v4: leurs trous, asphalte mieux capté; v5: hauteurs LiDAR; v6: arbres LiDAR; v7: empreintes LiDAR, entrées en gravier; v8: pentes des toits, empreintes d'équerre; v9: bouquets d'arbres isolés plus pris pour des bâtiments
 const API_BASE = (typeof __MS_TARGET__ !== 'undefined' && __MS_TARGET__ === 'native') ? 'https://www.meteoshoot.com' : '';
 
 export const sceneKey = (lat, lng) => `${Number(lat).toFixed(5)}_${Number(lng).toFixed(5)}`;

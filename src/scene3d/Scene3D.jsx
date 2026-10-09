@@ -3,7 +3,7 @@
 // bâtiments dessinés s'affichent tout de suite, les voisins et le relief (loadTerrain) s'ajoutent quand ils arrivent.
 // La légende dit toujours d'où vient ce qu'on regarde: condition de lumière (prévision) et hauteur de la forme
 // en face (réglée dans le projet, mesurée Overture, par défaut).
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { loadScene } from './data.js';
 import { loadTerrain } from './terrain.js';
 import { isChunkLoadError, reloadForUpdate } from '../shared/updateReload.js';
@@ -97,11 +97,35 @@ async function doSync(pid, onFetch) {
   return null;
 }
 
+// Chargement (v633.180): réseau de traits fins qui se tracent par-dessus la scène en construction, comme la confirmation
+// d'un mandat dans BudgetShoot: points dispersés, un trait entre deux points proches, chacun avec son délai et sa durée.
+// Tant que ça charge, un nouveau réseau part toutes les 3 s pendant que le précédent s'efface (deux couches à la fois).
+function WireLines({ seed }) {
+  const lines = useMemo(() => {
+    let s = (seed * 9301 + 49297) % 233280; const rnd = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+    const pts = []; for (let i = 0; i < 26; i++) pts.push({ x: -520 + rnd() * 1040, y: -380 + rnd() * 760 });
+    const items = [];
+    for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
+      const d = Math.hypot(pts[j].x - pts[i].x, pts[j].y - pts[i].y);
+      if (d < 360 && items.length < 70) items.push({ x1: pts[i].x, y1: pts[i].y, x2: pts[j].x, y2: pts[j].y, len: d, sw: 0.4 + rnd() * 0.8, op: 0.18 + rnd() * 0.32, delay: items.length * 0.02, dur: 0.4 + rnd() * 0.4 });
+    }
+    return items;
+  }, [seed]);
+  return (
+    <svg width="100%" height="100%" viewBox="-550 -400 1100 800" fill="none" preserveAspectRatio="xMidYMid slice" style={{ position: 'absolute', inset: 0, filter: 'drop-shadow(0 0 1px rgba(0,0,0,0.55))', animation: 'scene3dWireOut 0.7s ease 2.4s forwards' }}>
+      {lines.map((l, i) => <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke="#fff" strokeWidth={l.sw} opacity={l.op} style={{ strokeDasharray: l.len, strokeDashoffset: l.len, animation: `scene3dWireDraw ${l.dur}s ease-out ${l.delay}s forwards` }} />)}
+    </svg>
+  );
+}
+
 export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, visible, zoomRef, projectId, sunny, onToggleSunny }) => { // sunny: météo coupée (journée ensoleillée) // zoomRef.current(f) : les boutons + et - de la fenêtre
   const box = useRef(null);
   const eng = useRef(null);
   const [info, setInfo] = useState(null);
-  const [status, setStatus] = useState(null); // { text, busy }: busy = anneau d'attente, sinon message seul (erreur)
+  const [status, setStatus] = useState(null); // { text, busy }: busy = traits du chargement (WireLines), sinon message seul (erreur)
+  const busy = !!(status && status.busy);
+  const [wireSeed, setWireSeed] = useState(0); // cycle des traits du chargement
+  useEffect(() => { if (!busy) return undefined; setWireSeed(0); const id = setInterval(() => setWireSeed(k => k + 1), 3000); return () => clearInterval(id); }, [busy]);
   const [engReady, setEngReady] = useState(0); // compte des moteurs créés: relance les effets qui en dépendent
   // Modèle d'architecte importé: { info, pl } une fois posé; prep = progression des préparations en cours (0 à 1) par
   // projet: la préparation continue si la vue se ferme ou si l'on passe à un autre projet. dl = projet dont le modèle
@@ -367,11 +391,8 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
           <text x="17" y="4.2" textAnchor="middle" fontSize="7" fontFamily="Avenir Next, Avenir, sans-serif" fontWeight="600" fill="#fff" transform={`rotate(${info.northDeg.toFixed(1)} 17 2)`}>N</text>
         </g>
       </svg>}
+      {busy && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>{[wireSeed - 1, wireSeed].filter(k => k >= 0).map(k => <WireLines key={k} seed={k} />)}</div>}
       {status && <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', pointerEvents: 'none', animation: 'msFade 0.4s ease both' }}>
-        {status.busy && <svg width="34" height="34" viewBox="0 0 30 30" style={{ animation: 'scene3dSpin 1.1s linear infinite', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.35))' }}>
-          <circle cx="15" cy="15" r="12" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5"/>
-          <circle cx="15" cy="15" r="12" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="22 53.4"/>
-        </svg>}
         <div className="font-bebas-book" style={{ fontSize: '13px', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.8)', textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}>{status.text.toUpperCase()}</div>
       </div>}
     </div>
