@@ -70,7 +70,14 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
 - `supabase/migrations/20261005120000_cache_scene_3d.sql` (table `scene3d_cache`),
   `20261005150000_style_3d_projet.sql` (colonne `style3d`, supprimée par `20261005230000_retrait_style_3d.sql`),
   `20261005200000_cache_scene_3d_mise_a_jour.sql` (mise à jour d'une entrée périmée par un compte connecté).
-- `src/weather/api.js`: l'horaire porte `cloudMid` et `cloudHigh` (nuages moyens et hauts).
+- `src/weather/api.js`: l'horaire porte `cloudMid` et `cloudHigh` (nuages moyens et hauts); depuis la v633.187, aussi le
+  profil vertical de la nébulosité d'ICON (`prof`, `profZ`: 12 niveaux de pression de 1000 à 200 hPa avec leur hauteur
+  au-dessus du sol), `cape`, `frz` (niveau de gel), `lcl` (base des cumulus: 125 m par degré d'écart température / point
+  de rosée) et `elev`, pour les trois premiers jours.
+- `src/scene3d/sky.js`: nuages volumétriques (v633.187): textures de bruit 3D, code GLSL des couches, soleil vu d'une
+  altitude donnée, classement des nuages (`classifyClouds`).
+- `tools/sky/`: banc du ciel (page `harness.html` servie par Vite, pilote Chrome sans fenêtre `cdp.mjs`, captures
+  `shoot.mjs` sur des jeux de conditions `scenarios.mjs` ou sur la prévision réelle `real.mjs`, planches `sheet.py`).
 - `vercel.json`: durée maximale de `api/scene3d.js` (90 s). `.vercelignore` exclut les dossiers natifs et de
   compilation (sans lui, le client Vercel envoyait 15 000 fichiers).
 - Données du projet: chaque forme de `buildings` porte `polygon`, `height`, `name` et, depuis la v633.144,
@@ -661,6 +668,67 @@ importé, lui, est le fichier de l'architecte.
   refusées en silence depuis le début (aucune en base le 9 octobre; le relief était recalculé à chaque ouverture,
   masqué par le cache du navigateur et de Vercel). Migration `20261009200000_cache_scene_3d_cles_prefixees.sql`
   appliquée par `supabase db push`: préfixe optionnel dem_ ou hor_, vérifié par une insertion d'essai annulée.
+- v633.187 (9 octobre 2026), **ciel volumétrique: le look du ciel fidèle au type de nuage** (« que ça respecte très
+  fidèlement le type de nuage annoncé... quand c'est nuageux avec éclaircie, on a souvent droit à des nuages allumés par
+  les derniers rayons orange; quand c'est de gros nuages de tempête ou de cumulonimbus, je veux que le ciel ressemble à
+  ça »). Les trois couches de nuages en bruit 2D plat du shader du ciel sont remplacées par `src/scene3d/sky.js`:
+  - **Données (ICON en priorité, demande de Stéphane):** la requête ICON ajoute `cape`, `freezing_level_height`,
+    `dew_point_2m` et, pour 12 niveaux de pression (1000 à 200 hPa), `cloud_cover_XhPa` et `geopotential_height_XhPa`
+    (GFS les accepte aussi; les deux requêtes vérifiées à 54 et 71 Ko). La rangée horaire porte `prof` (12 couvertures),
+    `profZ` (hauteurs au-dessus du sol), `cape`, `frz`, `lcl`, `elev` (3 premiers jours seulement). `classifyClouds`
+    (sky.js) en tire trois couches: basse (base et sommet d'après le nuage convectif ou le profil, sinon le niveau de
+    condensation; type 0 stratus, 0,5 stratocumulus, 1 cumulus; bourgeonnement; cumulonimbus d'après le code 80 à 99 ou
+    l'épaisseur convective), moyenne (altostratus si couverte et épaisse, sinon altocumulus) et haute (cirrus,
+    cirrostratus au-delà de 50 %, enclume sous l'orage), plus les mots de la légende: « Nuages bas 40 % (cumulus), nuages
+    d'altitude 60 % (altocumulus et cirrus) ». Les couvertures par niveau d'ICON sous-estiment les parts bas/moyen/haut
+    (recouvrement maximal-aléatoire sur 20 niveaux): elles servent au placement vertical, les parts à la quantité.
+  - **Rendu:** couches basse et moyenne tracées par rayons (marche volumétrique) dans deux textures de bruit 3D générées
+    sur la carte graphique à l'ouverture (Perlin-Worley 128³ tuilable et Worley 32³ d'érosion, `WebGL3DRenderTarget` couche
+    par couche), coquilles sphériques (Terre de 6 371 km: les nuages se rejoignent à l'horizon et se fondent dans la brume
+    à 22 km), champ de couverture à 16 et 5 km, forme à 4,5 km, érosion à 600 m, base plate et dense (érosion réduite sur
+    les 15 % du bas), contour net pour les cumulus (densité pleine dès 45 % de la plage), tour étirée et enclume élargie
+    pour le cumulonimbus, cellules de 2,6 km pour l'altocumulus, voile uniforme pour l'altostratus. Cirrus en voile 2D à
+    l'altitude du profil: bancs séparés par du ciel bleu, filaments étirés, halo de 22° gardé pour le cirrostratus. Rideaux
+    de pluie sous la base (averses, orage). Lumière par point: soleil (diffusion simple et trois octaves de diffusion
+    multiple, phase 0,5 avant g = 0,65 et 0,5 arrière g = -0,35, profondeur optique vers le soleil par 5 pas croissants
+    et un échantillon lointain), lumière transmise à travers l'épaisseur (1 / (1 + 0,22 tau) sur le minimum entre
+    l'épaisseur au-dessus et le chemin vers le soleil: claire sous un stratus mince, très sombre sous 10 km d'orage),
+    ciel (zénith et horizon du même ciel physique, heure bleue et nuit comme la sphère) et rebond du sol (réduit sous un
+    couvert et sous l'orage). Composition en linéaire: ciel clair x transmittance + radiance des nuages.
+  - **Soleil à l'altitude des nuages** (`sunAtAltitude`): extinction intégrée le long du rayon vers le soleil dans une
+    atmosphère sphérique (Rayleigh sur 8,4 km; aérosols sur 1,25 km avec une épaisseur optique verticale de 0,06 x
+    (turbidité - 1), soit 0,08 par air propre, dépendance d'Ångström 1,3: le terme de Mie de Preetham était 50 fois trop
+    faible et laissait passer une lumière rouge pur après le coucher, d'où des nuages roses que Stéphane ne reconnaissait
+    pas; avec les aérosols, les nuages bas s'allument orangé au coucher et s'éteignent en quelques minutes, les nuages hauts
+    gardent une lueur rouge plus longtemps), visibilité par l'ombre de la Terre (point le plus bas du rayon, bord adouci
+    sur 1 km) et réfraction (0,9° à l'horizon). Après le coucher au sol, un nuage à 1 500 m
+    voit encore le soleil pendant une dizaine de minutes, un altocumulus à 4 km un peu plus, un cirrus à 9 km jusqu'à
+    20 minutes: les rayons arrivent alors par-dessous la base et l'allument (orange, puis rose). Le ciel dessiné au
+    coucher restant plus clair que le vrai rapport ciel / soleil, le soleil des nuages est relevé jusqu'à 2,5 fois sous 8°
+    (`kLow`) pour que les bases allumées ressortent, sans plus: une première version à 5 fois donnait des roses trop
+    poussés (Stéphane: « ne pousse pas trop les couleurs, il faut éviter de faux effets trop poussés »); un peu moins de
+    blanc gardé dans la couleur du soleil au ras de l'horizon (orangé, sans magenta).
+  - **Pipeline:** passe des nuages dans une texture à la résolution des pixels CSS pendant les mouvements (moitié des
+    pixels Retina, 2 à 5 ms), puis une image de plus en pleine résolution 220 ms après l'arrêt (`cloudHi`); la sphère du
+    ciel la lit par quatre lectures décalées d'un demi-pixel (lisse le tramage). Les cartes cubiques (lumière d'ambiance,
+    flaques) calculent les nuages en ligne (`INLINE`, moitié des pas), donc la lumière de la scène suit (grise sous le
+    couvert, chaude sous les nuages allumés). Le brouillard du lointain prend la clarté de la base des nuages calculée par le
+    même modèle (sombre sous l'orage: les traînées de pluie, teintées sur lui, foncent aussi). Trouée autour du soleil
+    (`uSunGap`) gardée: facteur de couverture du rayon dans le cône. Dérive de 20 km/h vers l'est-nord-est au fil des
+    heures (le curseur fait défiler le ciel; modulo 60 jours et champ périodique de 28 560 km pour la précision des
+    flottants). Nuages toujours figés pour une heure donnée.
+  - **Calibration au banc** (`tools/sky`): la part du ciel couverte était une sigmoïde très raide du paramètre brut
+    (cumulus: 11 % à 0,40, 54 % à 0,50, 87 % à 0,60): tables mesurées par type (`CM0`, `CM5`, `CM1`, 13 noeuds) pour que
+    40 % couvrent 37 % du ciel et 70 % en couvrent 74 %. Non-régression: ciel clair de midi identique au pixel près; nuit
+    quasi identique; l'heure bleue change (nuages volumétriques en silhouette).
+  - **Pièges rencontrés:** intersection rayon-coquille en flottants 32 bits (différence de deux carrés de 6 371 km): les
+    rideaux de pluie marchaient sous le sol avec une densité négative, l'exponentielle explosait à -65504 dans la carte
+    cubique et toute la scène sortait blanche (ACES d'un négatif); corrigé par la forme factorisée (h - hAlt)(2R + h +
+    hAlt), des racines stables et des densités bornées. `smoothstep` à bornes inversées remplacé. `readRenderTargetPixels`
+    d'une cible demi-flottante demande un `Uint16Array` (décodage à la main dans le banc). Le soleil rasant d'après le
+    coucher n'éclaire que les 50 premiers mètres de la base: si l'érosion vide le bas des cumulus, rien ne s'allume.
+  - **À suivre:** cumulus encore un peu doux vus du sol (bord et contraste des sommets), neige (pas encore de couche
+    d'hiver), mammatus et foudre non faits, jugement de Stéphane sur les teintes du coucher.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

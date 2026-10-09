@@ -199,7 +199,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
   useEffect(() => { if (eng.current) eng.current.setModelLocked(locked); if (locked) stopDrag(); }, [locked, engReady]);
   useEffect(() => { if (eng.current) eng.current.setProject({ lat, lng, buildings, orientation }); }, [buildings, orientation]);
   useEffect(() => { if (eng.current) eng.current.setTime(timeMs); }, [timeMs]);
-  useEffect(() => { if (eng.current) eng.current.setWeather(weatherRow); }, [weatherRow?.time, weatherRow?.cloudLow, weatherRow?.cloudMid, weatherRow?.cloudHigh, weatherRow?.sunFraction, weatherRow?.precip, weatherRow?.wc, weatherRow?.convBase, weatherRow?.convDepth, weatherRow?.direct]);
+  useEffect(() => { if (eng.current) eng.current.setWeather(weatherRow); }, [weatherRow?.time, weatherRow?.cloudLow, weatherRow?.cloudMid, weatherRow?.cloudHigh, weatherRow?.sunFraction, weatherRow?.precip, weatherRow?.wc, weatherRow?.convBase, weatherRow?.convDepth, weatherRow?.direct, weatherRow?.cape, weatherRow?.lcl]);
   // Fumée de feux (FireWork) à l'heure affichée, seulement dans la fenêtre de prévision de la 3D (comme la météo) et un
   // jour où l'app en signale déjà (moyenne du jour, icône du soleil): par prudence, la couche horaire seule mêle le fond
   // urbain. Demandée un court instant après l'arrêt du curseur; une heure déjà lue s'affiche tout de suite, une réponse
