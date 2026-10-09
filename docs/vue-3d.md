@@ -114,7 +114,12 @@ importé, lui, est le fichier de l'architecte.
   forme et l'édifice Overture qu'elle recouvre; les arbres sous elle disparaissent, ceux qui la touchent sont ajustés
   (`clearance.js`). Si la position du projet est corrigée de moins d'un kilomètre, la maison reste au même endroit
   du terrain; au-delà, pose par défaut.
-- **Pastille MAISON** (une fois le modèle posé): glisser la maison dans la vue pour la déplacer (Échap annule);
+- **Cadenas** (v633.175, 8 octobre 2026, Stéphane: « je n'arrête pas de déplacer le modèle 3D de ma maison quand je veux
+  tourner autour »): la maison est fixée par défaut chaque fois qu'un modèle déjà placé s'affiche (retour à la 3D ou au
+  projet). Fixée, la pastille ne montre que MAISON et un cadenas fermé, et glisser sur la maison fait tourner la vue comme
+  ailleurs (`setModelLocked`, `pickModel` ne la saisit plus). Libre juste après un import (à placer), ou d'un clic sur le
+  cadenas: les réglages ci-dessous réapparaissent, avec « Glisser la maison pour la déplacer, cadenas pour la fixer ».
+- **Pastille MAISON** (une fois le modèle posé, cadenas ouvert): glisser la maison dans la vue pour la déplacer (Échap annule);
   rotation en glissant la pastille des degrés à gauche ou à droite (Maj: par 15°); hauteur en glissant la pastille
   suivante vers le haut ou le bas; flèche « recoller au sol » quand la hauteur n'est pas nulle; croix pour retirer le
   modèle (la forme dessinée revient).

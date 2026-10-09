@@ -104,6 +104,10 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
   // projet: la préparation continue si la vue se ferme ou si l'on passe à un autre projet. dl = projet dont le modèle
   // en ligne se télécharge.
   const [mdl, setMdl] = useState(null);
+  // Maison fixée (cadenas): par défaut chaque fois qu'un modèle déjà placé s'affiche (retour à la 3D ou au projet), pour
+  // tourner autour sans la déplacer; libre seulement juste après un import ou d'un clic sur le cadenas (Stéphane, 8
+  // octobre 2026: « je n'arrête pas de déplacer le modèle 3D de ma maison quand je veux tourner autour »).
+  const [locked, setLocked] = useState(true);
   const [prep, setPrep] = useState({});
   const [dl, setDl] = useState(null);
   const [mdlErr, setMdlErr] = useState(null);
@@ -131,9 +135,12 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
     const rec = (pid ? await loadModel(pid) : undefined) || fallback;
     if (isOff() || eng.current !== e) return;
     if (!rec) { if (e.getModelPlacement()) await e.setModel(null); if (eng.current === e) { mdlFor.current = null; if (!isOff()) setMdl(null); } return; }
-    const pl = await e.setModel(rec.glb, rec.info, toLocal(rec.placement, org.current));
+    const p0 = toLocal(rec.placement, org.current);
+    const pl = await e.setModel(rec.glb, rec.info, p0);
     if (!pl || eng.current !== e) return;
-    mdlFor.current = pid; if (!isOff()) setMdl({ info: rec.info, pl });
+    // Jamais placé (import fini vue fermée ou sur un autre projet, adresse déplacée de plus d'un kilomètre): pose par défaut
+    // gardée et maison libre à cette première apparition; fixée aux suivantes.
+    mdlFor.current = pid; if (!p0) keep(pl); if (!isOff()) { setMdl({ info: rec.info, pl }); setLocked(p0 != null); }
   });
   const stopDrag = () => { if (endDrag.current) endDrag.current(); };
 
@@ -163,13 +170,13 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
     });
     // Fermeture: plus de maison dans la vue, et une erreur d'import affichée s'efface (celle qui arrive vue fermée reste
     // pour la réouverture).
-    return () => { cancelled = true; stopDrag(); setMdl(null); setMdlErr(null); setSatOn(false); if (zoomRef) zoomRef.current = null; if (eng.current) { eng.current.dispose(); eng.current = null; mdlFor.current = null; } };
+    return () => { cancelled = true; stopDrag(); setMdl(null); setLocked(true); setMdlErr(null); setSatOn(false); if (zoomRef) zoomRef.current = null; if (eng.current) { eng.current.dispose(); eng.current = null; mdlFor.current = null; } };
   }, [visible, lat, lng]);
   // Modèle du projet, à chaque moteur créé et à chaque changement de projet (même adresse comprise): celui de l'autre
   // projet est retiré. Copie locale d'abord, puis la copie en ligne: autre modèle (téléchargé et posé), modèle retiré
   // ailleurs (retiré ici aussi) ou placement plus récent (repris).
   useEffect(() => {
-    const e = eng.current, pid = projectId; setMdl(null);
+    const e = eng.current, pid = projectId; setMdl(null); setLocked(true);
     if (!e) return;
     let off = false; const isOff = () => off;
     showLocal(e, pid, isOff).catch(err => console.warn('[scene3d] modèle importé illisible:', err));
@@ -186,6 +193,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
     return () => { off = true; stopDrag(); };
   }, [projectId, engReady]);
   useEffect(() => { setMdlErr(null); }, [projectId]);
+  useEffect(() => { if (eng.current) eng.current.setModelLocked(locked); if (locked) stopDrag(); }, [locked, engReady]);
   useEffect(() => { if (eng.current) eng.current.setProject({ lat, lng, buildings, orientation }); }, [buildings, orientation]);
   useEffect(() => { if (eng.current) eng.current.setTime(timeMs); }, [timeMs]);
   useEffect(() => { if (eng.current) eng.current.setWeather(weatherRow); }, [weatherRow?.time, weatherRow?.cloudLow, weatherRow?.cloudMid, weatherRow?.cloudHigh, weatherRow?.sunFraction, weatherRow?.precip, weatherRow?.wc, weatherRow?.convBase, weatherRow?.convDepth, weatherRow?.direct]);
@@ -221,7 +229,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
         const e = here() ? eng.current : null;
         const pl = e ? await e.setModel(res.glb, res.info, null) : null;
         const shown = pl && eng.current === e;
-        if (shown) { mdlFor.current = pid; if (here()) setMdl({ info: res.info, pl }); }
+        if (shown) { mdlFor.current = pid; if (here()) { setMdl({ info: res.info, pl }); setLocked(false); } } // modèle neuf: libre, à placer
         setPrepOf(pid, null);
         if (!pid) return;
         // Copie locale en attente d'envoi, puis envoi en ligne (pas attendu: la file du moteur reste libre).
@@ -284,7 +292,8 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 6, background: '#202427', overflow: 'hidden' }}>
       <div ref={box} style={{ position: 'absolute', inset: 0 }}/>
-      {/* Modèle d'architecte (.kmz de SketchUp): import, puis placement. La maison se glisse dans la vue pour la déplacer.
+      {/* Modèle d'architecte (.kmz de SketchUp): import, puis placement. La maison se glisse dans la vue pour la déplacer
+          tant que le cadenas est ouvert (fixée à chaque retour).
           En haut à gauche sous la boussole (left 14, top 104, 34 de haut), loin de la colonne des formes et de SAT / 3D. */}
       <input ref={fileRef} type="file" accept=".kmz" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; onFile(f); }}/>
       <div style={{ position: 'absolute', top: '148px', left: '14px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '6px' }}>
@@ -302,18 +311,24 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
             </div>
           ) : <>
             <span className="font-bebas-bold" title={`${mdl.info.name}: ${Math.round(mdl.info.tris).toLocaleString('fr-CA')} triangles, ${Math.round(mdl.info.bytes / 1024)} Ko`} style={{ ...bebas, color: '#fff', padding: '3px 2px 0 2px' }}>MAISON</span>
-            <div onPointerDown={(e) => dragPill(e, 'rot')} title="Glisser à gauche ou à droite pour tourner (Maj: par 15°)" style={{ ...whitePill, cursor: 'ew-resize' }}>
-              <span className="font-bebas-bold" style={{ ...bebas, color: '#000' }}>{Math.round(mdl.pl.rot)}°</span>
-            </div>
-            <div onPointerDown={(e) => dragPill(e, 'dy')} title="Glisser vers le haut pour ressortir, vers le bas pour enfoncer" style={{ ...whitePill, cursor: 'ns-resize' }}>
-              <span className="font-bebas-bold" style={{ ...bebas, color: '#000' }}>{fmtDy(mdl.pl.dy)}</span>
-            </div>
-            {Math.abs(mdl.pl.dy) >= 0.025 && <button onClick={() => { const pl = move({ dy: 0 }); keep(pl); }} title="Recoller au sol" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative', top: '1px' }}><path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/></svg>
-            </button>}
-            <button onClick={removeModel} title="Retirer le modèle" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px 2px 0', display: 'flex', alignItems: 'center' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2.5" strokeLinecap="round" style={{ position: 'relative', top: '1px' }}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            {/* Cadenas (tracés Lucide lock et lock-open): fermé, la maison est fixée et seuls MAISON et le cadenas restent. */}
+            <button onClick={() => setLocked(v => !v)} title={locked ? 'Maison fixée : cliquer pour la déplacer ou la tourner' : 'Fixer la maison en place'} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: locked ? '2px 6px 2px 2px' : '2px', display: 'flex', alignItems: 'center' }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative', top: '1px' }}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d={locked ? 'M7 11V7a5 5 0 0 1 10 0v4' : 'M7 11V7a5 5 0 0 1 9.9-1'}/></svg>
             </button>
+            {!locked && <>
+              <div onPointerDown={(e) => dragPill(e, 'rot')} title="Glisser à gauche ou à droite pour tourner (Maj: par 15°)" style={{ ...whitePill, cursor: 'ew-resize' }}>
+                <span className="font-bebas-bold" style={{ ...bebas, color: '#000' }}>{Math.round(mdl.pl.rot)}°</span>
+              </div>
+              <div onPointerDown={(e) => dragPill(e, 'dy')} title="Glisser vers le haut pour ressortir, vers le bas pour enfoncer" style={{ ...whitePill, cursor: 'ns-resize' }}>
+                <span className="font-bebas-bold" style={{ ...bebas, color: '#000' }}>{fmtDy(mdl.pl.dy)}</span>
+              </div>
+              {Math.abs(mdl.pl.dy) >= 0.025 && <button onClick={() => { const pl = move({ dy: 0 }); keep(pl); }} title="Recoller au sol" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative', top: '1px' }}><path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/></svg>
+              </button>}
+              <button onClick={removeModel} title="Retirer le modèle" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px 2px 0', display: 'flex', alignItems: 'center' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2.5" strokeLinecap="round" style={{ position: 'relative', top: '1px' }}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </>}
           </>}
         </div>
         <div onClick={toggleSat} title={satOn ? 'Retirer l’image satellite du sol' : 'Poser l’image satellite de Plans sur le sol (repère pour placer la maison)'} style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: satBusy ? 'wait' : 'pointer', borderRadius: '16px', padding: '4px 10px 3px 8px', whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.4)', background: satOn ? '#fff' : 'rgba(232,228,220,0.25)', userSelect: 'none', WebkitUserSelect: 'none' }}>
@@ -321,7 +336,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
             : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={satOn ? '#000' : '#fff'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative', top: '1px' }}><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>}
           <span className="font-bebas-bold" style={{ fontSize: '15px', letterSpacing: '0.04em', lineHeight: '1', color: satOn ? '#000' : '#fff', paddingTop: '2px' }}>SOL SAT</span>
         </div>
-        {mdl && prepP == null && <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.75)', textShadow: '0 1px 2px rgba(0,0,0,0.5)', paddingLeft: '6px', pointerEvents: 'none' }}>Glisser la maison pour la déplacer</div>}
+        {mdl && prepP == null && !locked && <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.75)', textShadow: '0 1px 2px rgba(0,0,0,0.5)', paddingLeft: '6px', pointerEvents: 'none' }}>Glisser la maison pour la déplacer, cadenas pour la fixer</div>}
         {mdlErr && <div style={{ fontSize: '11px', color: '#ffb4a8', textShadow: '0 1px 2px rgba(0,0,0,0.5)', paddingLeft: '6px', maxWidth: '240px' }}>{mdlErr}</div>}
       </div>
       {info && <div style={{ position: 'absolute', left: '14px', bottom: '12px', fontSize: '12px', lineHeight: '1.45', color, pointerEvents: 'none', textShadow: info.light ? '0 1px 2px rgba(0,0,0,0.35)' : 'none' }}>

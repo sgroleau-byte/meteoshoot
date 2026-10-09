@@ -629,6 +629,7 @@ export function createScene3D(container, opts = {}) {
   // sens horaire depuis le nord), dy (mètres au-dessus de la pose au sol). Pose au sol: le bas du modèle au point le plus bas
   // du relief sous son emprise; à flanc de colline, l'arrière s'enfonce et le relief cache la partie enterrée.
   let model = null, modelPl = null, modelDrag = null, modelTimer = 0;
+  let modelLocked = false; // maison fixée (cadenas de la pastille MAISON): glisser dessus fait tourner la vue, comme ailleurs
   // Calque satellite temporaire (satDrape.js): image drapée sur le relief, arbres masqués tant qu'il est allumé.
   let sat = null, satObj = null;
   const satTrees = () => { (treesI || []).forEach(m => { m.visible = !sat; }); statics.forEach(m => { if (m.material === fillMat || m.material === edgeMat) m.visible = !sat; }); dirty = true; };
@@ -1205,12 +1206,12 @@ export function createScene3D(container, opts = {}) {
   // ---- interaction: un doigt (ou la souris) tourne et monte, deux doigts pincent pour s'approcher, molette ou
   // trackpad aussi; les boutons + et - de la fenêtre passent par zoom(). Distance bornée par clampR.
   const el = R.domElement; const ptrs = new Map(); let pinch = null;
-  // La maison importée se déplace en la glissant; ailleurs, la vue tourne. Le déplacement à l'écran devient un déplacement
+  // La maison importée se déplace en la glissant (sauf fixée: modelLocked); ailleurs, la vue tourne. Le déplacement à l'écran devient un déplacement
   // au sol: gauche-droite le long de la droite de la caméra, haut-bas le long de son avant (vers le haut = plus loin), à
   // l'échelle de la maison saisie (distance / focale en pixels). Pas de plan à la hauteur du point saisi: à hauteur d'oeil,
   // il passe au-dessus de la caméra (sens inversé, maison figée ou projetée à des centaines de mètres).
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), rtV = new THREE.Vector3();
-  const pickModel = (e) => { if (!model) return null; const r = el.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, cam); const h = ray.intersectObject(model.group, true); return h.length ? h[0] : null; };
+  const pickModel = (e) => { if (!model || modelLocked) return null; const r = el.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, cam); const h = ray.intersectObject(model.group, true); return h.length ? h[0] : null; };
   const startModelDrag = (e, hit) => {
     const f = el.getBoundingClientRect().height / (2 * Math.tan(cam.fov * Math.PI / 360)); // focale en pixels (CSS)
     rtV.setFromMatrixColumn(cam.matrixWorld, 0); rtV.y = 0; if (rtV.lengthSq() < 1e-8) rtV.set(1, 0, 0); rtV.normalize();
@@ -1563,6 +1564,7 @@ export function createScene3D(container, opts = {}) {
     setModelPlacement(p) { if (!model) return null; modelPl = { ...modelPl, ...p }; placeModel(); modelChanged(); return { ...modelPl }; },
     autoPlaceModel() { if (!model) return null; modelPl = defaultPlacement(); rebuild(true, true); return { ...modelPl }; },
     getModelPlacement() { return modelPl ? { ...modelPl } : null; },
+    setModelLocked(v) { modelLocked = !!v; if (modelLocked) cancelModelDrag(); if (!ptrs.size) el.style.cursor = 'grab'; }, // fixée: un glisser en cours est annulé
     // Calque satellite: image de loadSatImage (satDrape.js) ou null pour l'éteindre.
     setSatellite(s) { sat = s || null; placeSat(); return !!satObj; },
     dispose() {
