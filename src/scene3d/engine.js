@@ -397,17 +397,27 @@ export function createScene3D(container, opts = {}) {
   let gnd = null;
   const gndFar = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000, 8, 8), gndMatFar); gndFar.rotation.x = -Math.PI / 2; gndFar.position.y = -0.3; gndFar.receiveShadow = true; S.add(gndFar);
   const FT = facadeTex();
+  // La scène pousse (v633.181): à l'arrivée des environs, les bâtiments montent du sol (sommets rapportés à leur base,
+  // aGrow = [départ en s, base]), les surfaces et les rues se tracent du sujet vers l'extérieur (aDist, mètres depuis
+  // l'origine, contre uReveal), les arbres grandissent par leurs matrices d'instance (trees). uGrow: secondes depuis le
+  // début, très grand quand c'est fini. Les ombres suivent (growDepthMat pour les bâtiments; les arbres, par leurs matrices).
+  const growU = { uGrow: { value: 1e4 }, uReveal: { value: 1e6 } };
+  const GROW_V = 'attribute vec2 aGrow;uniform float uGrow;\n', GROW_B = '\n{float gs=clamp((uGrow-aGrow.x)/0.7,0.0,1.0);gs=gs*gs*(3.0-2.0*gs);transformed.y=aGrow.y+(transformed.y-aGrow.y)*gs;}';
+  const growVertex = (sh) => { Object.assign(sh.uniforms, growU); sh.vertexShader = GROW_V + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>' + GROW_B); };
+  const growDepthMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  growDepthMat.onBeforeCompile = growVertex; growDepthMat.customProgramCacheKey = () => 'pousse-profondeur';
   const wallMat = new THREE.MeshStandardMaterial({ vertexColors: true, map: FT.map, roughnessMap: FT.rough, roughness: 1, metalness: 0, envMapIntensity: 0.75, emissive: 0xffffff, emissiveMap: FT.emis, emissiveIntensity: 0 });
   const uNight = { value: 0 }; // 0 le jour (fenêtres discrètes), 1 la nuit (fenêtres d'origine): voir frame
   wallMat.onBeforeCompile = (sh) => {
     sh.uniforms.mapDay = { value: FT.mapDay }; sh.uniforms.uNight = uNight;
-    sh.vertexShader = 'attribute float aSeed;varying float vSeed;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvSeed=aSeed;');
+    growVertex(sh); sh.vertexShader = 'attribute float aSeed;varying float vSeed;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvSeed=aSeed;');
     sh.fragmentShader = 'varying float vSeed;uniform sampler2D mapDay;uniform float uNight;\n' + sh.fragmentShader
       .replace('#include <map_fragment>', 'diffuseColor*=mix(texture2D(mapDay,vMapUv),texture2D(map,vMapUv),uNight);')
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor=roughness*mix(0.933,texture2D(roughnessMap,vRoughnessMapUv).g,uNight);')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance*=vSeed<0.0?1.0:step(0.5,fract(sin(dot(floor(vEmissiveMapUv)+vec2(vSeed,vSeed*0.37),vec2(12.9898,78.233)))*43758.5453));');
   };
   const roofMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, envMapIntensity: 0.75 });
+  roofMat.onBeforeCompile = (sh) => growVertex(sh);
   const trunkMat = new THREE.MeshStandardMaterial({ color: L('#4a3b2e'), roughness: 0.95, envMapIntensity: 0.75 });
   const leafMask = leafTex();
   // Couronnes vues d'un seul côté (8 octobre 2026): par les trous on voit le ciel ou ce qui est derrière, pas l'intérieur
@@ -466,7 +476,15 @@ export function createScene3D(container, opts = {}) {
   let lampMeshes = [], urban = 0; // urban: 0 en campagne, 1 en ville (densité des bâtiments)
   // Surfaces au sol: pas d'écriture de profondeur et un ordre de rendu par couche (gazon, asphalte, pavé, rails, rues,
   // trottoirs), sinon des surfaces à quelques millimètres l'une de l'autre scintillent à 200 m (triangles qui clignotent).
-  const flat = (h, y) => new THREE.MeshStandardMaterial({ color: L(h), roughness: 0.95, side: THREE.DoubleSide, envMapIntensity: 0.75, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 * y });
+  const flat = (h, y) => {
+    const m = new THREE.MeshStandardMaterial({ color: L(h), roughness: 0.95, side: THREE.DoubleSide, envMapIntensity: 0.75, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 * y });
+    m.onBeforeCompile = (sh) => { // la surface se trace du sujet vers l'extérieur à l'arrivée des environs (aDist contre uReveal)
+      Object.assign(sh.uniforms, growU);
+      sh.vertexShader = 'attribute float aDist;varying float vDist;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvDist=aDist;');
+      sh.fragmentShader = 'varying float vDist;uniform float uReveal;\n' + sh.fragmentShader.replace('#include <clipping_planes_fragment>', 'if(vDist>uReveal)discard;\n#include <clipping_planes_fragment>');
+    };
+    return m;
+  };
   // Gris foncés (rues, surfaces pavées) pour trancher avec le gazon et les toits (#5a5650); trottoirs un peu plus clairs.
   const flatMats = { road: flat('#383b3e', 3), rail: flat('#7d766c', 3), walk: flat('#9b978d', 4), asphalt: flat('#3a3d40', 2), gravel: flat('#7a756b', 2) }; // gravier: gris chaud, plus clair que l'asphalte, plus sobre que le trottoir
   Object.keys(GC).forEach(k => { flatMats[k] = flat(GC[k], 1); });
@@ -605,6 +623,25 @@ export function createScene3D(container, opts = {}) {
   const nearXY = (x, n) => Math.hypot(x, n) < NEAR;
   let winLights = [];
   function clearStatics() { statics.forEach(m => { S.remove(m); if (!m.userData.sharedGeo) m.geometry && m.geometry.dispose(); if (m.isInstancedMesh) m.dispose(); }); statics = []; treesI = null; winLights.forEach(l => { S.remove(l); l.dispose && l.dispose(); }); winLights = []; lampMeshes = []; urban = 0; }
+  // Pousse de la scène (voir growU): démarre à la reconstruction qui suit l'arrivée des environs (setData), 2,5 s.
+  let growing = false, growT0 = 0, growNext = false;
+  const GROW_TOTAL = 2.5;
+  function treeGrowStep(t) {
+    (treesI || []).forEach(m => {
+      const g = m.userData.grow; if (!g) return;
+      const a = m.instanceMatrix.array, F = g.final, n = g.gt.length;
+      for (let i = 0; i < n; i++) {
+        let s = (t - g.gt[i]) / 0.8; s = s <= 0 ? 0 : s >= 1 ? 1 : s * s * (3 - 2 * s); const o = i * 16;
+        if (s >= 1) { for (let k = 0; k < 16; k++) a[o + k] = F[o + k]; continue; }
+        s = 0.01 + 0.99 * s; const px = g.gp[3 * i], py = g.gp[3 * i + 1], pz = g.gp[3 * i + 2];
+        for (let k = 0; k < 12; k++) a[o + k] = F[o + k] * s;
+        a[o + 12] = px + s * (F[o + 12] - px); a[o + 13] = py + s * (F[o + 13] - py); a[o + 14] = pz + s * (F[o + 14] - pz); a[o + 15] = 1;
+      }
+      m.instanceMatrix.needsUpdate = true;
+    });
+  }
+  function startGrow(now) { growing = true; growT0 = now; growU.uGrow.value = 0; growU.uReveal.value = 0; treeGrowStep(0); dirty = true; }
+  function finishGrow() { growing = false; growNext = false; growU.uGrow.value = 1e4; growU.uReveal.value = 1e6; treeGrowStep(1e4); dirty = true; }
   function addMesh(g, mat, y, near, shadows, order = 0) { const m = new THREE.Mesh(g, mat); m.position.y = y; m.renderOrder = order; m.receiveShadow = true; if (shadows) m.castShadow = true; m.userData.pt = !!near; S.add(m); statics.push(m); return m; }
   // Surfaces au sol (parcs, asphalte, eau): items = [{ o: contour, h: trous }], séparés proche/loin, triangulées en 2D
   // puis drapées sur le relief (chaque morceau dans le plan du maillage du sol, voir terrain.drape).
@@ -619,7 +656,8 @@ export function createScene3D(container, opts = {}) {
   function drapedMesh(lots, mat, y, near, order) {
     const parts = lots.map(l => terrain.drape(l.tris, l.hFn, l.nFn)).filter(p => p.pos.length); if (!parts.length) return;
     const n = parts.reduce((t, p) => t + p.pos.length, 0), pos = new Float32Array(n), nrm = new Float32Array(n); let o = 0; parts.forEach(p => { pos.set(p.pos, o); nrm.set(p.nrm, o); o += p.pos.length; });
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); addMesh(g, mat, y, near, false, order);
+    const dist = new Float32Array(n / 3); for (let i = 0, k = 0; i < n; i += 3, k++) dist[k] = Math.hypot(pos[i], pos[i + 2]);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); g.setAttribute('aDist', new THREE.BufferAttribute(dist, 1)); addMesh(g, mat, y, near, false, order);
   }
   function addFlat(items, mat, y, order = 0) {
     [true, false].forEach(near => {
@@ -640,7 +678,7 @@ export function createScene3D(container, opts = {}) {
   function blocks(list) {
     [true, false].forEach(near => {
       const part = list.filter(b => { const c = centroid(b.p); return nearXY(c[0], c[1]) === near; }); if (!part.length) return;
-      const P = [], N = [], U = [], C = [], SD = [], RP = [], RN = [], RC = [];
+      const P = [], N = [], U = [], C = [], SD = [], GW = [], RP = [], RN = [], RC = [], GR = [];
       part.forEach(b => {
         // Contour en sens trigonométrique (vu du ciel): l'extérieur est à droite du sens de parcours, ce qui vaut
         // aussi pour les formes concaves (en L, en U), contrairement à un test sur le centre de la forme.
@@ -649,14 +687,15 @@ export function createScene3D(container, opts = {}) {
         // (rien ne flotte côté aval, le pied s'enterre côté amont); étages recomptés sur la hauteur réelle du mur.
         // Toit en pente mesuré (LiDAR, v633.179): murs jusqu'à l'égout le plus bas, versants et pignons par-dessus (roof.js).
         const gb = b.g || groundOf(pts), yb = gb.min - 0.5, top = gb.mean + (roof ? roof.he : h), lvw = Math.max(1, Math.round(lv * (top - yb) / h));
+        const cb = centroid(pts), g0 = 0.15 + 0.9 * Math.min(1, Math.hypot(cb[0], cb[1]) / 400); // départ de la pousse: une vague du sujet vers l'extérieur
         for (let i = 0; i < pts.length; i++) {
           const a = pts[i], c = pts[(i + 1) % pts.length]; const ax = a[0], azz = -a[1], bx = c[0], bz = -c[1]; const ex = bx - ax, ez = bz - azz, len = Math.hypot(ex, ez); if (len < 0.05) continue;
           const nx = -ez / len, nz = ex / len;
           // Nombre entier de travées par mur (fenêtres centrées, jamais coupées dans un coin); mur trop court: plein.
           const nb = Math.round(len / (b.bay || 6.5)); const u1 = u0 + nb; const q = [[ax, yb, azz, u0, 0], [bx, yb, bz, u1, 0], [bx, top, bz, u1, lvw], [ax, top, azz, u0, lvw]];
-          [[0, 1, 2], [0, 2, 3]].forEach(t => t.forEach(k => { const v = q[k]; P.push(v[0], v[1], v[2]); N.push(nx, 0, nz); U.push(v[3], v[4]); C.push(col.r, col.g, col.b); SD.push(b.allLit ? -1 : seed0 + i); })); u0 = u1;
+          [[0, 1, 2], [0, 2, 3]].forEach(t => t.forEach(k => { const v = q[k]; P.push(v[0], v[1], v[2]); N.push(nx, 0, nz); U.push(v[3], v[4]); C.push(col.r, col.g, col.b); SD.push(b.allLit ? -1 : seed0 + i); GW.push(g0, yb); })); u0 = u1;
         }
-        const rg = new THREE.ShapeGeometry(shapeOf(pts)); rg.rotateX(-Math.PI / 2); const ra = rg.toNonIndexed().attributes.position.array; for (let i = 0; i < ra.length; i += 3) { RP.push(ra[i], top, ra[i + 2]); RN.push(0, 1, 0); RC.push(rc.r, rc.g, rc.b); } rg.dispose();
+        const rg = new THREE.ShapeGeometry(shapeOf(pts)); rg.rotateX(-Math.PI / 2); const ra = rg.toNonIndexed().attributes.position.array; for (let i = 0; i < ra.length; i += 3) { RP.push(ra[i], top, ra[i + 2]); RN.push(0, 1, 0); RC.push(rc.r, rc.g, rc.b); GR.push(g0, yb); } rg.dispose();
         if (!roof) return;
         roofFaces(pts, roof).forEach(f => {
           const q = f.p.map(([x, n, z]) => [x, gb.mean + z, -n]); // repère du moteur (rotation: le sens des sommets est gardé)
@@ -668,19 +707,19 @@ export function createScene3D(container, opts = {}) {
               let [a, c] = bot; if (-(c[2] - a[2]) * nx + (c[0] - a[0]) * nz < 0) [a, c] = [c, a];
               const len = Math.hypot(c[0] - a[0], c[2] - a[2]), nb = Math.max(1, Math.round(len / (b.bay || 6.5))), u1 = u0 + nb, rows = Math.max(1, Math.round((yHi - yLo) / 3.3));
               const w = [[a[0], yLo, a[2], u0, 0], [c[0], yLo, c[2], u1, 0], [c[0], yHi, c[2], u1, rows], [a[0], yHi, a[2], u0, rows]];
-              [[0, 1, 2], [0, 2, 3]].forEach(t => t.forEach(k => { const v = w[k]; P.push(v[0], v[1], v[2]); N.push(nx, 0, nz); U.push(v[3], v[4]); C.push(col.r, col.g, col.b); SD.push(b.allLit ? -1 : seed0 + 50 + u0); })); u0 = u1;
+              [[0, 1, 2], [0, 2, 3]].forEach(t => t.forEach(k => { const v = w[k]; P.push(v[0], v[1], v[2]); N.push(nx, 0, nz); U.push(v[3], v[4]); C.push(col.r, col.g, col.b); SD.push(b.allLit ? -1 : seed0 + 50 + u0); GW.push(g0, yb); })); u0 = u1;
               return;
             }
           }
           const cc = f.wall ? col : rc;
-          for (let i = 1; i + 1 < q.length; i++) [q[0], q[i], q[i + 1]].forEach(v => { RP.push(v[0], v[1], v[2]); RN.push(nx, ny, nz); RC.push(cc.r, cc.g, cc.b); });
+          for (let i = 1; i + 1 < q.length; i++) [q[0], q[i], q[i + 1]].forEach(v => { RP.push(v[0], v[1], v[2]); RN.push(nx, ny, nz); RC.push(cc.r, cc.g, cc.b); GR.push(g0, yb); });
         });
       });
       if (!P.length) return;
-      const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); wg.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); wg.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); wg.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); wg.setAttribute('aSeed', new THREE.Float32BufferAttribute(SD, 1));
-      addMesh(wg, wallMat, 0, near, true);
-      const rgm = new THREE.BufferGeometry(); rgm.setAttribute('position', new THREE.Float32BufferAttribute(RP, 3)); rgm.setAttribute('normal', new THREE.Float32BufferAttribute(RN, 3)); rgm.setAttribute('color', new THREE.Float32BufferAttribute(RC, 3));
-      addMesh(rgm, roofMat, 0, near, true);
+      const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); wg.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); wg.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); wg.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); wg.setAttribute('aSeed', new THREE.Float32BufferAttribute(SD, 1)); wg.setAttribute('aGrow', new THREE.Float32BufferAttribute(GW, 2));
+      addMesh(wg, wallMat, 0, near, true).customDepthMaterial = growDepthMat;
+      const rgm = new THREE.BufferGeometry(); rgm.setAttribute('position', new THREE.Float32BufferAttribute(RP, 3)); rgm.setAttribute('normal', new THREE.Float32BufferAttribute(RN, 3)); rgm.setAttribute('color', new THREE.Float32BufferAttribute(RC, 3)); rgm.setAttribute('aGrow', new THREE.Float32BufferAttribute(GR, 2));
+      addMesh(rgm, roofMat, 0, near, true).customDepthMaterial = growDepthMat;
     });
   }
   // Soubassement: bandeau de 0,9 m au pied des bâtiments du projet, dans la couleur du bas des murs.
@@ -793,6 +832,8 @@ export function createScene3D(container, opts = {}) {
       const m = new THREE.InstancedMesh(geo, mat, lot.length);
       lot.forEach((t, i) => { place(t); o3.updateMatrix(); m.setMatrixAt(i, o3.matrix); if (mat !== trunkMat && mat !== shadowMat) m.setColorAt(i, L(t.con ? CONIFER_PAL[Math.floor(t.c * CONIFER_PAL.length)] : TREE_PAL[Math.floor(t.c * TREE_PAL.length)])); });
       m.castShadow = cast; m.receiveShadow = mat !== shadowMat; m.userData.sharedGeo = true;
+      // Pousse: matrices finales, pied de l'arbre (le point fixe du grossissement) et départ (vague du sujet vers l'extérieur, troncs un peu avant).
+      { const gp = new Float32Array(lot.length * 3), gt = new Float32Array(lot.length); lot.forEach((t, i) => { gp[3 * i] = t.x; gp[3 * i + 1] = t.y; gp[3 * i + 2] = -t.n; gt[i] = 0.35 + 0.9 * Math.min(1, t.d / 400) + 0.25 * hsh(t.x, t.n, 7) + (mat === trunkMat ? -0.15 : 0); }); m.userData.grow = { final: Float32Array.from(m.instanceMatrix.array), gp, gt }; }
       // Doublure d'ombre: dessinée dans la carte d'ombre seulement (aucune instance dans la passe principale, où elle
       // n'écrivait rien de toute façon).
       if (mat === shadowMat) { const n = lot.length; m.computeBoundingSphere(); m.onBeforeRender = () => { m.count = 0; }; m.onAfterRender = () => { m.count = n; }; }
@@ -1152,6 +1193,7 @@ export function createScene3D(container, opts = {}) {
       lamps(data.roads, data.bld);
     }
     blocks(list);
+    if (growNext && data && !modelOnly) startGrow(performance.now()); else if (!growing) { growU.uGrow.value = 1e4; growU.uReveal.value = 1e6; }
     // Point de vue sur la première forme dessinée; sans forme, sur l'édifice (Overture) sous le point du projet, sinon le plus proche à moins de 60 m.
     let focus = mRing || (drawn.length ? drawn[0].p : null), focusH = mRing ? model.h : drawn.length ? (drawn[0].hEff ?? 9) : 9;
     if (!focus && data) {
@@ -1235,6 +1277,7 @@ export function createScene3D(container, opts = {}) {
   function frame(now) {
     if (!running) return; raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (growing) { const gt = (now - growT0) / 1000; growU.uGrow.value = gt; growU.uReveal.value = 650 * (1 - Math.pow(1 - Math.min(1, gt / 1.1), 2)); treeGrowStep(gt); if (gt >= GROW_TOTAL) finishGrow(); dirty = true; }
     const a = 1 - Math.exp(-dt * 3.5); let moving = false;
     ['cum', 'mid', 'high', 'iv', 'rain', 'wet', 'pud', 'fogK', 'fogTh', 'smk', 'storm', 'brk'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > 0.0005) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; });
     if (!dirty && !moving && now - envAt > 400) {
@@ -1464,7 +1507,7 @@ export function createScene3D(container, opts = {}) {
       if (!data) origin = [la, ln];
       rebuild();
     },
-    setData(scene) { data = scene; if (scene && scene.origin) origin = scene.origin; rebuild(); },
+    setData(scene) { data = scene; if (scene && scene.origin) origin = scene.origin; growNext = !!(scene && scene.bld && scene.bld.length); rebuild(); },
     setTerrain(t) { terrain = makeTerrain(t); rebuild(); },
     setTime(ms) { if (ms !== dateMs) { dateMs = ms; dirty = true; } },
     // Fumée de feux au sol à l'heure affichée (FireWork, microgrammes par mètre cube), ou null. Dessinée à partir de

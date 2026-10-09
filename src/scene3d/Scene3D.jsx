@@ -3,7 +3,7 @@
 // bâtiments dessinés s'affichent tout de suite, les voisins et le relief (loadTerrain) s'ajoutent quand ils arrivent.
 // La légende dit toujours d'où vient ce qu'on regarde: condition de lumière (prévision) et hauteur de la forme
 // en face (réglée dans le projet, mesurée Overture, par défaut).
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { loadScene } from './data.js';
 import { loadTerrain } from './terrain.js';
 import { isChunkLoadError, reloadForUpdate } from '../shared/updateReload.js';
@@ -97,35 +97,66 @@ async function doSync(pid, onFetch) {
   return null;
 }
 
-// Chargement (v633.180): réseau de traits fins qui se tracent par-dessus la scène en construction, comme la confirmation
-// d'un mandat dans BudgetShoot: points dispersés, un trait entre deux points proches, chacun avec son délai et sa durée.
-// Tant que ça charge, un nouveau réseau part toutes les 3 s pendant que le précédent s'efface (deux couches à la fois).
-function WireLines({ seed }) {
-  const lines = useMemo(() => {
-    let s = (seed * 9301 + 49297) % 233280; const rnd = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
-    const pts = []; for (let i = 0; i < 26; i++) pts.push({ x: -520 + rnd() * 1040, y: -380 + rnd() * 760 });
-    const items = [];
-    for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
-      const d = Math.hypot(pts[j].x - pts[i].x, pts[j].y - pts[i].y);
-      if (d < 360 && items.length < 70) items.push({ x1: pts[i].x, y1: pts[i].y, x2: pts[j].x, y2: pts[j].y, len: d, sw: 0.4 + rnd() * 0.8, op: 0.18 + rnd() * 0.32, delay: items.length * 0.02, dur: 0.4 + rnd() * 0.4 });
-    }
-    return items;
-  }, [seed]);
-  return (
-    <svg width="100%" height="100%" viewBox="-550 -400 1100 800" fill="none" preserveAspectRatio="xMidYMid slice" style={{ position: 'absolute', inset: 0, filter: 'drop-shadow(0 0 1px rgba(0,0,0,0.55))', animation: 'scene3dWireOut 0.7s ease 2.4s forwards' }}>
-      {lines.map((l, i) => <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke="#fff" strokeWidth={l.sw} opacity={l.op} style={{ strokeDasharray: l.len, strokeDashoffset: l.len, animation: `scene3dWireDraw ${l.dur}s ease-out ${l.delay}s forwards` }} />)}
-    </svg>
-  );
+// Chargement (v633.181): courbes de niveau qui s'écoulent par-dessus la scène en construction. Un champ de bruit lissé
+// (trois octaves) dérive lentement; ses isolignes (marching squares, chaînées en polylignes) sont redessinées à chaque
+// image: des courbes comme sur une carte topographique, jamais les mêmes, qui se tracent une à une à l'ouverture puis
+// glissent tant que les environs se calculent, et s'effacent quand la scène apparaît (la scène pousse alors, engine.js).
+// Montées seulement après 0,5 s d'attente: un chargement déjà en cache ne les montre pas.
+function ContourLines({ fading }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const svg = ref.current; if (!svg) return undefined;
+    const NX = 56, NY = 40, W = 1100, H = 800, X0 = -550, Y0 = -400, W1 = NX + 1, LV = [-0.42, -0.3, -0.18, -0.06, 0.06, 0.18, 0.3, 0.42];
+    const hash = (i, j, k) => { const v = Math.sin(i * 127.1 + j * 311.7 + k * 74.7) * 43758.5453; return v - Math.floor(v); };
+    const sm = (t) => t * t * (3 - 2 * t);
+    const vnoise = (x, y, k) => { const i = Math.floor(x), j = Math.floor(y), fx = sm(x - i), fy = sm(y - j), a = hash(i, j, k), b = hash(i + 1, j, k), c = hash(i, j + 1, k), d = hash(i + 1, j + 1, k); return (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy; };
+    const F = new Float32Array(W1 * (NY + 1));
+    const field = (t) => { for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) { const x = i / NX * 4.2, y = j / NY * 3.05; F[j * W1 + i] = (vnoise(x + t * 0.045, y + t * 0.025, 1) - 0.5) * 0.9 + (vnoise(x * 2.1 - t * 0.035, y * 2.1 + t * 0.02, 2) - 0.5) * 0.35 + (vnoise(x * 4.3 + t * 0.02, y * 4.3 - t * 0.015, 3) - 0.5) * 0.12; } };
+    const key = (p) => Math.round(p[0] * 50) + ',' + Math.round(p[1] * 50);
+    const iso = (lv) => { // segments par cellule, puis chaînage par les bouts
+      const segs = [], sx = W / NX, sy = H / NY;
+      for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+        const v0 = F[j * W1 + i], v1 = F[j * W1 + i + 1], v2 = F[(j + 1) * W1 + i + 1], v3 = F[(j + 1) * W1 + i];
+        const c = (v0 > lv ? 8 : 0) | (v1 > lv ? 4 : 0) | (v2 > lv ? 2 : 0) | (v3 > lv ? 1 : 0); if (c === 0 || c === 15) continue;
+        const X = X0 + i * sx, Y = Y0 + j * sy, top = [X + sx * (lv - v0) / (v1 - v0), Y], right = [X + sx, Y + sy * (lv - v1) / (v2 - v1)], bottom = [X + sx * (lv - v3) / (v2 - v3), Y + sy], left = [X, Y + sy * (lv - v0) / (v3 - v0)];
+        const T = { 1: [[left, bottom]], 2: [[bottom, right]], 3: [[left, right]], 4: [[top, right]], 5: [[left, top], [bottom, right]], 6: [[top, bottom]], 7: [[left, top]], 8: [[left, top]], 9: [[top, bottom]], 10: [[left, bottom], [top, right]], 11: [[top, right]], 12: [[left, right]], 13: [[bottom, right]], 14: [[left, bottom]] };
+        for (const sg of T[c]) segs.push(sg);
+      }
+      const ends = new Map(); segs.forEach((sg, k) => { for (const p of sg) { const kk = key(p); if (!ends.has(kk)) ends.set(kk, []); ends.get(kk).push(k); } });
+      const used = new Uint8Array(segs.length), out = [];
+      for (let k = 0; k < segs.length; k++) {
+        if (used[k]) continue; used[k] = 1; const line = [segs[k][0], segs[k][1]];
+        for (const dir of [1, -1]) for (;;) { const e = dir === 1 ? line[line.length - 1] : line[0], cand = (ends.get(key(e)) || []).find(q => !used[q]); if (cand === undefined) break; used[cand] = 1; const sg = segs[cand], nx = key(sg[0]) === key(e) ? sg[1] : sg[0]; if (dir === 1) line.push(nx); else line.unshift(nx); }
+        if (line.length >= 4) out.push(line);
+      }
+      return out;
+    };
+    const paths = LV.map((lv, k) => { const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('fill', 'none'); p.setAttribute('stroke', '#fff'); p.setAttribute('stroke-width', (0.75 + 0.2 * (k % 3)).toFixed(2)); p.setAttribute('stroke-linejoin', 'round'); p.setAttribute('stroke-linecap', 'round'); p.setAttribute('opacity', (0.32 + 0.06 * (k % 4)).toFixed(2)); svg.appendChild(p); return p; });
+    const t0 = performance.now(); let raf = 0, drawn = false, tick2 = 0;
+    const tick = (now) => {
+      raf = requestAnimationFrame(tick);
+      if (tick2++ % 2) return; // 30 images par seconde suffisent
+      field((now - t0) / 1000);
+      paths.forEach((p, k) => p.setAttribute('d', iso(LV[k]).map(l => 'M' + l.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L')).join('')));
+      if (!drawn) { // premier tracé: chaque courbe se dessine d'un bout à l'autre, les niveaux l'un après l'autre
+        drawn = true;
+        paths.forEach((p, k) => { const len = p.getTotalLength() || 1; p.style.strokeDasharray = `${len}`; p.style.strokeDashoffset = `${len}`; p.style.animation = `scene3dWireDraw ${(1.4 + 0.3 * (k % 3)).toFixed(1)}s ease-out ${(0.22 * k).toFixed(2)}s forwards`; setTimeout(() => { p.style.strokeDasharray = 'none'; p.style.animation = 'none'; }, 2400 + 220 * k); });
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); paths.forEach(p => p.remove()); };
+  }, []);
+  return <svg ref={ref} viewBox="-550 -400 1100 800" preserveAspectRatio="xMidYMid slice" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', filter: 'drop-shadow(0 0 1px rgba(0,0,0,0.5))', opacity: fading ? 0 : 1, transition: 'opacity 0.7s ease' }} />;
 }
 
 export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, visible, zoomRef, projectId, sunny, onToggleSunny }) => { // sunny: météo coupée (journée ensoleillée) // zoomRef.current(f) : les boutons + et - de la fenêtre
   const box = useRef(null);
   const eng = useRef(null);
   const [info, setInfo] = useState(null);
-  const [status, setStatus] = useState(null); // { text, busy }: busy = traits du chargement (WireLines), sinon message seul (erreur)
+  const [status, setStatus] = useState(null); // { text, busy }: busy = courbes de niveau du chargement (ContourLines), sinon message seul (erreur)
   const busy = !!(status && status.busy);
-  const [wireSeed, setWireSeed] = useState(0); // cycle des traits du chargement
-  useEffect(() => { if (!busy) return undefined; setWireSeed(0); const id = setInterval(() => setWireSeed(k => k + 1), 3000); return () => clearInterval(id); }, [busy]);
+  const [wire, setWire] = useState(0); // courbes de niveau du chargement: 0 absentes, 1 visibles (après 0,5 s d'attente), 2 en train de s'effacer
+  useEffect(() => { if (busy) { const id = setTimeout(() => setWire(1), 500); return () => clearTimeout(id); } setWire(w => (w === 1 ? 2 : 0)); const id = setTimeout(() => setWire(0), 750); return () => clearTimeout(id); }, [busy]);
   const [engReady, setEngReady] = useState(0); // compte des moteurs créés: relance les effets qui en dépendent
   // Modèle d'architecte importé: { info, pl } une fois posé; prep = progression des préparations en cours (0 à 1) par
   // projet: la préparation continue si la vue se ferme ou si l'on passe à un autre projet. dl = projet dont le modèle
@@ -391,7 +422,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
           <text x="17" y="4.2" textAnchor="middle" fontSize="7" fontFamily="Avenir Next, Avenir, sans-serif" fontWeight="600" fill="#fff" transform={`rotate(${info.northDeg.toFixed(1)} 17 2)`}>N</text>
         </g>
       </svg>}
-      {busy && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>{[wireSeed - 1, wireSeed].filter(k => k >= 0).map(k => <WireLines key={k} seed={k} />)}</div>}
+      {wire > 0 && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}><ContourLines fading={wire === 2} /></div>}
       {status && <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', pointerEvents: 'none', animation: 'msFade 0.4s ease both' }}>
         <div className="font-bebas-book" style={{ fontSize: '13px', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.8)', textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}>{status.text.toUpperCase()}</div>
       </div>}

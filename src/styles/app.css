@@ -445,8 +445,7 @@
     @keyframes msGaugeFill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
     @keyframes msFade { from { opacity: 0; } to { opacity: 1; } }
     @keyframes scene3dSpin { to { transform: rotate(360deg); } } /* anneau d'attente des pastilles de la vue 3D */
-    @keyframes scene3dWireDraw { to { stroke-dashoffset: 0; } } /* traits du chargement de la vue 3D (WireLines) */
-    @keyframes scene3dWireOut { to { opacity: 0; } }
+    @keyframes scene3dWireDraw { to { stroke-dashoffset: 0; } } /* courbes de niveau du chargement de la vue 3D (ContourLines) */
     @keyframes msGeoIn { from { opacity: 0; transform: scale(0.985); filter: blur(6px); } 60% { filter: blur(0); } to { opacity: 1; transform: none; filter: blur(0); } }
     @keyframes msDetailIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
     @keyframes msDetailOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(14px); } }

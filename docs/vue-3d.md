@@ -567,6 +567,26 @@ importé, lui, est le fichier de l'architecte.
     bouquets et une plaque de 27 m² à 7 m), Limoilou 65 → 35 (30 arbres de rue, vérifiés sur l'imagerie), Outremont,
     Toronto, Ottawa, Sillery: arbres de rue retirés. Piège rencontré: un `git checkout` du fichier pour retirer une
     sonde de débogage a aussi effacé la règle non commise; relire les comptes avant de commettre.
+- **v633.181 (9 octobre 2026): la scène pousse, courbes de niveau pendant l'attente.** Stéphane sur les traits fins:
+  « boff, donne l'impression d'une vitre cassée; une suggestion de loading au look plus organique qui n'est pas juste une
+  loop? », puis « a et b ».
+  - **La scène pousse** (`growU`, `growVertex`, `treeGrowStep`, `startGrow` dans `engine.js`): à la reconstruction qui
+    suit l'arrivée des environs (`setData`, `growNext`), 2,5 s: les murs et les toits montent du sol (sommet rapporté à
+    la base du bâtiment, attribut `aGrow` = [départ, base], départ 0,15 s + 0,9 s selon la distance au sujet sur 400 m,
+    durée 0,7 s, `smoothstep`), avec leurs ombres (`growDepthMat`, un `MeshDepthMaterial` à la même transformation, en
+    `customDepthMaterial` des murs et des toits); les arbres grandissent depuis leur pied par leurs matrices d'instance
+    (matrices finales gardées dans `userData.grow`, bloc 3 × 3 et translation ramenés vers le pied, troncs 0,15 s avant
+    les couronnes, départ 0,35 s + distance + 0,25 s de hasard, durée 0,8 s, échelle jamais sous 0,01); les surfaces et
+    les rues drapées se tracent du sujet vers l'extérieur (attribut `aDist` posé dans `drapedMesh`, `discard` au-delà de
+    `uReveal`, 650 m atteints en 1,1 s). Le relief, l'eau, le sous-bois et les lampadaires ne bougent pas. Une
+    reconstruction pendant la pousse (relief arrivé après les environs) la relance; une reconstruction du modèle seul
+    (`modelOnly`) ne la déclenche pas. Vu dans Chrome sans fenêtre (captures `caps/pousse_*.png`).
+  - **Courbes de niveau** (`ContourLines`, `Scene3D.jsx`): un champ de bruit lissé à trois octaves qui dérive lentement;
+    ses isolignes (8 niveaux, marching squares sur 56 × 40 cellules, segments chaînés en polylignes) sont redessinées
+    30 fois par seconde dans un SVG par-dessus la scène: des courbes comme sur une carte topographique, jamais les mêmes.
+    À l'ouverture elles se tracent une à une (`stroke-dashoffset`, niveaux décalés de 0,22 s), puis glissent; elles
+    s'effacent en 0,7 s quand la scène apparaît. Montées après 0,5 s d'attente seulement (un chargement en cache ne les
+    montre pas, ou à peine). Les traits fins de la v633.180 sont retirés.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
