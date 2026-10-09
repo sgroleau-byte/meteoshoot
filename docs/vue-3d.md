@@ -455,6 +455,49 @@ importé, lui, est le fichier de l'architecte.
   curseur, légende « Ciel dégagé : soleil franc, ombres nettes »; MÉTÉO remet la prévision de l'heure. Choix gardé pour la
   session (`sessionStorage` `scene3d-sunny`), état dans ProjectDetail (`sceneSunny`), pastille dans Scene3D (`sunny`,
   `onToggleSunny`).
+- v633.178 (9 octobre 2026), **empreintes réelles des bâtiments et entrées en gravier** (« les autres bâtiments autour ne sont
+  pas très proches de la réalité, pas bien orientés, pas la bonne forme ou carrément inexistants; les entrées ne sont pas
+  présentes non plus », avec le calque SOL SAT; « entrée en gravier, pas en terre »). Environs **version 7** (`SCENE_V = 7`,
+  les entrées v6 du cache sont recalculées à la prochaine ouverture).
+  - **Cause:** hors des villes, les empreintes d'Overture sont des tracés automatiques Microsoft (« Microsoft ML Buildings »,
+    618 sur 663 même à Limoilou): des carrés de 4 sommets, taille et orientation approximatives, ailes et annexes perdues,
+    beaucoup de bâtiments absents (la maison de Stéphane à Stoneham n'y était pas). L'analyse de l'imagerie ne cherchait
+    que l'asphalte et le béton, et son ouverture de 3 m effaçait toute bande de moins de 6 m: aucune entrée.
+  - **Empreintes LiDAR** (`api/footprints.js`, même fenêtre de hauteur de canopée que les arbres, lue une fois par
+    `readCanopy` dans `api/trees.js`): pans plans (plan 3 × 3 à moins de 0,3 m, pente continue), plaques fermées d'un
+    pixel et trous comblés, puis un toit = plaque de 16 m² et plus, aux côtés droits (rectangle englobant rempli aux 3/5),
+    à chute nette en bordure (sol ou toit plus bas de 2 m dans les 3 m) et à surface fine (plan à 0,15 m sur plus du
+    tiers); pour un toit absent d'Overture, 14 m au plus et un entourage qui tranche (du sol dans l'anneau de 6 à 14 m,
+    ou des arbres bien plus hauts). Contour mis au net (`ring.js`, lissage à 2 m, Douglas-Peucker 0,8 m, directions
+    dominantes), ramené au rectangle quand il le remplit à 87 %. Un toit reconnu dans une empreinte Overture la remplace
+    (sauf un tracé OpenStreetMap, fait à la main, jamais remplacé: Overture donne la source; et sauf un coin de toit de
+    moins de 40 % de l'empreinte); un toit hors de toute empreinte devient un bâtiment (remise sous 45 m²); une empreinte
+    sans toit reconnu (sous les arbres, bâti après le relevé) est gardée. Hauteur par `pickHeight`; champs `bld[i][4] = 1`
+    (mesuré) et `bld[i][5] = 1` (empreinte LiDAR), `lidarFp` en compte. `lidarHeights` ne relit pas ces bâtiments.
+    Stoneham (relevé 2024, 1 m, 0,7 s): 50 empreintes remplacées, 50 bâtiments ajoutés, aucune cime acceptée; Limoilou:
+    172 remplacées, 53 ajoutées, 45 tracés OpenStreetMap intacts. Piste écartée: le filtre de planéité par pan (un toit à
+    deux versants ou en arc le ratait) et le score de dôme (un toit en arc est un dôme): remplacés par la chute en
+    bordure, la finesse de surface et l'entourage.
+  - **Calage de l'imagerie** (`api/paved.js`): l'imagerie Esri est décalée de quelques mètres par rapport au LiDAR et à
+    Overture (Stoneham: 5 m est, 8 m nord; Limoilou: 10 m est); mesuré en superposant les pixels sombres (clarté sous le
+    25e centile, les toits) aux empreintes sur une grille au mètre (±12 m), gardé s'il fait 1,5 fois mieux que sans
+    décalage; appliqué aux polygones tirés de l'image (pavé et gravier), `imgShift` dans la scène. Une partie de l'écart
+    que Stéphane voyait avec SOL SAT (Plans d'Apple) est un décalage d'imagerie du même ordre, non corrigé pour l'image
+    drapée.
+  - **Entrées en gravier** (`gravel`, même forme que `paved`): dans l'image, le gravier est ce qu'il y a de plus clair et
+    de moins saturé; seuils relatifs à l'image (saturation sous son 15e centile, clarté au-dessus de son 70e), parce que
+    la dominante varie (à Stoneham, prise sans feuilles, même l'asphalte est « vert »). Demi-résolution, moins bâtiments
+    (1 m) et rues (largeur + 1 m), fermeture 1,2 m, ouverture 1 m; une composante de 12 à 1500 m² n'est une entrée que si
+    elle touche une rue (à 2,5 m) et un bâtiment (à 3 m). Hors ville seulement (sol bâti sous 10 % dans 300 m et 15e
+    centile de saturation à 0,2 au moins: en ville, trottoirs, toits clairs et stationnements passeraient pour du
+    gravier; Limoilou: 14 % bâti, saturation 16 sur 255, rien). Stoneham: 37 entrées et cours. Rendu `flatMats.gravel`
+    (#7a756b, gris chaud entre l'asphalte et le trottoir), contours mis au net (`regularizeRing(o, 1, 15)`), un cran sous
+    le pavé; mouillé: assombri, peu de flaques. Légende: « Entrées en gravier d'après l'imagerie satellite (Esri),
+    approximatives » et « formes et hauteurs des bâtiments LiDAR ».
+  - **Limites:** relevé LiDAR daté (un bâtiment plus récent garde son carré d'Overture ou manque); toit sous les arbres
+    gardé en carré; contour au mètre; gravier clair seulement (une entrée en terre ou en asphalte sombre n'est pas une
+    entrée en gravier); une cour de gravier qui touche la rue et une remise passe pour une entrée; imagerie Esri datée
+    autrement que le LiDAR.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

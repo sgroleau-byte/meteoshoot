@@ -345,29 +345,39 @@ const hsh = (x, n, k) => { const s = Math.sin(x * 12.9898 + n * 78.233 + k * 37.
 
 // Arbres autour de (lat, lng): { trees: [[x, n, h, r, k]] (k 1 conifère, 0 feuillu; près d'un bâtiment, plus dx, dn, o), covered(x, n) (le LiDAR voit-il ce
 // point), canopy (boisés, voir canopyGrid), date, essences (sources utilisées), failed }. trees null: pas de LiDAR ici (repli sur Overture).
-export async function lidarTrees(lat, lng, bld, log = () => {}) {
+// Fenêtre LiDAR de la hauteur de canopée (surface moins sol nu) sur ±350 m: { raw, seen, W, H, res, fr, date } ou null
+// sans relevé ici. Partagée par les empreintes des bâtiments (api/footprints.js) et les arbres.
+export async function readCanopy(lat, lng, log = () => {}) {
   const R = R_TREES + 8, mLat = 111320, mLng = 111320 * Math.cos(lat * Math.PI / 180);
   const bbox = [lng - R / mLng, lat - R / mLat, lng + R / mLng, lat + R / mLat];
   const [E, N] = toLCC(lat, lng);
-  // Peuplements et inventaire en même temps que le LiDAR.
+  const again = (f) => f().catch(() => f()); // une erreur réseau passagère (ou un service lent) ne doit pas coûter le relevé
+  let list = await again(() => items('hrdem-mosaic-1m', bbox));
+  if (!list.length) list = await again(() => items('hrdem-mosaic-2m', bbox));
+  if (!list.length) { log('LiDAR: pas de relevé ici'); return null; }
+  const it = list[0];
+  // Fenêtre carrée en Lambert (±R plus la rotation du repère: le cercle de R mètres y tient).
+  const [dsm, dtm] = await Promise.all([again(() => window1m(it.dsm, E - R, N - R, E + R, N + R)), again(() => window1m(it.dtm, E - R, N - R, E + R, N + R))]);
+  if (!dsm || !dtm || dsm.w !== dtm.w || dsm.h !== dtm.h || dsm.c0 !== dtm.c0 || dsm.r0 !== dtm.r0) { log('LiDAR: fenêtre vide'); return null; }
+  const { w: W, h: H, res } = dsm;
+  const raw = new Float32Array(W * H), seen = new Uint8Array(W * H);
+  let nSeen = 0;
+  for (let k = 0; k < raw.length; k++) { const v = dsm.data[k] - dtm.data[k]; if (v === v) { raw[k] = Math.max(0, v); seen[k] = 1; nSeen++; } }
+  if (nSeen < raw.length * 0.05) { log('LiDAR: absent de la fenêtre'); return null; }
+  return { raw, seen, W, H, res, fr: frame(lat, lng, dsm), date: it.date, bbox };
+}
+
+export async function lidarTrees(lat, lng, bld, log = () => {}, win = undefined) {
+  if (win === undefined) win = await readCanopy(lat, lng, log);
+  if (!win) return { trees: null, failed: false };
+  const { raw, seen, W, H, res, fr, bbox } = win, it = { date: win.date };
+  // Peuplements et inventaire.
   const inQc = lat > 44.9 && lat < 53 && lng > -79.8 && lng < -57;
   const again = (f) => f().catch(() => f()); // une erreur réseau passagère (ou un service lent) ne doit pas coûter les arbres
   const vdqP = inVdq(lat, lng) ? again(() => vdqTrees(bbox)) : Promise.resolve(null);
   const ecoP = inQc ? again(() => ecoforStands(bbox)) : Promise.resolve(null);
   vdqP.catch(() => {}); ecoP.catch(() => {});
-  let list = await again(() => items('hrdem-mosaic-1m', bbox));
-  if (!list.length) list = await again(() => items('hrdem-mosaic-2m', bbox));
-  if (!list.length) { log('arbres: pas de LiDAR ici'); return { trees: null, failed: false }; }
-  const it = list[0];
-  // Fenêtre carrée en Lambert (±R plus la rotation du repère: le cercle de R mètres y tient).
-  const [dsm, dtm] = await Promise.all([again(() => window1m(it.dsm, E - R, N - R, E + R, N + R)), again(() => window1m(it.dtm, E - R, N - R, E + R, N + R))]);
-  if (!dsm || !dtm || dsm.w !== dtm.w || dsm.h !== dtm.h || dsm.c0 !== dtm.c0 || dsm.r0 !== dtm.r0) { log('arbres: fenêtre LiDAR vide'); return { trees: null, failed: false }; }
-  const { w: W, h: H, res } = dsm;
-  const raw = new Float32Array(W * H), seen = new Uint8Array(W * H);
-  let nSeen = 0;
-  for (let k = 0; k < raw.length; k++) { const v = dsm.data[k] - dtm.data[k]; if (v === v) { raw[k] = Math.max(0, v); seen[k] = 1; nSeen++; } }
-  if (nSeen < raw.length * 0.05) { log('arbres: LiDAR absent de la fenêtre'); return { trees: null, failed: false }; }
-  const fr = frame(lat, lng, dsm);
+  const mLat = 111320, mLng = 111320 * Math.cos(lat * Math.PI / 180);
   const mask = buildingMask(bld, fr, W, H, Math.round(1.5 / res)); // 2 pixels à 1 m, 1 à 2 m: 2 m autour de l'empreinte
   const hmax = lng < -114 ? HMAX_WEST : HMAX_EAST;
   const { tops: found, chm, roofMask } = crowns(raw, W, H, res, mask, hmax);

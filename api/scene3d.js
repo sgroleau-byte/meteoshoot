@@ -11,6 +11,9 @@
 // v4 (6 octobre 2026): surfaces pavées avec leurs trous ({ o, h }), asphalte neutre jusqu'à 0,16 de saturation.
 // v5 (7 octobre 2026): hauteur réelle des bâtiments par LiDAR (api/heights.js): bld[i][4] vaut 1 quand la hauteur
 //   et les étages viennent de la mesure (surface moins sol nu), lidarBld donne le nombre de bâtiments mesurés.
+// v7 (9 octobre 2026): empreintes réelles des bâtiments par LiDAR (api/footprints.js): bld[i][5] vaut 1 quand la forme vient
+//   du relevé (remplace le carré d'Overture, ou bâtiment ajouté), lidarFp en compte; entrées en gravier d'après l'imagerie
+//   (gravel, même forme que paved) recalée sur le LiDAR (imgShift, mètres est et nord).
 // v6 (8 octobre 2026): arbres mesurés par LiDAR jusqu'à 350 m (api/trees.js): trees[i] = [x, n, h, r, k] (hauteur,
 //   rayon de couronne, k 1 conifère ou 0 feuillu; près d'un bâtiment, plus dx, dn: centre mesuré de la couronne, et
 //   o: 1 si le relevé montre du feuillage au-dessus du toit voisin); treesSrc { date, res, essences }. Restent au format [x, n] (taille
@@ -21,7 +24,8 @@
 import duckdb from 'duckdb';
 import { readFileSync } from 'fs';
 import { lidarHeights } from './heights.js';
-import { lidarTrees, R_TREES } from './trees.js';
+import { lidarTrees, readCanopy, R_TREES } from './trees.js';
+import { lidarFootprints } from './footprints.js';
 import { pavedFromImagery, PAVED_ATTRIBUTION } from './paved.js';
 
 export const maxDuration = 60;
@@ -171,17 +175,18 @@ export async function buildScene(lat, lng) {
   };
   const t0 = Date.now();
   const [bRows, sRows, lRows, uRows, wRows] = await Promise.all([
-    query('theme=buildings/type=building', 'height, num_floors, subtype, class', R_BLD),
+    query('theme=buildings/type=building', 'height, num_floors, subtype, class, sources[1].dataset AS src', R_BLD),
     query('theme=transportation/type=segment', 'class, subclass, names.primary AS name', R_ROAD),
     query('theme=base/type=land', 'subtype, class', R_WOOD),
     query('theme=base/type=land_use', 'subtype, class', R_GREEN),
     query('theme=base/type=water', 'subtype, class', R_WATER),
   ]);
   const tq = Date.now() - t0;
+  { const srcs = new Map(); for (const r of bRows) { const k = String(r.src || '?'); srcs.set(k, (srcs.get(k) || 0) + 1); } console.log('[scene3d] sources des bâtiments:', [...srcs].map(([k, n]) => `${k} ${n}`).join(', ')); }
   const loc = (ring) => ring.map(([lon, la]) => X(lon, la));
 
   // Bâtiments: hauteur mesurée si connue, sinon étages, sinon 7,5 m. Remisés (petits, dépendances) en gris.
-  const bld = [];
+  let bld = []; const osmIdx = new Set(); // tracés OpenStreetMap (à la main, exacts): jamais remplacés par le LiDAR
   for (const row of bRows) {
     for (const rings of polysOf(wkbToGeom(row.geometry))) {
       let r = simplifyRing(loc(rings[0]), 0.3);
@@ -196,6 +201,7 @@ export async function buildScene(lat, lng) {
       const st = row.subtype || '', cl = row.class || '';
       const kind = (st === 'outbuilding' || cl === 'garage' || cl === 'shed' || area < 45) ? 2
         : ['medical', 'education', 'civic', 'commercial', 'industrial', 'service', 'transportation'].includes(st) ? 1 : 0;
+      if (/OpenStreetMap/i.test(String(row.src || ''))) osmIdx.add(bld.length);
       bld.push([round1(ccw(r)), Math.round(h * 10) / 10, fl, kind]);
     }
   }
@@ -287,18 +293,23 @@ export async function buildScene(lat, lng) {
   // qui n'utilise que les empreintes).
   // lidarErr: lecture LiDAR échouée (catalogue ou mosaïque indisponible): la scène sert quand même, mais n'est gardée
   // ni par le réseau de Vercel ni dans le cache partagé, pour être recalculée au prochain affichage.
-  let paved = [], pavedSrc = null, lidarBld = 0, lidarErr = false, lt = null;
+  let paved = [], gravel = [], imgShift = [0, 0], pavedSrc = null, lidarBld = 0, lidarErr = false, lt = null, lidarFp = 0;
   const log = (m) => console.log('[scene3d]', m);
   // Délai global des lectures LiDAR: un serveur de Ressources naturelles Canada bloqué ne doit pas faire échouer toute la
   // scène (60 s pour la fonction, dont 15 à 20 s pour Overture): après 50 s depuis le début, on sert sans ces mesures.
   const deadline = t0 + 50000;
   const inTime = (p, what) => { let tm; const t = new Promise((_, rej) => { tm = setTimeout(() => rej(new Error(`${what}: délai dépassé`)), Math.max(1000, deadline - Date.now())); }); return Promise.race([p, t]).finally(() => clearTimeout(tm)); };
+  // D'abord la fenêtre LiDAR (±350 m) et les empreintes réelles des bâtiments qu'on en tire: les surfaces au sol, les
+  // hauteurs et les arbres s'appuient ensuite sur ces empreintes.
+  const win = await inTime(readCanopy(lat, lng, log), 'LiDAR').catch((e) => { lidarErr = true; console.warn('[scene3d] fenêtre LiDAR indisponible:', e && e.message); return null; });
+  if (win) { try { const fp = lidarFootprints(win, win.fr, bld, log, bld.map((_, i) => osmIdx.has(i))); bld = fp.bld; lidarFp = fp.replaced + fp.added; } catch (e) { console.warn('[scene3d] empreintes LiDAR:', e && e.message); } }
   await Promise.all([
-    pavedFromImagery(lat, lng, bld, roads, log).then((r) => { paved = r.paved; pavedSrc = r.dense ? null : PAVED_ATTRIBUTION; }).catch((e) => console.warn('[scene3d] surfaces pavées indisponibles:', e && e.message)),
+    pavedFromImagery(lat, lng, bld, roads, log).then((r) => { paved = r.paved; gravel = r.gravel || []; imgShift = r.shift || [0, 0]; pavedSrc = r.dense ? null : PAVED_ATTRIBUTION; }).catch((e) => console.warn('[scene3d] surfaces pavées indisponibles:', e && e.message)),
     inTime(lidarHeights(lat, lng, bld, log), 'hauteurs').then((r) => { lidarBld = r.measured; if (r.failed) lidarErr = true; }).catch((e) => { lidarErr = true; console.warn('[scene3d] hauteurs LiDAR indisponibles:', e && e.message); }),
     // Les empreintes ne changent pas pendant la mesure des hauteurs: le masque des toits peut se faire en même temps.
-    inTime(lidarTrees(lat, lng, bld, log), 'arbres').then((r) => { lt = r; if (r.failed) lidarErr = true; }).catch((e) => { lidarErr = true; console.warn('[scene3d] arbres LiDAR indisponibles:', e && e.message); }),
+    inTime(lidarTrees(lat, lng, bld, log, win), 'arbres').then((r) => { lt = r; if (r.failed) lidarErr = true; }).catch((e) => { lidarErr = true; console.warn('[scene3d] arbres LiDAR indisponibles:', e && e.message); }),
   ]);
+  lidarBld += bld.filter(b => b[5] === 1).length; // les empreintes LiDAR sont mesurées aussi
   // Arbres mesurés là où le LiDAR voit; ceux d'Overture ailleurs (trou de couverture, au-delà de 350 m), sauf dans un
   // bâtiment ou à moins de 1 m d'un mur (les boisés sont semés au hasard, sans tenir compte des bâtiments).
   const boxes = bld.map(([r]) => { let x0 = Infinity, n0 = Infinity, x1 = -Infinity, n1 = -Infinity; for (const [x, n] of r) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); n0 = Math.min(n0, n); n1 = Math.max(n1, n); } return [x0 - 1, n0 - 1, x1 + 1, n1 + 1]; });
@@ -310,7 +321,7 @@ export async function buildScene(lat, lng) {
     treesSrc = { date: lt.date, res: lt.res, essences: lt.essences, n: lt.trees.length };
     canopy = lt.canopy;
   }
-  const scene = { v: 6, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, pavedSrc, lidarBld, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
+  const scene = { v: 7, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, imgShift, pavedSrc, lidarBld, lidarFp, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
   if (lidarErr) scene.lidarErr = true;
   return scene;
 }
@@ -339,7 +350,7 @@ if (process.argv.includes('--test')) {
   const lat = parseFloat(process.argv[i + 1] || '46.8367'), lng = parseFloat(process.argv[i + 2] || '-71.2336');
   buildScene(lat, lng).then((s) => {
     const j = JSON.stringify(s);
-    console.log({ bld: s.bld.length, roads: s.roads.length, trees: s.trees.length, lidarTrees: s.treesSrc && s.treesSrc.n, conifers: s.trees.filter(t => t[4] === 1).length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, bytes: j.length, ms: s.ms });
+    console.log({ bld: s.bld.length, lidarFp: s.lidarFp, roads: s.roads.length, trees: s.trees.length, lidarTrees: s.treesSrc && s.treesSrc.n, conifers: s.trees.filter(t => t[4] === 1).length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, gravel: s.gravel.length, imgShift: s.imgShift, bytes: j.length, ms: s.ms });
     if (process.argv.includes('--out')) { import('fs').then(fs => fs.writeFileSync(process.argv[process.argv.indexOf('--out') + 1], j)); }
   }).catch((e) => { console.error(e); process.exit(1); });
 }

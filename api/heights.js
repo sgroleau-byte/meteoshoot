@@ -79,11 +79,13 @@ const inRing = (x, y, r) => {
 // h et étages mesurés, et un 5e champ à 1 quand la hauteur vient du LiDAR. Retourne { measured, failed }: failed
 // quand une lecture a échoué (la scène ne doit alors pas être gardée en cache comme définitive).
 export async function lidarHeights(lat, lng, bld, log = () => {}) {
-  if (!bld.length) return { measured: 0, failed: false };
+  // Les bâtiments déjà mesurés (empreintes LiDAR, api/footprints.js: 5e champ à 1) ne sont pas relus.
+  const todo = bld.map((b, i) => (b[4] === 1 ? -1 : i)).filter(i => i >= 0);
+  if (!todo.length) return { measured: 0, failed: false };
   const mLat = 111320, mLng = 111320 * Math.cos(lat * Math.PI / 180);
-  // Cadre des empreintes (en mètres locaux), puis en Lambert du Canada.
+  // Cadre des empreintes à mesurer (en mètres locaux), puis en Lambert du Canada.
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const [r] of bld) for (const [x, n] of r) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, n); y1 = Math.max(y1, n); }
+  for (const i of todo) for (const [x, n] of bld[i][0]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, n); y1 = Math.max(y1, n); }
   const toL = (x, n) => toLCC(lat + n / mLat, lng + x / mLng);
   const corners = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([x, n]) => toL(x, n));
   const E0 = Math.min(...corners.map((c) => c[0])) - 2, E1 = Math.max(...corners.map((c) => c[0])) + 2;
@@ -96,7 +98,7 @@ export async function lidarHeights(lat, lng, bld, log = () => {}) {
   const list = [...l1, ...l2];
   if (!list.length) { failed = failed || err['2m']; log(failed ? 'hauteurs: catalogue LiDAR indisponible' : 'hauteurs: pas de LiDAR ici'); return { measured: 0, failed }; }
 
-  const done = new Array(bld.length).fill(false);
+  const done = bld.map(b => b[4] === 1);
   const missing = new Array(bld.length).fill(true); // pas encore couvert par une mosaïque lue
   let measured = 0;
   for (const it of list) {

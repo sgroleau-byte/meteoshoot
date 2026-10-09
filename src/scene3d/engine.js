@@ -18,6 +18,7 @@ import SunCalc from 'suncalc';
 import { DIRS, centroid, edgesOf, localRings, signedArea } from './footprint.js';
 import { TEX_PERIOD, flatTerrain, makeTerrain } from './terrain.js';
 import { prisms, fitTree, reachOf, sheetCellBlocked, sheetTriTooClose, LOBE_PARTS, CON_TIERS, CON_TIERS_LOW } from './clearance.js';
+import { segDist, dpClosed, regularizeRing } from './ring.js';
 
 // Ombres PCSS (percentage-closer soft shadows) greffées sur le mode d'ombre « de base » de three (carte de profondeur en
 // pleine précision, lue directement): pénombre nette au contact et de plus en plus large en s'éloignant de l'objet qui
@@ -279,70 +280,6 @@ const GC = { park: '#66784d', pitch: '#5d8a47', play: '#b8a88e', grass: '#6f8552
 // ---- géométrie 2D (x est, n nord); signedArea, centroid et les lettres des volumes viennent de footprint.js
 function pointInRing(p, r) { let inside = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const a = r[i], b = r[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside; } return inside; }
 function segsCross(a, b, c, d) { const o = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])); return o(a, b, c) !== o(a, b, d) && o(c, d, a) !== o(c, d, b); }
-// Surfaces pavées d'après l'imagerie (contours tracés sur une grille de 0,4 m, marches de 2 à 3 m): mise au net en
-// polygones aux côtés droits. 1) rééchantillonnage au mètre et moyenne glissante sur ±4 m (efface les marches);
-// 2) Douglas-Peucker à 1,2 m (segments droits); 3) directions dominantes (histogramme des angles modulo 180°, cases de
-// 5°, pondéré par la longueur; pics portant au moins 10 % du périmètre ou 12 m; la perpendiculaire de la principale est
-// ajoutée); 4) chaque côté à moins de 12° d'une direction dominante y est aligné; 5) côtés consécutifs presque
-// parallèles (< 15°) fusionnés; 6) sommets = intersections des côtés voisins (jonction par projection si l'intersection
-// part trop loin). Les formes restent approximatives (voir docs/vue-3d.md), mais nettes plutôt qu'organiques.
-function smoothRing(r, step = 1, half = 4) {
-  if (r.length < 3) return r;
-  const pts = [];
-  for (let i = 0; i < r.length; i++) { const a = r[i], b = r[(i + 1) % r.length]; const l = Math.hypot(b[0] - a[0], b[1] - a[1]); const n = Math.max(1, Math.round(l / step)); for (let k = 0; k < n; k++) { const t = k / n; pts.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); } }
-  const N = pts.length; if (N < 8) return r;
-  const w = Math.min(Math.round(half / step), Math.floor((N - 1) / 2)), out = [];
-  for (let i = 0; i < N; i++) { let x = 0, n = 0; for (let k = -w; k <= w; k++) { const q = pts[(i + k + N) % N]; x += q[0]; n += q[1]; } out.push([x / (2 * w + 1), n / (2 * w + 1)]); }
-  return out;
-}
-const segDist = (p, a, b) => { const dx = b[0] - a[0], dn = b[1] - a[1], l2 = dx * dx + dn * dn || 1e-9; const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dn) / l2)); return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dn); };
-function dpClosed(r, eps) { // Douglas-Peucker sur un contour fermé (coupé au point le plus éloigné du premier)
-  const n = r.length; if (n < 4) return r;
-  let far = 1, fd = 0; for (let i = 1; i < n; i++) { const d = Math.hypot(r[i][0] - r[0][0], r[i][1] - r[0][1]); if (d > fd) { fd = d; far = i; } }
-  const pts = r.concat([r[0]]), keep = new Uint8Array(n + 1); keep[0] = keep[far] = keep[n] = 1;
-  const st = [[0, far], [far, n]];
-  while (st.length) { const [a, b] = st.pop(); let best = 0, bi = -1; for (let k = a + 1; k < b; k++) { const d = segDist(pts[k], pts[a], pts[b]); if (d > best) { best = d; bi = k; } } if (best > eps) { keep[bi] = 1; st.push([a, bi], [bi, b]); } }
-  const out = []; for (let i = 0; i < n; i++) if (keep[i]) out.push(r[i]); return out;
-}
-const angDiff = (a, b) => { const d = Math.abs(a - b) % 180; return Math.min(d, 180 - d); };
-const meanAng = (items) => { let x = 0, y = 0; items.forEach(([a, w]) => { x += Math.cos(2 * a * Math.PI / 180) * w; y += Math.sin(2 * a * Math.PI / 180) * w; }); return ((Math.atan2(y, x) * 180 / Math.PI) / 2 + 180) % 180; };
-function regularizeRing(r, eps = 1.2, tol = 12) {
-  const P = dpClosed(smoothRing(r), eps), n = P.length; if (n < 3) return r;
-  const ang = [], len = []; let total = 0;
-  for (let i = 0; i < n; i++) { const a = P[i], b = P[(i + 1) % n]; const dx = b[0] - a[0], dn = b[1] - a[1], l = Math.hypot(dx, dn); len.push(l); total += l; ang.push(((Math.atan2(dn, dx) * 180 / Math.PI) % 180 + 180) % 180); }
-  const bins = Array.from({ length: 36 }, () => []); for (let i = 0; i < n; i++) bins[Math.floor(ang[i] / 5) % 36].push([ang[i], len[i]]);
-  const w = bins.map(b => b.reduce((s, x) => s + x[1], 0)), sm = w.map((v, i) => v + w[(i + 35) % 36] + w[(i + 1) % 36]);
-  const dirs = [];
-  for (let i = 0; i < 36; i++) if (sm[i] >= sm[(i + 35) % 36] && sm[i] > sm[(i + 1) % 36] && sm[i] >= Math.max(12, total * 0.1)) dirs.push({ th: meanAng([...bins[(i + 35) % 36], ...bins[i], ...bins[(i + 1) % 36]]), w: sm[i] });
-  if (!dirs.length) return P;
-  dirs.sort((a, b) => b.w - a.w); const perp = (dirs[0].th + 90) % 180; if (!dirs.some(d => angDiff(d.th, perp) < tol)) dirs.push({ th: perp, w: 0 });
-  const lines = [];
-  for (let i = 0; i < n; i++) {
-    let th = ang[i], bd = tol; dirs.forEach(d => { const dd = angDiff(ang[i], d.th); if (dd < bd) { bd = dd; th = d.th; } });
-    const a = P[i], b = P[(i + 1) % n]; lines.push({ x: (a[0] + b[0]) / 2, n: (a[1] + b[1]) / 2, th, len: len[i], i1: (i + 1) % n, parts: [[th, len[i]]] });
-  }
-  let changed = true;
-  while (changed && lines.length > 3) {
-    changed = false;
-    for (let i = 0; i < lines.length && lines.length > 3; i++) {
-      const A = lines[i], B = lines[(i + 1) % lines.length]; if (angDiff(A.th, B.th) >= 15) continue;
-      const wt = A.len + B.len; A.x = (A.x * A.len + B.x * B.len) / wt; A.n = (A.n * A.len + B.n * B.len) / wt; A.parts = A.parts.concat(B.parts); A.th = meanAng(A.parts); A.len = wt; A.i1 = B.i1;
-      lines.splice((i + 1) % lines.length, 1); changed = true; break;
-    }
-  }
-  if (lines.length < 3) return P;
-  const out = [];
-  for (let i = 0; i < lines.length; i++) {
-    const A = lines[i], B = lines[(i + 1) % lines.length], V = P[A.i1];
-    const ta = A.th * Math.PI / 180, tb = B.th * Math.PI / 180, ax = Math.cos(ta), an = Math.sin(ta), bx = Math.cos(tb), bn = Math.sin(tb), det = ax * bn - an * bx;
-    let ok = false;
-    if (Math.abs(det) > 1e-6) { const t = ((B.x - A.x) * bn - (B.n - A.n) * bx) / det, px = A.x + ax * t, pn = A.n + an * t; if (Math.hypot(px - V[0], pn - V[1]) <= Math.max(6, 0.75 * Math.max(A.len, B.len))) { out.push([px, pn]); ok = true; } }
-    if (!ok) { const pa = (V[0] - A.x) * ax + (V[1] - A.n) * an, pb = (V[0] - B.x) * bx + (V[1] - B.n) * bn; out.push([A.x + ax * pa, A.n + an * pa], [B.x + bx * pb, B.n + bn * pb]); }
-  }
-  const res = []; for (const p of out) { const q = res[res.length - 1]; if (!q || Math.hypot(p[0] - q[0], p[1] - q[1]) > 0.4) res.push(p); }
-  if (res.length > 3 && Math.hypot(res[0][0] - res[res.length - 1][0], res[0][1] - res[res.length - 1][1]) <= 0.4) res.pop();
-  return res.length >= 3 ? res : P;
-}
 function segHitsRing(a, b, r) { if (pointInRing(a, r) || pointInRing(b, r)) return true; for (let i = 0; i < r.length; i++) if (segsCross(a, b, r[i], r[(i + 1) % r.length])) return true; return false; }
 function ringsOverlap(a, b) { if (pointInRing(centroid(a), b) || pointInRing(centroid(b), a)) return true; if (a.some(p => pointInRing(p, b)) || b.some(p => pointInRing(p, a))) return true; for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) if (segsCross(a[i], a[(i + 1) % a.length], b[j], b[(j + 1) % b.length])) return true; return false; }
 
@@ -508,7 +445,7 @@ export function createScene3D(container, opts = {}) {
   // lustre modéré, l'assombrissement domine); les façades, les arbres et les fenêtres, par la passe de reflet. refl = part
   // du reflet, écrite dans l'alpha de l'image de la scène: les flaques sur l'asphalte, un peu sur les trottoirs et les
   // toits plats (qui s'égouttent), rien sur le gazon (la couleur ne suffit pas à les distinguer la nuit).
-  const WET = { 'plat-road': [0.42, 0.72, 1], 'plat-asphalt': [0.42, 0.72, 1], 'plat-walk': [0.36, 0.75, 0.6], 'plat-rail': [0.3, 0.78, 0.4], toit: [0.3, 0.8, 0.25], mur: [0.2, 1, 0], tronc: [0.35, 1, 0], feuillage: [0.12, 0.9, 0], 'sous-bois': [0.12, 0.9, 0], lisiere: [0.12, 0.9, 0] };
+  const WET = { 'plat-road': [0.42, 0.72, 1], 'plat-asphalt': [0.42, 0.72, 1], 'plat-gravel': [0.3, 0.85, 0.15], 'plat-walk': [0.36, 0.75, 0.6], 'plat-rail': [0.3, 0.78, 0.4], toit: [0.3, 0.8, 0.25], mur: [0.2, 1, 0], tronc: [0.35, 1, 0], feuillage: [0.12, 0.9, 0], 'sous-bois': [0.12, 0.9, 0], lisiere: [0.12, 0.9, 0] };
   const lampLit = (mat, key) => {
     const prev = mat.onBeforeCompile, [wDark, wGloss, wRefl] = WET[key] || [0.3, 0.9, 0];
     mat.onBeforeCompile = (sh, r) => {
@@ -530,7 +467,7 @@ export function createScene3D(container, opts = {}) {
   // trottoirs), sinon des surfaces à quelques millimètres l'une de l'autre scintillent à 200 m (triangles qui clignotent).
   const flat = (h, y) => new THREE.MeshStandardMaterial({ color: L(h), roughness: 0.95, side: THREE.DoubleSide, envMapIntensity: 0.75, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 * y });
   // Gris foncés (rues, surfaces pavées) pour trancher avec le gazon et les toits (#5a5650); trottoirs un peu plus clairs.
-  const flatMats = { road: flat('#383b3e', 3), rail: flat('#7d766c', 3), walk: flat('#9b978d', 4), asphalt: flat('#3a3d40', 2) };
+  const flatMats = { road: flat('#383b3e', 3), rail: flat('#7d766c', 3), walk: flat('#9b978d', 4), asphalt: flat('#3a3d40', 2), gravel: flat('#7a756b', 2) }; // gravier: gris chaud, plus clair que l'asphalte, plus sobre que le trottoir
   Object.keys(GC).forEach(k => { flatMats[k] = flat(GC[k], 1); });
   // Matériaux qui reçoivent la lumière des lampadaires (le toit, au-dessus des lampes, n'en reçoit presque pas).
   [[wallMat, 'mur'], [roofMat, 'toit'], [trunkMat, 'tronc'], [crownMat, 'feuillage'], [conMat, 'feuillage'], [fillMat, 'sous-bois'], [edgeMat, 'lisiere'], [gndMat, 'sol'], [gndMatFar, 'sol-loin'], ...Object.entries(flatMats).map(([k, m]) => [m, 'plat-' + k])].forEach(([m, k]) => lampLit(m, k));
@@ -1173,6 +1110,8 @@ export function createScene3D(container, opts = {}) {
       addFlat(data.asphalt.map(p => ({ o: p })), flatMats.asphalt, 0.05, 2);
       // Surfaces pavées vues sur l'imagerie satellite (stationnements, aires, cours): même gris que l'asphalte, un cran dessous.
       addFlat((data.paved || []).map(p => { const v = p.o ? p : { o: p, h: [] }; return { o: regularizeRing(v.o), h: (v.h || []).map(h => regularizeRing(h)) }; }), flatMats.asphalt, 0.045, 3);
+      // Entrées et cours en gravier vues sur l'imagerie satellite (v633.178): mêmes contours mis au net, un cran sous le pavé.
+      addFlat((data.gravel || []).map(v => ({ o: regularizeRing(v.o, 1.0, 15), h: (v.h || []).map(h => regularizeRing(h, 1.0, 15)) })), flatMats.gravel, 0.042, 3);
       addFlat(data.water.map(w => ({ o: w.o, h: w.h, hFn: terrain.waterSurface(w), nFn: terrain.upNormal })), waterMat, 0.05); // surface lisse calée sur les rives
       ribbons(data.roads.filter(r => r.k === 2), 0.1, flatMats.rail, 4); ribbons(data.roads.filter(r => r.k === 0), 0.08, flatMats.road, 5); ribbons(data.roads.filter(r => r.k === 1), 0.12, flatMats.walk, 6);
       // Formes du projet et voisins, tels que blocks() les dessine, plus la maison importée (prisme de son enveloppe, de sa
@@ -1475,9 +1414,10 @@ export function createScene3D(container, opts = {}) {
     let fac = null, best = -Infinity;
     projInfo.forEach(e => { if (e.len < 2.5) return; const dx = cam.position.x - e.mid[0], dz = cam.position.z + e.mid[1], dist = Math.hypot(dx, dz) || 1; const facing = (e.nrm[0] * dx - e.nrm[1] * dz) / dist; if (facing < 0.15) return; const scv = facing * Math.sqrt(e.len) / Math.sqrt(dist); if (scv > best) { best = scv; fac = e; } });
     const height = fac ? `${fac.label}, côté ${fac.dir} : ${Math.round(fac.h)} m, hauteur ${fac.src}` : '';
-    const hLidar = !!(data && data.lidarBld > 0), hLine = 'Hauteurs des bâtiments LiDAR (Ressources naturelles Canada)';
-    const relief = terrain.flat ? (hLidar ? hLine : '') : terrain.src.lidar >= 0.5 ? `Relief LiDAR ${terrain.src.lidarRes || 2} m${hLidar ? ' et hauteurs des bâtiments LiDAR' : ''} (Ressources naturelles Canada)` : 'Relief du modèle d’élévation du Canada (20 m)' + (hLidar ? ' · ' + hLine : '');
-    const pavedLine = data && data.paved && data.paved.length ? `Surfaces pavées d’après l’imagerie satellite (${data.pavedSrc || 'Esri'}), approximatives` : '';
+    const hLidar = !!(data && data.lidarBld > 0), fpLidar = !!(data && data.lidarFp > 0), hWhat = fpLidar ? 'formes et hauteurs des bâtiments LiDAR' : 'hauteurs des bâtiments LiDAR', hLine = hWhat[0].toUpperCase() + hWhat.slice(1) + ' (Ressources naturelles Canada)';
+    const relief = terrain.flat ? (hLidar ? hLine : '') : terrain.src.lidar >= 0.5 ? `Relief LiDAR ${terrain.src.lidarRes || 2} m${hLidar ? ' et ' + hWhat : ''} (Ressources naturelles Canada)` : 'Relief du modèle d’élévation du Canada (20 m)' + (hLidar ? ' · ' + hLine : '');
+    const nPav = data && data.paved ? data.paved.length : 0, nGrav = data && data.gravel ? data.gravel.length : 0;
+    const pavedLine = nPav || nGrav ? `${nPav && nGrav ? 'Surfaces pavées et entrées en gravier' : nGrav ? 'Entrées en gravier' : 'Surfaces pavées'} d’après l’imagerie satellite (${data.pavedSrc || 'Esri'}), approximatives` : '';
     const ts = data && data.treesSrc, treeLine = ts && ts.n ? `Arbres LiDAR, conifères estimés d’après ${ts.essences && ts.essences.length ? ts.essences.join(' et ') : 'la forme des cimes'}` : '';
     const srcLine = [relief, treeLine, pavedLine, sat ? SAT_CREDIT : ''].filter(Boolean).join(' · ');
     const info = cond + '|' + parts + '|' + where + '|' + height + '|' + srcLine + '|' + (est > 0.55 ? 'dark' : 'light');
