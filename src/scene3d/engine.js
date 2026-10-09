@@ -595,7 +595,8 @@ export function createScene3D(container, opts = {}) {
       const mLng = 111320 * Math.cos(origin[0] * Math.PI / 180), cx = (sat.lng - origin[1]) * mLng, cn = (sat.lat - origin[0]) * 111320;
       // Image recalée sur les empreintes (satShift, v633.179), refaite quand les environs changent (image allumée avant
       // leur arrivée: sans empreintes, le calage valait zéro et restait en mémoire, v633.182).
-      if (!sat.shift || sat.shiftFor !== data) { sat.shift = satShift(sat, data ? data.bld : [], cx, cn); sat.shiftFor = data; }
+      // Depuis la v633.183, le serveur mesure ce calage avec la scène (appleShift): appliqué tel quel; sinon, mesure ici.
+      if (!sat.shift || sat.shiftFor !== data) { sat.shift = data && Array.isArray(data.appleShift) ? data.appleShift.slice() : satShift(sat, data ? data.bld : [], cx, cn); sat.shiftFor = data; }
       if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.satShift = sat.shift; // vérification en développement
       satObj = satMesh(terrain, sat, cx + sat.shift[0], cn + sat.shift[1]); S.add(satObj);
     }
@@ -1407,7 +1408,8 @@ export function createScene3D(container, opts = {}) {
     const nPav = data && data.paved ? data.paved.length : 0, nGrav = data && data.gravel ? data.gravel.length : 0;
     const pavedLine = nPav || nGrav ? `${nPav && nGrav ? 'Surfaces pavées et entrées en gravier' : nGrav ? 'Entrées en gravier' : 'Surfaces pavées'} d’après l’imagerie satellite (${data.pavedSrc || 'Esri'}), approximatives` : '';
     const ts = data && data.treesSrc, treeLine = ts && ts.n ? `Arbres LiDAR, conifères estimés d’après ${ts.essences && ts.essences.length ? ts.essences.join(' et ') : 'la forme des cimes'}` : '';
-    const srcLine = [relief, treeLine, pavedLine, sat ? SAT_CREDIT : ''].filter(Boolean).join(' · ');
+    const satNote = sat && sat.shift ? (sat.shift[0] || sat.shift[1] ? ` (recalée de ${Math.abs(sat.shift[0])} m ${sat.shift[0] >= 0 ? 'est' : 'ouest'} et ${Math.abs(sat.shift[1])} m ${sat.shift[1] >= 0 ? 'nord' : 'sud'})` : ' (non recalée)') : '';
+    const srcLine = [relief, treeLine, pavedLine, sat ? SAT_CREDIT + satNote : ''].filter(Boolean).join(' · ');
     const info = cond + '|' + parts + '|' + where + '|' + height + '|' + srcLine + '|' + (est > 0.55 ? 'dark' : 'light');
     if (info !== lastInfo) { lastInfo = info; onInfo({ cond, parts, where, height, srcLine, light: est <= 0.55, northDeg: (Math.atan2(vF.x, -vF.z) * 180 / Math.PI) }); }
   }

@@ -27,6 +27,7 @@ import { lidarHeights } from './heights.js';
 import { lidarTrees, readCanopy, R_TREES } from './trees.js';
 import { lidarFootprints } from './footprints.js';
 import { lidarRoofs } from './roofs.js';
+import { appleShift } from './satshift.js';
 import { pavedFromImagery, PAVED_ATTRIBUTION } from './paved.js';
 
 export const maxDuration = 60;
@@ -294,7 +295,7 @@ export async function buildScene(lat, lng) {
   // qui n'utilise que les empreintes).
   // lidarErr: lecture LiDAR échouée (catalogue ou mosaïque indisponible): la scène sert quand même, mais n'est gardée
   // ni par le réseau de Vercel ni dans le cache partagé, pour être recalculée au prochain affichage.
-  let paved = [], gravel = [], imgShift = [0, 0], pavedSrc = null, lidarBld = 0, lidarErr = false, lt = null, lidarFp = 0;
+  let paved = [], gravel = [], imgShift = [0, 0], pavedSrc = null, lidarBld = 0, lidarErr = false, lt = null, lidarFp = 0, apple = null;
   const log = (m) => console.log('[scene3d]', m);
   // Délai global des lectures LiDAR: un serveur de Ressources naturelles Canada bloqué ne doit pas faire échouer toute la
   // scène (60 s pour la fonction, dont 15 à 20 s pour Overture): après 50 s depuis le début, on sert sans ces mesures.
@@ -309,6 +310,8 @@ export async function buildScene(lat, lng) {
   if (win) { try { roofs = lidarRoofs(win, bld, log).n; } catch (e) { console.warn('[scene3d] toits LiDAR:', e && e.message); } }
   await Promise.all([
     pavedFromImagery(lat, lng, bld, roads, log).then((r) => { paved = r.paved; gravel = r.gravel || []; imgShift = r.shift || [0, 0]; pavedSrc = r.dense ? null : PAVED_ATTRIBUTION; }).catch((e) => console.warn('[scene3d] surfaces pavées indisponibles:', e && e.message)),
+    // Calage de l'image Plans d'Apple sur les empreintes (v633.183): appleShift dans la scène, appliqué tel quel par le navigateur.
+    inTime(appleShift(lat, lng, bld, log), 'calage Plans').then((r) => { apple = r; }).catch((e) => console.warn('[scene3d] calage Plans d\'Apple indisponible:', e && e.message)),
     inTime(lidarHeights(lat, lng, bld, log), 'hauteurs').then((r) => { lidarBld = r.measured; if (r.failed) lidarErr = true; }).catch((e) => { lidarErr = true; console.warn('[scene3d] hauteurs LiDAR indisponibles:', e && e.message); }),
     // Les empreintes ne changent pas pendant la mesure des hauteurs: le masque des toits peut se faire en même temps.
     inTime(lidarTrees(lat, lng, bld, log, win), 'arbres').then((r) => { lt = r; if (r.failed) lidarErr = true; }).catch((e) => { lidarErr = true; console.warn('[scene3d] arbres LiDAR indisponibles:', e && e.message); }),
@@ -325,7 +328,7 @@ export async function buildScene(lat, lng) {
     treesSrc = { date: lt.date, res: lt.res, essences: lt.essences, n: lt.trees.length };
     canopy = lt.canopy;
   }
-  const scene = { v: 9, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, imgShift, pavedSrc, lidarBld, lidarFp, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
+  const scene = { v: 10, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, imgShift, appleShift: apple, pavedSrc, lidarBld, lidarFp, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
   if (lidarErr) scene.lidarErr = true;
   return scene;
 }
@@ -354,7 +357,7 @@ if (process.argv.includes('--test')) {
   const lat = parseFloat(process.argv[i + 1] || '46.8367'), lng = parseFloat(process.argv[i + 2] || '-71.2336');
   buildScene(lat, lng).then((s) => {
     const j = JSON.stringify(s);
-    console.log({ bld: s.bld.length, lidarFp: s.lidarFp, roofs: s.roofs, roads: s.roads.length, trees: s.trees.length, lidarTrees: s.treesSrc && s.treesSrc.n, conifers: s.trees.filter(t => t[4] === 1).length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, gravel: s.gravel.length, imgShift: s.imgShift, bytes: j.length, ms: s.ms });
+    console.log({ bld: s.bld.length, lidarFp: s.lidarFp, roofs: s.roofs, appleShift: s.appleShift, roads: s.roads.length, trees: s.trees.length, lidarTrees: s.treesSrc && s.treesSrc.n, conifers: s.trees.filter(t => t[4] === 1).length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, gravel: s.gravel.length, imgShift: s.imgShift, bytes: j.length, ms: s.ms });
     if (process.argv.includes('--out')) { import('fs').then(fs => fs.writeFileSync(process.argv[process.argv.indexOf('--out') + 1], j)); }
   }).catch((e) => { console.error(e); process.exit(1); });
 }

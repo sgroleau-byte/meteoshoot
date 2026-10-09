@@ -58,6 +58,20 @@ const fail = (res, code, msg) => {
 // Journal côté serveur: statut et cause seulement (ni clé, ni adresse signée, ni identifiants d'équipe ou de clé).
 const note = (msg) => console.error(`[apple-snapshot] ${msg}`);
 
+// Adresse signée de l'image (côté serveur seulement): { url, hide } ou null sans clé ni identifiants. Sert aussi au
+// calage de l'image sur les empreintes des bâtiments (api/satshift.js).
+export function snapshotRequest(lat, lng, z = 18) {
+  const team = process.env.APPLE_MAPS_TEAM_ID, keyId = process.env.APPLE_MAPS_KEY_ID;
+  let k = null;
+  try { k = privateKey(); } catch { return null; }
+  if (!k || !team || !keyId) return null;
+  const q = new URLSearchParams({ center: `${lat.toFixed(6)},${lng.toFixed(6)}`, z: String(z), size: '640x640', scale: '2', t: 'satellite', teamId: team, keyId });
+  const path = `/api/v1/snapshot?${q}`;
+  const signature = sign('sha256', Buffer.from(path), { key: k, dsaEncoding: 'ieee-p1363' }).toString('base64url');
+  const hide = (x) => [team, keyId, signature].filter(Boolean).reduce((t, v) => t.split(v).join('***'), String(x)).replace(/signature=[^&\s"']*/g, 'signature=***');
+  return { url: `${HOST}${path}&signature=${signature}`, hide };
+}
+
 export default async function handler(req, res) {
   const who = caller(req);
   res.setHeader('Vary', 'Origin');

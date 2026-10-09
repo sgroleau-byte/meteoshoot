@@ -608,6 +608,19 @@ importé, lui, est le fichier de l'architecte.
     directions, 10 m à 5 km, vu de 1,6 m au-dessus du sol; mesuré: 14 à 20° vers l'est à Stoneham) remonte par
     `onHorizon` à la fiche, qui s'en sert à la place du profil d'open-elevation (`lidarHorizonRef`). Le cache Supabase
     n'est pas réécrit (le client n'a pas le droit d'écraser une entrée): sans la 3D ouverte, l'ancien profil reste.
+- **v633.183 (10 octobre 2026): calage de l'image Plans d'Apple fait par le serveur.** Stéphane, SOL SAT allumé:
+  « l'image au sol est ultra décalée, c'est toutes les maisons » (gros plans: chaque bloc à une maison de son toit),
+  alors que le même build de production en local plaçait les blocs sur leurs toits et que la scène servie par
+  www.meteoshoot.com est identique à la scène locale (96 empreintes LiDAR, même `imgShift`). Le calage dans le
+  navigateur (`satShift`, canvas et ImageBitmap) ne s'appliquait donc pas chez lui, sans cause trouvée (navigateur,
+  ordre des chargements). Désormais `api/satshift.js` (`appleShift`) refait la même mesure côté serveur, avec la clé
+  Apple de Vercel (`snapshotRequest` exporté par `api/apple-snapshot.js`): même image que celle du navigateur (même
+  centre, même zoom 18), ramenée au mètre (rangée 0 au sud), pixels sombres contre empreintes, ±12 m, gardé à 1,5 fois
+  mieux et 50 pixels; résultat `appleShift` dans la scène (environs version 10), appliqué tel quel par `placeSat`
+  (le calage du navigateur ne sert plus que sans valeur serveur: développement local sans clé). Stoneham: 2 m est,
+  10 m sud (823 contre 331). La légende dit maintenant « Image satellite © Plans d'Apple (recalée de 2 m est et 10 m
+  sud) » ou « (non recalée) »: on voit ce qui s'applique. Vérifié dans le build de production local avec la clé:
+  légende « recalée de 2 m est et 10 m sud », blocs sur leurs toits.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
