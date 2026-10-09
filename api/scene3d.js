@@ -328,7 +328,7 @@ export async function buildScene(lat, lng) {
     treesSrc = { date: lt.date, res: lt.res, essences: lt.essences, n: lt.trees.length };
     canopy = lt.canopy;
   }
-  const scene = { v: 10, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, imgShift, appleShift: apple, pavedSrc, lidarBld, lidarFp, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
+  const scene = { v: 11, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, imgShift, appleShift: apple, pavedSrc, lidarBld, lidarFp, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
   if (lidarErr) scene.lidarErr = true;
   return scene;
 }

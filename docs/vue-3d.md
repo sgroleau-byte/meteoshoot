@@ -621,6 +621,17 @@ importé, lui, est le fichier de l'architecte.
   10 m sud (823 contre 331). La légende dit maintenant « Image satellite © Plans d'Apple (recalée de 2 m est et 10 m
   sud) » ou « (non recalée) »: on voit ce qui s'applique. Vérifié dans le build de production local avec la clé:
   légende « recalée de 2 m est et 10 m sud », blocs sur leurs toits.
+- **v633.184 (10 octobre 2026): calage de l'image Plans d'Apple par contraste.** Stéphane, légende à l'appui:
+  « recalée de 8 m est et 12 m nord », « rues, maisons, tout est décalé ». Son projet est à 47.01031, -71.37338 (trouvé
+  dans `scene3d_cache`), 30 m du centre de test; là, le compte de pixels sombres sous les empreintes a deux pics à 1 %
+  l'un de l'autre: le vrai (2 m est, 10 m sud) et un faux en bord de fenêtre (8 m est, 12 m nord: les empreintes
+  tombent sur des ombres et des stationnements), qui gagnait de peu. Nouveau critère (`contrastShift`,
+  `api/satshift.js`; même chose côté client dans `satDrape.js` pour le secours sans clé): part de pixels sombres
+  dedans moins celle de l'anneau de 2 à 4 m autour (un toit est sombre et son pourtour clair, une ombre est sombre
+  partout), recherche à ±16 m, accepté si le contraste atteint 0,08, fait 1,3 fois le 2e pic (à 4 m et plus) et n'est
+  pas en bord de fenêtre. Mesuré: Stoneham (les deux centres) 2 m est 10 m sud (0,126 contre 0,07 à 0,09), Limoilou
+  3 m est 12 m sud, Gaspé 4 m est 12 m sud, les sept autres lieux « pas assez net »: pas de recalage (prudent).
+  Environs version 11 (la scène de Stéphane gardait le mauvais calage en cache).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
