@@ -31,6 +31,9 @@ function toLocal(pl, org) {
 // Ces files vivent hors du composant: un envoi continue si la vue se ferme ou si l'on passe à un autre projet.
 const warnCloud = (what) => (err) => console.warn(`[scene3d] ${what}, copie locale seulement:`, (err && err.message) || err);
 const sends = new Map(); // projet -> { at, p }: envoi du modèle en cours (un même import n'est envoyé qu'une fois à la fois)
+// Dernier modèle retiré par projet, pour la session: réimporter le même fichier (même nom, même taille, par exemple pour
+// profiter d'un meilleur classement des vitrages) le remet à sa place réglée à la main, hauteur comprise.
+const removed = new Map(); // projet -> { name, srcBytes, pl (avec o, l'origine du moteur) }
 function sendModel(pid, rec) {
   const cur = sends.get(pid);
   if (cur && cur.at === rec.at) return cur.p;
@@ -227,14 +230,18 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
       const res = await importKmz(file, (p) => setPrepOf(pid, p));
       await withModel(async () => {
         const e = here() ? eng.current : null;
-        const pl = e ? await e.setModel(res.glb, res.info, null) : null;
+        const prev = removed.get(pid), same = !!prev && prev.name === res.info.name && prev.srcBytes === res.info.srcBytes;
+        if (same) removed.delete(pid);
+        const p0 = same && e ? toLocal(prev.pl, org.current) : null;
+        const pl = e ? await e.setModel(res.glb, res.info, p0) : null;
         const shown = pl && eng.current === e;
-        if (shown) { mdlFor.current = pid; if (here()) { setMdl({ info: res.info, pl }); setLocked(false); } } // modèle neuf: libre, à placer
+        if (shown) { mdlFor.current = pid; if (here()) { setMdl({ info: res.info, pl }); setLocked(p0 != null); } } // modèle neuf: libre, à placer; même fichier remis en place: fixé
+        if (import.meta.env.DEV) console.info('[scene3d] vitrages', res.info.glazing);
         setPrepOf(pid, null);
         if (!pid) return;
         // Copie locale en attente d'envoi, puis envoi en ligne (pas attendu: la file du moteur reste libre).
         // Échec du stockage local (navigation privée, quota): la maison reste affichée, avec un avertissement.
-        const at = Date.now(), rec = { glb: res.glb, info: res.info, placement: shown ? { ...pl, o: org.current, t: at } : null, pending: true, at };
+        const at = Date.now(), rec = { glb: res.glb, info: res.info, placement: shown ? { ...pl, o: org.current, t: at } : same ? { ...prev.pl, t: at } : null, pending: true, at };
         await saveModel(pid, rec)
           .catch(err => { console.warn('[scene3d] modèle non gardé:', err); if (here()) setMdlErr('Modèle non gardé sur cet appareil (stockage local refusé ou plein)'); });
         sendModel(pid, rec).catch(warnCloud('modèle pas encore en ligne'));
@@ -263,7 +270,9 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
   };
   // Retrait: copie locale effacée (une marque reste tant que le serveur n'a pas effacé la sienne), puis copie en ligne.
   const removeModel = () => withModel(async () => {
-    const e = eng.current, pid = mdlFor.current; mdlFor.current = null; setMdl(null);
+    const e = eng.current, pid = mdlFor.current, cur = e && e.getModelPlacement();
+    if (pid && cur && mdl) removed.set(pid, { name: mdl.info.name, srcBytes: mdl.info.srcBytes, pl: { ...cur, o: org.current } });
+    mdlFor.current = null; setMdl(null);
     if (e) await e.setModel(null);
     if (!pid) return;
     const at = await retireModel(pid).catch(err => { console.warn('[scene3d] modèle non effacé:', err); return null; });

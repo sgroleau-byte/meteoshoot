@@ -12,8 +12,11 @@
 // - doublons de même sens: un seul gardé; à égalité de profondeur, le recto gagne;
 // - faces simples vues surtout de dos (normale vers l'intérieur dans le fichier): sommets inversés, la normale pointe
 //   vers l'extérieur (biais d'ombre du moteur);
-// - verre (opacité de la couleur) vu des deux côtés depuis l'extérieur (garde-corps): transparent; vu d'un seul côté
-//   (fenêtre, l'intérieur est retiré derrière): opaque et foncé;
+// - verre (opacité < 1, ou couleur unie bleu pâle sans texture: fenêtres de fabricants) classé par ce qu'il y a derrière
+//   chaque vitre (glazing.js): intérieur retiré ou mur juste derrière d'un côté, extérieur de l'autre, haut pris dans le
+//   mur ou le toit: fenêtre, opaque, allumée la nuit; extérieur des deux côtés (garde-corps): transparent; le reste
+//   (puits de lumière, verre au haut libre): opaque, foncé, jamais allumé (8 octobre 2026: le garde-corps de verre en
+//   boîte de 1 cm de la maison de Stéphane s'allumait, ses fenêtres bleu pâle opaques restaient éteintes);
 // - détourages (PNG à couche alpha, opacité 1: arbres, plantes, personnages) et objets égarés loin de la maison:
 //   retirés avant la passe de visibilité (ils masqueraient la façade ou fausseraient l'emprise).
 import * as THREE from 'three';
@@ -22,6 +25,7 @@ import { unzipSync, strFromU8 } from 'three/addons/libs/fflate.module.js';
 import { MeshoptSimplifier } from 'three/addons/libs/meshopt_simplifier.module.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { glazingKinds } from './glazing.js';
 
 const tick = () => new Promise(r => setTimeout(r, 0));
 const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp', webp: 'image/webp' };
@@ -186,6 +190,17 @@ function mainCluster(p, area, list) {
   return { keep: dropped ? list.filter((t, k) => kept[lab[first[k]]]) : list, dropped };
 }
 
+// Verre d'un matériau: 1 transparent (opacité < 1), 2 verre opaque (couleur unie bleu pâle sans texture, la convention
+// des fenêtres de fabricants dans SketchUp; confirmé ou écarté par glazing.js), 0 sinon.
+function glassOf(m) {
+  if (m.opacity < 1) return 1;
+  if (m.map || !m.color) return 0;
+  const c = m.color.clone().convertLinearToSRGB(), mx = Math.max(c.r, c.g, c.b), d = mx - Math.min(c.r, c.g, c.b);
+  if (!mx || d / mx < 0.15 || mx < 0.75) return 0;
+  const h = 60 * (mx === c.r ? ((c.g - c.b) / d + 6) % 6 : mx === c.g ? (c.b - c.r) / d + 2 : (c.r - c.g) / d + 4);
+  return h >= 175 && h <= 235 ? 2 : 0;
+}
+
 // Recto-verso et doublons (voir l'en-tête), détourages et objets égarés, normales, aires, verre; recentrage sur l'amas
 // principal: emprise centrée, sol à y = 0.
 function faces(F) {
@@ -223,7 +238,7 @@ function faces(F) {
   // Rôle des jumeaux de même matériau (1 ou 2 selon le sens de la normale sur son axe dominant, constant sur toute une
   // face plane): les deux côtés ne sont jamais simplifiés ensemble (voir build).
   const roleOf = t => { const x = nrm[t * 3], y = nrm[t * 3 + 1], z = nrm[t * 3 + 2], ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z); return (ax >= ay && ax >= az ? x : ay >= az ? y : z) > 0 ? 1 : 2; };
-  const n = keep.length, isGlass = F.mats.map(m => m.opacity < 1 ? 1 : 0), at = new Int32Array(F.n).fill(-1);
+  const n = keep.length, isGlass = F.mats.map(glassOf), at = new Int32Array(F.n).fill(-1);
   keep.forEach((t, k) => { at[t] = k; });
   const G = { n, mats: F.mats, pos: new Float32Array(n * 9), mat: new Uint16Array(n), nrm: new Float32Array(n * 3), area: new Float32Array(n), dbl: new Uint8Array(n), glass: new Uint8Array(n), mate: new Int32Array(n), role: new Uint8Array(n), cutouts, dropped };
   keep.forEach((t, k) => {
@@ -332,37 +347,6 @@ function flipTri(F, t) {
   for (let j = 0; j < 3; j++) F.nrm[t * 3 + j] = -F.nrm[t * 3 + j];
 }
 
-// Verre: vu des deux côtés depuis l'extérieur = libre (transparent), sinon fenêtre (opaque). Vitre = triangles de verre
-// qui se touchent et restent parallèles (à 8 degrés près) au plus grand d'entre eux: jamais de vitres d'orientations
-// différentes réunies (véranda, verrière, mur-rideau courbe), dont l'une rendrait les autres transparentes sur un
-// intérieur déjà retiré.
-function glassKinds(F, front, back) {
-  const q = x => Math.round(x * 1000), vkey = (t, j) => { const o = t * 9 + j * 3; return q(F.pos[o]) + ',' + q(F.pos[o + 1]) + ',' + q(F.pos[o + 2]); };
-  const dot = (a, b) => F.nrm[a * 3] * F.nrm[b * 3] + F.nrm[a * 3 + 1] * F.nrm[b * 3 + 1] + F.nrm[a * 3 + 2] * F.nrm[b * 3 + 2];
-  const byVertex = new Map(), list = [];
-  for (let t = 0; t < F.n; t++) {
-    if (!F.glass[t]) continue;
-    list.push(t);
-    for (let j = 0; j < 3; j++) { const k = vkey(t, j), l = byVertex.get(k); if (l) l.push(t); else byVertex.set(k, [t]); }
-  }
-  list.sort((a, b) => F.area[b] - F.area[a]);
-  const kind = new Uint8Array(F.n), done = new Uint8Array(F.n);
-  for (const s of list) {
-    if (done[s]) continue;
-    done[s] = 1;
-    const pane = [s];
-    let sides = 0;
-    for (let i = 0; i < pane.length; i++) {
-      const t = pane[i], same = dot(t, s) >= 0;
-      if (front[t]) sides |= same ? 1 : 2;
-      if (back[t]) sides |= same ? 2 : 1;
-      for (let j = 0; j < 3; j++) for (const u of byVertex.get(vkey(t, j))) if (!done[u] && Math.abs(dot(u, s)) > 0.99) { done[u] = 1; pane.push(u); }
-    }
-    for (const t of pane) kind[t] = sides === 3 ? 2 : 1;
-  }
-  return kind;
-}
-
 // ---------- reconstruction allégée, couleurs unies ----------
 function averageColor(tex) {
   const img = tex && tex.image;
@@ -377,11 +361,15 @@ function averageColor(tex) {
   return n ? new THREE.Color().setRGB(r / n / 255, gg / n / 255, b / n / 255, THREE.SRGBColorSpace) : null;
 }
 
+// Vitrage (glazing.js): 0 pas du verre, 1 fenêtre (allumée la nuit), 2 verre libre (transparent), 3 vitrage sombre.
+const VITRAGE = ['', 'fenetre', 'verre', 'vitrage'];
 function material(src, front, glassKind) {
   const m = new THREE.MeshStandardMaterial({ color: src.color ? src.color.clone() : new THREE.Color(1, 1, 1), roughness: 0.85, metalness: 0, side: front ? THREE.FrontSide : THREE.DoubleSide });
-  m.name = (src.name || 'materiau') + (glassKind === 1 ? '-fenetre' : glassKind === 2 ? '-verre' : '');
+  m.name = (src.name || 'materiau') + (glassKind ? '-' + VITRAGE[glassKind] : '');
+  m.userData.vitrage = VITRAGE[glassKind]; // écrit dans le GLB (extras) et relu par engine.js: un nom d'origine en « -fenetre » ne s'allume plus
   if (src.map) { const avg = averageColor(src.map); if (avg) m.color.copy(avg).multiply(src.color || new THREE.Color(1, 1, 1)); }
-  if (glassKind === 1) { m.color.lerp(new THREE.Color(0x1c232b), 0.78); m.roughness = 0.25; m.metalness = 0.1; }
+  // Fenêtre ou vitrage sombre: foncé seulement si le verre d'origine est transparent (une fenêtre bleu pâle opaque garde sa couleur le jour).
+  if (glassKind === 1 || glassKind === 3) { if (src.opacity < 1) m.color.lerp(new THREE.Color(0x1c232b), 0.78); m.roughness = 0.25; m.metalness = 0.1; }
   else if (glassKind === 2) { m.transparent = true; m.opacity = Math.min(src.opacity, 0.45); m.roughness = 0.1; }
   return m;
 }
@@ -460,7 +448,8 @@ function convexHull(pts) {
 }
 
 // Fichier .kmz -> { glb (ArrayBuffer), info }. onProgress(0 à 1). info.cutouts: triangles de détourage retirés;
-// info.dropped: objets égarés écartés (absents quand il n'y en a pas).
+// info.dropped: objets égarés écartés (absents quand il n'y en a pas); info.glazing: bilan des vitrages (fenêtres, verre
+// libre, vitrages sombres, aire allumée).
 export async function importKmz(file, onProgress = () => {}) {
   const t0 = performance.now();
   onProgress(0.02); await tick();
@@ -482,7 +471,7 @@ export async function importKmz(file, onProgress = () => {}) {
     }
     // Rien de visible: rendu muet (contexte graphique) ou faces simples toutes à l'envers, sans drapeau double face.
     if (!kept) throw new Error('Aucune face visible de l\'extérieur dans ce modèle');
-    const kind = glassKinds(F, front, back);
+    const { kind, stats } = glazingKinds(F, front, back, keep);
     await MeshoptSimplifier.ready;
     onProgress(0.92); await tick();
     const B = build(F, keep, kind);
@@ -498,6 +487,7 @@ export async function importKmz(file, onProgress = () => {}) {
       name: file.name.replace(/\.kmz$/i, ''), bytes: glb.byteLength, srcBytes: file.size, srcTris: raw.n, tris: B.tris, kept,
       size: [+F.size.x.toFixed(2), +(F.size.z).toFixed(2), +F.size.y.toFixed(2)], hull: B.hull, offset: [F.offset.x, -F.offset.z], geo: K.geo, ms: Math.round(performance.now() - t0),
     };
+    info.glazing = { v: 2, ...stats }; // bilan des vitrages; absent: classement d'avant la v633.176
     if (F.dropped) info.dropped = F.dropped;
     if (F.cutouts) info.cutouts = F.cutouts;
     return { glb, info };

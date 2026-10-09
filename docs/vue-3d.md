@@ -103,8 +103,36 @@ importé, lui, est le fichier de l'architecte.
     miroir (sens corrigé), doublons, faces simples tournées vers l'intérieur (retournées);
   - détourages retirés (images percées: arbres, plantes, personnages) et objets égarés écartés (voiture, personnage,
     bloc oublié loin de la maison); un garage ou un deuxième bâtiment à moins de 60 m est gardé;
-  - verre vu des deux côtés (garde-corps): transparent; vu d'un seul côté (fenêtre): opaque, foncé, allumé la nuit
-    comme les fenêtres des murs;
+  - vitrages (`glazing.js`, v633.176): est du verre un matériau d'opacité inférieure à 1, ou de couleur unie bleu pâle sans
+    texture (teinte 175 à 235°, clair, saturé à 15 % au moins: la convention des fenêtres de fabricants, souvent opaques
+    dans SketchUp). Chaque vitre (triangles de verre qui se touchent, parallèles à 8° près) est jugée par ce qu'il y a
+    derrière elle: des rayons partent de points de la vitre des deux côtés; le premier obstacle est INTÉRIEUR (surface
+    jamais vue de l'extérieur, donc retirée), MUR (vue de l'extérieur, à 25 cm ou moins, pas du verre) ou EXTÉRIEUR (plus
+    loin, ou le ciel). Les feuilles d'un même vitrage à moins de 8 cm (verre en boîte de 1 cm, double vitrage) sont
+    traversées. Trois types:
+    - **fenêtre**: intérieur ou mur d'un côté, extérieur de l'autre (ou des lattes à 25 cm au plus devant), vitre raide,
+      haut pris dans le mur, le cadre ou le toit: opaque, allumée la nuit; foncée le jour seulement si le verre d'origine
+      est transparent (une fenêtre bleu pâle opaque garde sa couleur);
+    - **verre libre**: extérieur des deux côtés (garde-corps, clôture de piscine, auvent): transparent, jamais allumé;
+    - **vitrage sombre**: intérieur derrière sans être une fenêtre sûre (haut libre, vitre couchée: puits de lumière,
+      piscine): opaque, foncé, jamais allumé.
+    Verre bleu pâle opaque: fenêtre seulement si la vitre fait 8 m² au plus et 20 cm de large au moins, n'est pas la face
+    d'un solide (planche, volet, porte peints en bleu), et si son matériau est une fenêtre sur les deux tiers au moins de
+    ses vitres raides; sinon couleur inchangée. Chaque matériau du GLB porte `userData.vitrage` (`fenetre`, `verre`,
+    `vitrage` ou vide), relu par le moteur; les fichiers plus anciens gardent la règle du suffixe `-fenetre` du nom.
+    Cause (8 octobre 2026, maison de Stéphane): son garde-corps est fait de 7 boîtes de verre de 1 cm dont chaque face
+    était jugée « vue d'un seul côté », donc allumée, et ses fenêtres sont bleu pâle opaques (jamais reconnues comme du
+    verre). Bilan de son modèle (`info.glazing`): 38 fenêtres (dont 37 opaques), 14 verres libres, 8 vitrages sombres
+    (lamelles), 42 m² allumés. Banc: `node tools/glazing/scenes.mjs` (52 scènes de synthèse: bandeau sous une dalle,
+    lattes, balconnet, puits de lumière, piscine, porte peinte en bleu, mur bleu pâle avec vitre au nu, fenêtre bleue en
+    boîte de 1 cm, volets bleus plaqués, revêtement bleu derrière une fenêtre...). Deux types de verre ne forment une même
+    vitre que s'ils sont les deux côtés d'un même triangle; une boîte de verre opaque n'est un solide (planche, volet)
+    qu'à partir de 2,5 cm d'épaisseur ou plaquée sur ce qu'il y a derrière; un pan bleu opaque de plus de 8 m² derrière
+    une fenêtre est un revêtement, pas un verre. Limites connues: baie bleu opaque d'une seule
+    vitre de plus de 8 m² (éteinte), garde-corps de verre à 25 cm ou moins devant un mur plein plus large que lui
+    (allumé), porte ou panneau bleu pâle sans épaisseur (allumé), verre opaque gris, noir ou blanc (non reconnu), lattes à
+    plus de 25 cm (vitre sombre), vitre bleue opaque en boîte de 2,5 cm ou plus, ou collée sur le revêtement (éteinte). Un modèle importé avant la v633.176 garde l'ancien classement (pas de `info.glazing`):
+    le réimporter;
   - simplification au centimètre et couleurs unies (moyenne de chaque texture): un GLB (fichier 3D compact)
     d'environ 150 Ko. Banc d'essai: 194 000 triangles ramenés à 6 000, 14,4 Mo à 0,15 Mo, sans différence visible.
 - **Pose**: calée sur la première forme dessinée (sinon l'édifice Overture sous le point du projet), centres
@@ -122,7 +150,9 @@ importé, lui, est le fichier de l'architecte.
 - **Pastille MAISON** (une fois le modèle posé, cadenas ouvert): glisser la maison dans la vue pour la déplacer (Échap annule);
   rotation en glissant la pastille des degrés à gauche ou à droite (Maj: par 15°); hauteur en glissant la pastille
   suivante vers le haut ou le bas; flèche « recoller au sol » quand la hauteur n'est pas nulle; croix pour retirer le
-  modèle (la forme dessinée revient).
+  modèle (la forme dessinée revient). Retirer puis réimporter le même fichier (même nom, même taille) dans la même session
+  le remet à sa place réglée à la main, hauteur comprise, cadenas fermé (mémoire perdue si la page est rechargée entre les
+  deux).
 - **Calque SOL SAT** (`satDrape.js`): image satellite de Plans d'Apple (1280 pixels, environ 260 m de côté à Québec,
   20 cm par pixel) drapée sur le relief autour du projet, comme repère pour poser la maison (entrée, chemin,
   clairière). Éteint à chaque ouverture de la 3D. Allumé, il masque les arbres et le sous-bois, et la légende ajoute

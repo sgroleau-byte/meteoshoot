@@ -1104,7 +1104,8 @@ export function createScene3D(container, opts = {}) {
         } else {
           lampLit(m, 'modele'); modelShadow(m, 'lamp-modele');
           // Vitre de fenêtre: allumée la nuit comme les fenêtres des murs (même teinte, même courbe, voir frame).
-          if (/-fenetre$/.test(m.name || '')) { m.emissive.set('#ffe2b0'); m.emissiveIntensity = 0; win.push(m); }
+          const v = m.userData.vitrage; // fichiers depuis la v633.176: chaque matériau le porte ('' hors verre); plus anciens: suffixe du nom
+          if (v !== undefined ? v === 'fenetre' : /-fenetre$/.test(m.name || '')) { m.emissive.set('#ffe2b0'); m.emissiveIntensity = 0; win.push(m); }
         }
       }
       o.castShadow = !m.transparent; if (m.transparent) o.renderOrder = 2;
