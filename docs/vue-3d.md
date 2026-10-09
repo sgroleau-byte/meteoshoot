@@ -632,6 +632,17 @@ importé, lui, est le fichier de l'architecte.
   pas en bord de fenêtre. Mesuré: Stoneham (les deux centres) 2 m est 10 m sud (0,126 contre 0,07 à 0,09), Limoilou
   3 m est 12 m sud, Gaspé 4 m est 12 m sud, les sept autres lieux « pas assez net »: pas de recalage (prudent).
   Environs version 11 (la scène de Stéphane gardait le mauvais calage en cache).
+- **v633.185 (9 octobre 2026): Option + glisser déplace la caméra.** Demande de Stéphane (« me déplacer en cliquant
+  sur option »). Le glisser ordinaire tourne et monte comme avant; avec la touche Option enfoncée, le point visé (`ct`,
+  `engine.js`, `panView`) glisse au sol dans le sens du geste (le décor suit le pointeur) et la caméra suit, à l'échelle
+  de la distance de visée (distance divisée par la focale en pixels, comme le glisser de la maison). La hauteur de
+  visée reste la même au-dessus du sol (on suit la pente), 80 pixels au plus par événement (pas de saut), et le point
+  visé ne s'éloigne pas à plus de 500 m du projet (limite des environs chargés: bâtiments 450 m, rues 500 m). La touche
+  peut être prise ou lâchée en plein geste; curseur « move » dès qu'elle est enfoncée (écouteurs keydown et keyup
+  sur la fenêtre), « grab » et « grabbing » sinon. Option prime sur la maison importée: avec la touche, on déplace
+  la vue même en saisissant la maison (cadenas ouvert). `setView` accepte `ct` pour les tests. Vérifié en local
+  par des événements de pointeur synthétiques: 200 px vers la droite = 48 m vers la gauche de la caméra, azimut,
+  hauteur et distance inchangés; rotation et pincement intacts.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

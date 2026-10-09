@@ -1152,12 +1152,29 @@ export function createScene3D(container, opts = {}) {
     if (md.moved && model && modelPl) { modelPl.x = md.pl0.x; modelPl.n = md.pl0.n; placeModel(); }
     el.style.cursor = 'grab';
   };
+  // Option + glisser (Stéphane, 9 octobre 2026): déplace la caméra au lieu de tourner. Le point visé (ct) glisse au sol dans
+  // le sens du geste (le décor suit le pointeur), à l'échelle de la distance de visée (distance / focale en pixels), et la
+  // caméra suit puisqu'elle est posée par rapport à lui. La hauteur de visée reste la même au-dessus du sol (on suit la
+  // pente) et on ne s'éloigne pas à plus de PAN_MAX du projet: au-delà, plus d'environs chargés. Option prime sur la maison
+  // importée: avec la touche, on déplace la vue même en saisissant la maison.
+  const PAN_MAX = 500;
+  const panView = (dx, dy) => {
+    const f = el.getBoundingClientRect().height / (2 * Math.tan(cam.fov * Math.PI / 360)); // focale en pixels (CSS)
+    const k = Math.max(5, cam.position.distanceTo(ct)) / f;
+    const l = Math.hypot(dx, dy); if (l > 80) { dx *= 80 / l; dy *= 80 / l; } // garde: un saut du pointeur ne projette pas la vue au loin
+    // Avant horizontal de la caméra (-sin az, cos az) et sa droite (-cos az, -sin az), en three (x est, z sud).
+    const fx = -Math.sin(az), fz = Math.cos(az), rx = -Math.cos(az), rz = -Math.sin(az);
+    const aim = ct.y - terrain.hTri(ct.x, -ct.z); // hauteur de visée au-dessus du sol, gardée
+    let x = ct.x - (dx * rx - dy * fx) * k, z = ct.z - (dx * rz - dy * fz) * k;
+    const ox = x - T0.x, oz = z - T0.z, d = Math.hypot(ox, oz); if (d > PAN_MAX) { x = T0.x + ox * PAN_MAX / d; z = T0.z + oz * PAN_MAX / d; }
+    ct.set(x, terrain.hTri(x, -z) + aim, z); dirty = true;
+  };
   el.addEventListener('pointerdown', e => {
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); try { el.setPointerCapture(e.pointerId); } catch (err) { /* pointeur déjà parti */ }
     if (ptrs.size >= 2) { cancelModelDrag(); const [a, b] = [...ptrs.values()]; pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, r0: Rr }; drag = null; return; }
-    const hit = e.button === 0 ? pickModel(e) : null;
+    const hit = e.button === 0 && !e.altKey ? pickModel(e) : null;
     if (hit) { modelDrag = startModelDrag(e, hit); el.style.cursor = 'move'; return; }
-    drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; el.style.cursor = 'grabbing';
+    drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; el.style.cursor = e.altKey ? 'move' : 'grabbing';
   });
   el.addEventListener('pointermove', e => {
     const p = ptrs.get(e.pointerId); if (p) { p.x = e.clientX; p.y = e.clientY; }
@@ -1171,10 +1188,12 @@ export function createScene3D(container, opts = {}) {
       modelPl.x = x; modelPl.n = n; placeModel();
       return;
     }
-    if (!ptrs.size && model) el.style.cursor = pickModel(e) ? 'move' : 'grab';
+    if (!ptrs.size) el.style.cursor = e.altKey ? 'move' : model && pickModel(e) ? 'move' : 'grab'; // Option enfoncée: la vue se déplace
     if (pinch && ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y) || 1; Rr = clampR(pinch.r0 * pinch.d0 / d); dirty = true; return; }
     if (!drag || e.pointerId !== drag.id) return;
-    az += (e.clientX - drag.x) * 0.008; camH = Math.max(1.2, Math.min(320, camH + (e.clientY - drag.y) * 0.6)); drag = { x: e.clientX, y: e.clientY, id: drag.id }; dirty = true;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag = { x: e.clientX, y: e.clientY, id: drag.id };
+    if (e.altKey) { panView(dx, dy); el.style.cursor = 'move'; return; } // la touche peut être prise ou lâchée en plein geste
+    az += dx * 0.008; camH = Math.max(1.2, Math.min(320, camH + dy * 0.6)); el.style.cursor = 'grabbing'; dirty = true;
   });
   const endPtr = (e, cancel) => {
     if (modelDrag && e.pointerId === modelDrag.id) {
@@ -1189,8 +1208,13 @@ export function createScene3D(container, opts = {}) {
   // Capture perdue en plein glisser (elle est relâchée d'office après pointerup, le glisser est alors déjà fini): annulé.
   el.addEventListener('lostpointercapture', e => { if (modelDrag && e.pointerId === modelDrag.id) cancelModelDrag(); });
   // Échap pendant le glisser: annulé, et la touche ne va pas plus loin (elle fermerait la carte plein écran).
-  const onKey = (e) => { if (e.key === 'Escape' && modelDrag) { e.preventDefault(); e.stopPropagation(); cancelModelDrag(); } };
-  window.addEventListener('keydown', onKey, true);
+  // Option prise ou lâchée sans bouger la souris: le curseur dit tout de suite ce qu'un glisser ferait (déplacer ou tourner).
+  const onKey = (e) => {
+    if (e.key === 'Escape' && modelDrag) { e.preventDefault(); e.stopPropagation(); cancelModelDrag(); }
+    if (e.key === 'Alt' && !ptrs.size) el.style.cursor = 'move';
+  };
+  const onKeyUp = (e) => { if (e.key === 'Alt' && !ptrs.size) el.style.cursor = 'grab'; };
+  window.addEventListener('keydown', onKey, true); window.addEventListener('keyup', onKeyUp, true);
   el.addEventListener('wheel', e => { e.preventDefault(); Rr = clampR(Rr * Math.exp(e.deltaY * 0.0015)); dirty = true; }, { passive: false });
 
   const vF = new THREE.Vector3(); let last = performance.now(), raf = 0;
@@ -1496,7 +1520,7 @@ export function createScene3D(container, opts = {}) {
     },
     resize,
     getView() { return { az, camH, Rr, ct: ct.toArray(), time: new Date(dateMs).toString().slice(0, 24) }; },
-    setView(v) { if (v.az != null) az = v.az; if (v.camH != null) camH = v.camH; if (v.Rr != null) Rr = v.Rr; dirty = true; },
+    setView(v) { if (v.az != null) az = v.az; if (v.camH != null) camH = v.camH; if (v.Rr != null) Rr = v.Rr; if (v.ct) ct.fromArray(v.ct); dirty = true; },
     zoom(f) { Rr = clampR(Rr * f); dirty = true; }, // f < 1: on s'approche
     // Modèle importé: glb (ArrayBuffer) et info de modelImport.js, placement gardé ou null (placement par défaut). Renvoie le placement.
     async setModel(glb, info, placement) {
@@ -1517,7 +1541,7 @@ export function createScene3D(container, opts = {}) {
     // Calque satellite: image de loadSatImage (satDrape.js) ou null pour l'éteindre.
     setSatellite(s) { sat = s || null; placeSat(); return !!satObj; },
     dispose() {
-      running = false; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); window.removeEventListener('keydown', onKey, true); clearStatics(); clearTimeout(modelTimer); dropModel(); sat = null; placeSat();
+      running = false; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); window.removeEventListener('keydown', onKey, true); window.removeEventListener('keyup', onKeyUp, true); clearStatics(); clearTimeout(modelTimer); dropModel(); sat = null; placeSat();
       [sceneRT, aoRT, aoRT2, compRT, reflRT, reflRT2, cubeRT, skyRT, envRT].forEach(r => r && r.dispose()); pmrem.dispose();
       [skyMat, aoMat, blurMat, compMat, reflMat, rblurMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, shadowMat, conMat, fillMat, edgeMat, waterMat, cloudMat, lampHeadMat, ...Object.values(flatMats)].forEach(m => m.dispose()); GLOW.dispose(); if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
       [skyGeo, crownGeo, crownGeoMid, crownGeoFar, crownGeoShadow, conGeo, conGeoLow, trunkGeo, trunkGeoLow, sg, gnd && gnd.geometry, gndFar.geometry, quad.geometry].forEach(g => g && g.dispose()); FT.map.dispose(); FT.rough.dispose(); FT.emis.dispose(); gndTex.dispose(); gndTexNear.dispose(); gndMat.dispose(); gndMatFar.dispose(); leafMask.dispose(); conMask.dispose(); edgeMask.dispose();
