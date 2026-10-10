@@ -1386,7 +1386,12 @@ export function createScene3D(container, opts = {}) {
     hc = mv(hc, lin(vc).map(v => v * 0.55), veil * (0.45 + 0.52 * thick * thick));
     // Heure bleue et nuit sur l'horizon clair d'abord; la base des nuages (déjà calculée avec l'ambiance du moment) vient ensuite,
     // sinon la brume gardait le bleu de l'heure bleue sous un couvert sombre et la montagne du fond paraissait allumée.
-    hc = mv(hc, lin([0.11, 0.24, 0.50]).map(v => v * (0.72 + 0.55 * cgv)), twi); hc = mv(hc, lin([0.045, 0.07, 0.16]).map(v => v * (0.8 + 0.3 * cgv)), nightF);
+    // Le sol lointain reste plus sombre que l'horizon au crépuscule et la nuit aussi (0,22 fois la couleur du ciel au ras de
+    // l'horizon): l'air des basses couches est dans l'ombre de la Terre et ne diffuse que la lumière du ciel, déjà faible. Sans ce
+    // facteur, les montagnes du fond prenaient la valeur la plus claire du ciel crépusculaire et sortaient bleu vif, plus claires
+    // que le ciel au-dessus de la crête (Stéphane, 10 octobre 2026: « montagne fluo »); ses photos à l'heure bleue montrent des
+    // silhouettes nettement plus sombres que l'horizon.
+    hc = mv(hc, lin([0.11, 0.24, 0.50]).map(v => v * (0.72 + 0.55 * cgv) * 0.22), twi); hc = mv(hc, lin([0.045, 0.07, 0.16]).map(v => v * (0.8 + 0.3 * cgv) * 0.22), nightF);
     // Le sol lointain reste nettement plus sombre que le ciel juste au-dessus de l'horizon (0,45 fois, comme par ciel clair):
     // sans ce facteur, les montagnes prenaient la clarté de la base des nuages et sortaient gris très pâle (Stéphane, 10 octobre 2026).
     const hcT = hc.slice();

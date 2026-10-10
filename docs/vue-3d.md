@@ -765,6 +765,17 @@ importé, lui, est le fichier de l'architecte.
     après le réglage), `sweep.mjs` et `repro*.mjs` dans le dossier de session; piège corrigé dans `cdp.mjs`: deux
     lancements rapprochés sur le même port de débogage se rattachaient à la page de l'instance précédente (vue héritée
     d'une autre série), port unique par processus et attente de la sortie de Chrome.
+- v633.189 (10 octobre 2026), **montagnes bleu vif au crépuscule par ciel dégagé** (captures de Stéphane à 18 h 22, 19 h 04
+  et 6 h 16 avec 0 à 38 % de nuages: « montagne fluo pas réaliste du tout », « encore pire », « montagne néon »; 17 h 58 et
+  6 h 43 avec 63 % de nuages: bons). Cause: à l'heure bleue et la nuit, la brume du lointain prenait la couleur du ciel au ras
+  de l'horizon (le point le plus clair du ciel crépusculaire) sans le facteur « sol lointain plus sombre » qui existe par jour
+  (0,45); comme le ciel visible au-dessus de la crête est déjà bien plus sombre que l'horizon, les montagnes entièrement
+  dans la brume (au-delà de 1,5 km) sortaient plus claires que le ciel. Sous un couvert, c'est la base sombre des nuages
+  qui colore la brume, d'où le bon résultat à 63 %. Défaut présent depuis le relief (v633.162), rendu visible par les tests
+  au crépuscule. Correctif: facteur 0,22 sur la couleur crépusculaire et nocturne de la brume (l'air des basses couches est
+  dans l'ombre de la Terre et ne diffuse que la lumière du ciel). Vérifié au banc en Retina simulé sur les cinq heures de
+  ses captures (`montagnes.json`, planche avant/après dans verification_ciel): à 18 h 22, montagne à 0,45 fois le ciel
+  au-dessus de la crête au lieu de 0,85; 17 h 58 et 6 h 55 inchangés.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
