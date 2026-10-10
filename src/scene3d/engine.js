@@ -228,7 +228,28 @@ gl_FragColor=vec4(mix(sky,texture2D(tCol,h).rgb,k)*w,w);}`;
 // rougit, et ne s'éteint qu'au ras de l'horizon; dessiné seulement sur le ciel (un relief ou un bâtiment le cache).
 // Reflet des flaques (reflRT, déjà flouté à la verticale dans frame: une flaque troublée par la pluie ne fait pas un
 // miroir net, et les traînées de nuages près de l'horizon s'y fondent) ajouté tel quel.
-const COMP_FRAG = `uniform sampler2D tCol,tAO,tBloom,tDepth;uniform float uExp,uAO,uBloom,uAspect,uFlare,uRays,uVeilW,uVis,uDs,uRain,uTime,uFocal,uSlant,uRefl,uFogSig,uFogTop,uSmkSig,uSmkTop,uSunR;uniform vec2 uSunUV,uFog,uNF;uniform vec3 uSunC,uRainCol,uFogCol,uSmkCol,uCamW,uSunDisc;uniform mat3 uV2W;uniform mat4 uProjInv;uniform sampler2D tRefl;varying vec2 vUv;
+const COMP_FRAG = `uniform sampler2D tCol,tAO,tBloom,tDepth;uniform float uExp,uAO,uBloom,uAspect,uFlare,uRays,uVeilW,uVis,uDs,uRain,uTime,uFocal,uSlant,uRefl,uFogSig,uFogTop,uFogAmp,uSmkSig,uSmkTop,uSunR;uniform vec2 uSunUV,uFog,uNF;uniform vec3 uSunC,uRainCol,uFogCol,uFogColTop,uFogSunTop,uSunW,uSmkCol,uCamW,uSunDisc;uniform mat3 uV2W;uniform mat4 uProjInv;uniform sampler2D tRefl;varying vec2 vUv;
+float fh(vec2 i){return fract(sin(dot(i,vec2(127.1,311.7)))*43758.5453);}
+float fn2(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(fh(i),fh(i+vec2(1.0,0.0)),f.x),mix(fh(i+vec2(0.0,1.0)),fh(i+vec2(1.0,1.0)),f.x),f.y);}
+/* Nappe de brouillard: comme lfog (plus bas), mais le sommet ondule (bruit en mètres au point où le rayon croise le plan du
+   sommet moyen, amplitude uFogAmp) et, vue d'en haut, la nappe montre son dessus éclairé par le soleil et le ciel (uFogColTop,
+   comme le dessus d'un stratus) au lieu du gris de l'intérieur (uFogCol): brume de vallée au lever, photos de Stéphane. */
+float fogTop(vec2 xz,float top,float amp){float n=fn2(xz*0.00045+5.0)*0.45+fn2(xz*0.0019)*0.3+fn2(xz*0.0056+3.1)*0.17+fn2(xz*0.016+7.7)*0.08;return top+amp*(n-0.5)*2.0;}
+/* Nappe de brouillard: comme lfog (plus bas), mais le sommet ondule (bruit en mètres au point où le rayon croise le plan du
+   sommet moyen, amplitude uFogAmp), la densité varie par régions, le bord supérieur décroît sur quelques mètres (échelle Hs)
+   au lieu d'être tranché, et, vue d'en haut, la nappe montre son dessus éclairé comme une surface blanche (ciel selon la pente,
+   soleil selon l'angle avec la pente: les ondulations se lisent) au lieu du gris de l'intérieur (brume de vallée au lever,
+   photos de Stéphane). Intégrale exacte le long du rayon par la hauteur. */
+vec3 lfogN(vec3 c,float sig,float top,vec3 col,vec3 colTop,vec3 sunTop,float amp){if(sig<=0.0)return c;float z=texture2D(tDepth,vUv).x;vec4 pv=uProjInv*vec4(vUv*2.0-1.0,z*2.0-1.0,1.0);vec3 P=pv.xyz/pv.w;
+vec3 d=uV2W*normalize(P);float dist=z>=0.99999?1e5:length(P);float hc=uCamW.y;
+float tc=abs(d.y)>1e-4?(top-hc)/d.y:-1.0;vec2 xz=(tc>0.0&&tc<dist)?uCamW.xz+d.xz*tc:uCamW.xz+d.xz*min(dist,300.0);
+float topL=fogTop(xz,top,amp);float dens=sig*(0.55+0.9*fn2(xz*0.0033+11.0));
+float Hs=max(5.0,0.08*amp/0.3);float hp=hc+d.y*dist,lo=min(hc,hp),hi=max(hc,hp),sp=hi-lo,ady=max(abs(d.y),1e-4);
+float L;if(sp<0.5){L=dist*(hc>topL?exp(-(hc-topL)/Hs):1.0);}else{float below=clamp(topL-lo,0.0,sp);float a0=max(lo,topL)-topL,a1=max(hi,topL)-topL;L=(below+Hs*(exp(-a0/Hs)-exp(-a1/Hs)))/ady;L=min(L,dist);}
+float above=clamp((hc-top-amp)/40.0,0.0,1.0);vec3 fc=col;
+if(above>0.0){float e=30.0;vec3 nrm=normalize(vec3(fogTop(xz-vec2(e,0.0),top,amp)-fogTop(xz+vec2(e,0.0),top,amp),2.0*e,fogTop(xz-vec2(0.0,e),top,amp)-fogTop(xz+vec2(0.0,e),top,amp)));
+fc=mix(col,colTop*(0.7+0.3*nrm.y)+sunTop*max(dot(nrm,uSunW),0.0),above);}
+return mix(c,fc,1.0-exp(-dens*L));}
 vec3 lfog(vec3 c,float sig,float top,vec3 col){if(sig<=0.0)return c;float z=texture2D(tDepth,vUv).x;vec4 pv=uProjInv*vec4(vUv*2.0-1.0,z*2.0-1.0,1.0);vec3 P=pv.xyz/pv.w;
 vec3 d=uV2W*normalize(P);float dist=z>=0.99999?1e5:length(P);float hc=uCamW.y,hp=hc+d.y*dist,lo=min(hc,hp),hi=max(hc,hp),sp=max(hi-lo,1e-3);
 float L=dist*0.5*(clamp((top-lo)/sp,0.0,1.0)+clamp((top+25.0-lo)/sp,0.0,1.0));return mix(c,col,1.0-exp(-sig*L));}
@@ -263,7 +284,7 @@ float a=atan(q.y,q.x),r1=pow(abs(cos(4.0*a+0.2)),110.0),r2=0.5*pow(abs(cos(4.0*a
 float rays=(r1+r2)*(0.65+0.35*cos(3.0*a+1.7))*exp(-d/0.17)*smoothstep(0.0,0.02,d);
 f+=core*rays*0.7*uRays*vis*vis;return f*uFlare*(0.6/uExp);}
 void main(){vec3 c=texture2D(tCol,vUv).rgb;float ao=texture2D(tAO,vUv).r;c*=mix(1.0,ao,uAO);
-if(uRefl>0.0){float zr=texture2D(tDepth,vUv).x;c+=texture2D(tRefl,vUv).rgb*uRefl*(1.0-smoothstep(uFog.x,uFog.y,lz(zr)));}c=lfog(c,uFogSig,uFogTop,uFogCol);c=lfog(c,uSmkSig,uSmkTop,uSmkCol);
+if(uRefl>0.0){float zr=texture2D(tDepth,vUv).x;c+=texture2D(tRefl,vUv).rgb*uRefl*(1.0-smoothstep(uFog.x,uFog.y,lz(zr)));}c=lfogN(c,uFogSig,uFogTop,uFogCol,uFogColTop,uFogSunTop,uFogAmp);c=lfog(c,uSmkSig,uSmkTop,uSmkCol);
 if(uSunR>0.0&&texture2D(tDepth,vUv).x>=0.99999)c+=uSunDisc*smoothstep(uSunR,uSunR*0.8,length((vUv-uSunUV)*vec2(uAspect,1.0)));
 c+=texture2D(tBloom,vUv).rgb*uBloom;c+=flare();c=aces(c);gl_FragColor=vec4(rain(desat(pow(c,vec3(1.0/2.2))))+(ign(gl_FragCoord.xy)-0.5)/255.0,1.0);}`;
 
@@ -567,7 +588,7 @@ export function createScene3D(container, opts = {}) {
   const kern = []; for (let i = 0; i < 12; i++) { const v = new THREE.Vector3(hsh(i, 3, 1) * 2 - 1, hsh(i, 3, 2) * 2 - 1, 0.15 + 0.85 * hsh(i, 3, 3)).normalize(); const s = i / 12; v.multiplyScalar(0.12 + 0.88 * s * s); kern.push(v); }
   const aoMat = new THREE.ShaderMaterial({ uniforms: { tDepth: { value: null }, uRes: { value: new THREE.Vector2() }, uProj: { value: new THREE.Matrix4() }, uProjInv: { value: new THREE.Matrix4() }, uR: { value: 2.4 }, uBias: { value: 0.04 }, uInt: { value: 1.6 }, uK: { value: kern } }, vertexShader: QV, fragmentShader: AO_FRAG });
   const blurMat = new THREE.ShaderMaterial({ uniforms: { tAO: { value: null }, tDepth: { value: null }, uDir: { value: new THREE.Vector2() }, uNF: { value: new THREE.Vector2(1, 60000) } }, vertexShader: QV, fragmentShader: BLUR_FRAG });
-  const compMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, tAO: { value: null }, tBloom: { value: null }, tDepth: { value: null }, uExp: { value: 1 }, uAO: { value: 0.9 }, uBloom: { value: 0 }, uAspect: { value: 1 }, uFlare: { value: 0 }, uRays: { value: 0 }, uVeilW: { value: 1 }, uVis: { value: 1 }, uSunUV: { value: new THREE.Vector2(0.5, 0.5) }, uSunC: { value: new THREE.Vector3(1, 1, 1) }, uDs: { value: 0 }, uFog: { value: new THREE.Vector2(300, 1600) }, uNF: { value: new THREE.Vector2(1, 60000) }, uRain: { value: 0 }, uTime: { value: 0 }, uFocal: { value: 1000 }, uSlant: { value: 0.1 }, uRainCol: { value: new THREE.Vector3(0.6, 0.6, 0.6) }, tRefl: { value: null }, uRefl: { value: 0 }, uFogSig: { value: 0 }, uFogTop: { value: 9000 }, uFogCol: { value: new THREE.Vector3(0.5, 0.5, 0.5) }, uSmkSig: { value: 0 }, uSmkTop: { value: 2500 }, uSmkCol: { value: new THREE.Vector3(0.5, 0.4, 0.3) }, uSunR: { value: 0 }, uSunDisc: { value: new THREE.Vector3() }, uCamW: { value: new THREE.Vector3() }, uV2W: { value: new THREE.Matrix3() }, uProjInv: { value: new THREE.Matrix4() } }, vertexShader: QV, fragmentShader: COMP_FRAG });
+  const compMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, tAO: { value: null }, tBloom: { value: null }, tDepth: { value: null }, uExp: { value: 1 }, uAO: { value: 0.9 }, uBloom: { value: 0 }, uAspect: { value: 1 }, uFlare: { value: 0 }, uRays: { value: 0 }, uVeilW: { value: 1 }, uVis: { value: 1 }, uSunUV: { value: new THREE.Vector2(0.5, 0.5) }, uSunC: { value: new THREE.Vector3(1, 1, 1) }, uDs: { value: 0 }, uFog: { value: new THREE.Vector2(300, 1600) }, uNF: { value: new THREE.Vector2(1, 60000) }, uRain: { value: 0 }, uTime: { value: 0 }, uFocal: { value: 1000 }, uSlant: { value: 0.1 }, uRainCol: { value: new THREE.Vector3(0.6, 0.6, 0.6) }, tRefl: { value: null }, uRefl: { value: 0 }, uFogSig: { value: 0 }, uFogAmp: { value: 0 }, uFogColTop: { value: new THREE.Vector3(0.5, 0.5, 0.5) }, uFogSunTop: { value: new THREE.Vector3() }, uSunW: { value: new THREE.Vector3(0, 1, 0) }, uFogTop: { value: 9000 }, uFogCol: { value: new THREE.Vector3(0.5, 0.5, 0.5) }, uSmkSig: { value: 0 }, uSmkTop: { value: 2500 }, uSmkCol: { value: new THREE.Vector3(0.5, 0.4, 0.3) }, uSunR: { value: 0 }, uSunDisc: { value: new THREE.Vector3() }, uCamW: { value: new THREE.Vector3() }, uV2W: { value: new THREE.Matrix3() }, uProjInv: { value: new THREE.Matrix4() } }, vertexShader: QV, fragmentShader: COMP_FRAG });
   const rblurMat = new THREE.ShaderMaterial({ uniforms: { tSrc: { value: null }, uDir: { value: new THREE.Vector2() } }, vertexShader: QV, fragmentShader: RBLUR_FRAG });
   const reflMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, tDepth: { value: null }, uProj: { value: new THREE.Matrix4() }, uProjInv: { value: new THREE.Matrix4() }, uUp: { value: new THREE.Vector3(0, 1, 0) }, uTx: { value: new THREE.Vector2() }, tSky: { value: skyRT.texture }, uV2W: { value: new THREE.Matrix3() }, uCamW: { value: new THREE.Vector3() }, uPud: { value: 0 } }, vertexShader: QV, fragmentShader: REFL_FRAG });
   const brightMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, uTh: { value: 0.3 } }, vertexShader: QV, fragmentShader: BRIGHT_FRAG });
@@ -1451,7 +1472,18 @@ export function createScene3D(container, opts = {}) {
       if (br > 0.01) { CU.uSunR.value = 1.3 * Math.tan(0.0047) / (2 * Math.tan(cam.fov * Math.PI / 360)); CU.uSunDisc.value.set(T[0] / mx * br, T[1] / mx * br, T[2] / mx * br); }
     }
     if (CU.uSmkSig.value > 0) { const scl = LUM([fog.color.r, fog.color.g, fog.color.b]) * (1.25 + 0.5 * (1 - twi)); CU.uSmkCol.value.set(scl * 1.15, scl * 0.85, scl * 0.55); }
-    if (fogSig > 0) { const fcl = LUM([fog.color.r, fog.color.g, fog.color.b]); CU.uFogCol.value.set(fog.color.r, fog.color.g, fog.color.b).lerp(new THREE.Vector3(fcl, fcl, fcl), 0.65).multiplyScalar(1.6); }
+    if (fogSig > 0) {
+      const fcl = LUM([fog.color.r, fog.color.g, fog.color.b]); CU.uFogCol.value.set(fog.color.r, fog.color.g, fog.color.b).lerp(new THREE.Vector3(fcl, fcl, fcl), 0.65).multiplyScalar(1.6);
+      // Dessus de la nappe (vu de drone): surface blanche d'albédo 0,85 éclairée par le ciel (désaturé de 30 %: la nappe diffuse
+      // toutes les longueurs d'onde) et par le soleil selon la pente locale (dans le shader). Une brume de vallée reste à l'ombre
+      // des collines tant que le soleil est bas (sous 12° il ne l'atteint pas encore): elle n'est alors éclairée que par le ciel.
+      const sunAbove = night ? 0 : 10 * fe * iv * smokeT * smooth(3, 12, realDeg), sLin = rgb(sc0).map(v => Math.pow(v, 2.2));
+      // Lumière du ciel sur la nappe: moitié zénith, moitié horizon (l'horizon côté soleil est bien plus clair que la moyenne: x 1,3),
+      // désaturée de moitié (gris clair à peine bleuté, comme sur les photos; une première version sortait bleu ardoise).
+      const skyT = [0, 1, 2].map(i => (0.5 * ambZ[i] + 0.5 * ambH[i]) * 1.3), skyL = LUM(skyT), topC = skyT.map(v => 0.85 * (v * 0.5 + skyL * 0.5));
+      CU.uFogColTop.value.set(topC[0], topC[1], topC[2]); CU.uFogSunTop.value.set(0.85 * sLin[0] * sunAbove / Math.PI, 0.85 * sLin[1] * sunAbove / Math.PI, 0.85 * sLin[2] * sunAbove / Math.PI); CU.uSunW.value.copy(sDir);
+      CU.uFogAmp.value = Math.min(30, 0.3 * fogThick); // ondulation du sommet (grande échelle et bancs): 30 % de l'épaisseur, au plus 30 m
+    }
     // Gouttes: un peu plus claires que l'horizon (teinte du brouillard, en affichage), penchées selon le vent.
     CU.uRain.value = rainK > 0.005 ? rainK : 0; CU.uTime.value = (now / 1000) % 60; CU.uFocal.value = PH / (2 * Math.tan(cam.fov * Math.PI / 360)); CU.uSlant.value = 0.06 + 0.22 * clamp((weatherRow?.wind ?? 10) / 50);
     if (rainK > 0) { const fl = Math.pow(fog.color.r * 0.2126 + fog.color.g * 0.7152 + fog.color.b * 0.0722, 1 / 2.2); CU.uRainCol.value.setScalar(Math.min(1, fl * 1.5 + 0.1)); }
@@ -1572,6 +1604,14 @@ export function createScene3D(container, opts = {}) {
       const cl = classifyClouds(row);
       Object.assign(tg, { l0b: cl.low.base, l0t: cl.low.top, l0c: cl.low.cov, l0k: cl.low.type, l0w: cl.low.tower, l0s: cl.low.cb, l0d: cl.low.dark, m1b: cl.mid.base, m1t: cl.mid.top, m1c: cl.mid.cov, m1k: cl.mid.type, hc: cl.high.cov, hk: cl.high.type, ha: cl.high.alt, ht: cl.high.thick, shaft: cl.shaft });
       cloudNames = cl.names;
+      // Brouillard ou stratus bas d'après le profil ICON (10 octobre 2026): les « nuages bas » d'ICON comptent la nappe elle-même.
+      // Si aucun niveau de pression échantillonné au-dessus de la nappe (jusqu'à 2 500 m) ne porte de nuage, il n'y a pas de
+      // couche à dessiner au-dessus: ciel dégagé par-dessus la brume de vallée, comme sur les photos de Stéphane au lever.
+      if (tg.fogK > 0 && Array.isArray(row?.prof) && Array.isArray(row?.profZ)) {
+        let above = null;
+        for (let i = 0; i < 12; i++) { const z = row.profZ[i]; if (z == null || z < tg.fogTh + 120 || z > 2500) continue; above = Math.max(above ?? 0, row.prof[i] || 0); }
+        if (above != null && above < 25) tg.l0c = Math.min(tg.l0c, above / 100);
+      }
       if (!row) { tg.cum = 0; tg.mid = 0; tg.high = 0; tg.iv = 1; tg.rain = 0; tg.wet = 0; tg.pud = 0; tg.fogK = 0; tg.fogTh = 600; tg.storm = 0; tg.pSun = 1; tg.brk = 0; tg.l0c = 0; tg.m1c = 0; tg.hc = 0; tg.shaft = 0; cloudNames = []; }
       // L'épaisseur ne glisse pas pendant que le brouillard apparaît ou disparaît (sinon la vue drone se noie un instant).
       if (!(tg.fogK > 0)) tg.fogTh = cur.fogTh; else if (cur.fogK < 1e-3) cur.fogTh = tg.fogTh;

@@ -776,6 +776,26 @@ importé, lui, est le fichier de l'architecte.
   dans l'ombre de la Terre et ne diffuse que la lumière du ciel). Vérifié au banc en Retina simulé sur les cinq heures de
   ses captures (`montagnes.json`, planche avant/après dans verification_ciel): à 18 h 22, montagne à 0,45 fois le ciel
   au-dessus de la crête au lieu de 0,85; 17 h 58 et 6 h 55 inchangés.
+- v633.190 (10 octobre 2026), **brume de vallée du matin** (photo de drone de Stéphane au lever: nappe blanche au fond de la
+  vallée sous un ciel dégagé, collines qui en sortent; « brume du matin parfois présente le matin »). Avant: nappe grise
+  uniforme et ciel couvert au-dessus (ICON compte la nappe dans ses « nuages bas » à 85 %), vue de drone noyée dans le gris.
+  - **Ciel au-dessus de la nappe:** quand le brouillard est détecté (règle prudente inchangée: visibilité GFS, air saturé,
+    nuages bas ICON 80 % et plus, pas de pluie) et que le profil ICON ne montre aucun nuage aux niveaux de pression
+    échantillonnés au-dessus de la nappe (jusqu'à 2 500 m, moins de 25 %), la couche volumétrique basse est retirée: les
+    nuages bas d'ICON sont la nappe elle-même. Sans profil (GFS, rangées anciennes du cache), rien ne change.
+  - **Nappe** (`lfogN` dans la composition, à la place de `lfog` pour le brouillard; la fumée garde `lfog`): sommet ondulé
+    (bruit à 2 à 3 km, bancs à 500 et 180 m, détail à 60 m; amplitude 30 % de l'épaisseur, 30 m au plus), densité variable par
+    régions (0,55 à 1,45), bord supérieur en décroissance exponentielle (échelle 5 à 8 m: une caméra 40 m au-dessus de la
+    nappe voit clair; une queue plus longue noyait tout) avec intégrale exacte le long du rayon; vue d'en haut, le dessus est
+    une surface blanche d'albédo 0,85 éclairée par le ciel (moitié zénith, moitié horizon x 1,3, désaturée de moitié: gris clair
+    à peine bleuté comme sur la photo; une version plus bleue sortait ardoise) et par le soleil selon la pente locale (les
+    ondulations se lisent), le soleil n'atteignant la nappe qu'au-dessus de 12° (à l'ombre des collines avant). Vue de
+    l'intérieur: gris d'avant. À 9 h, nappe blanche et collines émergées; au lever, nappe gris clair à l'ombre.
+  - **Fumée de feux:** une tentative de ciel plus pâle au soleil haut et d'auréole autour du soleil (d'après ses deux photos)
+    a été refusée par Stéphane (« ne change pas ton rendu pour les feux de forêt, ils étaient très bien ») et retirée;
+    rendu vérifié identique au pixel près aux captures d'avant.
+  - **À suivre:** billows et bords déchiquetés de la nappe (demanderait une marche volumétrique avec profondeur, comme les
+    nuages), nappe suivant les creux du relief plutôt qu'une altitude unique.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
