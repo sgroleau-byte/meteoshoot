@@ -97,7 +97,7 @@ function sunExtinction(y, turb, ray) {
 // fumée; puis les nuages volumétriques de sky.js par-dessus (passe à résolution réduite lue dans tCloud, ou calcul en
 // ligne pour les cartes cubiques de la lumière d'ambiance et des flaques: INLINE). Composition en linéaire:
 // ciel x transmittance des nuages + radiance des nuages. Les nuages eux-mêmes (formes, lumière) sont dans sky.js.
-const SKY_HEAD = `uniform float uDirect,uWarm,uTw,uNight,uGlow,uTurb,uRay,uSkyK,uZen,uSmoke;uniform vec3 uSunCol;uniform sampler2D tCloud;uniform vec2 uRes;varying vec3 vDir;
+const SKY_HEAD = `uniform float uDirect,uWarm,uTw,uNight,uGlow,uTurb,uRay,uSkyK,uZen,uSmoke;uniform vec3 uSunCol;uniform sampler2D tCloud;uniform vec2 uRes,uCloudPx;varying vec3 vDir;
 const vec3 LUMW=vec3(0.2126,0.7152,0.0722);
 // Ciel clair de Preetham (modèle analytique de lumière du jour, comme Sky.js de three): diffusion de Rayleigh (bleu du ciel) et de
 // Mie (halo blanc autour du soleil, brume à l'horizon), extinction Fex le long du rayon. uTurb = turbidité (brume), uRay = part
@@ -142,9 +142,9 @@ col=mix(col,mix(bh,night,uNight),uTw);
 col=mix(col,dot(col,LUMW)*vec3(1.12,0.9,0.66),uSmoke*0.75)*(1.0-0.2*uSmoke);
 vec3 lin=pow(max(col,0.0),vec3(2.2));
 #ifdef INLINE
-vec4 cl=clouds(uCamW,rd,0.5,0.5);
+vec4 cl=clouds(uCamW,rd,ignoise(gl_FragCoord.xy)*0.8+0.1,0.5);
 #else
-vec2 cuv=gl_FragCoord.xy/uRes,cpx=0.5/uRes;vec4 cl=0.25*(texture2D(tCloud,cuv+cpx)+texture2D(tCloud,cuv-cpx)+texture2D(tCloud,cuv+vec2(cpx.x,-cpx.y))+texture2D(tCloud,cuv+vec2(-cpx.x,cpx.y)));/* quatre lectures décalées d'un demi-pixel: lisse le grain du tramage */
+vec2 cuv=gl_FragCoord.xy/uRes,cpx=0.5*uCloudPx;vec4 cl=0.25*(texture2D(tCloud,cuv+cpx)+texture2D(tCloud,cuv-cpx)+texture2D(tCloud,cuv+vec2(cpx.x,-cpx.y))+texture2D(tCloud,cuv+vec2(-cpx.x,cpx.y)));/* quatre lectures décalées d'un demi-texel de la texture des nuages: lisse le grain du tramage */
 #endif
 vec3 cc=mix(cl.rgb,dot(cl.rgb,LUMW)*vec3(1.12,0.9,0.66),uSmoke*0.75)*(1.0-0.2*uSmoke);
 gl_FragColor=vec4(lin*cl.a+cc,1.0);}`;
@@ -374,7 +374,7 @@ export function createScene3D(container, opts = {}) {
   const noiseTex = makeNoiseTextures(R);
   const V3 = () => ({ value: new THREE.Vector3() });
   const cloudU = { tNoise: { value: noiseTex.base }, tDetail: { value: noiseTex.detail }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunL: V3(), uSunM: V3(), uSunH: V3(), uAmbZ: V3(), uAmbH: V3(), uAmbG: V3(), uOff: V3(), uCamW: V3(), uLay0: { value: new THREE.Vector4(800, 1600, 0, 1) }, uLay0b: { value: new THREE.Vector4() }, uLay1: { value: new THREE.Vector4(3200, 4300, 0, 1) }, uHi: { value: new THREE.Vector4(0, 1, 9000, 1) }, uGround: { value: 0 }, uSunGap: { value: 0 }, uGapR: { value: 0.1 }, uSteps: { value: 1 }, uShaft: { value: 0 } };
-  const skyU = { ...cloudU, uCum: { value: 0 }, uMid: { value: 0 }, uHigh: { value: 0 }, uDirect: { value: 1 }, uWarm: { value: 0 }, uTw: { value: 0 }, uNight: { value: 0 }, uGlow: { value: 0 }, uSmoke: { value: 0 }, uTurb: { value: 2.5 }, uRay: { value: 1.5 }, uSkyK: { value: 0.2 }, uZen: { value: 0.1 }, uStorm: { value: 0 }, uSunCol: { value: new THREE.Vector3(1, 1, 1) }, tCloud: { value: null }, uRes: { value: new THREE.Vector2(1, 1) } };
+  const skyU = { ...cloudU, uCum: { value: 0 }, uMid: { value: 0 }, uHigh: { value: 0 }, uDirect: { value: 1 }, uWarm: { value: 0 }, uTw: { value: 0 }, uNight: { value: 0 }, uGlow: { value: 0 }, uSmoke: { value: 0 }, uTurb: { value: 2.5 }, uRay: { value: 1.5 }, uSkyK: { value: 0.2 }, uZen: { value: 0.1 }, uStorm: { value: 0 }, uSunCol: { value: new THREE.Vector3(1, 1, 1) }, tCloud: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uCloudPx: { value: new THREE.Vector2(1, 1) } };
   const skyMat = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: skyU, vertexShader: SKY_VERT, fragmentShader: SKY_GLSL });
   const skyMatIn = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: skyU, defines: { INLINE: 1 }, vertexShader: SKY_VERT, fragmentShader: SKY_GLSL });
   const cloudPassMat = new THREE.ShaderMaterial({ uniforms: { ...cloudU, uProjInv: { value: new THREE.Matrix4() }, uV2W: { value: new THREE.Matrix3() }, uRes: { value: new THREE.Vector2(1, 1) } }, vertexShader: QV, fragmentShader: CLOUD_PASS_FRAG });
@@ -558,7 +558,7 @@ export function createScene3D(container, opts = {}) {
     BW = Math.max(2, Math.round(PW / 4)); BH = Math.max(2, Math.round(PH / 4)); const ob = { ...o, type: THREE.HalfFloatType }; bloomA = new THREE.WebGLRenderTarget(BW, BH, ob); bloomB = new THREE.WebGLRenderTarget(BW, BH, ob);
     reflRT = new THREE.WebGLRenderTarget(Math.max(2, Math.round(PW / 2)), Math.max(2, Math.round(PH / 2)), ob); reflRT2 = reflRT.clone(); // reflet des flaques, et passe de flou
     // Nuages: à la résolution des pixels CSS (moitié des pixels sur un écran Retina), les nuages sont doux; lus par la sphère du ciel.
-    const cdiv = DPR >= 1.5 ? 2 : 1.5, CW = Math.max(2, Math.round(PW / cdiv)), CH = Math.max(2, Math.round(PH / cdiv));
+    const cdiv = Math.max(1, DPR), CW = Math.max(2, Math.round(PW / cdiv)), CH = Math.max(2, Math.round(PH / cdiv));
     if (cloudRT) cloudRT.dispose(); cloudRT = new THREE.WebGLRenderTarget(CW, CH, ob); if (cloudRTHi) cloudRTHi.dispose(); cloudRTHi = new THREE.WebGLRenderTarget(PW, PH, ob); cloudHi = false; hiDone = false; skyU.tCloud.value = cloudRT.texture; skyU.uRes.value.set(PW, PH); cloudPassMat.uniforms.uRes.value.set(CW, CH);
   }
   alloc();
@@ -1356,8 +1356,11 @@ export function createScene3D(container, opts = {}) {
     // Ambiance: zénith et horizon du même ciel (en linéaire), puis heure bleue et nuit comme la sphère; sol: rebond de la lumière.
     const zp = preethamRadiance([0, 1, 0], sunV, turb, 1.5), zl = Math.max(LUM(zp), 1e-6); let zc = mv(zp.map(v => v / zl), [1, 1, 1], 0.35).map(v => v * zenTarget); const zlum = LUM(zc); zc = zc.map(v => v / (1 + 0.5 * zlum));
     const hzc = hc0.map(v => v / 0.45);
-    const ambZ = mv(zc, mv(lin3([0.03, 0.07, 0.21]).map(v => v * 0.85), lin3([0.016, 0.03, 0.09]).map(v => v * 0.9), nightF), twi);
-    const ambH = mv(hzc, mv(lin3([0.11, 0.24, 0.50]), lin3([0.045, 0.07, 0.16]), nightF), twi);
+    let ambZ = mv(zc, mv(lin3([0.03, 0.07, 0.21]).map(v => v * 0.85), lin3([0.016, 0.03, 0.09]).map(v => v * 0.9), nightF), twi);
+    let ambH = mv(hzc, mv(lin3([0.11, 0.24, 0.50]), lin3([0.045, 0.07, 0.16]), nightF), twi);
+    // À l'heure bleue, la lumière reçue par les nuages vient de tout le ciel, lueur chaude de l'horizon comprise: ambiance
+    // désaturée de 40 % pour les nuages (sinon un couvert au crépuscule sortait d'un bleu uniforme trop saturé); le ciel clair ne change pas.
+    const dsT = 0.4 * twi, lz = LUM(ambZ), lh = LUM(ambH); ambZ = mv(ambZ, [lz, lz, lz], dsT); ambH = mv(ambH, [lh, lh, lh], dsT);
     // Lumière renvoyée par le sol: soleil direct selon la part de l'heure au soleil et l'ombre des nuages, ciel diffus réduit sous un
     // couvert (sous une base d'orage, le sol est sombre et n'éclaire plus les nuages).
     const cover = Math.max(cur.l0c, 0.8 * cur.m1c), gIrr = Idir * Math.max(Math.sin(sp.altitude), 0) * Math.max(tg.pSun, 0.15) * (1 - 0.8 * cur.storm) + Math.PI * LUM(ambZ) * 1.3 * (1 - 0.75 * cover * (0.4 + 0.6 * cur.l0d)), ambG = [GROUND_TINT.r, GROUND_TINT.g, GROUND_TINT.b].map(v => v * 0.9 * gIrr / Math.PI);
@@ -1366,10 +1369,10 @@ export function createScene3D(container, opts = {}) {
     cloudU.uLay0.value.set(T0y + cur.l0b, T0y + cur.l0t, l0c, fogCov > cur.l0c && cam.position.y <= fogTopW + 10 ? Math.min(cur.l0k, 0.1) : cur.l0k);
     cloudU.uLay0b.value.set(cur.l0w, cur.l0s, 0, cur.l0d); cloudU.uLay1.value.set(T0y + cur.m1b, T0y + cur.m1t, cur.m1c, cur.m1k); cloudU.uHi.value.set(cur.hc, cur.hk, T0y + cur.ha, cur.ht);
     cloudU.uGround.value = T0y; cloudU.uCamW.value.copy(cam.position); cloudU.uShaft.value = cur.shaft * (1 - 0.5 * cur.brk);
-    const drift = ((dateMs / 1000) % 5193600) * 5.5; cloudU.uOff.value.set(-drift * 0.93, 0, drift * 0.37); // 20 km/h; modulo 60 jours (précision des flottants), champ périodique de 28 560 km
+    const drift = ((dateMs / 1000) % 1209600) * 5.5; cloudU.uOff.value.set(-drift * 0.93, 0, drift * 0.37); // 20 km/h; modulo 14 jours (6 650 km: précision de 0,5 m en flottants 32 bits), champ périodique de 28 560 km
     if (envNow && key3 !== envKey && now - envAt > 120) { envKey = key3; envAt = now; envNow(); }
     const CM = cloudPassMat.uniforms; CM.uProjInv.value.copy(cam.projectionMatrixInverse); CM.uV2W.value.setFromMatrix4(cam.matrixWorld);
-    const cRT = cloudHi ? cloudRTHi : cloudRT; CM.uRes.value.set(cRT.width, cRT.height); pass(cloudPassMat, cRT); skyU.tCloud.value = cRT.texture; const usedHi = cloudHi; cloudHi = false;
+    const cRT = cloudHi ? cloudRTHi : cloudRT; CM.uRes.value.set(cRT.width, cRT.height); pass(cloudPassMat, cRT); skyU.tCloud.value = cRT.texture; skyU.uCloudPx.value.set(1 / cRT.width, 1 / cRT.height); const usedHi = cloudHi; cloudHi = false;
     let vc = mv([0.88, 0.89, 0.90], [0.64, 0.66, 0.69], thick); vc = mv(vc, mv([0.62, 0.62, 0.66], [0.95, 0.72, 0.55], 0.6), uW * 0.5);
     // Sous les nuages, l'horizon prend la clarté de leur base, calculée comme dans sky.js (lumière transmise à travers
     // l'épaisseur: claire sous un stratus mince, très sombre sous un orage), avec un reste de brume; le voile d'altitude comme avant.
@@ -1381,8 +1384,14 @@ export function createScene3D(container, opts = {}) {
     };
     const fogSat = fogSig > 0 ? 1 - Math.exp(-fogSig * fogThick) : 0, wLow = Math.max(smooth(0.2, 0.75, cur.l0c), smooth(0.25, 0.85, fogSat)), wMid = smooth(0.3, 0.9, cur.m1c) * (1 - wLow);
     hc = mv(hc, lin(vc).map(v => v * 0.55), veil * (0.45 + 0.52 * thick * thick));
-    if (wMid > 0) { const mr = slabRad(1); hc = mv(hc, mr.map((v, i) => v * 0.85 + hc0[i] * 0.15), wMid); }
-    if (wLow > 0) { const lr = fogSat > cur.l0c ? lin([0.50, 0.54, 0.60]).map(v => v * 0.65) : slabRad(0); hc = mv(hc, lr.map((v, i) => v * 0.85 + hc0[i] * 0.15), wLow); } hc = mv(hc, lin([0.11, 0.24, 0.50]).map(v => v * (0.72 + 0.55 * cgv)), twi); hc = mv(hc, lin([0.045, 0.07, 0.16]).map(v => v * (0.8 + 0.3 * cgv)), nightF); hc = mv(hc, lin([0.30, 0.21, 0.13]).map(v => v * 0.5), 0.28 * urban * nightF); fog.color.setRGB(hc[0], hc[1], hc[2]); fog.near = 250 + camH * 4; fog.far = 1500 + camH * 14; // dernier mélange: pollution lumineuse au loin, en ville
+    // Heure bleue et nuit sur l'horizon clair d'abord; la base des nuages (déjà calculée avec l'ambiance du moment) vient ensuite,
+    // sinon la brume gardait le bleu de l'heure bleue sous un couvert sombre et la montagne du fond paraissait allumée.
+    hc = mv(hc, lin([0.11, 0.24, 0.50]).map(v => v * (0.72 + 0.55 * cgv)), twi); hc = mv(hc, lin([0.045, 0.07, 0.16]).map(v => v * (0.8 + 0.3 * cgv)), nightF);
+    // Le sol lointain reste nettement plus sombre que le ciel juste au-dessus de l'horizon (0,45 fois, comme par ciel clair):
+    // sans ce facteur, les montagnes prenaient la clarté de la base des nuages et sortaient gris très pâle (Stéphane, 10 octobre 2026).
+    const hcT = hc.slice();
+    if (wMid > 0) { const mr = slabRad(1); hc = mv(hc, mr.map((v, i) => v * 0.45 * 0.85 + hcT[i] * 0.15), wMid); }
+    if (wLow > 0) { const lr = fogSat > cur.l0c ? lin([0.50, 0.54, 0.60]).map(v => v * 0.65 * (1 - 0.8 * twi)) : slabRad(0).map(v => v * 0.45); hc = mv(hc, lr.map((v, i) => v * 0.85 + hcT[i] * 0.15), wLow); } hc = mv(hc, lin([0.30, 0.21, 0.13]).map(v => v * 0.5), 0.28 * urban * nightF); fog.color.setRGB(hc[0], hc[1], hc[2]); fog.near = 250 + camH * 4; fog.far = 1500 + camH * 14; // dernier mélange: pollution lumineuse au loin, en ville
     if (cur.smk > 0) { const sl = LUM([fog.color.r, fog.color.g, fog.color.b]); fog.color.lerp(new THREE.Color(sl * 1.15, sl * 0.85, sl * 0.55), 0.6 * cur.smk); } // fumée: le voile du lointain prend aussi la teinte brun-orangé
     const rainK = cur.rain * (1 - RAIN_BRK * cur.brk); if (rainK > 0) { fog.near *= 1 - 0.6 * rainK; fog.far *= 1 - 0.5 * rainK; fog.color.lerp(new THREE.Color().setScalar(fog.color.r * 0.2126 + fog.color.g * 0.7152 + fog.color.b * 0.0722), 0.5 * rainK); } // pluie: visibilité réduite, grisaille
     lampU.uWet.value = cur.wet;

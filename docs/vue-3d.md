@@ -729,6 +729,42 @@ importé, lui, est le fichier de l'architecte.
     coucher n'éclaire que les 50 premiers mètres de la base: si l'érosion vide le bas des cumulus, rien ne s'allume.
   - **À suivre:** cumulus encore un peu doux vus du sol (bord et contraste des sommets), neige (pas encore de couche
     d'hiver), mammatus et foudre non faits, jugement de Stéphane sur les teintes du coucher.
+- v633.188 (10 octobre 2026), **retours de Stéphane sur le ciel volumétrique** (« grosse amélioration! », puis trois
+  défauts: « des lignes de nuage pas réalistes », « une répétition non naturelle dans plusieurs cas », « la montagne en
+  fond qui devient allumée », « c'est surtout les montagnes bleu flashy ou gris très pâle qui jurent »). Diagnostic par
+  reproduction au banc (prévision réelle, écran Retina simulé: `--dpr 2`, balayage en élévation `sweep.mjs` qui compte
+  les oscillations de transmittance) et par trois lecteurs indépendants du code (échantillonnage, textures, composition),
+  d'accord sur la cause principale.
+  - **Lignes horizontales:** un pas de marche a une épaisseur optique bien supérieure à 1, donc la couleur d'un pixel est
+    décidée par son premier échantillon plein; tous les pixels échantillonnant les mêmes altitudes (pas = épaisseur / 56,
+    tramage réduit à un quart de pas), la base ondulée des nuages était quantifiée en terrasses, écrasées en lignes vues de
+    côté (près de l'horizon). S'y ajoutaient les plans de cassure de l'interpolation trilinéaire des textures 3D (un texel
+    vertical tous les 19 ou 35 m) et la quantification 8 bits du bruit. Correctifs (sky.js): marche à deux niveaux (pas
+    grossiers sans détail, recul d'un pas au premier impact puis quart de pas avec le détail, lumière recalculée tous les
+    quatre pas fins), pas plafonné au tiers de l'épaisseur et croissance lente, tramage sur presque tout le pas (aussi
+    dans les cartes cubiques), lecture lissée des textures (`tex3`: arrondi quintique dans le texel), textures de bruit en
+    demi-flottants et détail en 64 cubes, poids du détail continu avec la distance (plus de couture à 14 km), départ de la
+    marche vers le soleil décalé par pixel; dans la sphère, le flou à quatre lectures prend la vraie taille du texel de la
+    texture des nuages (`uCloudPx`, il était calé sur le pixel écran) et la passe réduite est à la résolution des pixels CSS
+    à tout DPR. Mesure: 20 oscillations sur 8 degrés avant, 0 après. Coût: passe réduite 3 à 14 ms à 1 400 x 860 (0,1 ms
+    par ciel clair), passe pleine une fois la vue posée.
+  - **Répétition du motif:** les textures de bruit sont périodiques (600 m pour le détail, 4,5 km pour la forme), ce qui se
+    voyait comme un carrelage sur un couvert jusqu'à l'horizon. Seconde lecture tournée (axe vertical, 37 à 60 degrés) à
+    une autre échelle (x 1,53, 437 m, 5,3 km) mélangée à 40 % dans la forme, le détail, la couverture et les fibres de cirrus
+    (contraste rendu après le mélange); les stratus sont moins érodés (0,25 au lieu de 0,45 du poids des cumulus). Hors
+    phase fine (pas grossiers, lumière), une seule lecture: le coût reste contenu.
+  - **Montagnes:** sous un couvert, la brume prenait toute la clarté de la base des nuages (montagnes gris très pâle,
+    confondues avec le ciel) et, au crépuscule, le bleu de l'heure bleue s'appliquait après le mélange avec la base (montagne
+    bleu vif sous un ciel couvert sombre). Règle rétablie: le sol lointain vaut 0,45 fois l'horizon, sous les nuages aussi;
+    heure bleue et nuit appliquées à l'horizon clair avant le mélange avec la base. Référence: les photos de Stéphane à
+    l'heure bleue et au lever (hiver, drone): montagnes en silhouette plus sombres que l'horizon, ciel peu saturé.
+  - **Couleurs:** ambiance de l'heure bleue désaturée de 40 % pour la lumière reçue par les nuages (un couvert au crépuscule
+    sortait d'un bleu uniforme trop saturé); le ciel clair ne change pas. Dérive des nuages modulo 14 jours (0,5 m de
+    précision en flottants 32 bits, contre 2 m à la fin du cycle de 60 jours).
+  - **Banc:** `shoot.mjs --dpr 2` (écran Retina simulé: le moteur lit devicePixelRatio à sa création, la page est rechargée
+    après le réglage), `sweep.mjs` et `repro*.mjs` dans le dossier de session; piège corrigé dans `cdp.mjs`: deux
+    lancements rapprochés sur le même port de débogage se rattachaient à la page de l'instance précédente (vue héritée
+    d'une autre série), port unique par processus et attente de la sortie de Chrome.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

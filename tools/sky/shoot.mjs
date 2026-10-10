@@ -16,9 +16,10 @@ const W = Number(opt('w', 1200)), H = Number(opt('h', 750));
 const url = opt('url', 'http://localhost:5173/tools/sky/harness.html');
 mkdirSync(out, { recursive: true });
 
+const DPR = Number(opt('dpr', 1));
 const b = await launch(url, { width: W, height: H });
 try {
-  await b.setSize(W, H);
+  await b.setSize(W, H, DPR); if (DPR !== 1) { await b.navigate(url); await sleep(400); } // le moteur lit devicePixelRatio à sa création
   const t0 = Date.now();
   for (let i = 0; i < 200 && !(await b.eval('!!window.H')); i++) await sleep(100); // le module de la page se charge
   if (!(await b.eval('!!window.H'))) { console.error('harness absent; console:\n' + b.console().join('\n')); process.exit(2); }

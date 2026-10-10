@@ -51,14 +51,14 @@ export function makeNoiseTextures(R) {
   const mat = new THREE.ShaderMaterial({ uniforms: { uZ: { value: 0 }, uN: { value: 128 }, uDetail: { value: 0 } }, vertexShader: QV, fragmentShader: NOISE_GLSL });
   const sc = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat); sc.add(quad);
   const gen = (n, detail) => {
-    const rt = new THREE.WebGL3DRenderTarget(n, n, n, { depthBuffer: false, stencilBuffer: false, generateMipmaps: false });
+    const rt = new THREE.WebGL3DRenderTarget(n, n, n, { type: THREE.HalfFloatType, depthBuffer: false, stencilBuffer: false, generateMipmaps: false }); // demi-flottants: en 8 bits, les marches de 1/255 faisaient des terrasses horizontales
     const t = rt.texture; t.wrapS = t.wrapT = t.wrapR = THREE.RepeatWrapping; t.minFilter = t.magFilter = THREE.LinearFilter; t.generateMipmaps = false;
     mat.uniforms.uN.value = n; mat.uniforms.uDetail.value = detail ? 1 : 0;
     for (let z = 0; z < n; z++) { mat.uniforms.uZ.value = (z + 0.5) / n; R.setRenderTarget(rt, z); R.render(sc, cam); }
     R.setRenderTarget(null);
     return rt;
   };
-  const base = gen(128, false), detail = gen(32, true);
+  const base = gen(128, false), detail = gen(64, true); // 64: 8 texels par cellule de 75 m (à 32, les cônes de Worley étaient des pyramides à facettes)
   quad.geometry.dispose(); mat.dispose();
   return { base: base.texture, detail: detail.texture, dispose() { base.dispose(); detail.dispose(); } };
 }
@@ -76,6 +76,14 @@ const float PI = 3.14159265;
 float hg(float c, float g) { float g2 = g * g; return (1.0 - g2) / (4.0 * PI * pow(max(1.0 + g2 - 2.0 * g * c, 1e-4), 1.5)); }
 float rmp(float v, float a, float b) { return clamp((v - a) / max(b - a, 1e-5), 0.0, 1.0); }
 float ignoise(vec2 p) { return fract(52.9829189 * fract(0.06711056 * p.x + 0.00583715 * p.y)); }
+/* Lecture lissée d'une texture 3D (n texels par période): l'interpolation trilinéaire est continue mais cassée à chaque
+   texel; vue par la tranche (nuages de côté, près de l'horizon), chaque plan de cassure faisait une ligne horizontale.
+   On arrondit la position dans le texel (courbe quintique) avant la lecture: interpolation lisse, même coût. */
+vec4 tex3(sampler3D s, vec3 p, float n) { vec3 u = p * n - 0.5; vec3 i = floor(u), f = fract(u); f = f * f * f * (f * (f * 6.0 - 15.0) + 10.0); return texture(s, (i + 0.5 + f) / n); }
+/* Rotations (axe vertical, et dans le plan) pour une seconde lecture à une autre échelle: deux champs périodiques tournés
+   l'un par rapport à l'autre ne se répètent plus ensemble (le carrelage du motif disparaît). */
+vec3 rotY(vec3 v, float c, float s) { return vec3(c * v.x - s * v.z, v.y, s * v.x + c * v.z); }
+vec2 rot2(vec2 v, float c, float s) { return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }
 /* Coquille sphérique à l'altitude hAlt au-dessus du sol (Terre de rayon PR centrée sous la caméra): racines (entrée, sortie) */
 vec2 shell(vec3 ro, vec3 rd, float hAlt) {
   /* |oc|^2 - r^2 sous forme factorisée (sinon différence de deux carrés de 6 371 km: perte totale de précision en 32 bits)
@@ -112,8 +120,9 @@ float covMap(float c, float typ) {
   return mix(covKnot(i, typ), covKnot(i + 1, typ), x);
 }
 /* Champ de couverture locale (xz): régions plus ou moins nuageuses, amplitude nulle aux extrêmes (0 % et 100 %) */
-float covField(vec2 xz, float cov) {
-  float cv = texture(tNoise, vec3(xz * (1.0 / 16000.0), 0.37)).r * 0.6 + texture(tNoise, vec3(xz * (1.0 / 5000.0) + 0.5, 0.71)).r * 0.4;
+float covField(vec2 xz, float cov, float full) {
+  float cv = tex3(tNoise, vec3(xz * (1.0 / 16000.0), 0.37), 128.0).r;
+  if (full > 0.5) cv = cv * 0.6 + tex3(tNoise, vec3(rot2(xz, 0.8746, 0.4848) * (1.0 / 5300.0) + 0.5, 0.71), 128.0).r * 0.4;
   return clamp(cov + (cv - 0.5) * 2.2 * cov * (1.0 - cov), 0.0, 1.0);
 }
 /* Couche basse. type: 0 stratus, 0,5 stratocumulus, 1 cumulus; tour: bourgeonnement vertical; cb: cumulonimbus (enclume).
@@ -124,10 +133,14 @@ float dLow(vec3 p, float detail, float covK, out float hh) {
   if (h <= 0.0 || h >= 1.0 || cov <= 0.002) return 0.0;
   vec3 q = p + uOff;
   float anvW = cb * smoothstep(0.7, 0.9, h);
-  float covL = covField(q.xz, cov) + anvW * 0.45;
+  float covL = covField(q.xz, cov, detail) + anvW * 0.45;
   if (covL <= 0.002) return 0.0;
   float sy = mix(1.0, 0.4, tower), sxz = mix(1.0, 0.45, anvW);
-  vec4 n = texture(tNoise, vec3(q.x * sxz, (p.y - base) * sy + 1234.0, q.z * sxz) / 4500.0);
+  vec3 qs = vec3(q.x * sxz, (p.y - base) * sy + 1234.0, q.z * sxz);
+  /* pas grossiers et lumière (detail = 0): une seule lecture; phase fine: seconde lecture tournée contre la répétition */
+  vec4 n = tex3(tNoise, qs / 4500.0, 128.0);
+  if (detail > 0.5) n = mix(n, tex3(tNoise, rotY(qs * vec3(1.0, 0.8, 1.0) + vec3(0.0, 311.0, 0.0), 0.7986, 0.6018) / 6900.0, 128.0), 0.4);
+  n.r = clamp((n.r - 0.5) * 1.25 + 0.5, 0.0, 1.0); /* contraste rendu après le mélange des deux lectures */
   float fb = n.g * 0.625 + n.b * 0.25 + n.a * 0.125;
   float shape = rmp(n.r, -(1.0 - fb), 1.0);
   shape = mix(0.92, shape, mix(0.45, 1.0, typ)); /* stratiforme: champ presque uniforme */
@@ -136,10 +149,10 @@ float dLow(vec3 p, float detail, float covK, out float hh) {
   float covP = covMap(covL, typ);
   float d = rmp(shape * grad, 1.0 - covP, 1.0) * covP;
   if (detail > 0.5 && d > 0.0 && d < 0.92) {
-    vec3 dn = texture(tDetail, (q + vec3(0.0, 777.0, 0.0)) / 600.0).rgb;
+    vec3 dn = mix(tex3(tDetail, (q + vec3(0.0, 777.0, 0.0)) / 600.0, 64.0).rgb, tex3(tDetail, rotY(q, 0.5, 0.866) / 437.0 + 0.3, 64.0).rgb, 0.4);
     float hf = dn.r * 0.625 + dn.g * 0.25 + dn.b * 0.125;
     float hfm = mix(hf, 1.0 - hf, clamp(h * 10.0, 0.0, 1.0));
-    d = rmp(d, hfm * 0.6 * mix(0.45, 1.0, typ) * mix(0.3, 1.0, smoothstep(0.04, 0.35, h)), 1.0); /* base plate et dense, sommet bourgeonnant */
+    d = rmp(d, hfm * 0.6 * detail * mix(0.25, 1.0, typ) * mix(0.3, 1.0, smoothstep(0.04, 0.35, h)), 1.0); /* base plate et dense, sommet bourgeonnant; stratus peu érodé; detail: poids continu selon la distance */
   }
   /* Densité pleine dès 45 % de la plage: le bord d'un cumulus passe du vide au plein en quelques dizaines de mètres (contour net,
      chou-fleur), un stratus garde sa transition douce. */
@@ -151,10 +164,13 @@ float dMid(vec3 p, float detail, out float hh) {
   float h = (p.y - base) / max(top - base, 1.0); hh = h;
   if (h <= 0.0 || h >= 1.0 || cov <= 0.002) return 0.0;
   vec3 q = p + uOff * 0.6 + vec3(3100.0, 0.0, -2700.0);
-  float covL = covField(q.xz * 1.3, cov);
+  float covL = covField(q.xz * 1.3, cov, detail);
   if (covL <= 0.002) return 0.0;
   float L = mix(6000.0, 2600.0, typ);
-  vec4 n = texture(tNoise, vec3(q.x * 1.4, (p.y - base) * 1.5 + 321.0, q.z) / L);
+  vec3 qs = vec3(q.x * 1.4, (p.y - base) * 1.5 + 321.0, q.z);
+  vec4 n = tex3(tNoise, qs / L, 128.0);
+  if (detail > 0.5) n = mix(n, tex3(tNoise, rotY(qs + vec3(0.0, 97.0, 0.0), 0.8988, 0.4384) / (L * 1.53), 128.0), 0.4);
+  n.r = clamp((n.r - 0.5) * 1.25 + 0.5, 0.0, 1.0);
   float fb = n.g * 0.625 + n.b * 0.25 + n.a * 0.125;
   float shape = rmp(n.r, -(1.0 - fb), 1.0);
   shape = mix(0.9, shape, mix(0.3, 1.0, typ));
@@ -162,16 +178,16 @@ float dMid(vec3 p, float detail, out float hh) {
   float covP = covMap(covL, typ);
   float d = rmp(shape * grad, 1.0 - covP, 1.0) * covP;
   if (detail > 0.5 && d > 0.0 && d < 0.92) {
-    vec3 dn = texture(tDetail, (q + vec3(0.0, 555.0, 0.0)) / 500.0).rgb;
+    vec3 dn = mix(tex3(tDetail, (q + vec3(0.0, 555.0, 0.0)) / 500.0, 64.0).rgb, tex3(tDetail, rotY(q, 0.5, 0.866) / 371.0 + 0.6, 64.0).rgb, 0.4);
     float hf = dn.r * 0.625 + dn.g * 0.25 + dn.b * 0.125;
-    d = rmp(d, mix(hf, 1.0 - hf, clamp(h * 6.0, 0.0, 1.0)) * 0.3 * typ, 1.0);
+    d = rmp(d, mix(hf, 1.0 - hf, clamp(h * 6.0, 0.0, 1.0)) * 0.3 * detail * typ, 1.0);
   }
   return d;
 }
 /* Profondeur optique (sans sigma) vers le soleil: 5 pas croissants puis un échantillon lointain */
-float tauTo(vec3 p, vec3 sd, float thick, float covK, int layer) {
-  float st = thick * 0.07, t = 0.0, tau = 0.0, hh;
-  for (int i = 0; i < 5; i++) { float ds = st * (float(i) + 1.0); t += ds; vec3 q = p + sd * t; tau += (layer == 0 ? dLow(q, 0.0, covK, hh) : dMid(q, 0.0, hh)) * ds; }
+float tauTo(vec3 p, vec3 sd, float thick, float covK, int layer, float jit) {
+  float st = thick * 0.09, t = st * (jit - 0.5), tau = 0.0, hh;
+  for (int i = 0; i < 4; i++) { float ds = st * (float(i) + 1.0); t += ds; vec3 q = p + sd * max(t, 0.0); tau += (layer == 0 ? dLow(q, 0.0, covK, hh) : dMid(q, 0.0, hh)) * ds; }
   vec3 q = p + sd * thick * 1.8; tau += (layer == 0 ? dLow(q, 0.0, covK, hh) : dMid(q, 0.0, hh)) * thick * 0.6;
   return tau;
 }
@@ -195,28 +211,38 @@ vec3 scat(vec3 p, vec3 rd, float h, float dloc, vec3 sd, vec3 sunRad, float sig,
 void marchLayer(vec3 ro, vec3 rd, int layer, float jit, float covK, float quality, inout vec3 col, inout float T, inout float tFirst) {
   vec4 lay = layer == 0 ? uLay0 : uLay1; if (lay.z <= 0.002) return;
   float hb = lay.x - uGround, ht = lay.y - uGround, thick = lay.y - lay.x;
-  vec2 s = seg(ro, rd, hb, ht); float maxT = layer == 0 ? 36000.0 : 60000.0;
+  vec2 s = seg(ro, rd, hb, ht); float maxT = layer == 0 ? 28000.0 : 60000.0;
   s.y = min(s.y, maxT); if (s.y <= s.x) return;
   vec3 sunRad = layer == 0 ? uSunL : uSunM;
   float typ = lay.w, sig = layer == 0 ? mix(0.03, 0.07, typ) : mix(0.015, 0.03, typ);
   float dMean = sig * mix(0.85, 0.8, typ) * (0.5 + 0.5 * lay.z);
-  float nSteps = (layer == 0 ? 56.0 : 28.0) * quality;
-  float len = s.y - s.x, dt0 = clamp(len / nSteps, layer == 0 ? 18.0 : 40.0, layer == 0 ? 260.0 : 500.0);
-  float t = s.x + dt0 * jit, hh; int empty = 0;
-  for (int i = 0; i < 96; i++) {
-    if (float(i) >= nSteps * 1.6 || t > s.y || T < 0.015) break;
-    float dt = dt0 * (1.0 + t / 9000.0);
-    vec3 p = ro + rd * t; float det = t < 14000.0 ? 1.0 : 0.0; /* érosion fine seulement à moins de 14 km (au loin elle fait du grain) */
+  float nSteps = (layer == 0 ? 56.0 : 36.0) * quality;
+  /* Pas: au plus un tiers de l'épaisseur de la couche (rayons rasants: la structure verticale reste échantillonnée),
+     croissance lente avec la distance; au-delà du nombre d'itérations, le lointain reste dans la brume. */
+  float len = s.y - s.x, dt0 = clamp(len / nSteps, layer == 0 ? 18.0 : 40.0, min(layer == 0 ? 140.0 : 400.0, 0.33 * thick));
+  /* Marche à deux niveaux: pas grossiers sans détail dans le vide; au premier impact on recule d'un pas et on avance au
+     quart du pas avec le détail. Un pas grossier a une épaisseur optique bien supérieure à 1: la couleur d'un pixel est
+     décidée par son premier échantillon plein; si tous les pixels échantillonnent les mêmes altitudes, la base ondulée
+     est quantifiée en terrasses, vues de côté comme des lignes horizontales. Le pas fin ramène les terrasses à quelques
+     mètres et le tramage par pixel fait le reste. */
+  float t = s.x + dt0 * jit, hh, dtPrev = 0.0, tauSun = 0.0; int empty = 0, fine = 0, lit = 0;
+  for (int i = 0; i < 128; i++) {
+    if (float(i) >= nSteps * 2.3 || t > s.y || T < 0.015) break;
+    float dtC = dt0 * (1.0 + t / 11000.0), dt = fine > 0 ? dtC * 0.25 : dtC;
+    vec3 p = ro + rd * t; float det = fine > 0 ? 1.0 - 0.9 * smoothstep(8000.0, 18000.0, t) : 0.0; /* érosion fine surtout de près (au loin elle fait du grain), poids continu */
     float d = layer == 0 ? dLow(p, det, covK, hh) : dMid(p, det, hh);
+    if (d > 0.002 && fine == 0) { t = max(s.x, t - dtPrev); fine = 16; empty = 0; lit = 0; dtPrev = 0.0; continue; } /* premier impact: recul d'un pas, phase fine */
     if (d > 0.002) {
       if (tFirst < 0.0) tFirst = t;
-      float tauSun = tauTo(p, uSun, thick, covK, layer);
+      if (lit <= 0) { tauSun = tauTo(p, uSun, thick, covK, layer, jit); lit = 4; } /* lumière vers le soleil recalculée tous les quatre pas fins */
+      lit--;
       float tauUp = (lay.y - p.y) * dMean / sig;
       vec3 S = scat(p, rd, hh, d, uSun, sunRad, sig, tauSun, tauUp, lay.z, layer == 0 ? uLay0b.w : 0.0);
       float ext = exp(-max(d, 0.0) * sig * max(dt, 0.0));
       col += T * S * (1.0 - ext); T *= ext; empty = 0;
     } else { empty++; }
-    t += dt * (empty > 2 ? 1.6 : 1.0);
+    if (fine > 0) { fine--; if (empty > 3) fine = 0; }
+    dtPrev = dt * (fine == 0 && empty > 2 ? 1.6 : 1.0); t += dtPrev;
   }
 }
 /* Rideaux de pluie sous la base (averses, orage): voile gris sous les régions les plus couvertes */
@@ -226,7 +252,7 @@ void marchShaft(vec3 ro, vec3 rd, float jit, inout vec3 col, inout float T) {
   float dt = (s.y - s.x) / 10.0, t = s.x + dt * jit;
   vec3 grey = (uAmbH * 0.6 + uAmbZ * 0.4) * 0.1 + uAmbG * 0.15; /* lumière sous une base d'averse: faible */
   for (int i = 0; i < 10; i++) {
-    vec3 p = ro + rd * t; float cv = covField(p.xz + uOff.xz, uLay0.z);
+    vec3 p = ro + rd * t; float cv = covField(p.xz + uOff.xz, uLay0.z, 0.0);
     float d = uShaft * smoothstep(0.45, 0.95, cv) * (0.5 + 0.5 * clamp((p.y - uGround) / max(hb, 1.0), 0.0, 1.0));
     float ext = exp(-d * 0.00035 * dt); col += T * grey * (1.0 - ext); T *= ext; t += dt;
   }
@@ -237,11 +263,11 @@ void cirrus(vec3 ro, vec3 rd, inout vec3 col, inout float T) {
   vec2 s = shell(ro, rd, uHi.z); float t = s.y; if (t <= 0.0 || rd.y < -0.02) return;
   vec3 p = ro + rd * t + uOff; vec2 pv = p.xz * (1.0 / 14000.0);
   /* bancs de cirrus (grande échelle, trous de ciel bleu entre eux) puis filaments étirés dans une direction */
-  float n1 = texture(tNoise, vec3(pv * 0.5 + 0.2, 0.11)).r;
-  float region = smoothstep(0.66 - 0.56 * cov, 0.8 - 0.45 * cov, n1);
+  float n1 = mix(tex3(tNoise, vec3(pv * 0.5 + 0.2, 0.11), 128.0).r, tex3(tNoise, vec3(rot2(pv, 0.9063, 0.4226) * 0.31 + 0.7, 0.19), 128.0).r, 0.4);
+  float region = smoothstep(0.64 - 0.56 * cov, 0.8 - 0.45 * cov, n1);
   vec2 pr = vec2(pv.x * 0.35 + pv.y * 0.25, pv.y * 1.9 - pv.x * 0.5);
-  float n2 = texture(tNoise, vec3(pr * 1.7 + 0.3, 0.53)).g, n3 = texture(tNoise, vec3(pr * 5.0 + 0.6, 0.83)).b;
-  float fib = texture(tNoise, vec3(pr.x * 14.0, pr.y * 1.2, 0.29)).a; /* fibres étirées */
+  float n2 = tex3(tNoise, vec3(pr * 1.7 + 0.3, 0.53), 128.0).g, n3 = tex3(tNoise, vec3(pr * 5.0 + 0.6, 0.83), 128.0).b;
+  float fib = mix(tex3(tNoise, vec3(pr.x * 14.0, pr.y * 1.2, 0.29), 128.0).a, tex3(tNoise, vec3(pr.x * 9.3 + 0.4, pr.y * 0.8 + 0.2, 0.47), 128.0).a, 0.45); /* fibres étirées, deux échelles */
   float wisp = smoothstep(0.3, 0.8, n2 * 0.55 + n3 * 0.15 + fib * 0.45);
   float cs = dot(rd, uSun);
   float aCir = region * wisp * 0.6, aStr = (0.3 + 0.45 * smoothstep(0.3, 0.7, n2 * 0.7 + n3 * 0.3)) * mix(region, 1.0, 0.5);
@@ -254,7 +280,7 @@ void cirrus(vec3 ro, vec3 rd, inout vec3 col, inout float T) {
 /* Tous les nuages pour un rayon: radiance prémultipliée et transmittance */
 vec4 clouds(vec3 ro, vec3 rd, float jit, float quality) {
   vec3 col = vec3(0.0); float T = 1.0, tFirst = -1.0;
-  float ga = acos(clamp(dot(rd, uSun), -1.0, 1.0)), gR = uGapR * (0.7 + 0.6 * texture(tNoise, vec3(rd.xz * 3.0, 0.5)).g);
+  float ga = acos(clamp(dot(rd, uSun), -1.0, 1.0)), gR = uGapR * (0.7 + 0.6 * tex3(tNoise, vec3(rd.xz * 3.0, 0.5), 128.0).g);
   float gp = 1.0 - smoothstep(0.35 * gR, gR, ga);
   float covK = 1.0 + gp * (uSunGap > 0.0 ? -0.75 : 0.9) * abs(uSunGap);
   marchShaft(ro, rd, jit, col, T);
@@ -262,7 +288,7 @@ vec4 clouds(vec3 ro, vec3 rd, float jit, float quality) {
   marchLayer(ro, rd, 1, jit, 1.0, quality, col, T, tFirst);
   cirrus(ro, rd, col, T);
   /* perspective atmosphérique: les nuages lointains se fondent dans la brume de l'horizon */
-  if (tFirst > 0.0) { float f = 1.0 - exp(-tFirst / 22000.0); col = mix(col, uAmbH * (1.0 - T), f); }
+  if (tFirst > 0.0) { float f = 1.0 - exp(-tFirst / 15000.0); col = mix(col, uAmbH * (1.0 - T), f); }
   return vec4(col, T);
 }`;
 
@@ -271,7 +297,7 @@ export const CLOUD_PASS_FRAG = CLOUD_GLSL + `
 uniform mat4 uProjInv; uniform mat3 uV2W; uniform vec2 uRes; varying vec2 vUv;
 void main() {
   vec4 pv = uProjInv * vec4(vUv * 2.0 - 1.0, 1.0, 1.0); vec3 rd = normalize(uV2W * (pv.xyz / pv.w));
-  float jit = ignoise(gl_FragCoord.xy) * 0.25 + 0.35;
+  float jit = ignoise(gl_FragCoord.xy) * 0.8 + 0.1; /* tramage sur presque tout le pas: casse les structures régulières (lissé ensuite par les quatre lectures) */
   gl_FragColor = clouds(uCamW, rd, jit, 1.0);
 }`;
 

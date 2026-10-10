@@ -8,7 +8,9 @@ import { join } from 'node:path';
 
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
-export async function launch(url, { port = 9333, width = 1300, height = 860 } = {}) {
+// Port de débogage unique par processus: deux lancements rapprochés sur le même port se rattachaient à l'ancienne page
+// (état de vue hérité d'une autre série de captures).
+export async function launch(url, { port = 9300 + (process.pid % 600), width = 1300, height = 860 } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ms-sky-'));
   const proc = spawn(CHROME, [
     '--headless=new', `--remote-debugging-port=${port}`, '--use-angle=metal', '--ignore-gpu-blocklist',
@@ -36,10 +38,10 @@ export async function launch(url, { port = 9333, width = 1300, height = 860 } = 
     // Évalue une expression (une promesse est attendue) et renvoie sa valeur.
     async eval(expr) { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error('eval: ' + (r.exceptionDetails.exception?.description || r.exceptionDetails.text)); return r.result.value; },
     async navigate(u) { await send('Page.navigate', { url: u }); },
-    async setSize(w, h) { await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: false }); },
+    async setSize(w, h, dpr = 1) { await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: dpr, mobile: false }); },
     console() { drain(); return consoleLines.splice(0); },
     async screenshot(path) { const r = await send('Page.captureScreenshot', { format: 'png' }); const { writeFileSync } = await import('node:fs'); writeFileSync(path, Buffer.from(r.data, 'base64')); },
-    async close() { try { ws.close(); } catch (e) { /* déjà fermé */ } proc.kill(); await new Promise(r => setTimeout(r, 200)); try { rmSync(dir, { recursive: true, force: true }); } catch (e) { /* laissé au système */ } },
+    async close() { try { ws.close(); } catch (e) { /* déjà fermé */ } const gone = new Promise(r => proc.once('exit', r)); proc.kill(); await Promise.race([gone, new Promise(r => setTimeout(r, 3000))]); try { rmSync(dir, { recursive: true, force: true }); } catch (e) { /* laissé au système */ } },
     stderr: () => errLog,
   };
   return b;
