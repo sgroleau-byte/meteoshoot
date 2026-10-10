@@ -394,12 +394,18 @@ export function createScene3D(container, opts = {}) {
   // résolution réduite, texture tCloud), la sphère du ciel vue par la caméra et sa variante INLINE des cartes cubiques.
   const noiseTex = makeNoiseTextures(R);
   const V3 = () => ({ value: new THREE.Vector3() });
-  const cloudU = { tNoise: { value: noiseTex.base }, tDetail: { value: noiseTex.detail }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunL: V3(), uSunM: V3(), uSunH: V3(), uAmbZ: V3(), uAmbH: V3(), uAmbG: V3(), uOff: V3(), uCamW: V3(), uLay0: { value: new THREE.Vector4(800, 1600, 0, 1) }, uLay0b: { value: new THREE.Vector4() }, uLay1: { value: new THREE.Vector4(3200, 4300, 0, 1) }, uHi: { value: new THREE.Vector4(0, 1, 9000, 1) }, uGround: { value: 0 }, uSunGap: { value: 0 }, uGapR: { value: 0.1 }, uSteps: { value: 1 }, uShaft: { value: 0 } };
+  const cloudU = { tNoise: { value: noiseTex.base }, tDetail: { value: noiseTex.detail }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunL: V3(), uSunM: V3(), uSunH: V3(), uAmbZ: V3(), uAmbH: V3(), uAmbG: V3(), uOff: V3(), uCamW: V3(), uLay0: { value: new THREE.Vector4(800, 1600, 0, 1) }, uLay0b: { value: new THREE.Vector4() }, uLay1: { value: new THREE.Vector4(3200, 4300, 0, 1) }, uHi: { value: new THREE.Vector4(0, 1, 9000, 1) }, uGround: { value: 0 }, uSunGap: { value: 0 }, uGapR: { value: 0.1 }, uSteps: { value: 1 }, uShaft: { value: 0 }, uHz: { value: Array.from({ length: 9 }, () => new THREE.Vector3()) }, uPixAng: { value: 0.001 } };
   const skyU = { ...cloudU, uCum: { value: 0 }, uMid: { value: 0 }, uHigh: { value: 0 }, uDirect: { value: 1 }, uWarm: { value: 0 }, uTw: { value: 0 }, uNight: { value: 0 }, uGlow: { value: 0 }, uSmoke: { value: 0 }, uTurb: { value: 2.5 }, uRay: { value: 1.5 }, uSkyK: { value: 0.2 }, uZen: { value: 0.1 }, uStorm: { value: 0 }, uSunCol: { value: new THREE.Vector3(1, 1, 1) }, tCloud: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uCloudPx: { value: new THREE.Vector2(1, 1) } };
   const skyMat = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: skyU, vertexShader: SKY_VERT, fragmentShader: SKY_GLSL });
   const skyMatIn = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: skyU, defines: { INLINE: 1 }, vertexShader: SKY_VERT, fragmentShader: SKY_GLSL });
-  const cloudPassMat = new THREE.ShaderMaterial({ uniforms: { ...cloudU, uProjInv: { value: new THREE.Matrix4() }, uV2W: { value: new THREE.Matrix3() }, uRes: { value: new THREE.Vector2(1, 1) } }, vertexShader: QV, fragmentShader: CLOUD_PASS_FRAG });
-  let cloudRT = null, cloudRTHi = null, cloudHi = false, hiDone = false, lastMoveAt = 0; // nuages: résolution réduite en mouvement, pleine une fois la vue posée
+  const cloudPassMat = new THREE.ShaderMaterial({ uniforms: { ...cloudU, uProjInv: { value: new THREE.Matrix4() }, uV2W: { value: new THREE.Matrix3() }, uRes: { value: new THREE.Vector2(1, 1) }, uSub: { value: new THREE.Vector2() }, uJit: { value: 0 }, uQual: { value: 1 } }, vertexShader: QV, fragmentShader: CLOUD_PASS_FRAG });
+  // Accumulation des nuages une fois la vue posée: ACC_N passes avec tramage et décalage sous-pixel différents, moyennées
+  // (anticrénelage: plus de grain sur les bords de cellules plus fins qu'un pixel). Deux cibles en alternance.
+  const ACC_N = 8; let accK = 0, accA = null, accB = null;
+  const METRES = new Set(['fogTh', 'l0b', 'l0t', 'm1b', 'm1t', 'ha']); // valeurs interpolées en mètres
+  const accMat = new THREE.ShaderMaterial({ uniforms: { tA: { value: null }, tB: { value: null }, uW: { value: 1 } }, vertexShader: QV, fragmentShader: `uniform sampler2D tA,tB;uniform float uW;varying vec2 vUv;void main(){gl_FragColor=mix(texture2D(tA,vUv),texture2D(tB,vUv),uW);}` });
+  const halton = (b, i) => { let f = 1, r = 0; i += 1; while (i > 0) { f /= b; r += f * (i % b); i = Math.floor(i / b); } return r; };
+  let cloudRT = null, cloudRTHi = null, cloudHi = false, lastMoveAt = 0; // nuages: résolution réduite en mouvement, pleine une fois la vue posée
   const S = new THREE.Scene();
   const cam = new THREE.PerspectiveCamera(44, W / H, 1, 60000);
   if (import.meta.env.DEV) window.__scene3dCore = { R, S, cam, THREE, sky: { skyU, cloudU, cloudPassMat, rts: () => ({ cloudRT, cubeRT, sceneRT, envRT }) } }; // inspection en développement seulement
@@ -580,7 +586,7 @@ export function createScene3D(container, opts = {}) {
     reflRT = new THREE.WebGLRenderTarget(Math.max(2, Math.round(PW / 2)), Math.max(2, Math.round(PH / 2)), ob); reflRT2 = reflRT.clone(); // reflet des flaques, et passe de flou
     // Nuages: à la résolution des pixels CSS (moitié des pixels sur un écran Retina), les nuages sont doux; lus par la sphère du ciel.
     const cdiv = Math.max(1, DPR), CW = Math.max(2, Math.round(PW / cdiv)), CH = Math.max(2, Math.round(PH / cdiv));
-    if (cloudRT) cloudRT.dispose(); cloudRT = new THREE.WebGLRenderTarget(CW, CH, ob); if (cloudRTHi) cloudRTHi.dispose(); cloudRTHi = new THREE.WebGLRenderTarget(PW, PH, ob); cloudHi = false; hiDone = false; skyU.tCloud.value = cloudRT.texture; skyU.uRes.value.set(PW, PH); cloudPassMat.uniforms.uRes.value.set(CW, CH);
+    if (cloudRT) cloudRT.dispose(); cloudRT = new THREE.WebGLRenderTarget(CW, CH, ob); if (cloudRTHi) cloudRTHi.dispose(); cloudRTHi = new THREE.WebGLRenderTarget(PW, PH, ob); [accA, accB].forEach(r => r && r.dispose()); accA = new THREE.WebGLRenderTarget(PW, PH, ob); accB = new THREE.WebGLRenderTarget(PW, PH, ob); cloudHi = false; accK = 0; skyU.tCloud.value = cloudRT.texture; skyU.uRes.value.set(PW, PH); cloudPassMat.uniforms.uRes.value.set(CW, CH);
   }
   alloc();
   const qScene = new THREE.Scene(), qCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)); qScene.add(quad);
@@ -1251,9 +1257,9 @@ export function createScene3D(container, opts = {}) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     if (growing) { const gt = (now - growT0) / 1000; growU.uGrow.value = gt; growU.uReveal.value = 650 * (1 - Math.pow(1 - Math.min(1, gt / 1.1), 2)); treeGrowStep(gt); if (gt >= GROW_TOTAL) finishGrow(); dirty = true; }
     const a = 1 - Math.exp(-dt * 3.5); let moving = false;
-    ['cum', 'mid', 'high', 'iv', 'rain', 'wet', 'pud', 'fogK', 'fogTh', 'smk', 'storm', 'brk', 'l0b', 'l0t', 'l0c', 'l0k', 'l0w', 'l0s', 'l0d', 'm1b', 'm1t', 'm1c', 'm1k', 'hc', 'hk', 'ha', 'ht', 'shaft'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > 0.0005) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; });
+    ['cum', 'mid', 'high', 'iv', 'rain', 'wet', 'pud', 'fogK', 'fogTh', 'smk', 'storm', 'brk', 'l0b', 'l0t', 'l0c', 'l0k', 'l0w', 'l0s', 'l0d', 'm1b', 'm1t', 'm1c', 'm1k', 'hc', 'hk', 'ha', 'ht', 'shaft'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > (METRES.has(k) ? 0.5 : 0.0005)) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; }); // altitudes en mètres: seuil d'un demi-mètre (sinon la scène restait « en mouvement » 4 s et l'accumulation des nuages attendait)
     // Vue posée depuis 220 ms après un rendu en résolution réduite: une image de plus avec les nuages en pleine résolution.
-    if (!dirty && !moving && !hiDone && now - lastMoveAt > 220) { hiDone = true; cloudHi = true; dirty = true; }
+    if (!dirty && !moving && accK < ACC_N && now - lastMoveAt > 220) { cloudHi = true; dirty = true; } // une passe d'accumulation par image
     if (!dirty && !moving && now - envAt > 400) {
       // Rien d'autre ne bouge: sous la pluie, seules les gouttes avancent (composition et lissage refaits, pas la scène),
       // 30 fois par seconde au plus (environ 1,5 ms de calcul graphique chaque fois), et seulement si la 3D est à l'écran.
@@ -1261,7 +1267,7 @@ export function createScene3D(container, opts = {}) {
       return; // sinon rien à redessiner: on laisse le processeur tranquille
     }
     dirty = false;
-    if (!cloudHi) { lastMoveAt = now; hiDone = false; } // image en mouvement: nuages réduits, et on devra repasser en pleine résolution
+    if (!cloudHi) { lastMoveAt = now; accK = 0; } // image en mouvement: nuages réduits, et on devra repasser en pleine résolution
     const cum = cur.cum, mid = cur.mid, high = cur.high, iv = cur.iv, veil = Math.max(mid, high);
     const sp = SunCalc.getPosition(new Date(dateMs), lat, lng); const bearing = sp.azimuth + Math.PI; // azimut depuis le nord, sens horaire
     const realDeg = sp.altitude * 180 / Math.PI, el = Math.max(sp.altitude, 0.6 * Math.PI / 180), eld = el * 180 / Math.PI;
@@ -1352,7 +1358,7 @@ export function createScene3D(container, opts = {}) {
     const soft = twi * (1 - nightF); twL.intensity = 1.8 * soft; twL.color.copy(L(mixHex('#9fb0e0', '#e8bc92', glow * 0.5)));
     twL.target.position.copy(T0); twL.position.copy(T0).add(new THREE.Vector3(Math.sin(bearing) * Math.cos(0.17), Math.sin(0.17), -Math.cos(bearing) * Math.cos(0.17)).multiplyScalar(400));
     const sDir = new THREE.Vector3(Math.sin(bearing) * Math.cos(sp.altitude), Math.sin(sp.altitude), -Math.cos(bearing) * Math.cos(sp.altitude)); U.uSun.value.copy(sDir); const sc1 = rgb(sc0); U.uSunCol.value.set(sc1[0], sc1[1], sc1[2]);
-    const envNow = () => { const ug = U.uSunGap.value; U.uSunGap.value = 0; updateEnv(); U.uSunGap.value = ug; }; // la trouée autour du soleil ne compte pas dans la lumière d'ambiance (fait plus bas, après les nuages)
+    const envNow = () => { const ug = U.uSunGap.value, pa = cloudU.uPixAng.value; U.uSunGap.value = 0; cloudU.uPixAng.value = 2 / 64; updateEnv(); U.uSunGap.value = ug; cloudU.uPixAng.value = pa; }; // la trouée autour du soleil ne compte pas dans la lumière d'ambiance (fait plus bas, après les nuages)
     const key3 = [cumS, mid, high, iv, uW, dk, sDir.x, sDir.y, smk, cur.storm, cur.l0c, cur.l0k, cur.l0s, cur.m1c, cur.hc, cur.l0b, cur.l0t].map(v => v.toFixed(2)).join(',');
     const cgv = Math.max(0, new THREE.Vector3(vF.x, 0, vF.z).normalize().dot(sDir)), thick = 1 - iv;
     // Brouillard: couleur de l'horizon du même ciel physique dans la direction regardée (épaule comme dans le shader),
@@ -1376,7 +1382,9 @@ export function createScene3D(container, opts = {}) {
     cloudU.uSunL.value.fromArray(sL); cloudU.uSunM.value.fromArray(sM); cloudU.uSunH.value.fromArray(sH);
     // Ambiance: zénith et horizon du même ciel (en linéaire), puis heure bleue et nuit comme la sphère; sol: rebond de la lumière.
     const zp = preethamRadiance([0, 1, 0], sunV, turb, 1.5), zl = Math.max(LUM(zp), 1e-6); let zc = mv(zp.map(v => v / zl), [1, 1, 1], 0.35).map(v => v * zenTarget); const zlum = LUM(zc); zc = zc.map(v => v / (1 + 0.5 * zlum));
-    const hzc = hc0.map(v => v / 0.45);
+    // Horizon pour l'ambiance des nuages: moyenne sur les quatre points cardinaux (pas la direction de la caméra, sinon toute la
+    // base d'un stratus virait à l'orangé dès qu'on regardait vers le soleil couchant: Stéphane, 11 octobre 2026).
+    const hzc = [0, 1, 2, 3].map(k => { const a = k * Math.PI / 2, hp4 = preethamRadiance([Math.sin(a), 0.04, -Math.cos(a)], sunV, turb, 1.5), l4 = Math.max(LUM(hp4), 1e-6); let c4 = hp4.map(v => (v / l4 * 0.3 + 0.7) * zenTarget * 2.4); const ll = LUM(c4); return c4.map(v => v / (1 + 0.5 * ll)); }).reduce((acc, c) => acc.map((v, i) => v + c[i] / 4), [0, 0, 0]);
     let ambZ = mv(zc, mv(lin3([0.03, 0.07, 0.21]).map(v => v * 0.85), lin3([0.016, 0.03, 0.09]).map(v => v * 0.9), nightF), twi);
     let ambH = mv(hzc, mv(lin3([0.11, 0.24, 0.50]), lin3([0.045, 0.07, 0.16]), nightF), twi);
     // À l'heure bleue, la lumière reçue par les nuages vient de tout le ciel, lueur chaude de l'horizon comprise: ambiance
@@ -1386,6 +1394,24 @@ export function createScene3D(container, opts = {}) {
     // couvert (sous une base d'orage, le sol est sombre et n'éclaire plus les nuages).
     const cover = Math.max(cur.l0c, 0.8 * cur.m1c), gIrr = Idir * Math.max(Math.sin(sp.altitude), 0) * Math.max(tg.pSun, 0.15) * (1 - 0.8 * cur.storm) + Math.PI * LUM(ambZ) * 1.3 * (1 - 0.75 * cover * (0.4 + 0.6 * cur.l0d)), ambG = [GROUND_TINT.r, GROUND_TINT.g, GROUND_TINT.b].map(v => v * 0.9 * gIrr / Math.PI);
     cloudU.uAmbZ.value.fromArray(ambZ); cloudU.uAmbH.value.fromArray(ambH); cloudU.uAmbG.value.fromArray(ambG);
+    // Couleur du ciel clair au ras de l'horizon (élévation 0,03) de 0 à 180° du soleil, par les mêmes formules que la sphère du
+    // ciel (chromaticité de Preetham adoucie, luminance dessinée, heure bleue, nuit, fumée), sans le halo serré du soleil:
+    // couleur de la brume des nuages lointains, qui se fondent ainsi exactement dans l'horizon.
+    const sdA = [sDir.x, sDir.y, sDir.z], shn = Math.hypot(sdA[0], sdA[2]);
+    for (let k = 0; k < 9; k++) {
+      const Bk = bearing + k * Math.PI / 8, yy = 0.03, cxy = Math.sqrt(1 - yy * yy), dir = [Math.sin(Bk) * cxy, yy, -Math.cos(Bk) * cxy];
+      const pr = preethamRadiance(dir, sdA, turb, 1.5), lp = Math.max(LUM(pr), 1e-6), kc = 0.35 + 0.35 * Math.pow(1 - yy, 2);
+      const cg = Math.max(0, dir[0] * sdA[0] + dir[1] * sdA[1] + dir[2] * sdA[2]), Ls = zenTarget * (1 + 1.4 * Math.pow(1 - yy, 2.2)) * (1 + 0.6 * Math.pow(cg, 6));
+      let c = pr.map(v => (v / lp * (1 - kc) + kc) * Ls); const lc = LUM(c); c = c.map(v => Math.pow(Math.max(v / (1 + 0.5 * lc), 0), 1 / 2.2));
+      const tt = Math.pow(yy, 0.45), cgh = shn > 1e-4 ? Math.max(0, (dir[0] * sdA[0] + dir[2] * sdA[2]) / (cxy * shn)) : 0;
+      let bh = mv([0.11, 0.24, 0.50], [0.03, 0.07, 0.21], tt).map(v => v * (0.72 + 0.55 * cgh * (1 - 0.7 * tt)));
+      bh = mv(bh, [0.92, 0.52, 0.30], Math.pow(cgh, 3) * Math.pow(1 - Math.min(1, yy * 4), 2) * glow * 0.6);
+      const ni = mv([0.045, 0.07, 0.16], [0.016, 0.03, 0.09], tt).map(v => v * (0.8 + 0.3 * cgh * (1 - 0.7 * tt)));
+      c = mv(c, mv(bh, ni, nightF), twi);
+      if (smk > 0) { const l = LUM(c); c = mv(c, [1.12 * l, 0.9 * l, 0.66 * l], smk * 0.75).map(v => v * (1 - 0.2 * smk)); }
+      cloudU.uHz.value[k].set(Math.pow(c[0], 2.2), Math.pow(c[1], 2.2), Math.pow(c[2], 2.2));
+    }
+    cloudU.uPixAng.value = 2 * Math.tan(cam.fov * Math.PI / 360) / Math.max(1, PH); // pixel de l'image pleine résolution (même rendu en mouvement)
     const fogCov = fogSig > 0 ? 1 - Math.exp(-fogSig * fogThick) : 0, l0c = cam.position.y > fogTopW + 10 ? cur.l0c : Math.max(cur.l0c, fogCov);
     cloudU.uLay0.value.set(T0y + cur.l0b, T0y + cur.l0t, l0c, fogCov > cur.l0c && cam.position.y <= fogTopW + 10 ? Math.min(cur.l0k, 0.1) : cur.l0k);
     cloudU.uLay0b.value.set(cur.l0w, cur.l0s, 0, cur.l0d); cloudU.uLay1.value.set(T0y + cur.m1b, T0y + cur.m1t, cur.m1c, cur.m1k); cloudU.uHi.value.set(cur.hc, cur.hk, T0y + cur.ha, cur.ht);
@@ -1393,7 +1419,17 @@ export function createScene3D(container, opts = {}) {
     const drift = ((dateMs / 1000) % 1209600) * 5.5; cloudU.uOff.value.set(-drift * 0.93, 0, drift * 0.37); // 20 km/h; modulo 14 jours (6 650 km: précision de 0,5 m en flottants 32 bits), champ périodique de 28 560 km
     if (envNow && key3 !== envKey && now - envAt > 120) { envKey = key3; envAt = now; envNow(); }
     const CM = cloudPassMat.uniforms; CM.uProjInv.value.copy(cam.projectionMatrixInverse); CM.uV2W.value.setFromMatrix4(cam.matrixWorld);
-    const cRT = cloudHi ? cloudRTHi : cloudRT; CM.uRes.value.set(cRT.width, cRT.height); pass(cloudPassMat, cRT); skyU.tCloud.value = cRT.texture; skyU.uCloudPx.value.set(1 / cRT.width, 1 / cRT.height); const usedHi = cloudHi; cloudHi = false;
+    let usedHi = false;
+    if (cloudHi) {
+      const k = accK; CM.uQual.value = 1; CM.uJit.value = (k * 0.6180339887) % 1; CM.uSub.value.set((halton(2, k) - 0.5) / PW, (halton(3, k) - 0.5) / PH); CM.uRes.value.set(PW, PH);
+      pass(cloudPassMat, cloudRTHi);
+      const dst = k % 2 === 0 ? accA : accB, src = k % 2 === 0 ? accB : accA;
+      accMat.uniforms.tA.value = k === 0 ? cloudRTHi.texture : src.texture; accMat.uniforms.tB.value = cloudRTHi.texture; accMat.uniforms.uW.value = 1 / (k + 1); pass(accMat, dst);
+      skyU.tCloud.value = dst.texture; skyU.uCloudPx.value.set(1 / PW, 1 / PH); accK = k + 1; usedHi = accK >= ACC_N;
+    } else {
+      CM.uQual.value = 0.65; CM.uJit.value = 0; CM.uSub.value.set(0, 0); CM.uRes.value.set(cloudRT.width, cloudRT.height); // en mouvement: moins de pas (l'accumulation à l'arrêt reprend la pleine qualité) pass(cloudPassMat, cloudRT); skyU.tCloud.value = cloudRT.texture; skyU.uCloudPx.value.set(1 / cloudRT.width, 1 / cloudRT.height);
+    }
+    cloudHi = false;
     let vc = mv([0.88, 0.89, 0.90], [0.64, 0.66, 0.69], thick); vc = mv(vc, mv([0.62, 0.62, 0.66], [0.95, 0.72, 0.55], 0.6), uW * 0.5);
     // Sous les nuages, l'horizon prend la clarté de leur base, calculée comme dans sky.js (lumière transmise à travers
     // l'épaisseur: claire sous un stratus mince, très sombre sous un orage), avec un reste de brume; le voile d'altitude comme avant.
@@ -1454,7 +1490,7 @@ export function createScene3D(container, opts = {}) {
     // Reflet des flaques (beaucoup de pluie seulement): calculé ici (images complètes); les images de gouttes seules
     // réutilisent reflRT.
     const reflK = cur.pud > 0.01 ? 0.8 * cur.pud : 0;
-    if (reflK > 0) { if (!skyFresh || skyGap !== U.uSunGap.value) { skyCam.update(R, skyScene); skyFresh = true; skyGap = U.uSunGap.value; } // les flaques reflètent le ciel affiché, trouée comprise const RU = reflMat.uniforms; RU.tCol.value = sceneRT.texture; RU.tDepth.value = sceneRT.depthTexture; RU.uProj.value.copy(cam.projectionMatrix); RU.uProjInv.value.copy(cam.projectionMatrixInverse); RU.uUp.value.set(0, 1, 0).transformDirection(cam.matrixWorldInverse); RU.uV2W.value.setFromMatrix4(cam.matrixWorld); RU.uCamW.value.copy(cam.position); RU.uPud.value = cur.pud; RU.uTx.value.set(4 / PW, 4 / PH); pass(reflMat, reflRT2); // normale du sol mesurée sur 4 pixels: au loin, la profondeur arrondie la ferait hésiter d'une ligne à l'autre
+    if (reflK > 0) { if (!skyFresh || skyGap !== U.uSunGap.value) { const pa = cloudU.uPixAng.value; cloudU.uPixAng.value = 2 / 256; skyCam.update(R, skyScene); cloudU.uPixAng.value = pa; skyFresh = true; skyGap = U.uSunGap.value; } // les flaques reflètent le ciel affiché, trouée comprise const RU = reflMat.uniforms; RU.tCol.value = sceneRT.texture; RU.tDepth.value = sceneRT.depthTexture; RU.uProj.value.copy(cam.projectionMatrix); RU.uProjInv.value.copy(cam.projectionMatrixInverse); RU.uUp.value.set(0, 1, 0).transformDirection(cam.matrixWorldInverse); RU.uV2W.value.setFromMatrix4(cam.matrixWorld); RU.uCamW.value.copy(cam.position); RU.uPud.value = cur.pud; RU.uTx.value.set(4 / PW, 4 / PH); pass(reflMat, reflRT2); // normale du sol mesurée sur 4 pixels: au loin, la profondeur arrondie la ferait hésiter d'une ligne à l'autre
       rblurMat.uniforms.tSrc.value = reflRT2.texture; rblurMat.uniforms.uDir.value.set(0, 1.8 / reflRT.height); pass(rblurMat, reflRT); } // flou vertical d'environ ±7 lignes
     const CU = compMat.uniforms; CU.tRefl.value = reflRT.texture; CU.uRefl.value = reflK; CU.tDepth.value = sceneRT.depthTexture; CU.uSunUV.value.set(sunPx, sunPy); CU.uAspect.value = W / H; CU.uFlare.value = kFl * (0.35 + 0.65 * iv) * (1 - 0.85 * cum) * sunVis * treeSun * (1 - 0.5 * rainK) * Math.sqrt(smokeT) * (fogSig > 0 ? Math.exp(-fogSig * Math.max(0, fogTopW - cam.position.y) / Math.max(Math.sin(el), 0.05)) : 1); CU.uRays.value = iv * iv * (1 - 0.7 * veil); CU.uVeilW.value = 1 + 1.2 * high + 0.5 * mid; CU.uVis.value = visCPU;
     CU.uDs.value = smooth(1, -4, realDeg); CU.uFog.value.set(fog.near, fog.far); // bleu désaturé: heure bleue et nuit
@@ -1490,7 +1526,7 @@ export function createScene3D(container, opts = {}) {
     const sl = rgb(sc0).map(v => Math.pow(v, 2.2)); CU.uSunC.value.set(sl[0], sl[1], sl[2]);
     compMat.uniforms.tCol.value = sceneRT.texture; compMat.uniforms.tAO.value = aoRT.texture; compMat.uniforms.tBloom.value = bloomA.texture; pass(compMat, compRT);
     fxMat.uniforms.tDiffuse.value = compRT.texture; fxMat.uniforms.resolution.value.set(1 / PW, 1 / PH); pass(fxMat, null);
-    if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.dbg = { storm: cur.storm, brk: cur.brk, pSun: tg.pSun, camSun, subjSun, gap: gapS, uExp: compMat.uniforms.uExp.value, hidden: brkHide.size, cur: { ...cur }, tg: { ...tg }, names: cloudNames.slice() }; // vérification en développement
+    if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.dbg = { storm: cur.storm, brk: cur.brk, pSun: tg.pSun, camSun, subjSun, gap: gapS, uExp: compMat.uniforms.uExp.value, hidden: brkHide.size, cur: { ...cur }, tg: { ...tg }, names: cloudNames.slice(), accK, usedHi }; // vérification en développement
     if (import.meta.env.DEV && window.__scene3dCore && window.__scene3dCore.afterFrame) window.__scene3dCore.afterFrame(PW, PH, usedHi); // mesure en développement (usedHi: nuages en pleine résolution)
     // Légende: condition de lumière, parts de nuages, position du soleil
     const w = weatherRow || {}; const low = w.cloudLow ?? null, alt = Math.max(w.cloudMid ?? 0, w.cloudHigh ?? 0), sun = w.sunFraction != null ? Math.round(w.sunFraction * 100) : null;
@@ -1641,8 +1677,8 @@ export function createScene3D(container, opts = {}) {
     setSatellite(s) { sat = s || null; placeSat(); return !!satObj; },
     dispose() {
       running = false; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); window.removeEventListener('keydown', onKey, true); window.removeEventListener('keyup', onKeyUp, true); clearStatics(); clearTimeout(modelTimer); dropModel(); sat = null; placeSat();
-      [sceneRT, aoRT, aoRT2, compRT, reflRT, reflRT2, cubeRT, skyRT, envRT, cloudRT, cloudRTHi].forEach(r => r && r.dispose()); pmrem.dispose(); noiseTex.dispose();
-      [skyMat, skyMatIn, cloudPassMat, aoMat, blurMat, compMat, reflMat, rblurMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, shadowMat, conMat, fillMat, edgeMat, waterMat, cloudMat, lampHeadMat, ...Object.values(flatMats)].forEach(m => m.dispose()); GLOW.dispose(); if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
+      [sceneRT, aoRT, aoRT2, compRT, reflRT, reflRT2, cubeRT, skyRT, envRT, cloudRT, cloudRTHi, accA, accB].forEach(r => r && r.dispose()); pmrem.dispose(); noiseTex.dispose();
+      [skyMat, skyMatIn, cloudPassMat, accMat, aoMat, blurMat, compMat, reflMat, rblurMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, shadowMat, conMat, fillMat, edgeMat, waterMat, cloudMat, lampHeadMat, ...Object.values(flatMats)].forEach(m => m.dispose()); GLOW.dispose(); if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
       [skyGeo, crownGeo, crownGeoMid, crownGeoFar, crownGeoShadow, conGeo, conGeoLow, trunkGeo, trunkGeoLow, sg, gnd && gnd.geometry, gndFar.geometry, quad.geometry].forEach(g => g && g.dispose()); FT.map.dispose(); FT.rough.dispose(); FT.emis.dispose(); gndTex.dispose(); gndTexNear.dispose(); gndMat.dispose(); gndMatFar.dispose(); leafMask.dispose(); conMask.dispose(); edgeMask.dispose();
       R.dispose(); R.forceContextLoss(); if (el.parentNode) el.parentNode.removeChild(el);
     },

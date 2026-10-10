@@ -161,10 +161,11 @@ uniform vec3 uDir; uniform float uJit, uQual; void main(){ vec3 rd = normalize(u
   bench(n = 12) {
     const core = window.__scene3dCore, R = core.R, gl = R.getContext(), rts = core.sky.rts(), mat = core.sky.cloudPassMat;
     const sc = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1); sc.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat));
+    const q0 = mat.uniforms.uQual ? mat.uniforms.uQual.value : 1; if (mat.uniforms.uQual) mat.uniforms.uQual.value = 0.65; // passe en mouvement
     const prev = R.getRenderTarget(); R.setRenderTarget(rts.cloudRT); R.render(sc, cam);
     // Synchronisation: lire un pixel force la carte graphique à finir (gl.finish ne bloque pas toujours sans fenêtre).
     const px = new Uint16Array(4); R.readRenderTargetPixels(rts.cloudRT, 0, 0, 1, 1, px);
-    let t0 = performance.now(); for (let i = 0; i < n; i++) R.render(sc, cam); R.readRenderTargetPixels(rts.cloudRT, 0, 0, 1, 1, px); const cloudMs = (performance.now() - t0) / n; R.setRenderTarget(prev);
+    let t0 = performance.now(); for (let i = 0; i < n; i++) R.render(sc, cam); R.readRenderTargetPixels(rts.cloudRT, 0, 0, 1, 1, px); const cloudMs = (performance.now() - t0) / n; R.setRenderTarget(prev); if (mat.uniforms.uQual) mat.uniforms.uQual.value = q0;
     return new Promise((res) => { let k = 0; const t1 = performance.now(); const tick = () => { core.afterFrame = null; if (++k >= n) { res({ cloudMs: +cloudMs.toFixed(2), frameMs: +((performance.now() - t1) / n).toFixed(2), w: rts.cloudRT.width, h: rts.cloudRT.height }); return; } core.afterFrame = tick; e.setView({ az: e.getView().az + 0.0005 }); }; core.afterFrame = tick; e.setView({ az: e.getView().az + 0.0005 }); });
   },
   // Prévision réelle (Open-Meteo, ICON puis GFS) du lieu du banc: rangées horaires complètes, avec les trois heures précédentes.

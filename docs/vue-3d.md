@@ -796,6 +796,58 @@ importé, lui, est le fichier de l'architecte.
     rendu vérifié identique au pixel près aux captures d'avant.
   - **À suivre:** billows et bords déchiquetés de la nappe (demanderait une marche volumétrique avec profondeur, comme les
     nuages), nappe suivant les creux du relief plutôt qu'une altitude unique.
+- v633.191 (10 octobre 2026), **voile de cirrus sans carrelage, couches sans répétition** (captures de Stéphane à Delson le
+  11 octobre, « c'est moche, on dirait un gros cylindre avec une texture cheap. Il faut absolument éviter ce type de
+  répétition »; il demandait si des particules feraient mieux). Diagnostic sur les vraies rangées ICON de Delson (le banc les
+  rejoue: `delson_real.mjs`): nuages bas 0 %, nuages hauts 100 %, le « 100 % » de la bande horaire étant le total. Le ciel
+  était donc le voile de cirrostratus, dessiné avec les canaux de Worley (cellules de 350 m à 9 km d'altitude: le nid
+  d'abeilles de sa capture de 18 h 13, convergeant en rayons vers l'horizon par la perspective) et effacé au ras de
+  l'horizon au lieu de s'y fondre (bande de ciel clair sous le voile: le « cylindre »). Réponse sur les particules: non,
+  le défaut est la répétition du motif et la coupure, pas la technique; des sprites coûteraient plus cher et feraient des
+  boules sur un voile continu.
+  - **Cirrus réécrit** (`cirrus` dans sky.js): bruit Perlin-Worley (canal r, doux) avec déformation du domaine; cirrus =
+    bancs de fibres étirées; cirrostratus = voile laiteux presque uniforme (0,55 + 0,3 x variations douces à 7 et 2 km); au
+    ras de l'horizon le voile prend la couleur de la brume (85 % à l'horizon, fondu sur 12°) au lieu de disparaître.
+  - **Déformation du domaine** pour les couches basse et moyenne: déplacement lent (période 11 km et 9 km, amplitude 2,2 km
+    et 1,6 km, le détail à 260 et 200 m) appliqué à la couverture, à la forme et au détail: plus de carrelage possible, même
+    sous un stratus à 100 %. Les secondes lectures tournées (v633.188) deviennent inutiles et sont retirées: passe des
+    nuages à 11 ms (cumulus) et 14 ms (couvert) à 1 400 x 860 en Retina, contre 21 avec les deux.
+  - **Couche basse prolongée jusqu'à l'horizon:** quand la marche s'arrête avant la sortie de la couche (28 km ou plafond
+    d'itérations), le reste prend la couleur de l'horizon selon la couverture (plus de bande claire sous un stratus).
+  - **Ambiance de l'horizon moyennée** sur les quatre points cardinaux pour la lumière des nuages (elle suivait la direction de
+    la caméra: toute la base d'un couvert virait orangé dès qu'on regardait vers le soleil couchant).
+  - **Base des couches épaisses:** lumière transmise un peu plus forte (0,36 au lieu de 0,27) et moins bleue (irradiance du
+    ciel désaturée de 40 %: un stratus de 1 100 m au lever sortait bleu marine au lieu de gris).
+  - Deuxième retour (« trop look texture avec une fin très sèche comme les vieux 3D », 18 h 13 et 18 h 25). Mesuré au banc
+    (gros plans à l'échelle 1, sondes GLSL par couche et par élévation), quatre causes:
+    1. **Altitude plate dans la densité**: les couches sont trouvées sur des coquilles sphériques, mais la densité était
+       évaluée à l'altitude plate de la scène; vers 90 km un rayon à 3° se croyait 640 m sous la base d'une couche à 5 km:
+       la couche s'arrêtait net à élévation constante. `altC(p)` ajoute la chute de l'horizon (d² / 2R) partout où une
+       altitude sert (densité, colonne au-dessus, brume).
+    2. **Lumière réutilisée**: la profondeur optique vers le soleil n'était recalculée que tous les quatre pas; prise dans la
+       frange mince de la base (très éclairée par le soleil rasant), elle faisait sortir le coeur dense comme éclairé à
+       travers: bande blanche de 2,5° à bord net vers le soleil couchant (radiance 2 contre 0,1). Recalculée à chacun des
+       quatre premiers échantillons (là où la couleur se décide), puis tous les quatre.
+    3. **Grain**: au loin les cellules passent sous le pixel et chaque pixel tirait un échantillon au hasard (« sable »).
+       Niveau de détail par l'empreinte d'un pixel sur la couche (`uPixAng`, étirée au ras de l'horizon): la densité glisse
+       vers le champ moyen entre Lf / 40 et Lf / 6 d'empreinte; au-delà, banc moyen calculé de la même façon (`slab`), sans
+       tirage, jusqu'à la vraie sortie de la couche (400 km au plus); et, une fois la vue posée, **accumulation** de 8 passes
+       avec tramage et décalage sous-pixel différents (anticrénelage, environ 0,3 s, seulement à l'arrêt). Piège trouvé en
+       route: les altitudes interpolées (mètres) avaient le seuil 0,0005 des fractions: la scène restait « en mouvement »
+       4 s après chaque changement de météo et l'accumulation ne démarrait jamais; seuil d'un demi-mètre (`METRES`).
+    4. **Brume à seuil global**: remplacée par une brume par échantillon selon l'épaisseur d'air réellement traversée
+       (`hazeW`: échelle de hauteur 1,5 km, 16 km d'extinction au sol; un nuage au zénith n'est presque pas voilé, une couche
+       à 100 km au ras de l'horizon s'y fond), vers la couleur du ciel clair au ras de l'horizon dans la direction du rayon
+       (`uHz[9]`, de 0 à 180° du soleil, mêmes formules que la sphère du ciel sans le halo serré): la couche lointaine se
+       fond exactement dans l'horizon.
+    Autres: cirrostratus presque uniforme; altocumulus aux cellules de taille variable; le banc moyen ne remplit que
+    l'au-delà de la portée (rempli dans le trou d'une marche interrompue de près, un cumulus à 10 % couvrait 78 % du ciel);
+    tables de couverture du stratus et du stratocumulus recalibrées (`CM0`, `CM5`: 10, 50 et 90 % donnent 10, 50 et 90 %);
+    passe en mouvement à 0,65 de qualité (17,5 ms pour un couvert épais à 1 400 x 860 en Retina), l'accumulation reprend la
+    pleine qualité. Ce qu'on regarde au banc désormais: `--dpr 2`, gros plans à l'échelle 1, `--stats` sans valeur
+    aberrante, `H.coverage`, et les vraies rangées ICON du lieu de la capture.
+  - Contrôle: les 28 scénarios de référence (sans valeur aberrante), la vraie journée de Delson (6 h 55, 7 h 22, 13 h,
+    18 h 13, 18 h 25), la couverture des trois types et le coût.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

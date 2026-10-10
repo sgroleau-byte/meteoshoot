@@ -70,6 +70,9 @@ export const CLOUD_GLSL = `
 uniform sampler3D tNoise, tDetail;
 uniform vec3 uSun, uSunL, uSunM, uSunH, uAmbZ, uAmbH, uAmbG, uOff, uCamW;
 uniform vec4 uLay0, uLay0b, uLay1, uHi;
+uniform vec3 uHz[9]; /* couleur du ciel clair au ras de l'horizon, de 0 à 180° du soleil par pas de 22,5° (linéaire) */
+uniform float uPixAng; /* taille angulaire d'un pixel (rad), pour le niveau de détail */
+float gLod = 0.0; /* niveau de détail du bruit pour l'échantillon courant (0: plein détail, 1: champ moyen) */
 uniform float uGround, uSunGap, uGapR, uSteps, uShaft;
 const float PR = 6371000.0;
 const float PI = 3.14159265;
@@ -84,6 +87,26 @@ vec4 tex3(sampler3D s, vec3 p, float n) { vec3 u = p * n - 0.5; vec3 i = floor(u
    l'un par rapport à l'autre ne se répètent plus ensemble (le carrelage du motif disparaît). */
 vec3 rotY(vec3 v, float c, float s) { return vec3(c * v.x - s * v.z, v.y, s * v.x + c * v.z); }
 vec2 rot2(vec2 v, float c, float s) { return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }
+/* Altitude d'un point de la scène au-dessus de la Terre ronde (centrée sous la caméra): la hauteur « plate » plus la chute de
+   l'horizon, d²/2R. Les couches sont trouvées sur des coquilles sphériques (seg); sans ce terme, la densité était évaluée à
+   l'altitude plate et, vers 90 km, un rayon à 3° se croyait 640 m sous la base d'une couche à 5 km: la couche s'arrêtait net à
+   élévation constante (« fin très sèche comme les vieux 3D », Stéphane, 11 octobre 2026). */
+float altC(vec3 p) { vec2 d = p.xz - uCamW.xz; return p.y + dot(d, d) * (0.5 / PR); }
+/* Couleur du ciel clair au ras de l'horizon dans la direction rd (interpolée selon l'angle au soleil) */
+vec3 hzCol(vec3 rd) {
+  float la = length(rd.xz), lb = length(uSun.xz);
+  float c = (la > 1e-4 && lb > 1e-4) ? dot(rd.xz, uSun.xz) / (la * lb) : 0.0;
+  float x = acos(clamp(c, -1.0, 1.0)) / 0.39269908; int k = int(min(floor(x), 7.0));
+  return mix(uHz[k], uHz[k + 1], clamp(x - float(k), 0.0, 1.0));
+}
+/* Part de brume entre la caméra et un point à la distance t: épaisseur optique de l'air traversé, dense près du sol (échelle
+   de hauteur 1,5 km, 16 km d'extinction au sol). Un nuage au zénith à 5 km n'est presque pas voilé; une couche vue au ras de
+   l'horizon, à 100 km, se fond dans la couleur de l'horizon: continûment, sans bord. */
+float hazeW(vec3 ro, float altP, float t) {
+  float a = max(altC(ro) - uGround, 0.0) / 1500.0, b = max(altP - uGround, 0.0) / 1500.0;
+  float m = abs(b - a) < 1e-3 ? exp(-a) : (exp(-a) - exp(-b)) / (b - a);
+  return 1.0 - exp(-t * m / 16000.0);
+}
 /* Coquille sphérique à l'altitude hAlt au-dessus du sol (Terre de rayon PR centrée sous la caméra): racines (entrée, sortie) */
 vec2 shell(vec3 ro, vec3 rd, float hAlt) {
   /* |oc|^2 - r^2 sous forme factorisée (sinon différence de deux carrés de 6 371 km: perte totale de précision en 32 bits)
@@ -107,8 +130,8 @@ vec2 seg(vec3 ro, vec3 rd, float hb, float ht) {
    couverte par la couche est une sigmoïde très raide du paramètre brut (cumulus: 11 % à 0,40, 54 % à 0,50, 87 % à 0,60);
    ces tables (13 noeuds: 0, 0,1 ... 0,9, 0,95, 0,98, 1) l'inversent pour que 40 % de nuages couvrent bien 40 % du ciel. */
 const float CM1[13] = float[13](0.33, 0.40, 0.425, 0.447, 0.468, 0.49, 0.514, 0.54, 0.572, 0.617, 0.66, 0.75, 1.0);
-const float CM5[13] = float[13](0.27, 0.325, 0.352, 0.373, 0.393, 0.413, 0.435, 0.46, 0.49, 0.53, 0.575, 0.65, 1.0);
-const float CM0[13] = float[13](0.22, 0.263, 0.287, 0.306, 0.324, 0.343, 0.363, 0.386, 0.415, 0.462, 0.51, 0.6, 1.0);
+const float CM5[13] = float[13](0.27, 0.33, 0.353, 0.369, 0.384, 0.398, 0.412, 0.427, 0.446, 0.473, 0.498, 0.547, 1.0); /* recalibrée le 10 octobre 2026 (érosion du stratus réduite) */
+const float CM0[13] = float[13](0.22, 0.237, 0.254, 0.269, 0.282, 0.295, 0.31, 0.327, 0.351, 0.389, 0.43, 0.502, 1.0);
 float covKnot(int i, float typ) { float a = CM0[i], b = CM5[i], c = CM1[i]; return typ < 0.5 ? mix(a, b, typ * 2.0) : mix(b, c, typ * 2.0 - 1.0); }
 float covMap(float c, float typ) {
   c = clamp(c, 0.0, 1.0);
@@ -129,18 +152,21 @@ float covField(vec2 xz, float cov, float full) {
    detail > 0,5: érosion fine. covK: facteur de couverture du rayon (trouée autour du soleil). hh: hauteur relative (sortie). */
 float dLow(vec3 p, float detail, float covK, out float hh) {
   float base = uLay0.x, top = uLay0.y, cov = clamp(uLay0.z * covK, 0.0, 1.0), typ = uLay0.w, tower = uLay0b.x, cb = uLay0b.y;
+  p.y = altC(p);
   float h = (p.y - base) / max(top - base, 1.0); hh = h;
   if (h <= 0.0 || h >= 1.0 || cov <= 0.002) return 0.0;
   vec3 q = p + uOff;
+  /* Déformation du domaine: les textures de bruit sont périodiques (600 m, 4,5 km) et, vues en perspective sous un stratus,
+     leurs cases faisaient un carrelage qui convergeait en rayons vers l'horizon (« gros cylindre avec une texture cheap »,
+     Stéphane, 11 octobre 2026). Un déplacement lent (période 11 km, amplitude 2,2 km) tord le réseau: plus de motif régulier. */
+  vec3 w = tex3(tNoise, vec3(q.x, q.y * 0.3, q.z) / 11000.0 + vec3(0.31, 0.57, 0.13), 128.0).rgb - vec3(0.5, 0.35, 0.3);
+  vec2 qw = q.xz + w.xy * 2200.0;
   float anvW = cb * smoothstep(0.7, 0.9, h);
-  float covL = covField(q.xz, cov, detail) + anvW * 0.45;
+  float covL = covField(qw, cov, detail) + anvW * 0.45;
   if (covL <= 0.002) return 0.0;
   float sy = mix(1.0, 0.4, tower), sxz = mix(1.0, 0.45, anvW);
-  vec3 qs = vec3(q.x * sxz, (p.y - base) * sy + 1234.0, q.z * sxz);
-  /* pas grossiers et lumière (detail = 0): une seule lecture; phase fine: seconde lecture tournée contre la répétition */
-  vec4 n = tex3(tNoise, qs / 4500.0, 128.0);
-  if (detail > 0.5) n = mix(n, tex3(tNoise, rotY(qs * vec3(1.0, 0.8, 1.0) + vec3(0.0, 311.0, 0.0), 0.7986, 0.6018) / 6900.0, 128.0), 0.4);
-  n.r = clamp((n.r - 0.5) * 1.25 + 0.5, 0.0, 1.0); /* contraste rendu après le mélange des deux lectures */
+  vec3 qs = vec3(qw.x * sxz, (p.y - base) * sy + 1234.0, qw.y * sxz);
+  vec4 n = tex3(tNoise, qs / 4500.0, 128.0); /* une seule lecture: la déformation du domaine suffit contre la répétition */
   float fb = n.g * 0.625 + n.b * 0.25 + n.a * 0.125;
   float shape = rmp(n.r, -(1.0 - fb), 1.0);
   shape = mix(0.92, shape, mix(0.45, 1.0, typ)); /* stratiforme: champ presque uniforme */
@@ -148,11 +174,16 @@ float dLow(vec3 p, float detail, float covK, out float hh) {
   if (cb > 0.001) grad = max(grad, smoothstep(0.7, 0.88, h) * (1.0 - smoothstep(0.95, 1.0, h)) * cb);
   float covP = covMap(covL, typ);
   float d = rmp(shape * grad, 1.0 - covP, 1.0) * covP;
-  if (detail > 0.5 && d > 0.0 && d < 0.92) {
-    vec3 dn = mix(tex3(tDetail, (q + vec3(0.0, 777.0, 0.0)) / 600.0, 64.0).rgb, tex3(tDetail, rotY(q, 0.5, 0.866) / 437.0 + 0.3, 64.0).rgb, 0.4);
+  /* Niveau de détail: au loin et au ras de l'horizon, les cellules deviennent plus petites qu'un pixel et chaque pixel tirait
+     un échantillon au hasard (du grain, du « sable »). Elles se fondent alors dans leur densité moyenne: une couche lointaine
+     devient un banc continu, comme à l'oeil. */
+  d = mix(d, covL * grad * 0.5, gLod);
+  if (detail > 0.5 && gLod < 0.95 && d > 0.0 && d < 0.92) {
+    vec3 qd = vec3(q.x + w.x * 260.0, q.y, q.z + w.y * 260.0); /* le détail suit la même déformation, à son échelle */
+    vec3 dn = tex3(tDetail, (qd + vec3(0.0, 777.0, 0.0)) / 600.0, 64.0).rgb;
     float hf = dn.r * 0.625 + dn.g * 0.25 + dn.b * 0.125;
     float hfm = mix(hf, 1.0 - hf, clamp(h * 10.0, 0.0, 1.0));
-    d = rmp(d, hfm * 0.6 * detail * mix(0.25, 1.0, typ) * mix(0.3, 1.0, smoothstep(0.04, 0.35, h)), 1.0); /* base plate et dense, sommet bourgeonnant; stratus peu érodé; detail: poids continu selon la distance */
+    d = rmp(d, hfm * 0.6 * detail * (1.0 - gLod) * mix(0.25, 1.0, typ) * mix(0.3, 1.0, smoothstep(0.04, 0.35, h)), 1.0); /* base plate et dense, sommet bourgeonnant; stratus peu érodé; detail: poids continu selon la distance */
   }
   /* Densité pleine dès 45 % de la plage: le bord d'un cumulus passe du vide au plein en quelques dizaines de mètres (contour net,
      chou-fleur), un stratus garde sa transition douce. */
@@ -161,26 +192,30 @@ float dLow(vec3 p, float detail, float covK, out float hh) {
 /* Couche moyenne. type: 0 altostratus (voile épais uniforme), 1 altocumulus (petits pelotons en nappe) */
 float dMid(vec3 p, float detail, out float hh) {
   float base = uLay1.x, top = uLay1.y, cov = uLay1.z, typ = uLay1.w;
+  p.y = altC(p);
   float h = (p.y - base) / max(top - base, 1.0); hh = h;
   if (h <= 0.0 || h >= 1.0 || cov <= 0.002) return 0.0;
   vec3 q = p + uOff * 0.6 + vec3(3100.0, 0.0, -2700.0);
-  float covL = covField(q.xz * 1.3, cov, detail);
+  vec3 w = tex3(tNoise, vec3(q.x, q.y * 0.3, q.z) / 9000.0 + vec3(0.71, 0.23, 0.47), 128.0).rgb - vec3(0.5, 0.35, 0.3);
+  q.xz += w.xy * 1600.0; /* déformation du domaine, comme la couche basse */
+  /* Altocumulus: cellules de taille variable (0,7 à 1,3 fois) et bancs plus ou moins fournis par régions, sinon un motif
+     uniforme qui lisait comme une texture plaquée (Stéphane, 11 octobre 2026). */
+  float covL = covField(q.xz * 1.3, cov, detail) * mix(1.0, 0.55 + 0.55 * smoothstep(-0.3, 0.3, w.z + 0.3), typ);
   if (covL <= 0.002) return 0.0;
-  float L = mix(6000.0, 2600.0, typ);
+  float L = mix(6000.0, 2600.0, typ) * (0.7 + 0.6 * (w.x + 0.5));
   vec3 qs = vec3(q.x * 1.4, (p.y - base) * 1.5 + 321.0, q.z);
   vec4 n = tex3(tNoise, qs / L, 128.0);
-  if (detail > 0.5) n = mix(n, tex3(tNoise, rotY(qs + vec3(0.0, 97.0, 0.0), 0.8988, 0.4384) / (L * 1.53), 128.0), 0.4);
-  n.r = clamp((n.r - 0.5) * 1.25 + 0.5, 0.0, 1.0);
   float fb = n.g * 0.625 + n.b * 0.25 + n.a * 0.125;
   float shape = rmp(n.r, -(1.0 - fb), 1.0);
   shape = mix(0.9, shape, mix(0.3, 1.0, typ));
   float grad = smoothstep(0.0, 0.15, h) * (1.0 - smoothstep(0.5, 1.0, h));
   float covP = covMap(covL, typ);
   float d = rmp(shape * grad, 1.0 - covP, 1.0) * covP;
-  if (detail > 0.5 && d > 0.0 && d < 0.92) {
-    vec3 dn = mix(tex3(tDetail, (q + vec3(0.0, 555.0, 0.0)) / 500.0, 64.0).rgb, tex3(tDetail, rotY(q, 0.5, 0.866) / 371.0 + 0.6, 64.0).rgb, 0.4);
+  d = mix(d, covL * grad * 0.5, gLod); /* niveau de détail, comme la couche basse */
+  if (detail > 0.5 && gLod < 0.95 && d > 0.0 && d < 0.92) {
+    vec3 dn = tex3(tDetail, (q + vec3(w.x * 200.0, 555.0, w.y * 200.0)) / 500.0, 64.0).rgb;
     float hf = dn.r * 0.625 + dn.g * 0.25 + dn.b * 0.125;
-    d = rmp(d, mix(hf, 1.0 - hf, clamp(h * 6.0, 0.0, 1.0)) * 0.3 * detail * typ, 1.0);
+    d = rmp(d, mix(hf, 1.0 - hf, clamp(h * 6.0, 0.0, 1.0)) * 0.3 * detail * (1.0 - gLod) * typ, 1.0);
   }
   return d;
 }
@@ -201,49 +236,83 @@ vec3 scat(vec3 p, vec3 rd, float h, float dloc, vec3 sd, vec3 sunRad, float sig,
   sun *= mix(1.0, powder, 0.2) * 1.6;
   float tauD = min(tauUp, tauSun) * sig;
   float trans = 1.0 / (1.0 + 0.22 * tauD);
-  vec3 skyIrr = (uAmbZ * 0.65 + uAmbH * 0.35) * PI;
-  vec3 diff = (sunRad * max(sd.y, 0.0) + skyIrr) / PI * 0.27 * trans;
+  vec3 skyI = uAmbZ * 0.65 + uAmbH * 0.35; vec3 skyIrr = mix(skyI, vec3(dot(skyI, vec3(0.2126, 0.7152, 0.0722))), 0.4) * PI; /* tout l'hémisphère éclaire le dessus: moins bleu que le zénith (une base de stratus au lever sortait bleu marine) */
+  vec3 diff = (sunRad * max(sd.y, 0.0) + skyIrr) / PI * 0.36 * trans;
   vec3 amb = uAmbG * (1.0 - h) * 0.35 * trans;
   vec3 L = (sunRad * sun + diff + amb) * (0.85 + 0.3 * (1.0 - dloc)); /* parties moins denses un peu plus claires: texture de la base */
   return L * mix(vec3(1.0), vec3(0.78, 0.84, 0.95), dark * (1.0 - trans));
 }
 /* Marche dans une couche: col/T accumulés (de l'avant vers l'arrière). layer 0: basse, 1: moyenne. */
+/* Banc moyen (lointain): la couche entre t0 et t1 vue comme un milieu continu, sans tirage au hasard. Densité moyenne du
+   champ de couverture à mi-hauteur, opacité par la longueur traversée, couleur calculée au point d'épaisseur optique 1, voilée
+   par la brume de sa distance. Fonction lisse de la direction: pas de grain, et se raccorde à la marche quand les cellules
+   deviennent plus petites qu'un pixel. */
+void slab(vec3 ro, vec3 rd, int layer, float t0, float t1, vec4 lay, float sig, float thick, float covK, vec3 sunRad, float dark, vec3 hz, inout vec3 col, inout float T) {
+  if (t1 <= t0 || T < 0.015) return;
+  gLod = 1.0; float hh0;
+  vec3 pm = ro + rd * t0; pm.y += lay.x + 0.35 * thick - altC(pm);
+  float dm = layer == 0 ? dLow(pm, 0.0, covK, hh0) : dMid(pm, 0.0, hh0);
+  if (dm <= 0.002) return;
+  float ext = sig * dm * 0.7, A = 1.0 - exp(-(t1 - t0) * ext);
+  float te = min(t0 + 1.0 / ext, t1);
+  vec3 pe = ro + rd * te; float ae = clamp(altC(pe), lay.x + 0.08 * thick, lay.y - 0.08 * thick); pe.y += ae - altC(pe);
+  /* mêmes paramètres que la marche au niveau de détail 1 (densité moyenne, colonne au-dessus comme dans la marche): les deux se
+     raccordent sans bord */
+  float dMeanS = sig * mix(0.85, 0.8, lay.w) * (0.5 + 0.5 * lay.z);
+  vec3 S = scat(pe, rd, (ae - lay.x) / thick, dm, uSun, sunRad, sig, tauTo(pe, uSun, thick, covK, layer, 0.5), (lay.y - ae) * dMeanS / sig, lay.z, dark);
+  col += T * mix(S, hz, hazeW(ro, ae, te)) * A; T *= 1.0 - A;
+}
 void marchLayer(vec3 ro, vec3 rd, int layer, float jit, float covK, float quality, inout vec3 col, inout float T, inout float tFirst) {
   vec4 lay = layer == 0 ? uLay0 : uLay1; if (lay.z <= 0.002) return;
   float hb = lay.x - uGround, ht = lay.y - uGround, thick = lay.y - lay.x;
-  vec2 s = seg(ro, rd, hb, ht); float maxT = layer == 0 ? 28000.0 : 60000.0;
-  s.y = min(s.y, maxT); if (s.y <= s.x) return;
+  vec2 s = seg(ro, rd, hb, ht); if (s.y <= s.x) return;
   vec3 sunRad = layer == 0 ? uSunL : uSunM;
   float typ = lay.w, sig = layer == 0 ? mix(0.03, 0.07, typ) : mix(0.015, 0.03, typ);
-  float dMean = sig * mix(0.85, 0.8, typ) * (0.5 + 0.5 * lay.z);
+  float dMean = sig * mix(0.85, 0.8, typ) * (0.5 + 0.5 * lay.z), dark = layer == 0 ? uLay0b.w : 0.0;
+  float Lf = layer == 0 ? 4500.0 : mix(6000.0, 2600.0, typ), ady = max(abs(rd.y), 0.02);
+  vec3 hz = hzCol(rd);
+  /* Partie marchée: jusqu'à la distance où le niveau de détail atteint 1 (empreinte d'un pixel = Lf / 6: la marche y est déjà
+     passée progressivement au champ moyen), au plus 28 km (basse) ou 90 km (moyenne); le reste, jusqu'à la vraie sortie de la
+     couche (400 km au plus au ras de l'horizon), en banc moyen calculé de la même façon: aucun raccord visible. */
+  float sEnd = min(s.y, 400000.0), tLod = (Lf / 6.0) * ady / max(uPixAng, 1e-5);
+  s.y = min(s.y, min(layer == 0 ? 28000.0 : 90000.0, tLod));
+  if (s.y <= s.x) { slab(ro, rd, layer, s.x, sEnd, lay, sig, thick, covK, sunRad, dark, hz, col, T); return; }
+  float sCap = s.y; /* fin de la portée de la marche: le banc moyen ne couvre que ce qui est au-delà */
   float nSteps = (layer == 0 ? 56.0 : 36.0) * quality;
   /* Pas: au plus un tiers de l'épaisseur de la couche (rayons rasants: la structure verticale reste échantillonnée),
-     croissance lente avec la distance; au-delà du nombre d'itérations, le lointain reste dans la brume. */
+     croissance lente avec la distance. */
   float len = s.y - s.x, dt0 = clamp(len / nSteps, layer == 0 ? 18.0 : 40.0, min(layer == 0 ? 140.0 : 400.0, 0.33 * thick));
   /* Marche à deux niveaux: pas grossiers sans détail dans le vide; au premier impact on recule d'un pas et on avance au
      quart du pas avec le détail. Un pas grossier a une épaisseur optique bien supérieure à 1: la couleur d'un pixel est
      décidée par son premier échantillon plein; si tous les pixels échantillonnent les mêmes altitudes, la base ondulée
      est quantifiée en terrasses, vues de côté comme des lignes horizontales. Le pas fin ramène les terrasses à quelques
      mètres et le tramage par pixel fait le reste. */
-  float t = s.x + dt0 * jit, hh, dtPrev = 0.0, tauSun = 0.0; int empty = 0, fine = 0, lit = 0;
+  float t = s.x + dt0 * jit, hh, dtPrev = 0.0, tauSun = 0.0; int empty = 0, fine = 0, lit = 0, hits = 0;
   for (int i = 0; i < 128; i++) {
-    if (float(i) >= nSteps * 2.3 || t > s.y || T < 0.015) break;
+    if (float(i) >= nSteps * (layer == 0 ? 2.3 : 3.4) || t > s.y || T < 0.015) break;
     float dtC = dt0 * (1.0 + t / 11000.0), dt = fine > 0 ? dtC * 0.25 : dtC;
-    vec3 p = ro + rd * t; float det = fine > 0 ? 1.0 - 0.9 * smoothstep(8000.0, 18000.0, t) : 0.0; /* érosion fine surtout de près (au loin elle fait du grain), poids continu */
+    vec3 p = ro + rd * t; float det = fine > 0 ? 1.0 - 0.9 * smoothstep(8000.0, 18000.0, t) : 0.0; /* érosion fine surtout de près */
+    gLod = smoothstep(Lf / 40.0, Lf / 6.0, uPixAng * t / ady); /* empreinte d'un pixel sur la couche, étirée au ras de l'horizon */
     float d = layer == 0 ? dLow(p, det, covK, hh) : dMid(p, det, hh);
     if (d > 0.002 && fine == 0) { t = max(s.x, t - dtPrev); fine = 16; empty = 0; lit = 0; dtPrev = 0.0; continue; } /* premier impact: recul d'un pas, phase fine */
     if (d > 0.002) {
       if (tFirst < 0.0) tFirst = t;
-      if (lit <= 0) { tauSun = tauTo(p, uSun, thick, covK, layer, jit); lit = 4; } /* lumière vers le soleil recalculée tous les quatre pas fins */
-      lit--;
-      float tauUp = (lay.y - p.y) * dMean / sig;
-      vec3 S = scat(p, rd, hh, d, uSun, sunRad, sig, tauSun, tauUp, lay.z, layer == 0 ? uLay0b.w : 0.0);
+      /* Lumière vers le soleil recalculée à chacun des quatre premiers échantillons (c'est là que la couleur du pixel se décide),
+         puis tous les quatre: réutilisée depuis la frange mince de la base, très éclairée par le soleil rasant, elle faisait
+         sortir le coeur dense comme éclairé à travers (bande blanche à bord net au coucher, vers le soleil). */
+      if (hits < 4 || lit <= 0) { tauSun = tauTo(p, uSun, thick, covK, layer, jit); lit = 4; }
+      lit--; hits++;
+      float ap = altC(p), tauUp = (lay.y - ap) * dMean / sig;
+      vec3 S = scat(p, rd, hh, d, uSun, sunRad, sig, tauSun, tauUp, lay.z, dark);
       float ext = exp(-max(d, 0.0) * sig * max(dt, 0.0));
-      col += T * S * (1.0 - ext); T *= ext; empty = 0;
+      col += T * mix(S, hz, hazeW(ro, ap, t)) * (1.0 - ext); T *= ext; empty = 0;
     } else { empty++; }
     if (fine > 0) { fine--; if (empty > 3) fine = 0; }
     dtPrev = dt * (fine == 0 && empty > 2 ? 1.6 : 1.0); t += dtPrev;
   }
+  /* Le reste de la couche au-delà de la portée, en banc moyen. Jamais le trou laissé par une marche interrompue de près
+     (plafond d'itérations dans des cumulus épars): rempli au champ moyen, un cumulus à 10 % couvrait 78 % du ciel. */
+  slab(ro, rd, layer, sCap, sEnd, lay, sig, thick, covK, sunRad, dark, hz, col, T);
 }
 /* Rideaux de pluie sous la base (averses, orage): voile gris sous les régions les plus couvertes */
 void marchShaft(vec3 ro, vec3 rd, float jit, inout vec3 col, inout float T) {
@@ -257,24 +326,32 @@ void marchShaft(vec3 ro, vec3 rd, float jit, inout vec3 col, inout float T) {
     float ext = exp(-d * 0.00035 * dt); col += T * grey * (1.0 - ext); T *= ext; t += dt;
   }
 }
-/* Nuages hauts (cirrus, cirrostratus): voile fibreux à l'altitude uHi.z */
+/* Nuages hauts (cirrus, cirrostratus): voile à l'altitude uHi.z. Cirrus (couverture faible): bancs de fibres étirées;
+   cirrostratus (couverture forte): voile laiteux presque uniforme, variations douces à grande échelle seulement. Bruit
+   Perlin-Worley (canal r, doux) avec déformation du domaine: une version aux cellules de Worley (canaux g et b) faisait un
+   nid d'abeilles de cases de 350 m sur tout le ciel, convergeant en rayons vers l'horizon (Stéphane, 11 octobre 2026:
+   « gros cylindre avec une texture cheap »). Vers l'horizon, le voile se fond dans la brume au lieu de s'effacer (sinon une
+   bande de ciel clair restait sous le voile). */
 void cirrus(vec3 ro, vec3 rd, inout vec3 col, inout float T) {
   float cov = uHi.x, typ = uHi.y; if (cov <= 0.002 || T < 0.01) return;
-  vec2 s = shell(ro, rd, uHi.z); float t = s.y; if (t <= 0.0 || rd.y < -0.02) return;
+  vec2 s = shell(ro, rd, uHi.z); float t = s.y; if (t <= 0.0 || rd.y < -0.06) return;
   vec3 p = ro + rd * t + uOff; vec2 pv = p.xz * (1.0 / 14000.0);
-  /* bancs de cirrus (grande échelle, trous de ciel bleu entre eux) puis filaments étirés dans une direction */
-  float n1 = mix(tex3(tNoise, vec3(pv * 0.5 + 0.2, 0.11), 128.0).r, tex3(tNoise, vec3(rot2(pv, 0.9063, 0.4226) * 0.31 + 0.7, 0.19), 128.0).r, 0.4);
+  vec3 w = tex3(tNoise, vec3(pv * 0.35 + 0.17, 0.61), 128.0).rgb - vec3(0.5, 0.35, 0.3); pv += w.xy * 0.9;
+  float n1 = tex3(tNoise, vec3(pv * 0.5 + 0.2, 0.11), 128.0).r;
   float region = smoothstep(0.64 - 0.56 * cov, 0.8 - 0.45 * cov, n1);
   vec2 pr = vec2(pv.x * 0.35 + pv.y * 0.25, pv.y * 1.9 - pv.x * 0.5);
-  float n2 = tex3(tNoise, vec3(pr * 1.7 + 0.3, 0.53), 128.0).g, n3 = tex3(tNoise, vec3(pr * 5.0 + 0.6, 0.83), 128.0).b;
-  float fib = mix(tex3(tNoise, vec3(pr.x * 14.0, pr.y * 1.2, 0.29), 128.0).a, tex3(tNoise, vec3(pr.x * 9.3 + 0.4, pr.y * 0.8 + 0.2, 0.47), 128.0).a, 0.45); /* fibres étirées, deux échelles */
-  float wisp = smoothstep(0.3, 0.8, n2 * 0.55 + n3 * 0.15 + fib * 0.45);
-  float cs = dot(rd, uSun);
-  float aCir = region * wisp * 0.6, aStr = (0.3 + 0.45 * smoothstep(0.3, 0.7, n2 * 0.7 + n3 * 0.3)) * mix(region, 1.0, 0.5);
+  float n2 = tex3(tNoise, vec3(pr * 1.7 + 0.3, 0.53), 128.0).r;
+  float fib = mix(tex3(tNoise, vec3(pr.x * 14.0, pr.y * 1.2, 0.29), 128.0).r, tex3(tNoise, vec3(pr.x * 9.3 + 0.4, pr.y * 0.8 + 0.2, 0.47), 128.0).r, 0.45);
+  float wisp = smoothstep(0.38, 0.8, n2 * 0.5 + fib * 0.5);
+  float aCir = region * wisp * 0.6;
+  float aStr = 0.66 + 0.12 * smoothstep(0.3, 0.7, n1 * 0.6 + n2 * 0.4); /* cirrostratus: presque uniforme (un motif plus marqué faisait « texture plaquée ») */
   float a = mix(aCir, aStr, 1.0 - typ) * uHi.w;
-  a *= smoothstep(-0.02, 0.08, rd.y); /* fondu au ras de l'horizon */
   if (a <= 0.002) return;
+  /* Perspective atmosphérique: même brume que les couches (épaisseur d'air réellement traversée), couleur du ciel à l'horizon
+     dans cette direction: le voile se fond dans l'horizon sans fin nette (« fin très sèche comme les vieux 3D »). */
+  float cs = dot(rd, uSun);
   vec3 L = uSunH * (0.03 + 0.25 * hg(cs, 0.7) + 0.04 * hg(cs, -0.3)) * 2.0 + (uAmbZ * 0.8 + uAmbH * 0.2) * 0.9;
+  L = mix(L, hzCol(rd), hazeW(ro, uHi.z, t));
   col += T * L * a; T *= 1.0 - a;
 }
 /* Tous les nuages pour un rayon: radiance prémultipliée et transmittance */
@@ -287,18 +364,17 @@ vec4 clouds(vec3 ro, vec3 rd, float jit, float quality) {
   marchLayer(ro, rd, 0, jit, covK, quality, col, T, tFirst);
   marchLayer(ro, rd, 1, jit, 1.0, quality, col, T, tFirst);
   cirrus(ro, rd, col, T);
-  /* perspective atmosphérique: les nuages lointains se fondent dans la brume de l'horizon */
-  if (tFirst > 0.0) { float f = 1.0 - exp(-tFirst / 15000.0); col = mix(col, uAmbH * (1.0 - T), f); }
-  return vec4(col, T);
+  return vec4(col, T); /* la brume est appliquée à chaque échantillon (hazeW): plus de fondu global à seuil */
 }`;
 
 // Passe des nuages à résolution réduite: rayons reconstruits depuis la caméra, résultat dans une texture lue par la sphère du ciel.
 export const CLOUD_PASS_FRAG = CLOUD_GLSL + `
-uniform mat4 uProjInv; uniform mat3 uV2W; uniform vec2 uRes; varying vec2 vUv;
+uniform mat4 uProjInv; uniform mat3 uV2W; uniform vec2 uRes, uSub; uniform float uJit, uQual; varying vec2 vUv;
 void main() {
-  vec4 pv = uProjInv * vec4(vUv * 2.0 - 1.0, 1.0, 1.0); vec3 rd = normalize(uV2W * (pv.xyz / pv.w));
-  float jit = ignoise(gl_FragCoord.xy) * 0.8 + 0.1; /* tramage sur presque tout le pas: casse les structures régulières (lissé ensuite par les quatre lectures) */
-  gl_FragColor = clouds(uCamW, rd, jit, 1.0);
+  /* uSub: décalage sous-pixel et uJit: décalage du tramage, différents à chaque passe de l'accumulation (vue posée) */
+  vec4 pv = uProjInv * vec4((vUv + uSub) * 2.0 - 1.0, 1.0, 1.0); vec3 rd = normalize(uV2W * (pv.xyz / pv.w));
+  float jit = fract(ignoise(gl_FragCoord.xy) + uJit);
+  gl_FragColor = clouds(uCamW, rd, jit, uQual);
 }`;
 
 // ---- Soleil vu depuis une altitude h (m au-dessus du sol): extinction le long du rayon vers le soleil dans une atmosphère
