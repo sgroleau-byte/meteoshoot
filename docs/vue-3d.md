@@ -940,6 +940,11 @@ importé, lui, est le fichier de l'architecte.
   soleil (iv) et sa hauteur (de 10 à 30°): l'herbe au soleil revient dans les tons moyens, feuillages plus denses. Lever,
   coucher, ciel couvert et nuit inchangés (vérifié au banc: exposition identique au coucher). Essais à 13 et 20 %: 20 %
   choisi par Stéphane (« -20 est la bonne »).
+- v633.196 (11 octobre 2026), **même baisse d'exposition sous un voile ou un couvert** (« c'est trop pâle, applique la même
+  recette, c'est surexposé », ville sous un voile d'altitude complet, 18 % de soleil direct): la baisse de 20 % de la
+  v633.195 ne valait qu'au plein soleil (pondérée par iv), et l'exposition automatique remontait la scène voilée jusqu'à la
+  délaver. Elle vaut maintenant pour tout le plein jour (hauteur du soleil de 10 à 30°), sauf sous un orage (rendu sombre
+  validé). Lever, coucher et nuit inchangés; banc: plein soleil et orage identiques, voile et couvert plus denses.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

@@ -74,7 +74,7 @@ let PCSS_OK = false;
   PCSS_OK = true;
 })();
 if (!PCSS_OK) console.warn('[scene3d] chunk d’ombre de three inattendu: ombres PCF au lieu de PCSS');
-const DAY_DARK = 0.2; // assombrissement du plein jour au soleil (exposition, v633.195: 20 %, choisi par Stéphane parmi 13 et 20 %), voir uExp
+const DAY_DARK = 0.2; // assombrissement du plein jour (exposition: 20 %, choisi par Stéphane parmi 13 et 20 % en v633.195; tout le jour depuis la v633.196), voir uExp
 const SUNMAP_HALF = 1500, SUNMAP_N = 512; // carte de hauteurs proche de la visibilité du soleil: ±1,5 km, 5,9 m par case (v633.194)
 const SHADOW_SPAN = 20000; // plage de profondeur de la carte d'ombre (mètres vers le soleil): le relief lointain porte son ombre
 // Orage et percées de soleil (8 octobre 2026; voir setWeather et frame).
@@ -1542,10 +1542,13 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     fill.color.setRGB(0.86, 0.90, 1.0).lerp(new THREE.Color(0.9, 0.9, 0.9), Math.max(cumS, veil)).lerp(new THREE.Color(0.78, 0.84, 0.95), 0.6 * cur.storm).lerp(new THREE.Color(1.0, 0.86, 0.68), 0.6 * smk); // ciel bleuté, gris sous les nuages ou le brouillard, ardoise sous l'orage, chaud sous la fumée
     fill.groundColor.copy(GROUND_TINT).multiplyScalar((0.5 + 1.3 * iv * (subjSun ? 1 : 1 - 0.7 * cur.storm) * Math.min(1, Math.sin(el) / 0.5)) * (1 - 0.6 * twi)); // rebond du sol
     const ambB = (0.3 + 0.55 * Math.min(1, Math.sin(el) / 0.5)) * (1 + 0.3 * Math.max(cumS, veil)) * ambK, IdirE = Idir * (subjSun ? 1 : 1 - 0.8 * cur.storm); const tot = (IdirE / Math.PI * 0.5 + ambB) / 2.2;
-    // Plein jour au soleil un peu plus sombre (v633.195, Stéphane: « en pleine journée même en gros soleil, l'image est un peu
-    // fade »): l'herbe au soleil sortait presque claire; une photo exposée pour le soleil la met dans les tons moyens. Selon la
-    // force du soleil (iv) et sa hauteur (de 10 à 30°): lever, coucher, ciel couvert et nuit inchangés.
-    const dayDark = 1 - DAY_DARK * clamp(iv) * smooth(10, 30, realDeg);
+    // Plein jour un peu plus sombre (v633.195, Stéphane: « en pleine journée même en gros soleil, l'image est un peu fade »):
+    // l'herbe au soleil sortait presque claire; une photo exposée pour le jour la met dans les tons moyens. Étendu à tout le
+    // plein jour en v633.196 (« trop pâle, applique la même recette, c'est surexposé », voile d'altitude, 18 % de soleil
+    // direct): l'exposition automatique remontait la scène sous un voile ou un couvert jusqu'à la rendre délavée. Selon la
+    // hauteur du soleil (de 10 à 30°): lever, coucher et nuit inchangés; orage épargné (rendu sombre validé, exposition
+    // déjà réglée pour l'ombre).
+    const dayDark = 1 - DAY_DARK * smooth(10, 30, realDeg) * (1 - cur.storm);
     compMat.uniforms.uExp.value = Math.max(0.5, Math.min(1.15 - 0.4 * twi, 0.64 * Math.pow(1 / Math.max(0.05, Math.min(1, tot)), 0.3))) * dayDark;
     const U = skyMat.uniforms, dk = 0.5 + 0.5 * clamp((realDeg + 1) / 14), uW = clamp(1 - (realDeg - 1) / 22);
     U.uDirect.value = iv; U.uWarm.value = uW; U.uTw.value = twi; U.uNight.value = nightF; U.uGlow.value = glow;
