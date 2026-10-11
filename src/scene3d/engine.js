@@ -6,7 +6,8 @@
 // ambiante), tonalité, lissage des bords.
 // Le sol est le relief réel (LiDAR ou modèle d'élévation du Canada, voir terrain.js): rues, parcs et eau y sont drapés,
 // bâtiments et arbres posés à la hauteur du terrain, la caméra à hauteur d'oeil sur la pente, et les collines ou
-// montagnes jusqu'à 9 km vers le soleil portent leur ombre sur le site.
+// montagnes jusqu'à 19 km vers le soleil portent leur ombre sur le site (20 km de plage depuis la v633.194, comme la barre
+// « ombre du terrain »; avant, 9 km: une crête plus loin laissait une bande au soleil autour du projet).
 // Chargé à la demande (import dynamique), three.js ne pèse rien tant que la 3D n'est pas ouverte.
 import * as THREE from 'three';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
@@ -17,7 +18,7 @@ RectAreaLightUniformsLib.init(); // tables des lumières surfaciques (façades a
 import SunCalc from 'suncalc';
 import { DIRS, centroid, edgesOf, localRings, signedArea } from './footprint.js';
 import { TEX_PERIOD, flatTerrain, makeTerrain } from './terrain.js';
-import { horizonProfile } from './horizon.js';
+import { horizonProfile, curvDrop } from './horizon.js';
 import { prisms, fitTree, reachOf, sheetCellBlocked, sheetTriTooClose, LOBE_PARTS, CON_TIERS, CON_TIERS_LOW } from './clearance.js';
 import { segDist, dpClosed, regularizeRing } from './ring.js';
 import { roofFaces, roofTop } from './roof.js';
@@ -26,9 +27,10 @@ import { makeNoiseTextures, CLOUD_GLSL, CLOUD_PASS_FRAG, sunAtAltitude, classify
 // Ombres PCSS (percentage-closer soft shadows) greffées sur le mode d'ombre « de base » de three (carte de profondeur en
 // pleine précision, lue directement): pénombre nette au contact et de plus en plus large en s'éloignant de l'objet qui
 // porte l'ombre (disque solaire de 0,5°), élargie sous le voile par shadow.radius. Remplace la méthode VSM (profondeur en
-// demi-flottants: rayures et fuites de lumière). Constante 0,3056 = plage de profondeur SHADOW_SPAN (10 km) x 2 tan(0,25°) /
-// cadre 300 m (caméra d'ombre dans createScene3D), par unité de profondeur normalisée; 0,0224 = profondeur normalisée type
-// du sujet (0,46 quand la plage faisait 480 m, ramenée à 10 km) pour le rayon de recherche des objets qui portent l'ombre.
+// demi-flottants: rayures et fuites de lumière). Constante 0,6112 = plage de profondeur SHADOW_SPAN (20 km) x 2 tan(0,25°) /
+// cadre 300 m (caméra d'ombre dans createScene3D), par unité de profondeur normalisée; 0,0112 = profondeur normalisée type
+// du sujet (0,46 quand la plage faisait 480 m, ramenée à 20 km) pour le rayon de recherche des objets qui portent l'ombre.
+// Mêmes pénombres qu'avec 10 km (k double, profondeurs normalisées divisées par deux).
 const PCSS_GLSL = `
 		float pcssNoise( vec2 p ) { return fract( 52.9829189 * fract( dot( p, vec2( 0.06711056, 0.00583715 ) ) ) ); }
 		vec2 pcssVogel( int i, int n, float phi ) { float r = sqrt( ( float( i ) + 0.5 ) / float( n ) ); float t = float( i ) * 2.399963229728653 + phi; return vec2( cos( t ), sin( t ) ) * r; }
@@ -36,15 +38,30 @@ const PCSS_GLSL = `
 			shadowCoord.xyz /= shadowCoord.w;
 			shadowCoord.z += shadowBias;
 			bool inFrustum = shadowCoord.x >= 0.0 && shadowCoord.x <= 1.0 && shadowCoord.y >= 0.0 && shadowCoord.y <= 1.0;
-			if ( ! inFrustum || shadowCoord.z > 1.0 ) return 1.0;
-			float texel = 1.0 / shadowMapSize.x, zR = shadowCoord.z, k = 0.3056 * shadowRadius;
+			if ( ! inFrustum || shadowCoord.z > 1.0 ) {
+#ifdef SUN_VIS
+				gSunSh = sunVisPx( vLampW ); return gSunSh; /* sol hors de la carte d'ombre: visibilité du soleil par le relief (v633.194) */
+#else
+				return 1.0;
+#endif
+			}
+			float texel = 1.0 / shadowMapSize.x, zR = shadowCoord.z, k = 0.6112 * shadowRadius;
 			float phi = pcssNoise( gl_FragCoord.xy ) * 6.2831853;
-			float sRad = clamp( k * 0.0224, 2.0 * texel, 0.03 ), bSum = 0.0, bN = 0.0;
+			float sRad = clamp( k * 0.0112, 2.0 * texel, 0.03 ), bSum = 0.0, bN = 0.0;
 			for ( int i = 0; i < 16; i ++ ) { float d = texture2D( shadowMap, shadowCoord.xy + pcssVogel( i, 16, phi ) * sRad ).r; if ( d < zR ) { bSum += d; bN += 1.0; } }
-			if ( bN < 0.5 ) return 1.0;
+			if ( bN < 0.5 ) {
+#ifdef SUN_VIS
+				gSunSh = 1.0;
+#endif
+				return 1.0;
+			}
 			float pen = clamp( k * ( zR - bSum / bN ), texel, 0.025 ), sh = 0.0;
 			for ( int i = 0; i < 24; i ++ ) { float d = texture2D( shadowMap, shadowCoord.xy + pcssVogel( i, 24, phi ) * pen ).r; sh += step( zR, d ); }
-			return mix( 1.0, sh / 24.0, shadowIntensity );
+			float shR = mix( 1.0, sh / 24.0, shadowIntensity );
+#ifdef SUN_VIS
+			gSunSh = shR;
+#endif
+			return shR;
 		}
 `;
 let PCSS_OK = false;
@@ -57,7 +74,8 @@ let PCSS_OK = false;
   PCSS_OK = true;
 })();
 if (!PCSS_OK) console.warn('[scene3d] chunk d’ombre de three inattendu: ombres PCF au lieu de PCSS');
-const SHADOW_SPAN = 10000; // plage de profondeur de la carte d'ombre (mètres vers le soleil): le relief lointain porte son ombre
+const SUNMAP_HALF = 1500, SUNMAP_N = 512; // carte de hauteurs proche de la visibilité du soleil: ±1,5 km, 5,9 m par case (v633.194)
+const SHADOW_SPAN = 20000; // plage de profondeur de la carte d'ombre (mètres vers le soleil): le relief lointain porte son ombre
 // Orage et percées de soleil (8 octobre 2026; voir setWeather et frame).
 const SUN_ON = 0.2;    // percée: part de l'heure au soleil (direct rapporté au ciel clair) dès laquelle le projet est montré au soleil
 const BRK_R = 60;      // rayon minimal (m) du dégagement autour du projet pendant une percée; fixe pour une scène (ne suit pas le zoom)
@@ -411,7 +429,8 @@ export function createScene3D(container, opts = {}) {
   // seulement sous forte pluie, sans le traitement de l'éclairage (qui coûterait 20 à 50 ms à cette taille).
   const skyRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType }); const skyCam = new THREE.CubeCamera(1, 9000, skyRT); skyScene.add(skyCam); let skyFresh = false, skyGap = 0;
   const pmrem = new THREE.PMREMGenerator(R); pmrem.compileCubemapShader(); let envRT = null;
-  function updateEnv() { skyFresh = false; cubeCam.update(R, skyScene); const nrt = pmrem.fromCubemap(cubeRT.texture); if (envRT) envRT.dispose(); envRT = nrt; S.environment = nrt.texture; }
+  let hzRT = null, hzMat = null; // bande de l'horizon du ciel dessiné (voir sunVisU), remplie après chaque carte cubique
+  function updateEnv() { skyFresh = false; cubeCam.update(R, skyScene); const nrt = pmrem.fromCubemap(cubeRT.texture); if (envRT) envRT.dispose(); envRT = nrt; S.environment = nrt.texture; if (hzMat) { const prv = R.getRenderTarget(); pass(hzMat, hzRT); R.setRenderTarget(prv); } }
   const fog = new THREE.Fog(0xcccccc, 300, 1600); S.fog = fog;
   const gndTex = groundTex();
   // Sol en deux pièces: le relief (maillage non uniforme de terrain.js: 2 m au centre, 20 km de rayon; plat et maillé à
@@ -419,6 +438,10 @@ export function createScene3D(container, opts = {}) {
   const gndTexNear = gndTex.clone(); gndTexNear.repeat.set(1, 1); // coordonnées de texture en mètres / TEX_PERIOD
   const gndMat = new THREE.MeshStandardMaterial({ color: L('#5c6b42'), roughness: 1, envMapIntensity: 0.75, map: gndTexNear }), gndMatFar = gndMat.clone(); gndMatFar.map = gndTex;
   let gnd = null;
+  // Relief lointain polaire (v633.194, au-delà de terrain.rIn): mêmes réglages que le sol proche, sa propre greffe
+  // (lampadaires, soleil des sommets), texture en mètres comme le sol proche.
+  const gndMatPol = new THREE.MeshStandardMaterial({ color: L('#5c6b42'), roughness: 1, envMapIntensity: 0.75, map: gndTexNear });
+  let gndPol = null;
   const gndFar = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000, 8, 8), gndMatFar); gndFar.rotation.x = -Math.PI / 2; gndFar.position.y = -0.3; gndFar.receiveShadow = true; S.add(gndFar);
   const FT = facadeTex();
   // La scène pousse (v633.181): à l'arrivée des environs, les bâtiments montent du sol (sommets rapportés à leur base,
@@ -458,7 +481,7 @@ export function createScene3D(container, opts = {}) {
   const edgeMask = leafTex(0.55), edgeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, envMapIntensity: 0.6, alphaMap: edgeMask, alphaTest: 0.5, side: THREE.DoubleSide }); // plus trouée que les couronnes
   const waterMat = new THREE.MeshStandardMaterial({ color: L('#2a3b48'), roughness: 0.12, metalness: 0, envMapIntensity: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   // L'eau a déjà son reflet de ciel brillant: alpha 0 dans l'image de la scène, la passe des flaques l'ignore.
-  waterMat.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a=0.0;'); };
+  waterMat.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a=0.0;'); hzCap(sh, waterMat); };
   waterMat.customProgramCacheKey = () => 'eau';
   // Arbres en trois anneaux de détail (moins de 150 m, 150 à 250 m, au-delà): feuillus en 6 lobes, 3 lobes simplifiés,
   // puis une boule à facettes; conifères en 3 étages de 10 côtés, puis 2 étages de 6; tronc à 6 faces, puis 3.
@@ -481,11 +504,21 @@ export function createScene3D(container, opts = {}) {
   // du reflet, écrite dans l'alpha de l'image de la scène: les flaques sur l'asphalte, un peu sur les trottoirs et les
   // toits plats (qui s'égouttent), rien sur le gazon (la couleur ne suffit pas à les distinguer la nuit).
   const WET = { 'plat-road': [0.42, 0.72, 1], 'plat-asphalt': [0.42, 0.72, 1], 'plat-gravel': [0.3, 0.85, 0.15], 'plat-walk': [0.36, 0.75, 0.6], 'plat-rail': [0.3, 0.78, 0.4], toit: [0.3, 0.8, 0.25], mur: [0.2, 1, 0], tronc: [0.35, 1, 0], feuillage: [0.12, 0.9, 0], 'sous-bois': [0.12, 0.9, 0], lisiere: [0.12, 0.9, 0] };
+  // Plafond de la brume (v633.194, voir sunVisU): jamais plus claire que 0,45 fois le ciel dessiné juste au-dessus de
+  // l'horizon dans la direction regardée, plus la lueur de la ville la nuit (uGlowL, absente du ciel dessiné), pour tous les
+  // matériaux soumis à la brume (sol, eau, murs, toits, arbres, surfaces): sinon un lac au loin restait gris pâle sur un
+  // relief assombri. uHzOn: 1 sans fumée, 0 sous la fumée de feux (rendu validé, inchangé), fondu entre les deux.
+  const hzU = { uHzTex: { value: null }, uHzOn: { value: 0 }, uGlowL: { value: 0 } };
+  const hzCap = (sh, mat) => {
+    if (!(mat.isMeshStandardMaterial || mat.isMeshLambertMaterial || mat.isMeshPhongMaterial)) return; // vViewPosition requis
+    Object.assign(sh.uniforms, hzU);
+    sh.fragmentShader = 'uniform float uHzOn,uGlowL;uniform sampler2D uHzTex;\n' + sh.fragmentShader.replace('#include <fog_fragment>', '#include <fog_fragment>\n#ifdef USE_FOG\nif(uHzOn>0.001){vec3 vdH=inverseTransformDirection(normalize(-vViewPosition),viewMatrix);vec3 hzc=texture2D(uHzTex,vec2(atan(vdH.x,-vdH.z)*0.15915494,0.5)).rgb;float lf=dot(fogColor,vec3(0.2126,0.7152,0.0722)),lh=0.45*dot(hzc,vec3(0.2126,0.7152,0.0722))+uGlowL;if(lf>lh&&lf>1e-6)gl_FragColor.rgb-=uHzOn*fogFactor*fogColor*(1.0-lh/lf);}\n#endif');
+  };
   const lampLit = (mat, key) => {
     const prev = mat.onBeforeCompile, [wDark, wGloss, wRefl] = WET[key] || [0.3, 0.9, 0];
     mat.onBeforeCompile = (sh, r) => {
       if (prev) prev.call(mat, sh, r);
-      Object.assign(sh.uniforms, lampU);
+      Object.assign(sh.uniforms, lampU); hzCap(sh, mat);
       sh.fragmentShader = sh.fragmentShader.replace('#include <lights_physical_fragment>',
         `float wetK=0.0;if(uWet>0.0){float upF=smoothstep(0.55,0.9,dot(normal,normalize((viewMatrix*vec4(0.0,1.0,0.0,0.0)).xyz)));wetK=uWet*upF;diffuseColor.rgb*=1.0-${wDark.toFixed(2)}*uWet;roughnessFactor=mix(roughnessFactor,${wGloss.toFixed(2)},wetK);}\n#include <lights_physical_fragment>`)
         .replace('#include <opaque_fragment>', `#include <opaque_fragment>\ngl_FragColor.a=${wRefl.toFixed(2)};`);
@@ -512,7 +545,62 @@ export function createScene3D(container, opts = {}) {
   const flatMats = { road: flat('#383b3e', 3), rail: flat('#7d766c', 3), walk: flat('#9b978d', 4), asphalt: flat('#3a3d40', 2), gravel: flat('#7a756b', 2) }; // gravier: gris chaud, plus clair que l'asphalte, plus sobre que le trottoir
   Object.keys(GC).forEach(k => { flatMats[k] = flat(GC[k], 1); });
   // Matériaux qui reçoivent la lumière des lampadaires (le toit, au-dessus des lampes, n'en reçoit presque pas).
-  [[wallMat, 'mur'], [roofMat, 'toit'], [trunkMat, 'tronc'], [crownMat, 'feuillage'], [conMat, 'feuillage'], [fillMat, 'sous-bois'], [edgeMat, 'lisiere'], [gndMat, 'sol'], [gndMatFar, 'sol-loin'], ...Object.entries(flatMats).map(([k, m]) => [m, 'plat-' + k])].forEach(([m, k]) => lampLit(m, k));
+  [[wallMat, 'mur'], [roofMat, 'toit'], [trunkMat, 'tronc'], [crownMat, 'feuillage'], [conMat, 'feuillage'], [fillMat, 'sous-bois'], [edgeMat, 'lisiere'], [gndMat, 'sol'], [gndMatFar, 'sol-loin'], [gndMatPol, 'sol-polaire'], ...Object.entries(flatMats).map(([k, m]) => [m, 'plat-' + k])].forEach(([m, k]) => lampLit(m, k));
+  // ---- Soleil sur le relief au loin (v633.194). La carte d'ombre ne couvre que ±150 à 700 m autour du sujet: au-delà, le
+  // relief n'avait aucune ombre (tout versant tourné vers le soleil était allumé de bas en haut), et la brume linéaire de
+  // three le recouvrait entièrement dès 1,5 km. Chaque sommet du sol calcule donc lui-même s'il voit le soleil: marche vers
+  // le soleil dans deux cartes de hauteurs (le relief jusqu'à ±1,5 km rééchantillonné à 5,9 m, la grille polaire lointaine
+  // telle quelle), jusqu'à 20 km, courbure de la Terre et réfraction comprises, disque solaire de 0,53°. Cette visibilité
+  // remplace l'ombre hors de la carte d'ombre (getShadow, SUN_VIS), et la part du soleil direct transmise par l'air
+  // (exp(-3,912 d / V), V la visibilité prévue, 46 km au plus) s'ajoute après la brume: le haut des montagnes s'allume au
+  // lever pendant que les vallées restent à l'ombre (photos de Stéphane, hiver à Stoneham). Au-delà de 700 à 1000 m, le sol
+  // prend la teinte d'une forêt vue de loin (moyenne des feuillus et des conifères du moteur, ombre entre les cimes), ou
+  // d'une ville. Enfin la brume ne peut plus être plus claire que 0,45 fois le ciel dessiné juste au-dessus de l'horizon
+  // dans la direction regardée (bande uHzTex tirée de la carte cubique de l'ambiance): avant le lever sous un voile, elle
+  // gardait un gris de plein jour et la montagne sortait blanche sous un ciel presque noir (capture de 6 h 48, 11 octobre).
+  const sunVisU = {
+    uHN: { value: null }, uHF: { value: null }, uHNHalf: { value: SUNMAP_HALF }, uFR0: { value: 1e9 }, uFLg: { value: 0.01 }, uFRings: { value: 2 }, uFDirs: { value: 2 },
+    uHasFar: { value: 0 }, uVisOn: { value: 0 }, uTanSun: { value: 0 }, uSunW: { value: new THREE.Vector3(0, 1, 0) },
+    uSunFar: { value: new THREE.Vector3() }, uSunV: { value: new THREE.Vector3(0, 1, 0) }, uSigAir: { value: 3.912 / 25000 },
+    uFarAlb: { value: new THREE.Vector3(0.1, 0.1, 0.05) }, uAlbR: { value: new THREE.Vector2(700, 1000) }, uRin: { value: 1e9 },
+    uSubj: { value: new THREE.Vector2() },
+  };
+  // Hauteur du relief (relative à terrain.hMin) au point p = (est, nord); marche vers le soleil depuis un sommet du maillage,
+  // pas croissant de 8,5 % (12 m au départ, 2 % de la distance au loin), arrêt dès que le disque est caché.
+  const SUN_VIS_V = `uniform sampler2D uHN,uHF;uniform float uHNHalf,uFR0,uFLg,uFRings,uFDirs,uHasFar,uVisOn,uTanSun;uniform vec3 uSunW;
+float hAt(vec2 p){if(uHasFar<0.5||max(abs(p.x),abs(p.y))<uHNHalf)return texture2D(uHN,p/(2.0*uHNHalf)+0.5).r;
+float kf=clamp(log(max(length(p),1.0)/uFR0)/uFLg,0.0,uFRings-1.0);return texture2D(uHF,vec2(atan(p.x,p.y)*0.15915494+0.5/uFDirs,(kf+0.5)/uFRings)).r;}
+float sunVis(vec3 P){if(uVisOn<0.5)return 1.0;vec2 p=vec2(P.x,-P.z),dir=normalize(vec2(uSunW.x,-uSunW.z));float r0=length(p),h0=hAt(p)+1.5;
+float d=uHasFar>0.5&&r0>uHNHalf?max(12.0,0.02*r0):12.0,m=-1.0;
+for(int i=0;i<110;i++){float t=(hAt(p+dir*d)-h0-d*d*6.83e-8)/d;m=max(m,t);if(m>uTanSun+0.006)return 0.0;d*=1.085;if(d>20000.0)break;}
+return smoothstep(-0.0047,0.0047,uTanSun-m);}
+`;
+  const terrainSun = (mat, key, opts) => {
+    const prev = mat.onBeforeCompile;
+    mat.onBeforeCompile = (sh, r) => {
+      if (prev) prev.call(mat, sh, r);
+      Object.assign(sh.uniforms, sunVisU);
+      if (opts.sun) sh.vertexShader = SUN_VIS_V + 'varying float vSunVis;\n' + sh.vertexShader.replace('#include <fog_vertex>', 'vSunVis=sunVis(vLampW);\n#include <fog_vertex>');
+      sh.fragmentShader = 'uniform vec3 uSunFar,uSunV,uFarAlb;uniform float uSigAir,uRin;uniform vec2 uAlbR,uSubj;\nfloat fhs(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}\nfloat fvn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(fhs(i),fhs(i+vec2(1.0,0.0)),f.x),mix(fhs(i+vec2(0.0,1.0)),fhs(i+vec2(1.0,1.0)),f.x),f.y);}\n' + (opts.sun ? SUN_VIS_V + 'varying float vSunVis;float gSunVis=1.0;float gSunSh=-1.0;bool gSunRef=false;\nfloat sunVisPx(vec3 P){if(!gSunRef){gSunRef=true;if(gSunVis>0.02&&gSunVis<0.98)gSunVis=sunVis(P);}return gSunVis;}\n#define SUN_VIS\n' : '') + (opts.near ? '#define NEAR_CLIP\n' : '') + sh.fragmentShader
+        .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n#ifdef NEAR_CLIP\nif(dot(vLampW.xz,vLampW.xz)>uRin*uRin)discard;\n#endif\n#ifdef SUN_VIS\ngSunVis=vSunVis;\n#endif')
+        .replace('#include <color_fragment>', '#include <color_fragment>\n{float rr=min(length(vLampW.xz),length(vLampW.xz-uSubj));vec2 fp=vLampW.xz;float nz=0.55*fvn(fp/180.0)+0.3*fvn(fp/60.0+7.3)+0.15*fvn(fp/700.0-3.1),nh=fvn(fp/260.0+19.7);float fw=length(fwidth(fp)),nc=mix(0.5,0.6*fvn(fp/6.5)+0.4*fvn(fp/15.0+3.7),1.0-smoothstep(1.5,6.0,fw));vec3 fa=uFarAlb*(0.68+0.64*nz)*(0.6+0.8*nc)*mix(vec3(0.78,1.04,1.12),vec3(1.14,0.98,0.86),nh);diffuseColor.rgb=mix(diffuseColor.rgb,fa,smoothstep(uAlbR.x,uAlbR.y,rr));}')
+        .replace('#include <fog_fragment>', '#include <fog_fragment>\n#ifdef USE_FOG\n{'
+          + (opts.sun ? 'if(fogFactor>0.001){float shF=gSunSh>=0.0?gSunSh:sunVisPx(vLampW);gl_FragColor.rgb+=fogFactor*exp(-uSigAir*vFogDepth)*shF*max(dot(normal,uSunV),0.0)*diffuseColor.rgb*0.31830989*uSunFar;}' : '') + '}\n#endif');
+    };
+    mat.customProgramCacheKey = () => 'lamp-' + key + '-soleil';
+  };
+  terrainSun(gndMat, 'sol', { sun: true, near: true }); terrainSun(gndMatPol, 'sol-polaire', { sun: true, near: false }); terrainSun(gndMatFar, 'sol-loin', { sun: false, near: false });
+  // Carte d'ombre du sol proche: ses coins au-delà du cercle terrain.rIn ne portent pas d'ombre (le relief lointain le fait).
+  const gndDepthMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  gndDepthMat.onBeforeCompile = (sh) => { sh.uniforms.uRin = sunVisU.uRin; sh.vertexShader = 'varying vec2 vGW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvGW=(modelMatrix*vec4(transformed,1.0)).xz;'); sh.fragmentShader = 'uniform float uRin;varying vec2 vGW;\n' + sh.fragmentShader.replace('void main() {', 'void main() {\nif(dot(vGW,vGW)>uRin*uRin)discard;'); };
+  gndDepthMat.customProgramCacheKey = () => 'sol-proche-profondeur';
+  // Teinte d'une forêt vue de loin: moyenne linéaire des feuillus (45 %) et des conifères (55 %, forêt mixte québécoise) du
+  // moteur, assombrie par l'ombre entre les cimes (0,45: un couvert forestier renvoie 5 à 10 % de la lumière) et un peu
+  // désaturée; dans le shader, variation douce de 60 à 700 m (massifs de conifères et de feuillus) et moutonnement des cimes
+  // (6 à 15 m, effacé quand il devient plus petit qu'un pixel), sinon une montagne au soleil ressemblait à une dune de sable.
+  // Ville: gris brun.
+  const FOREST_LIN = (() => { const avg = (pal) => { const t = [0, 0, 0]; pal.forEach(h => { const c = L(h); t[0] += c.r; t[1] += c.g; t[2] += c.b; }); return t.map(v => v / pal.length); }; const d = avg(TREE_PAL), c = avg(CONIFER_PAL); const m = d.map((v, i) => (0.45 * v + 0.55 * c[i]) * 0.45), l = LUM(m); return m.map(v => v + (l - v) * 0.15); })();
+  const CITY_LIN = [0.085, 0.08, 0.075];
   // Feuillage et troncs tout près de l'objectif (8 octobre 2026, « les arbres foncent dans la caméra »): effacés en douceur
   // par les trous du feuillage de 10 m à 3 m de la caméra (troncs de 4 m à 1 m, en trame). La carte d'ombre ne voit pas ce
   // retrait (three ne recopie pas onBeforeCompile dans son matériau de profondeur): les ombres sur la façade et au sol restent.
@@ -584,6 +672,12 @@ export function createScene3D(container, opts = {}) {
   alloc();
   const qScene = new THREE.Scene(), qCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)); qScene.add(quad);
   function pass(mat, rt) { quad.material = mat; R.setRenderTarget(rt); R.render(qScene, qCam); }
+  // Bande de 64 directions: couleur du ciel dessiné juste au-dessus de l'horizon (1,5 à 4,5°, nuages compris), lue dans la
+  // carte cubique de l'ambiance après chaque mise à jour: plafond de la brume du sol (voir sunVisU).
+  hzRT = new THREE.WebGLRenderTarget(64, 1, { type: THREE.HalfFloatType, depthBuffer: false, wrapS: THREE.RepeatWrapping, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+  hzMat = new THREE.ShaderMaterial({ uniforms: { uCube: { value: cubeRT.texture } }, vertexShader: QV, depthTest: false, depthWrite: false,
+    fragmentShader: `uniform samplerCube uCube;varying vec2 vUv;void main(){vec3 s=vec3(0.0);for(int a=-1;a<=1;a++)for(int e=0;e<3;e++){float az=vUv.x*6.2831853+float(a)*0.033,el=0.0262+0.0262*float(e);s+=textureCube(uCube,vec3(sin(az)*cos(el),sin(el),-cos(az)*cos(el))).rgb;}gl_FragColor=vec4(s/9.0,1.0);}` });
+  hzU.uHzTex.value = hzRT.texture;
   // Préchauffage: compile le shader de l'accumulation et alloue ses cibles pleine résolution dès la création (et après un
   // redimensionnement); sinon la première passe, juste à la fin de la pousse de la scène, figeait une image 250 ms.
   function warmAcc() { accMat.uniforms.tA.value = cloudRT.texture; accMat.uniforms.tB.value = cloudRT.texture; accMat.uniforms.uW.value = 1; pass(accMat, accA); pass(accMat, accB); pass(accMat, cloudRTHi); R.setRenderTarget(null); }
@@ -637,14 +731,62 @@ export function createScene3D(container, opts = {}) {
   let terrain = flatTerrain(), cloudLift = 150; // relief (plat en attendant /api/terrain); hauteur des nuages au-dessus du site
   function buildGround() {
     if (gnd) { S.remove(gnd); gnd.geometry.dispose(); gnd = null; }
-    const { ax, H, N } = terrain; const P = new Float32Array(N * N * 3), UV = new Float32Array(N * N * 2);
-    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const k = j * N + i; P[3 * k] = ax[i]; P[3 * k + 1] = H[k]; P[3 * k + 2] = -ax[j]; UV[2 * k] = ax[i] / TEX_PERIOD; UV[2 * k + 1] = ax[j] / TEX_PERIOD; }
+    if (gndPol) { S.remove(gndPol); gndPol.geometry.dispose(); gndPol = null; }
+    const { ax, H, N } = terrain, far = terrain.far;
+    // Avec le relief lointain (v633.194), le maillage proche s'arrête au premier noeud au-delà de terrain.rIn (1 km); ses
+    // coins hors du cercle sont éliminés au dessin (NEAR_CLIP) et dans la carte d'ombre (gndDepthMat).
+    let i0 = 0, i1 = N - 1;
+    if (far) { while (i0 < N - 2 && ax[i0 + 1] <= -terrain.rIn) i0++; while (i1 > 1 && ax[i1 - 1] >= terrain.rIn) i1--; }
+    const M = i1 - i0 + 1, P = new Float32Array(M * M * 3), UV = new Float32Array(M * M * 2);
+    for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) { const k = j * M + i, gi = i0 + i, gj = i0 + j, kk = gj * N + gi; P[3 * k] = ax[gi]; P[3 * k + 1] = H[kk]; P[3 * k + 2] = -ax[gj]; UV[2 * k] = ax[gi] / TEX_PERIOD; UV[2 * k + 1] = ax[gj] / TEX_PERIOD; }
     // Deux triangles par cellule, diagonale du coin bas-gauche au coin haut-droit (comme terrain.hTri), face vers le ciel.
-    const I = new Uint32Array((N - 1) * (N - 1) * 6); let q = 0;
-    for (let j = 0; j < N - 1; j++) for (let i = 0; i < N - 1; i++) { const a = j * N + i, b = a + 1, c = a + N, d = c + 1; I[q++] = a; I[q++] = b; I[q++] = d; I[q++] = a; I[q++] = d; I[q++] = c; }
+    const I = new Uint32Array((M - 1) * (M - 1) * 6); let q = 0;
+    for (let j = 0; j < M - 1; j++) for (let i = 0; i < M - 1; i++) { const a = j * M + i, b = a + 1, c = a + M, d = c + 1; I[q++] = a; I[q++] = b; I[q++] = d; I[q++] = a; I[q++] = d; I[q++] = c; }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(P, 3)); g.setAttribute('uv', new THREE.BufferAttribute(UV, 2)); g.setIndex(new THREE.BufferAttribute(I, 1)); g.computeVertexNormals();
-    gnd = new THREE.Mesh(g, gndMat); gnd.receiveShadow = true; gnd.castShadow = !terrain.flat; S.add(gnd);
+    gnd = new THREE.Mesh(g, gndMat); gnd.receiveShadow = true; gnd.castShadow = !terrain.flat; if (far) gnd.customDepthMaterial = gndDepthMat; S.add(gnd);
+    if (far) gndPol = farMesh(far);
     gndFar.position.y = terrain.hMin - 1;
+    sunVisU.uRin.value = far ? terrain.rIn : 1e9;
+    sunMaps();
+  }
+  // Maillage du relief lointain polaire: anneau k au rayon r0 x grow^k, 720 directions; normales tirées de la grille
+  // (différences centrées; avant le premier anneau, la surface du relief proche) pour un éclairage sans couture.
+  function farMesh(far) {
+    const Rn = far.rings, D = far.dirs, Hf = far.H, nv = Rn * D, P = new Float32Array(nv * 3), NR = new Float32Array(nv * 3), UV = new Float32Array(nv * 2);
+    const rr = (k) => far.r0 * Math.pow(far.grow, k), sn = new Float32Array(D), cs = new Float32Array(D), dB = 2 * Math.PI / D;
+    for (let j = 0; j < D; j++) { sn[j] = Math.sin(j * dB); cs[j] = Math.cos(j * dB); }
+    const inner = new Float32Array(D), ri = rr(-1); for (let j = 0; j < D; j++) inner[j] = terrain.hTri(ri * sn[j], ri * cs[j]);
+    for (let k = 0; k < Rn; k++) {
+      const r = rr(k), rm = rr(k - 1), rp = k < Rn - 1 ? rr(k + 1) : r;
+      for (let j = 0; j < D; j++) {
+        const v = k * D + j, h = Hf[v], x = r * sn[j], n = r * cs[j];
+        P[3 * v] = x; P[3 * v + 1] = h; P[3 * v + 2] = -n; UV[2 * v] = x / TEX_PERIOD; UV[2 * v + 1] = n / TEX_PERIOD;
+        const hm = k > 0 ? Hf[v - D] : inner[j], hp = k < Rn - 1 ? Hf[v + D] : h, dr = (hp - hm) / (rp - rm);
+        const dt = (Hf[k * D + (j + 1) % D] - Hf[k * D + (j + D - 1) % D]) / (2 * dB * r);
+        const gx = dr * sn[j] + dt * cs[j], gn = dr * cs[j] - dt * sn[j], l = Math.hypot(gx, 1, gn); // pente (est, nord)
+        NR[3 * v] = -gx / l; NR[3 * v + 1] = 1 / l; NR[3 * v + 2] = gn / l;
+      }
+    }
+    const I = new Uint32Array((Rn - 1) * D * 6); let q = 0;
+    for (let k = 0; k < Rn - 1; k++) for (let j = 0; j < D; j++) { const a = k * D + j, b = k * D + (j + 1) % D, c = a + D, d = b + D; I[q++] = a; I[q++] = b; I[q++] = c; I[q++] = b; I[q++] = d; I[q++] = c; }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.BufferAttribute(NR, 3)); g.setAttribute('uv', new THREE.BufferAttribute(UV, 2)); g.setIndex(new THREE.BufferAttribute(I, 1)); g.computeBoundingSphere();
+    const m = new THREE.Mesh(g, gndMatPol); m.receiveShadow = true; m.castShadow = true; S.add(m); return m;
+  }
+  // Cartes de hauteurs de la visibilité du soleil (voir sunVisU), relatives à terrain.hMin, en demi-flottants filtrés.
+  let hnTex = null, hfTex = null;
+  function sunMaps() {
+    if (hnTex) { hnTex.dispose(); hnTex = null; } if (hfTex) { hfTex.dispose(); hfTex = null; }
+    sunVisU.uHasFar.value = 0; sunVisU.uHN.value = null; sunVisU.uHF.value = null;
+    if (terrain.flat) return;
+    const toH = THREE.DataUtils.toHalfFloat, base = terrain.hMin, Nm = SUNMAP_N, cell = 2 * SUNMAP_HALF / Nm, a = new Uint16Array(Nm * Nm);
+    for (let j = 0; j < Nm; j++) { const n = -SUNMAP_HALF + (j + 0.5) * cell; for (let i = 0; i < Nm; i++) a[j * Nm + i] = toH(terrain.hTri(-SUNMAP_HALF + (i + 0.5) * cell, n) - base); }
+    hnTex = new THREE.DataTexture(a, Nm, Nm, THREE.RedFormat, THREE.HalfFloatType); hnTex.magFilter = hnTex.minFilter = THREE.LinearFilter; hnTex.needsUpdate = true; sunVisU.uHN.value = hnTex;
+    const far = terrain.far;
+    if (far) {
+      const b = new Uint16Array(far.rings * far.dirs); for (let i = 0; i < b.length; i++) b[i] = toH(far.H[i] - base);
+      hfTex = new THREE.DataTexture(b, far.dirs, far.rings, THREE.RedFormat, THREE.HalfFloatType); hfTex.magFilter = hfTex.minFilter = THREE.LinearFilter; hfTex.wrapS = THREE.RepeatWrapping; hfTex.needsUpdate = true;
+      sunVisU.uHF.value = hfTex; sunVisU.uFR0.value = far.r0; sunVisU.uFLg.value = Math.log(far.grow); sunVisU.uFRings.value = far.rings; sunVisU.uFDirs.value = far.dirs; sunVisU.uHasFar.value = 1;
+    }
   }
   buildGround();
   // Sol sous une empreinte: hauteur du relief à ses sommets et à son centre (min pour enterrer le pied, moyenne pour le toit).
@@ -655,6 +797,21 @@ export function createScene3D(container, opts = {}) {
   const NEAR = 230;
   const nearXY = (x, n) => Math.hypot(x, n) < NEAR;
   let winLights = [];
+  // Part de l'heure au soleil (v633.194): direct moyen sur l'heure rapporté au direct moyen par ciel clair sur la même heure
+  // (12 pas de 5 min). Référence par ciel clair: dniClear au-dessus de 20° (calée sur ICON), modèle de Meinel (masse d'air de
+  // Kasten et Young) au soleil bas, où dniClear valait encore 270 W/m² à 1° (un matin dégagé sortait voilé: 0,47 au lieu de 1).
+  // null si le soleil est levé trop peu de temps dans l'heure (moins de 3 W/m² par ciel clair).
+  const dniRef = (h) => { const amk = 1 / (Math.sin(h * Math.PI / 180) + 0.50572 * Math.pow(h + 6.07995, -1.6364)), me = 1353 * Math.pow(0.7, Math.pow(amk, 0.678)); return me + (dniClear(h) - me) * smooth(8, 20, h); };
+  const clearDirHour = (tEnd) => { let t = 0; for (let k = 0; k < 12; k++) { const h = SunCalc.getPosition(new Date(tEnd - 3600000 + (k + 0.5) * 300000), lat, lng).altitude * 180 / Math.PI; if (h > 0) t += Math.sin(h * Math.PI / 180) * dniRef(h); } return t / 12; };
+  const pSunOf = (r) => { if (!r?.time || r.direct == null) return null; const ref = clearDirHour(new Date(r.time).getTime()); return ref >= 3 ? clamp(r.direct / ref) : null; };
+  let pRow = null, pNext = null, pPrev = null, rowT = 0;
+  // Interpolée à l'heure affichée entre le milieu de l'heure de la rangée et celui de l'heure suivante (la rangée la plus
+  // proche est choisie: le curseur va de 30 min avant son heure à 30 min après).
+  function pSunAt(t) {
+    if (!weatherRow) return 1;
+    const a = pRow ?? pNext ?? pPrev; if (a == null) return 0;
+    const b = pNext ?? a; return a + (b - a) * clamp((t - (rowT - 1800000)) / 3600000);
+  }
   function clearStatics() { statics.forEach(m => { S.remove(m); if (!m.userData.sharedGeo) m.geometry && m.geometry.dispose(); if (m.isInstancedMesh) m.dispose(); }); statics = []; treesI = null; winLights.forEach(l => { S.remove(l); l.dispose && l.dispose(); }); winLights = []; urban = 0; }
   // Pousse de la scène (voir growU): démarre à la reconstruction qui suit l'arrivée des environs (setData), 2,5 s.
   let growing = false, growT0 = 0, growNext = false;
@@ -686,10 +843,34 @@ export function createScene3D(container, opts = {}) {
     const V2 = (r) => r.map(p => new THREE.Vector2(p[0], p[1]));
     try { return THREE.ShapeUtils.triangulateShape(V2(O), HS.map(V2)).map(([a, b, c]) => [all[a], all[b], all[c]]); } catch (e) { return []; }
   }
+  // Surfaces posées sur le relief proche seulement (v633.194): au-delà de terrain.rIn (1 km), le sol est le relief
+  // lointain polaire, pas la grille sur laquelle terrain.drape découpe; rues, parcs et surfaces pavées y flotteraient ou
+  // s'y enfonceraient. Triangles coupés au cercle (polygone inscrit de 1440 côtés: 2 cm sous le cercle à 1 km), en ne
+  // testant que les côtés du secteur angulaire du triangle. Les plans d'eau (leur propre surface lisse) ne sont pas coupés.
+  function clipDisk(tris, R) {
+    if (!(R < Infinity)) return tris;
+    const M = 1440, step = 2 * Math.PI / M, Rc = R * Math.cos(step / 2), Rc2 = Rc * Rc, out = [];
+    for (const t of tris) {
+      if (t.every(p => p[0] * p[0] + p[1] * p[1] <= Rc2)) { out.push(t); continue; }
+      const a0 = Math.atan2(t[0][0], t[0][1]); let lo = 0, hi = 0;
+      for (let k = 1; k < 3; k++) { let d = Math.atan2(t[k][0], t[k][1]) - a0; d -= Math.round(d / (2 * Math.PI)) * 2 * Math.PI; if (d < lo) lo = d; if (d > hi) hi = d; }
+      let m0 = Math.floor((a0 + lo) / step) - 1, m1 = Math.ceil((a0 + hi) / step) + 1;
+      const c0 = t[0][0] * t[1][1] - t[0][1] * t[1][0], c1 = t[1][0] * t[2][1] - t[1][1] * t[2][0], c2 = t[2][0] * t[0][1] - t[2][1] * t[0][0];
+      if ((c0 >= 0 && c1 >= 0 && c2 >= 0) || (c0 <= 0 && c1 <= 0 && c2 <= 0)) { m0 = 0; m1 = M - 1; } // l'origine est dans le triangle: tout le tour
+      let poly = t;
+      for (let m = m0; m <= m1 && poly.length >= 3; m++) {
+        const am = (m + 0.5) * step, nx = Math.sin(am), nn = Math.cos(am), f = (p) => Rc - (p[0] * nx + p[1] * nn), res = [];
+        for (let i = 0; i < poly.length; i++) { const p = poly[i], q = poly[(i + 1) % poly.length], fp = f(p), fq = f(q); if (fp >= 0) res.push(p); if ((fp >= 0) !== (fq >= 0)) { const u = fp / (fp - fq); res.push([p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u]); } }
+        poly = res;
+      }
+      for (let k = 1; k + 1 < poly.length; k++) out.push([poly[0], poly[k], poly[k + 1]]);
+    }
+    return out;
+  }
   // lots = [{ tris, hFn, nFn }]: chaque lot drapé avec sa fonction de hauteur et de normale (relief lissé, ou surface
   // lisse et normale verticale d'un plan d'eau), le tout en un maillage.
   function drapedMesh(lots, mat, y, near, order) {
-    const parts = lots.map(l => terrain.drape(l.tris, l.hFn, l.nFn)).filter(p => p.pos.length); if (!parts.length) return;
+    const parts = lots.map(l => terrain.drape(l.hFn ? l.tris : clipDisk(l.tris, terrain.rIn - 0.5), l.hFn, l.nFn)).filter(p => p.pos.length); if (!parts.length) return;
     const n = parts.reduce((t, p) => t + p.pos.length, 0), pos = new Float32Array(n), nrm = new Float32Array(n); let o = 0; parts.forEach(p => { pos.set(p.pos, o); nrm.set(p.nrm, o); o += p.pos.length; });
     const dist = new Float32Array(n / 3); for (let i = 0, k = 0; i < n; i += 3, k++) dist[k] = Math.hypot(pos[i], pos[i + 2]);
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); g.setAttribute('aDist', new THREE.BufferAttribute(dist, 1)); addMesh(g, mat, y, near, false, order);
@@ -1288,6 +1469,22 @@ export function createScene3D(container, opts = {}) {
     // Couleur du soleil direct: extinction adoucie (Preetham rougit trop au ras de l'horizon) et un peu de blanc gardé.
     const sunRGB = Fx.map((v, i) => (0.85 * Math.pow(v / fxm, 0.45) + 0.15) * (1 - [0, 0.18, 0.4][i] * smk)), sc0 = mixHex('#' + sunRGB.map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join(''), '#eeebe4', (1 - iv) * 0.6); sunL.color.copy(L(sc0));
     skyMat.uniforms.uTurb.value = turb; skyMat.uniforms.uSmoke.value = smk;
+    // Soleil du relief au loin (voir sunVisU): hauteur apparente (réfraction de Saemundsson: un sommet voit le soleil un peu
+    // avant le lever au sol), part de l'heure au soleil interpolée entre les rangées voisines (pSunAt); ni iv (intensité dans
+    // les trouées: sous des nuages bas épars, tout le lointain s'allumerait), ni brouillard de vallée (la nappe ne couvre pas
+    // les sommets). Même couleur que le soleil du sol (extinction adoucie, voile).
+    {
+      const hr = Math.max(-4.5, realDeg), eApp = hr + 1.02 / Math.tan((hr + 10.3 / (hr + 5.11)) * Math.PI / 180) / 60, eR = eApp * Math.PI / 180;
+      sunVisU.uSunW.value.set(Math.sin(bearing) * Math.cos(eR), Math.sin(eR), -Math.cos(bearing) * Math.cos(eR));
+      sunVisU.uTanSun.value = Math.tan(eR); sunVisU.uVisOn.value = !terrain.flat && eApp > -2.2 && eApp < 40 ? 1 : 0;
+      const pT = Math.min(pSunAt(dateMs), iv), F2 = sunExtinction(Math.max(0, Math.sin(eR)), turb, 1.5), f2m = Math.max(F2[0], F2[1], F2[2], 1e-4);
+      const I2 = eApp > -2.2 ? 10 * Math.pow(LUM(F2), 0.7) * pT * smokeT : 0;
+      const c2 = L(mixHex('#' + F2.map((v, i) => Math.round(Math.min(1, (0.85 * Math.pow(v / f2m, 0.45) + 0.15) * (1 - [0, 0.18, 0.4][i] * smk)) * 255).toString(16).padStart(2, '0')).join(''), '#eeebe4', (1 - pT) * 0.6));
+      sunVisU.uSunFar.value.set(c2.r * I2, c2.g * I2, c2.b * I2);
+      sunVisU.uSigAir.value = 3.912 / Math.max(5000, Math.min(46000, weatherRow?.visibility ?? 25000));
+      hzU.uHzOn.value = 1 - smooth(0, 0.03, smk); // fumée de feux: rendu validé, inchangé (fondu au même rythme que la fumée)
+      sunVisU.uFarAlb.value.set(...FOREST_LIN.map((v, i) => v + (CITY_LIN[i] - v) * urban));
+    }
     // Niveau du ciel: le modèle donne les couleurs et leur répartition, notre courbe donne la luminance du zénith
     // (0,17 en plein jour, encore 0,04 au ras de l'horizon), sinon le zénith s'éteint au soleil bas et l'horizon blanchit.
     const sunV = [Math.sin(bearing) * Math.cos(el), Math.sin(el), -Math.cos(bearing) * Math.cos(el)];
@@ -1298,7 +1495,7 @@ export function createScene3D(container, opts = {}) {
     // Paliers de 50 m pour que la grille d'ombre ne tremble pas à chaque mouvement; profondeur, biais et pénombre suivent.
     const SR = Math.ceil(Math.max(150, Math.min(700, 0.9 * Rr + 0.8 * camH + 60)) / 50) * 50;
     sc.left = -SR; sc.right = SR; sc.top = SR; sc.bottom = -SR;
-    // Profondeur: plage fixe SHADOW_SPAN (10 km) vers le soleil, pour qu'une colline ou une montagne jusqu'à 9 km dans sa
+    // Profondeur: plage fixe SHADOW_SPAN (20 km) vers le soleil, pour qu'une colline ou une montagne jusqu'à 19 km dans sa
     // direction porte son ombre sur le site (texture de profondeur 24 bits: moins d'un millimètre par pas); le biais garde
     // sa valeur en mètres et le shader PCSS est calé sur cette plage.
     const dist = SHADOW_SPAN + 200; sunL.position.copy(T0).addScaledVector(d, dist); sc.far = dist + 1.75 * SR; sc.near = sc.far - SHADOW_SPAN; sc.updateProjectionMatrix();
@@ -1312,7 +1509,7 @@ export function createScene3D(container, opts = {}) {
     // Orage sans percée (soleil moins du cinquième de l'heure): tous les groupes d'ombre, le projet est à l'ombre des nuages.
     const nb = tg.storm >= 0.45 && !tg.brk ? 60 : Math.min(60, Math.round(cum * 110)), hh = cloudLift / Math.max(d.y, 0.08); blobs.forEach((g, i) => { g.visible = i < nb; const u = g.userData; g.position.set(T0.x + u.gx + d.x * hh, T0.y + cloudLift, T0.z + u.gz + d.z * hh); });
     // Caméra à hauteur camH au-dessus du sol sous elle: elle suit la pente en tournant autour du sujet.
-    const cx = ct.x + Math.sin(az) * Rr, cz = ct.z - Math.cos(az) * Rr; cam.position.set(cx, terrain.hTri(cx, -cz) + camH, cz); cam.lookAt(ct); cam.updateMatrixWorld(); cam.getWorldDirection(vF); sky.position.copy(cam.position);
+    const cx = ct.x + Math.sin(az) * Rr, cz = ct.z - Math.cos(az) * Rr; cam.position.set(cx, terrain.hTri(cx, -cz) + camH, cz); cam.lookAt(ct); cam.updateMatrixWorld(); cam.getWorldDirection(vF); sky.position.copy(cam.position); sunVisU.uSunV.value.copy(sunVisU.uSunW.value).transformDirection(cam.matrixWorldInverse); sunVisU.uSubj.value.set(T0.x, T0.z);
     // Percée (8 octobre 2026): si la prévision donne du soleil au moins le cinquième de l'heure, les groupes dont l'ombre
     // toucherait le projet ou le disque de rayon brkR autour de lui sont retirés; les autres restent (la percée est locale,
     // le lointain reste à l'ombre). Le disque ne suit ni le zoom ni la caméra: tourner ne fait naître aucune ombre.
@@ -1456,7 +1653,7 @@ export function createScene3D(container, opts = {}) {
     // sans ce facteur, les montagnes prenaient la clarté de la base des nuages et sortaient gris très pâle (Stéphane, 10 octobre 2026).
     const hcT = hc.slice();
     if (wMid > 0) { const mr = slabRad(1); hc = mv(hc, mr.map((v, i) => v * 0.45 * 0.85 + hcT[i] * 0.15), wMid); }
-    if (wLow > 0) { const lr = fogSat > cur.l0c ? lin([0.50, 0.54, 0.60]).map(v => v * 0.65 * (1 - 0.8 * twi)) : slabRad(0).map(v => v * 0.45); hc = mv(hc, lr.map((v, i) => v * 0.85 + hcT[i] * 0.15), wLow); } hc = mv(hc, lin([0.30, 0.21, 0.13]).map(v => v * 0.5), 0.28 * urban * nightF); fog.color.setRGB(hc[0], hc[1], hc[2]); fog.near = 250 + camH * 4; fog.far = 1500 + camH * 14; // dernier mélange: pollution lumineuse au loin, en ville
+    if (wLow > 0) { const lr = fogSat > cur.l0c ? lin([0.50, 0.54, 0.60]).map(v => v * 0.65 * (1 - 0.8 * twi)) : slabRad(0).map(v => v * 0.45); hc = mv(hc, lr.map((v, i) => v * 0.85 + hcT[i] * 0.15), wLow); } hc = mv(hc, lin([0.30, 0.21, 0.13]).map(v => v * 0.5), 0.28 * urban * nightF); hzU.uGlowL.value = 0.28 * urban * nightF * LUM(lin([0.30, 0.21, 0.13]).map(v => v * 0.5)); fog.color.setRGB(hc[0], hc[1], hc[2]); fog.near = 250 + camH * 4; fog.far = 1500 + camH * 14; // dernier mélange: pollution lumineuse au loin, en ville
     if (cur.smk > 0) { const sl = LUM([fog.color.r, fog.color.g, fog.color.b]); fog.color.lerp(new THREE.Color(sl * 1.15, sl * 0.85, sl * 0.55), 0.6 * cur.smk); } // fumée: le voile du lointain prend aussi la teinte brun-orangé
     const rainK = cur.rain * (1 - RAIN_BRK * cur.brk); if (rainK > 0) { fog.near *= 1 - 0.6 * rainK; fog.far *= 1 - 0.5 * rainK; fog.color.lerp(new THREE.Color().setScalar(fog.color.r * 0.2126 + fog.color.g * 0.7152 + fog.color.b * 0.0722), 0.5 * rainK); } // pluie: visibilité réduite, grisaille
     lampU.uWet.value = cur.wet;
@@ -1474,7 +1671,7 @@ export function createScene3D(container, opts = {}) {
       const pS = new THREE.Vector3().copy(sDir).multiplyScalar(3000).add(cam.position).project(cam); sunPx = (pS.x + 1) / 2; sunPy = (pS.y + 1) / 2;
       const outX = Math.max(0, Math.abs(sunPx - 0.5) - 0.5) * (W / H), outY = Math.max(0, Math.abs(sunPy - 0.5) - 0.5);
       kFl = smooth(22, 4, realDeg) * smooth(-1.5, -0.3, realDeg) * smooth(0.8, 0, Math.hypot(outX, outY));
-      if (kFl > 0) visCPU = terrain.blocked(cam.position.x, -cam.position.z, cam.position.y, cam.position.x + sDir.x * 9000, -cam.position.z - sDir.z * 9000, cam.position.y + sDir.y * 9000) ? 0 : 1;
+      if (kFl > 0) { const ex = cam.position.x, en = -cam.position.z, ey = cam.position.y, hl = Math.hypot(sDir.x, sDir.z) || 1, ux = sDir.x / hl, un = -sDir.z / hl, tS = sDir.y / hl; visCPU = 1; for (let dd = 10; dd <= 20000; dd += dd < 300 ? 10 : dd < 1500 ? 25 : dd < 5000 ? 100 : 200) { if (terrain.hTri(ex + ux * dd, en + un * dd) - curvDrop(dd) > ey + tS * dd + 0.3) { visCPU = 0; break; } } } // relief jusqu'à 20 km, courbure comprise (comme le sol et la barre)
     }
     // Arbre effacé tout près de l'objectif (nearFade) qui cache le soleil: le flare et le disque perdent la part que son
     // feuillage arrête vraiment (environ les trois quarts), sinon l'étoile passerait à travers un arbre réel.
@@ -1540,7 +1737,7 @@ export function createScene3D(container, opts = {}) {
     const mm = tg.rain > 0 ? (w.precip >= 10 ? String(Math.round(w.precip)) : String(Math.round(w.precip * 10) / 10).replace('.', ',')) : null;
     // Seuils d'Environnement Canada: faible sous 2,5 mm/h, modérée jusqu'à 7,5 mm/h, forte au-delà.
     const rainTxt = mm == null ? '' : `Pluie ${w.precip >= 7.5 ? 'forte' : w.precip >= 2.5 ? 'modérée' : 'faible'}, ${mm} mm en une heure`;
-    const noSun = tg.iv < 0.05 || (weatherRow != null && w.sunFraction == null); // soleil direct nul ou trop faible pour être mesuré
+    const noSun = tg.iv < 0.05; // soleil direct nul ou presque (iv tient compte de l'heure voisine quand celle-ci est trop sombre pour être mesurée)
     // Brouillard (visibilité sous 1 km) ou brume (1 à 5 km), et épaisseur de la nappe au-dessus du projet.
     const vis = w.visibility, fogRel = w.fogThick ?? null;
     // « Risque »: le brouillard est mal prévu par les modèles, on le dit.
@@ -1561,7 +1758,7 @@ export function createScene3D(container, opts = {}) {
     const cond = smokeTxt ? (smokeSun ? smokeTxt : smokeTxt + ' · ' + cond1) : cond1;
     // Genres de nuages (sky.js): « Nuages bas 40 % (cumulus), nuages d'altitude 60 % (altocumulus et cirrus) »
     const lowN = low >= 5 && cloudNames.length ? cloudNames[0] : null, altN = cloudNames.slice(lowN ? 1 : 0).join(' et ');
-    const parts = low == null ? '' : `Nuages bas ${low} %${lowN ? ' (' + lowN + ')' : ''}, nuages d’altitude ${Math.round(alt)} %${altN && alt >= 5 ? ' (' + altN + ')' : ''}, soleil direct ${sun == null ? 0 : sun} %`;
+    const parts = low == null ? '' : `Nuages bas ${low} %${lowN ? ' (' + lowN + ')' : ''}, nuages d’altitude ${Math.round(alt)} %${altN && alt >= 5 ? ' (' + altN + ')' : ''}, soleil direct ${sun == null ? '--' : sun + ' %'}`;
     const where = night ? 'Soleil sous l’horizon' : `Soleil à ${Math.max(0, Math.round(realDeg))}° au-dessus de l’horizon, plein ${DIRS[Math.round(((bearing * 180 / Math.PI) % 360) / 45) % 8]}`;
     const est = (0.38 + 0.36 * Math.max(veil * (0.4 + 0.6 * thick), cum * 0.5)) * dk * (1 - 0.45 * cur.storm); // ciel d'orage sombre: texte clair
     // Forme du projet la plus en face de la caméra: sa hauteur et d'où elle vient (réglée, mesurée, par défaut).
@@ -1611,8 +1808,21 @@ export function createScene3D(container, opts = {}) {
     },
     setWeather(row) {
       weatherRow = row || null;
-      const s = row?.sunFraction == null ? 0.02 : row.sunFraction, cum = (row?.cloudLow ?? 0) / 100;
-      tg.cum = cum; tg.mid = (row?.cloudMid ?? 0) / 100; tg.high = (row?.cloudHigh ?? 0) / 100; tg.iv = clamp(s / Math.max(0.1, 1 - cum));
+      // Heure du lever ou du coucher (v633.194): le rayonnement d'Open-Meteo est la moyenne de l'heure précédente; quand le
+      // soleil y est levé trop peu de temps pour être mesuré, on prend la rangée voisine du côté du soleil (la suivante au
+      // lever, la précédente au coucher). sunFraction est null sous 50 W/m² (presque toute heure du lever en automne): la
+      // part directe est alors tirée du direct et du diffus bruts, sinon de la rangée voisine (avant: 2 %, lumière plate).
+      const tEnd = row?.time ? new Date(row.time).getTime() : dateMs;
+      const rising = SunCalc.getPosition(new Date(tEnd), lat, lng).altitude > SunCalc.getPosition(new Date(tEnd - 3600000), lat, lng).altitude;
+      const side = rising ? row?.next : row?.prev?.[0];
+      const sOf = (r) => r == null ? null : r.sunFraction != null ? r.sunFraction : r.direct != null && r.diffuse != null && r.direct + r.diffuse >= 5 ? r.direct / (r.direct + r.diffuse) : null;
+      const s = sOf(row) ?? sOf(side) ?? 0.02, cum = (row?.cloudLow ?? 0) / 100;
+      pRow = pSunOf(row); pNext = pSunOf(row?.next); pPrev = pSunOf(row?.prev?.[0]); rowT = tEnd;
+      const pS = pSunOf(row) ?? pSunOf(side) ?? 0;
+      // Intensité du soleil dans les trouées: la part directe s, mais pas moins de 0,8 fois la part de l'heure au soleil (au
+      // soleil bas par ciel dégagé, s tombe à 0,5 parce que le diffus domine sur l'horizontale, alors que le faisceau est
+      // entier; 0,8: la valeur de s à midi par ciel dégagé, sur laquelle la lumière a été calée).
+      tg.cum = cum; tg.mid = (row?.cloudMid ?? 0) / 100; tg.high = (row?.cloudHigh ?? 0) / 100; tg.iv = clamp(Math.max(s, 0.8 * pS) / Math.max(0.1, 1 - cum));
       // Pluie: nombre de gouttes de 0,1 mm/h (quelques-unes) à 8 mm/h (le maximum), en échelle logarithmique. Sous zéro ou
       // icône de neige: rien (la neige viendra à part). Sol mouillé: pluie de l'heure, ou des trois précédentes qui sèche.
       const rk = (h) => h && h.precip >= 0.1 && !(h.temp <= 0) && h.icon !== 'snow' ? clamp(Math.log10(1 + h.precip * 4) / Math.log10(33)) : 0;
@@ -1632,8 +1842,7 @@ export function createScene3D(container, opts = {}) {
       // Part de l'heure au soleil: direct normal moyen rapporté à celui d'un ciel clair (au soleil, un point reçoit tout le
       // direct; à l'ombre d'un nuage, presque rien), soleil au milieu de l'heure précédente (moyenne d'Open-Meteo). Percée:
       // le projet est montré au soleil, comme la légende le dit (voir frame).
-      const tMid = row?.time ? new Date(row.time).getTime() - 1800000 : dateMs, hMid = SunCalc.getPosition(new Date(tMid), lat, lng).altitude * 180 / Math.PI;
-      tg.pSun = row?.direct != null && hMid >= 2 ? clamp(row.direct / Math.sin(hMid * Math.PI / 180) / dniClear(hMid)) : 0;
+      tg.pSun = pS;
       tg.brk = tg.pSun >= SUN_ON && tg.iv >= 0.3 ? 1 : 0;
       // Brouillard et brume, par prudence (Stéphane: « ne pas montrer du faux brouillard »): il faut que les deux modèles
       // s'accordent: GFS (et HRRR) prévoit une visibilité sous 5 km avec de l'air saturé au sol (une nappe est mesurée),
@@ -1643,7 +1852,7 @@ export function createScene3D(container, opts = {}) {
       const V = row?.visibility, sat = row?.fogThick != null, lowOk = (row?.cloudLow ?? 0) >= 80;
       tg.fogK = V != null && V >= 0 && sat && lowOk && !(tg.rain > 0) ? 3912 / Math.max(V, 40) * smooth(5000, 1000, V) : 0; tg.fogTh = Math.min(row?.fogThick ?? 600, 600);
       // Forme des nuages (sky.js, d'après le profil vertical, le nuage convectif, le CAPE et le code météo d'ICON).
-      const cl = classifyClouds(row);
+      const cl = classifyClouds(row ? { ...row, sunFraction: s } : row);
       Object.assign(tg, { l0b: cl.low.base, l0t: cl.low.top, l0c: cl.low.cov, l0k: cl.low.type, l0w: cl.low.tower, l0s: cl.low.cb, l0d: cl.low.dark, m1b: cl.mid.base, m1t: cl.mid.top, m1c: cl.mid.cov, m1k: cl.mid.type, hc: cl.high.cov, hk: cl.high.type, ha: cl.high.alt, ht: cl.high.thick, shaft: cl.shaft });
       cloudNames = cl.names;
       // Brouillard ou stratus bas d'après le profil ICON (10 octobre 2026): les « nuages bas » d'ICON comptent la nappe elle-même.
@@ -1685,7 +1894,7 @@ export function createScene3D(container, opts = {}) {
       running = false; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); window.removeEventListener('keydown', onKey, true); window.removeEventListener('keyup', onKeyUp, true); clearStatics(); clearTimeout(modelTimer); dropModel(); sat = null; placeSat();
       [sceneRT, aoRT, aoRT2, compRT, reflRT, reflRT2, cubeRT, skyRT, envRT, cloudRT, cloudRTHi, accA, accB].forEach(r => r && r.dispose()); pmrem.dispose(); noiseTex.dispose();
       [skyMat, skyMatIn, cloudPassMat, accMat, aoMat, blurMat, compMat, reflMat, rblurMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, shadowMat, conMat, fillMat, edgeMat, waterMat, cloudMat, ...Object.values(flatMats)].forEach(m => m.dispose()); if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
-      [skyGeo, crownGeo, crownGeoMid, crownGeoFar, crownGeoShadow, conGeo, conGeoLow, trunkGeo, trunkGeoLow, sg, gnd && gnd.geometry, gndFar.geometry, quad.geometry].forEach(g => g && g.dispose()); FT.map.dispose(); FT.rough.dispose(); FT.emis.dispose(); gndTex.dispose(); gndTexNear.dispose(); gndMat.dispose(); gndMatFar.dispose(); leafMask.dispose(); conMask.dispose(); edgeMask.dispose();
+      [skyGeo, crownGeo, crownGeoMid, crownGeoFar, crownGeoShadow, conGeo, conGeoLow, trunkGeo, trunkGeoLow, sg, gnd && gnd.geometry, gndPol && gndPol.geometry, gndFar.geometry, quad.geometry].forEach(g => g && g.dispose()); gndMatPol.dispose(); gndDepthMat.dispose(); hzMat.dispose(); hzRT.dispose(); if (hnTex) hnTex.dispose(); if (hfTex) hfTex.dispose(); FT.map.dispose(); FT.rough.dispose(); FT.emis.dispose(); gndTex.dispose(); gndTexNear.dispose(); gndMat.dispose(); gndMatFar.dispose(); leafMask.dispose(); conMask.dispose(); edgeMask.dispose();
       R.dispose(); R.forceContextLoss(); if (el.parentNode) el.parentNode.removeChild(el);
     },
   };

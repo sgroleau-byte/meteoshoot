@@ -8,15 +8,22 @@
 // Résultat: une grille non uniforme (même axe en x et en n: 2 m au centre, pas croissant de 12 % jusqu'à 500 m,
 // 20 km de rayon), hauteurs en décimètres au-dessus du point le plus bas, encodées en base64 (Int16). Le client
 // (src/scene3d/terrain.js) la garde dans le cache partagé Supabase, donc chaque lieu n'est calculé qu'une fois.
+// Depuis la v633.194 (TERRAIN_V 2), s'y ajoute le relief lointain précis (far): une grille polaire centrée sur le lieu,
+// de FAR_R0 (1 km) à 20 km, anneaux espacés de 1 % de leur rayon et 720 directions (0,5°), soit une précision à peu
+// près constante à l'écran (10 m à 1 km, 50 m à 5 km, 200 m à 20 km; la grille carrée passait à 500 m dès 5 km et
+// abaissait les sommets lointains de 30 à 90 m). Sources par distance: LiDAR 8 m jusqu'à 2 km, 16 m jusqu'à 4 km,
+// 32 m jusqu'à 12 km, 64 m jusqu'à 20 km (aperçus des mosaïques), Terrain Tiles z11 et z10 en secours. Les 15 premiers
+// anneaux partent de la surface de la grille carrée (même découpage en triangles que le client) pour un raccord exact.
 //
-// GET /api/terrain?lat=46.1374&lng=-70.6695  ->  { v, origin, ax, hMin, h, src, ms }
+// GET /api/terrain?lat=46.1374&lng=-70.6695  ->  { v, origin, ax, hMin, h, far: { r0, grow, dirs, rings, hMin, h }, src, ms }
 // Essai local: node api/terrain.js --test 46.1374 -70.6695 [--png relief.png]
 
 import { PNG } from 'pngjs';
 import { openCog, readWindow } from './cog.js';
+import { gridSampler } from '../src/scene3d/horizon.js';
 
 export const maxDuration = 60;
-export const TERRAIN_V = 1;
+export const TERRAIN_V = 2; // 2: relief lointain polaire (far)
 const UA = 'MeteoShoot (www.meteoshoot.com)';
 
 // ---------- grille locale: positions des noeuds le long d'un axe (mètres), symétrique autour de 0
@@ -78,7 +85,9 @@ export async function terrariumLayer(lat, lng, z, half, mLat, mLng, log) {
   let ok = 0;
   await Promise.all(jobs.map(async ([tx, ty]) => {
     try {
-      const r = await fetch(`${TERR}/${z}/${tx}/${ty}.png`, { headers: { 'User-Agent': UA } }); if (!r.ok) return;
+      const get = () => fetch(`${TERR}/${z}/${tx}/${ty}.png`, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(15000) });
+      let r; try { r = await get(); } catch (e) { await new Promise(res => setTimeout(res, 400)); r = await get(); } // un second essai: échec réseau passager
+      if (!r.ok) return;
       const png = PNG.sync.read(Buffer.from(await r.arrayBuffer())); const p = png.data, ox = (tx - tx0) * 256, oy = (ty - ty0) * 256;
       for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) { const k = (y * 256 + x) * 4; data[(oy + y) * W + ox + x] = p[k] * 256 + p[k + 1] + p[k + 2] / 256 - 32768; }
       ok++;
@@ -94,14 +103,20 @@ const stacCache = new Map();
 function hrdemUrls(coll, bbox) {
   const key = coll + bbox; if (stacCache.has(key)) return stacCache.get(key);
   const p = fetch(`${STAC}/${coll}/items?bbox=${bbox}&limit=10`, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(12000) })
-    .then(r => (r.ok ? r.json() : { features: [] })).then(j => (j.features || []).map(f => f.assets && f.assets.dtm && f.assets.dtm.href).filter(Boolean));
+    .then(r => { if (!r.ok) throw new Error('catalogue LiDAR ' + r.status); return r.json(); }).then(j => (j.features || []).map(f => f.assets && f.assets.dtm && f.assets.dtm.href).filter(Boolean));
   stacCache.set(key, p); p.catch(() => stacCache.delete(key)); return p;
 }
 // urls: mosaïques par ordre de préférence (1 m avant 2 m); on s'arrête dès qu'une couvre toute la fenêtre.
-export async function hrdemLayers(urls, res, lat, lng, half, mLat, mLng, log) {
+// circle: fenêtre ronde de rayon half (cadre Lambert centre ± half x 1,01, environ 1,7 fois moins de pixels que le carré
+// tourné), pour le relief lointain; sinon le carré local ±half.
+export async function hrdemLayers(urls, res, lat, lng, half, mLat, mLng, log, circle = false) {
   const out = [];
-  const corners = [[-half, -half], [half, -half], [half, half], [-half, half]].map(([x, n]) => toLCC(lat + n / mLat, lng + x / mLng));
-  const E0 = Math.min(...corners.map(c => c[0])), E1 = Math.max(...corners.map(c => c[0])), N0 = Math.min(...corners.map(c => c[1])), N1 = Math.max(...corners.map(c => c[1]));
+  let E0, E1, N0, N1;
+  if (circle) { const [Ec, Nc] = toLCC(lat, lng), R = half * 1.01; E0 = Ec - R; E1 = Ec + R; N0 = Nc - R; N1 = Nc + R; }
+  else {
+    const corners = [[-half, -half], [half, -half], [half, half], [-half, half]].map(([x, n]) => toLCC(lat + n / mLat, lng + x / mLng));
+    E0 = Math.min(...corners.map(c => c[0])); E1 = Math.max(...corners.map(c => c[0])); N0 = Math.min(...corners.map(c => c[1])); N1 = Math.max(...corners.map(c => c[1]));
+  }
   for (const url of urls) {
     try {
       const cog = await openCog(url);
@@ -121,22 +136,61 @@ export async function hrdemLayers(urls, res, lat, lng, half, mLat, mLng, log) {
   return out.reverse(); // la préférée en dernier: elle recouvre les autres
 }
 
+// ---------- grille polaire lointaine (v633.194): anneau k au rayon FAR_R0 x FAR_GROW^k, direction j à j x 360 / FAR_DIRS
+// degrés depuis le nord dans le sens horaire (x = r sin, n = r cos, comme horizon.js); rangée k, colonne j.
+export const FAR_R0 = 1000, FAR_GROW = 1.01, FAR_DIRS = 720, FAR_BLEND = 15;
+export const farRings = () => Math.floor(Math.log(EXTENT / FAR_R0) / Math.log(FAR_GROW) + 1e-9) + 1;
+// Couches du lointain, de la plus grossière à la plus fine, avec leur rayon d'usage (fondu sur les 15 % extérieurs, en
+// distance euclidienne); nearH: surface de la grille carrée (relief proche tel que le client le reçoit), raccord et secours.
+function buildFar(layers, nearH, lat, lng, mLat, mLng) {
+  const R = farRings(), D = FAR_DIRS, h = new Float32Array(R * D);
+  for (let k = 0; k < R; k++) {
+    const r = FAR_R0 * Math.pow(FAR_GROW, k), tb = k < FAR_BLEND ? (k / FAR_BLEND) * (k / FAR_BLEND) * (3 - 2 * k / FAR_BLEND) : 1;
+    for (let j = 0; j < D; j++) {
+      const b = j * 2 * Math.PI / D, x = r * Math.sin(b), n = r * Math.cos(b), la = lat + n / mLat, ln = lng + x / mLng;
+      let v = NaN;
+      for (const [L, U] of layers) {
+        if (r > U) continue;
+        const [s, wv] = sample(L, la, ln); if (s !== s) continue;
+        const w = Math.min(Math.min(1, (U - r) / (0.15 * U)), wv);
+        if (v !== v) { v = s; continue; }
+        v += w * (s - v);
+      }
+      const hn = nearH(x, n);
+      h[k * D + j] = v !== v ? hn : hn + (v - hn) * tb;
+    }
+  }
+  let mn = Infinity; for (let i = 0; i < h.length; i++) if (h[i] < mn) mn = h[i];
+  const hMin = Math.floor(mn * 10) / 10, q = new Int16Array(h.length);
+  for (let i = 0; i < h.length; i++) q[i] = Math.max(0, Math.min(32767, Math.round((h[i] - hMin) * 10)));
+  return { r0: FAR_R0, grow: FAR_GROW, dirs: D, rings: R, hMin, h: Buffer.from(q.buffer).toString('base64') };
+}
+
 // ---------- construction
 export async function buildTerrain(lat, lng, log = () => {}) {
   const t0 = Date.now();
   const mLat = 111320, mLng = 111320 * Math.cos(rad(lat));
   const ax = buildAxis(), N = ax.length;
   const bbox = (half) => [lng - half / mLng, lat - half / mLat, lng + half / mLng, lat + half / mLat].map(v => v.toFixed(4)).join(',');
-  const [urls1, urls2] = await Promise.all([hrdemUrls('hrdem-mosaic-1m', bbox(6500)).catch(() => []), hrdemUrls('hrdem-mosaic-2m', bbox(6500)).catch(() => [])]);
+  // Relief incomplet (catalogue ou tuile en échec): renvoyé quand même, mais signalé (src.partial) pour ne pas être mis en
+  // cache (Supabase et réseau de Vercel): une panne passagère ne doit pas figer un relief sans LiDAR pour toujours.
+  let partial = false; const logE = (m) => { partial = true; log(m); };
+  const stac = (coll) => hrdemUrls(coll, bbox(23500)).catch((e) => { logE(`catalogue ${coll}: ${e.message}`); return []; });
+  const [urls1, urls2] = await Promise.all([stac('hrdem-mosaic-1m'), stac('hrdem-mosaic-2m')]);
   const lidarUrls = [...urls1, ...urls2.filter(u => !urls1.includes(u))];
   // Couches de la plus grossière à la plus fine; chacune recouvre la précédente là où elle a des données, avec un
-  // fondu sur ses bords (15 % du demi-côté) et à ses trous.
-  const [t10, t13, l32, l4, l2] = await Promise.all([
-    terrariumLayer(lat, lng, 10, EXTENT * 1.03, mLat, mLng, log),
-    terrariumLayer(lat, lng, 13, 5000, mLat, mLng, log),
-    hrdemLayers(lidarUrls, 32, lat, lng, 6000, mLat, mLng, log),
-    hrdemLayers(lidarUrls, 4, lat, lng, 1300, mLat, mLng, log),
-    hrdemLayers(lidarUrls, 2, lat, lng, 640, mLat, mLng, log),
+  // fondu sur ses bords (15 % du demi-côté) et à ses trous. Lointain: fenêtres rondes, résolution proche du pas local.
+  const [t10, t13, l32, l4, l2, t11, f64, f32, f16, f8] = await Promise.all([
+    terrariumLayer(lat, lng, 10, EXTENT * 1.03, mLat, mLng, logE),
+    terrariumLayer(lat, lng, 13, 5000, mLat, mLng, logE),
+    hrdemLayers(lidarUrls, 32, lat, lng, 6000, mLat, mLng, logE),
+    hrdemLayers(lidarUrls, 4, lat, lng, 1300, mLat, mLng, logE),
+    hrdemLayers(lidarUrls, 2, lat, lng, 640, mLat, mLng, logE),
+    terrariumLayer(lat, lng, 11, 21000, mLat, mLng, logE),
+    hrdemLayers(lidarUrls, 64, lat, lng, 23500, mLat, mLng, logE, true),
+    hrdemLayers(lidarUrls, 32, lat, lng, 12800, mLat, mLng, logE, true),
+    hrdemLayers(lidarUrls, 16, lat, lng, 4500, mLat, mLng, logE, true),
+    hrdemLayers(lidarUrls, 8, lat, lng, 2300, mLat, mLng, logE, true),
   ]);
   const layers = [t10, t13, ...l32, ...l4, ...l2].filter(Boolean);
   if (!layers.length) throw new Error('aucune source de relief');
@@ -169,8 +223,13 @@ export async function buildTerrain(lat, lng, log = () => {}) {
   hMin = Math.floor(hMin * 10) / 10;
   const q = new Int16Array(N * N); for (let k = 0; k < N * N; k++) q[k] = Math.max(0, Math.min(32767, Math.round((h[k] - hMin) * 10)));
   const b64 = Buffer.from(q.buffer).toString('base64');
-  const src = { lidar: fineN ? Math.round(fineLidar / fineN * 100) / 100 : 0, lidarRes, cdem: !!(t10 || t13), layers: layers.map(L => `${L.name} (${L.tiles} tuiles)`) };
-  return { v: TERRAIN_V, origin: [lat, lng], ax, hMin, hMax: Math.round(hMax * 10) / 10, h: b64, src, ms: { fetch: tFetch, total: Date.now() - t0 } };
+  // Relief lointain: raccordé à la surface de la grille carrée telle que le client la reçoit (hauteurs au décimètre).
+  const Hq = new Float32Array(N * N); for (let k = 0; k < N * N; k++) Hq[k] = hMin + q[k] / 10;
+  const farLayers = [[t10, 20600], [t11, 20500], ...f64.map(L => [L, 23000]), ...f32.map(L => [L, 12000]), ...f16.map(L => [L, 4000]), ...f8.map(L => [L, 2000])].filter(([L]) => L);
+  const far = buildFar(farLayers, gridSampler(ax, Hq), lat, lng, mLat, mLng);
+  const src = { lidar: fineN ? Math.round(fineLidar / fineN * 100) / 100 : 0, lidarRes, cdem: !!(t10 || t13), layers: layers.map(L => `${L.name} (${L.tiles} tuiles)`), far: farLayers.map(([L]) => L.name) };
+  if (partial) src.partial = true;
+  return { v: TERRAIN_V, origin: [lat, lng], ax, hMin, hMax: Math.round(hMax * 10) / 10, h: b64, far, src, ms: { fetch: tFetch, total: Date.now() - t0 } };
 }
 
 export default async function handler(req, res) {
@@ -184,7 +243,7 @@ export default async function handler(req, res) {
     const t = await buildTerrain(lat, lng, (m) => console.log('[terrain]', m));
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=2592000');
+    res.setHeader('Cache-Control', t.src && t.src.partial ? 'public, max-age=300' : 'public, max-age=86400, s-maxage=2592000'); // relief incomplet: pas de cache durable
     res.end(JSON.stringify(t));
   } catch (e) {
     console.error('[terrain]', e);
@@ -197,7 +256,7 @@ if (process.argv.includes('--test')) {
   const lat = parseFloat(process.argv[i + 1] || '46.8367'), lng = parseFloat(process.argv[i + 2] || '-71.2336');
   buildTerrain(lat, lng, (m) => console.log('  ', m)).then((t) => {
     const j = JSON.stringify(t);
-    console.log({ nodes: t.ax.length, hMin: t.hMin, hMax: t.hMax, src: t.src, bytes: j.length, ms: t.ms });
+    console.log({ nodes: t.ax.length, hMin: t.hMin, hMax: t.hMax, far: { rings: t.far.rings, dirs: t.far.dirs, hMin: t.far.hMin, bytes: t.far.h.length }, src: t.src, bytes: j.length, ms: t.ms });
     if (process.argv.includes('--png')) {
       // Ombrage du relief (±1 300 m, 5 m par pixel) pour vérifier à l'oeil: lumière du nord-ouest.
       const N = t.ax.length, ax = t.ax, q = new Int16Array(Buffer.from(t.h, 'base64').buffer, 0, N * N);

@@ -66,8 +66,15 @@ window.H = {
       else {
         // Rangée horaire comme celle de l'application (src/weather/api.js), complétée par défaut.
         const sf = w.sunFraction ?? (1 - (w.cloudLow ?? 0) / 100 * 0.9);
-        const row = { time: localIso(curMs), temp: 12, wind: 10, gust: 15, cloudcover: Math.max(w.cloudLow ?? 0, w.cloudMid ?? 0, w.cloudHigh ?? 0), precip: 0, precipProb: 0, sunFraction: sf, cloudLow: 0, cloudMid: 0, cloudHigh: 0, visibility: 20000, fogThick: null, smoke: 0, icon: 'cloudy', isGood: true, wc: 2, direct: null, convBase: 0, convDepth: 0, prev: [], ...w };
-        if (row.direct == null) { const h = SunCalc.getPosition(new Date(curMs - 1800000), lat, lng).altitude * 180 / Math.PI; row.direct = h > 0 ? Math.max(0, (950 - 710 * Math.exp(-h / 20.2)) * Math.sin(h * Math.PI / 180) * (w.pSun ?? sf)) : 0; }
+        // Rangée de l'heure la plus proche, comme la fiche (v633.194): rayonnement direct moyen de l'heure écoulée par ciel
+        // clair (même référence que le moteur: Meinel au soleil bas, dniClear au-dessus de 20°) fois la part au soleil, diffus
+        // estimé, et les rangées voisines (la suivante sert au lever; la précédente sans pluie, pour ne pas changer le sol mouillé).
+        const clearDir = (tEnd) => { let t = 0; for (let k = 0; k < 12; k++) { const h = SunCalc.getPosition(new Date(tEnd - 3600000 + (k + 0.5) * 300000), lat, lng).altitude * 180 / Math.PI; if (h > 0) { const am = 1 / (Math.sin(h * Math.PI / 180) + 0.50572 * Math.pow(h + 6.07995, -1.6364)), me = 1353 * Math.pow(0.7, Math.pow(am, 0.678)), dc = 950 - 710 * Math.exp(-h / 20.2), u = Math.min(1, Math.max(0, (h - 8) / 12)); t += Math.sin(h * Math.PI / 180) * (me + (dc - me) * u * u * (3 - 2 * u)); } } return t / 12; };
+        const tRow = Math.round(curMs / 3600000) * 3600000;
+        const mk = (tEnd, extra) => { const c = clearDir(tEnd); return { time: localIso(tEnd), temp: 12, wind: 10, gust: 15, cloudcover: Math.max(w.cloudLow ?? 0, w.cloudMid ?? 0, w.cloudHigh ?? 0), precip: 0, precipProb: 0, sunFraction: sf, cloudLow: 0, cloudMid: 0, cloudHigh: 0, visibility: 20000, fogThick: null, smoke: 0, icon: 'cloudy', isGood: true, wc: 2, direct: Math.round(c * (w.pSun ?? sf)), diffuse: c > 0 ? Math.round(20 + 0.18 * c) : 0, convBase: 0, convDepth: 0, prev: [], ...extra }; };
+        const row = { ...mk(tRow, w), direct: w.direct ?? mk(tRow).direct };
+        row.next = mk(tRow + 3600000, { ...w, direct: undefined, prev: undefined }); row.next.direct = mk(tRow + 3600000).direct;
+        row.prev = [{ ...mk(tRow - 3600000, { ...w, precip: 0, direct: undefined, prev: undefined }), direct: mk(tRow - 3600000).direct }];
         e.setWeather(row);
       }
     }
@@ -171,9 +178,26 @@ uniform vec3 uDir; uniform float uJit, uQual; void main(){ vec3 rd = normalize(u
   // Prévision réelle (Open-Meteo, ICON puis GFS) du lieu du banc: rangées horaires complètes, avec les trois heures précédentes.
   async real() {
     const w = await fetchWeather(lat, lng); if (!w || !w.data) throw new Error('météo indisponible: ' + JSON.stringify(w && w.error));
-    const H = w.data.hourly; return H.map((h, i) => ({ ...h, prev: [1, 2, 3].map(k => H[i - k] || null), cls: classifyClouds(h) }));
+    const H = w.data.hourly; return H.map((h, i) => ({ ...h, prev: [1, 2, 3].map(k => H[i - k] || null), next: H[i + 1] || null, cls: classifyClouds(h) }));
   },
   setRow(row) { curMs = new Date(row.time).getTime() + 1800000; e.setTime(curMs); e.setWeather(row); },
+  // Glissement du curseur simulé: à chaque image, l'heure avance de minPerFrame minutes (comme l'animation du curseur de la
+  // fiche), la rangée météo suit l'heure la plus proche (rows: rangées réelles). Mesure la durée de chaque image dessinée.
+  sweep(rows, startIso, hours, minPerFrame) {
+    const core = window.__scene3dCore;
+    return new Promise((res) => {
+      let t = new Date(startIso).getTime(); const tEnd = t + hours * 3600000; let last = performance.now(), curRow = null, changed = false; const frames = [];
+      core.afterFrame = () => { const now = performance.now(); frames.push({ dt: now - last, rowChange: changed }); last = now; changed = false; };
+      const step = () => {
+        if (t > tEnd) { core.afterFrame = null; res({ frames }); return; }
+        e.setTime(t);
+        let best = null, bd = Infinity; for (const r of rows) { const d = Math.abs(new Date(r.time).getTime() - t); if (d < bd) { bd = d; best = r; } }
+        if (best !== curRow) { curRow = best; e.setWeather(best); changed = true; }
+        t += minPerFrame * 60000; requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+  },
   dbg() { const core = window.__scene3dCore; const U = (core.skyU || {}); return { dbg: core.dbg || null, view: e.getView(), status, info: this.info, w: box.clientWidth, h: box.clientHeight, log: log.splice(0) }; },
 };
 console.log('[harness] prêt, lat', lat, 'lng', lng);

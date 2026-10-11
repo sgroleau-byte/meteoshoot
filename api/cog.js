@@ -8,10 +8,18 @@
 const TYPE_SIZE = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8, 16: 8, 17: 8, 18: 8 };
 const UA = 'MeteoShoot (www.meteoshoot.com)';
 
-async function rangeFetch(url, a, b) {
-  const r = await fetch(url, { headers: { Range: `bytes=${a}-${b}`, 'User-Agent': UA }, signal: AbortSignal.timeout(20000) }); // une lecture bloquée ne doit pas épuiser les 60 s de la fonction
-  if (r.status !== 206 && r.status !== 200) throw new Error(`cog ${r.status} ${url.slice(-40)}`);
-  return new Uint8Array(await r.arrayBuffer());
+async function rangeFetch(url, a, b, retry = 1) {
+  try {
+    const r = await fetch(url, { headers: { Range: `bytes=${a}-${b}`, 'User-Agent': UA }, signal: AbortSignal.timeout(20000) }); // une lecture bloquée ne doit pas épuiser les 60 s de la fonction
+    if (r.status !== 206 && r.status !== 200) throw new Error(`cog ${r.status} ${url.slice(-40)}`);
+    return new Uint8Array(await r.arrayBuffer());
+  } catch (e) {
+    // Un second essai après une courte pause (échec réseau passager): sinon toute une couche du relief était perdue en silence.
+    // Pas après le délai de 20 s dépassé: une lecture bloquée coûterait 40 s et la fonction dépasserait ses 60 s.
+    const timedOut = e && (e.name === 'TimeoutError' || e.name === 'AbortError');
+    if (retry > 0 && !timedOut) { await new Promise(res => setTimeout(res, 400)); return rangeFetch(url, a, b, retry - 1); }
+    throw e;
+  }
 }
 
 // ---------- LZW (TIFF): codes de 9 à 12 bits, bit de poids fort en premier, changement « précoce » de largeur.

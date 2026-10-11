@@ -6,11 +6,11 @@
 // s'enfoncer.
 import { supabase } from '../lib/supabase.js';
 import { sceneKey } from './data.js';
-import { HORIZON_V } from './horizon.js';
+import { HORIZON_V, farSampler } from './horizon.js';
 
 const mem = new Map();
 const TBL = 'scene3d_cache'; // même table que les environs, clés préfixées
-export const TERRAIN_V = 1;
+export const TERRAIN_V = 2; // 2: relief lointain polaire (far), voir api/terrain.js
 const API_BASE = (typeof __MS_TARGET__ !== 'undefined' && __MS_TARGET__ === 'native') ? 'https://www.meteoshoot.com' : '';
 export const TEX_PERIOD = 9.0909; // période de la texture du sol en mètres (6600 répétitions sur 60 km, comme avant)
 
@@ -31,7 +31,8 @@ export function loadTerrain(lat, lng) {
     if (t?.h && (t.v || 1) < TERRAIN_V) { res = await fetch(url, { cache: 'reload' }); if (res.ok) t = await res.json(); }
     if (!t?.h || !t.ax) throw new Error('terrain: réponse invalide');
     delete t.ms;
-    try {
+    // Relief incomplet (panne passagère d'une source): utilisé pour cette session, pas mis en cache partagé.
+    if (!t.src?.partial) try {
       if (stale) await supabase.from(TBL).update({ version: TERRAIN_V, data: t }).eq('key', key);
       else await supabase.from(TBL).insert({ key, lat: la, lng: ln, version: TERRAIN_V, data: t });
     } catch (e) { /* non connecté ou déjà en cache */ }
@@ -63,7 +64,8 @@ export function loadHorizon(lat, lng) {
     if (h?.profile && (h.v || 1) < HORIZON_V) { res = await fetch(url, { cache: 'reload' }); if (res.ok) h = await res.json(); }
     if (!Array.isArray(h?.profile) || h.profile.length !== 36) throw new Error('horizon: réponse invalide');
     delete h.ms;
-    try {
+    // Profil calculé sur un relief incomplet (panne passagère d'une source): utilisé pour cette session, pas mis en cache.
+    if (!h.src?.partial) try {
       if (stale) await supabase.from(TBL).update({ version: HORIZON_V, data: h }).eq('key', key);
       else await supabase.from(TBL).insert({ key, lat: la, lng: ln, version: HORIZON_V, data: h });
     } catch (e) { /* non connecté ou déjà en cache */ }
@@ -74,12 +76,24 @@ export function loadHorizon(lat, lng) {
   return p;
 }
 
-// Relief calculé -> objet de terrain (hauteurs en mètres au-dessus de la mer).
-export function makeTerrain(t) {
-  const ax = t.ax, N = ax.length, bin = atob(t.h), q = new Int16Array(N * N), u8 = new Uint8Array(q.buffer);
+// Base64 -> Int16Array de n valeurs (zéros si la réponse est trop courte).
+function b64Int16(b64, n) {
+  const bin = atob(b64), q = new Int16Array(n), u8 = new Uint8Array(q.buffer);
   for (let i = 0; i < u8.length && i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return q;
+}
+// Relief calculé -> objet de terrain (hauteurs en mètres au-dessus de la mer). far: relief lointain polaire (v633.194),
+// absent des réponses de la version 1.
+export function makeTerrain(t) {
+  const ax = t.ax, N = ax.length, q = b64Int16(t.h, N * N);
   const H = new Float32Array(N * N); for (let k = 0; k < N * N; k++) H[k] = t.hMin + q[k] / 10;
-  return terrainFrom(ax, H, t.src || {}, false);
+  let far = null;
+  if (t.far && t.far.h) {
+    const f = t.far, qf = b64Int16(f.h, f.rings * f.dirs), Hf = new Float32Array(qf.length);
+    for (let i = 0; i < qf.length; i++) Hf[i] = f.hMin + qf[i] / 10;
+    far = { r0: f.r0, grow: f.grow, dirs: f.dirs, rings: f.rings, H0: Hf };
+  }
+  return terrainFrom(ax, H, t.src || {}, false, far);
 }
 // Sol plat (en attendant le relief, ou sans relief): 3 km maillés à 50 m, puis deux cellules jusqu'à 30 km.
 export function flatTerrain() {
@@ -89,8 +103,12 @@ export function flatTerrain() {
 
 function pointInRing(p, r) { let inside = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const a = r[i], b = r[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside; } return inside; }
 
-function terrainFrom(ax, H0, src, flat) {
+function terrainFrom(ax, H0, src, flat, far0 = null) {
   const N = ax.length, H = new Float32Array(H0); // H0: relief d'origine; H: relief creusé sous l'eau (carveWater)
+  // Relief lointain polaire (au-delà de far.r0, 1 km): far.H creusé sous l'eau comme H, far.H0 d'origine.
+  const far = far0 ? { ...far0, H: new Float32Array(far0.H0) } : null, farFn = far ? farSampler(far, far.H) : null, R0sq = far ? far.r0 * far.r0 : Infinity;
+  const farFn0 = far ? farSampler(far, far.H0) : null; // relief lointain d'origine (avant creusage)
+  const farR = (k) => far.r0 * Math.pow(far.grow, k);
   const idx = (v) => { if (v <= ax[0]) return 0; if (v >= ax[N - 1]) return N - 2; let lo = 0, hi = N - 2; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (ax[m] <= v) lo = m; else hi = m - 1; } return lo; };
   // Hauteur sur la surface du maillage: plan du triangle de la cellule (diagonale du coin bas-gauche au coin haut-droit,
   // la même que celle du maillage dessiné), donc continue d'une cellule à l'autre et exacte sous les surfaces drapées.
@@ -99,7 +117,8 @@ function terrainFrom(ax, H0, src, flat) {
     const k = j * N + i, h00 = A[k], h10 = A[k + 1], h01 = A[k + N], h11 = A[k + N + 1];
     return v <= u ? h00 + (h10 - h00) * u + (h11 - h10) * v : h00 + (h11 - h01) * u + (h01 - h00) * v;
   }
-  const hTri = (x, n) => hTriOf(H, x, n);
+  // Hauteur du relief: grille carrée en deçà de far.r0 (surface exacte du maillage proche), grille polaire au-delà.
+  const hTri = farFn ? (x, n) => (x * x + n * n < R0sq ? hTriOf(H, x, n) : farFn(x, n)) : (x, n) => hTriOf(H, x, n);
   // Normales lissées aux noeuds (différences centrées sur la grille non uniforme), interpolées en tout point: les surfaces
   // drapées (rues, parcs) sont ombrées comme le sol sous elles, sans facettes. Recalculées après creusage (carveWater).
   let NRM = null;
@@ -126,15 +145,17 @@ function terrainFrom(ax, H0, src, flat) {
   const surfaces = new Map(); // plan d'eau -> fonction de hauteur
   function waterSurface(w) { return surfaces.get(w) || hTri; }
   function carveWater(waters) {
-    H.set(H0); surfaces.clear(); NRM = null;
+    H.set(H0); surfaces.clear(); NRM = null; if (far) far.H.set(far.H0);
     for (const w of waters || []) {
       const o = w.o || w, holes = w.h || []; if (!o || o.length < 3) continue;
-      const pts = []; [o, ...holes].forEach(r => r.forEach(p => pts.push([p[0], p[1], hTriOf(H0, p[0], p[1])])));
+      // Relief d'origine des rives: grille carrée en deçà de far.r0, relief lointain précis au-delà.
+      const hOrig = (x, n) => (farFn0 && x * x + n * n >= R0sq ? farFn0(x, n) : hTriOf(H0, x, n));
+      const pts = []; [o, ...holes].forEach(r => r.forEach(p => pts.push([p[0], p[1], hOrig(p[0], p[1])])));
       const surf = (x, n) => {
         let dmin = Infinity; for (const p of pts) { const d = Math.hypot(p[0] - x, p[1] - n); if (d < dmin) dmin = d; }
         const R = Math.max(3 * dmin, 40); let s = 0, ws = 0;
         for (const p of pts) { const d = Math.hypot(p[0] - x, p[1] - n); if (d > R) continue; const wt = 1 / (d * d + 1); s += p[2] * wt; ws += wt; }
-        return (ws ? s / ws : hTriOf(H0, x, n)) - 0.3;
+        return (ws ? s / ws : hOrig(x, n)) - 0.3;
       };
       surfaces.set(w, surf);
       let minx = Infinity, maxx = -Infinity, minn = Infinity, maxn = -Infinity; o.forEach(p => { if (p[0] < minx) minx = p[0]; if (p[0] > maxx) maxx = p[0]; if (p[1] < minn) minn = p[1]; if (p[1] > maxn) maxn = p[1]; });
@@ -143,11 +164,28 @@ function terrainFrom(ax, H0, src, flat) {
         const p = [ax[i], ax[j]]; if (!pointInRing(p, o) || holes.some(h => pointInRing(p, h))) continue;
         const k = j * N + i, y = surf(p[0], p[1]) - 0.6; if (H[k] > y) H[k] = y;
       }
+      // Même creusage sur le relief lointain (plans d'eau jusqu'à 2,5 km): noeuds polaires dans le contour.
+      if (far) {
+        const corners = [[minx, minn], [maxx, minn], [maxx, maxn], [minx, maxn]], rMax = Math.max(...corners.map(c => Math.hypot(c[0], c[1])));
+        const rMin = minx <= 0 && maxx >= 0 && minn <= 0 && maxn >= 0 ? 0 : Math.min(...corners.map(c => Math.hypot(c[0], c[1])), minx > 0 ? minx : maxx < 0 ? -maxx : Infinity, minn > 0 ? minn : maxn < 0 ? -maxn : Infinity);
+        if (rMax >= far.r0) {
+          const k0 = Math.max(0, Math.floor(Math.log(Math.max(rMin, far.r0) / far.r0) / Math.log(far.grow))), k1 = Math.min(far.rings - 1, Math.ceil(Math.log(rMax / far.r0) / Math.log(far.grow)));
+          for (let k = k0; k <= k1; k++) { const r = farR(k); for (let jd = 0; jd < far.dirs; jd++) {
+            const b = jd * 2 * Math.PI / far.dirs, p = [r * Math.sin(b), r * Math.cos(b)];
+            if (p[0] < minx || p[0] > maxx || p[1] < minn || p[1] > maxn || !pointInRing(p, o) || holes.some(h => pointInRing(p, h))) continue;
+            const q = k * far.dirs + jd, y = surf(p[0], p[1]) - 0.6; if (far.H[q] > y) far.H[q] = y;
+          } }
+        }
+      }
     }
+    // Raccord au cercle far.r0 après creusage: l'anneau 0 reprend la surface du maillage proche creusé, sinon une marche
+    // apparaissait devant les plans d'eau dont une cellule de la grille chevauche le cercle.
+    if (far) for (let jd = 0; jd < far.dirs; jd++) { const b = jd * 2 * Math.PI / far.dirs; far.H[jd] = hTriOf(H, far.r0 * Math.sin(b), far.r0 * Math.cos(b)); }
   }
   // Statistiques dans un rayon (mètres) autour de l'origine: plus haut point, utile pour placer les nuages.
   function maxWithin(r) { let m = -Infinity; for (let j = 0; j < N; j++) { if (Math.abs(ax[j]) > r) continue; for (let i = 0; i < N; i++) { if (Math.abs(ax[i]) > r) continue; const h = H[j * N + i]; if (h > m) m = h; } } return m === -Infinity ? 0 : m; }
   let hMin = Infinity, hMax = -Infinity; for (let k = 0; k < N * N; k++) { if (H[k] < hMin) hMin = H[k]; if (H[k] > hMax) hMax = H[k]; }
+  if (far) for (let i = 0; i < far.H0.length; i++) { const v = far.H0[i]; if (v < hMin) hMin = v; if (v > hMax) hMax = v; }
   // Le relief gêne-t-il la vue entre deux points (ligne droite, en mètres, hauteurs absolues)?
   function blocked(x0, n0, y0, x1, n1, y1) {
     for (let s = 1; s < 24; s++) { const t = s / 24; if (hTri(x0 + (x1 - x0) * t, n0 + (n1 - n0) * t) > y0 + (y1 - y0) * t + 0.3) return true; }
@@ -184,5 +222,5 @@ function terrainFrom(ax, H0, src, flat) {
     }
     return { pos: new Float32Array(out), nrm: new Float32Array(nrm) };
   }
-  return { ax, H, N, flat, src, hMin, hMax, hTri, normalAt, upNormal, maxWithin, blocked, drape, carveWater, waterSurface };
+  return { ax, H, N, flat, src, hMin, hMax, hTri, normalAt, upNormal, maxWithin, blocked, drape, carveWater, waterSurface, far, farR, rIn: far ? far.r0 : Infinity };
 }

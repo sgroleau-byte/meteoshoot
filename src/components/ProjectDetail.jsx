@@ -77,9 +77,10 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     let best = null, bd = Infinity;
     for (const h of weather.hourly) { const dd = Math.abs(new Date(h.time).getTime() - sceneTimeMs); if (dd < bd) { bd = dd; best = h; } }
     if (bd > 2 * 3600000) return null;
-    // Les trois heures précédentes: la 3D garde le sol mouillé un moment après une averse.
+    // Les trois heures précédentes: la 3D garde le sol mouillé un moment après une averse. L'heure suivante: le soleil de
+    // la première demi-heure après le lever (le rayonnement est la moyenne de l'heure écoulée, v633.194).
     let row = sceneRowCache.current.get(best);
-    if (!row) { const i = weather.hourly.indexOf(best); row = { ...best, prev: [1, 2, 3].map(k => weather.hourly[i - k] || null) }; sceneRowCache.current.set(best, row); }
+    if (!row) { const i = weather.hourly.indexOf(best); row = { ...best, prev: [1, 2, 3].map(k => weather.hourly[i - k] || null), next: weather.hourly[i + 1] || null }; sceneRowCache.current.set(best, row); }
     return row;
   }, [weather, sceneTimeMs, sceneSunny]);
   const sunHourTargetRef = React.useRef(sunHour);

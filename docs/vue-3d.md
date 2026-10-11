@@ -878,6 +878,63 @@ importé, lui, est le fichier de l'architecte.
   sans poteau) flottaient dans le vide la nuit. Elles sont retirées avec leur matériau et leur texture; la lumière au sol,
   sur les murs et dans les arbres (carte vue du dessus `lampU`, `LAMP_LIGHT` 0,5) ne change pas. Vérifié au banc de nuit
   (Retina simulé, quatre vues): seuls les pixels des anciens points et de leur halo changent, moins de 0,12 % de l'image.
+- v633.194 (11 octobre 2026), **relief lointain précis, soleil sur les sommets, brume qui suit la lumière** (« pourquoi le
+  soleil n'apparaît pas sur la montagne au fond? on voit le haut de la montagne s'illuminer au lever », « pour les reliefs
+  au loin, tu peux les rendre précis? », « vas-y pour les deux »; photos d'hiver de Stéphane: sommets roses puis dorés au
+  lever, limite d'ombre nette portée par la crête d'en face, bas des pentes gris-bleu; capture de 6 h 48: montagne blanche
+  sous un ciel presque noir).
+  - **Diagnostic** (banc, ablations, cinq lecteurs): la brume linéaire de three (`fog.near = 250 + 4 camH`, `fog.far = 1500 +
+    14 camH`, réglée en v633.142 pour un sol plat de 3 km et jamais revue avec le relief de 20 km) remplaçait tout au-delà de
+    1,5 km par une couleur unie; hors du carré de la carte d'ombre (150 à 700 m), le relief n'avait aucune ombre; la grille
+    carrée passait à 500 m de pas dès 5 km (sommets 30 à 90 m trop bas: 841 m vrai contre 753 m à 14 km vers 52°); la
+    première heure après le lever valait 2 % de soleil (sunFraction null sous 50 W/m², presque toute heure du lever en
+    automne), même par ciel dégagé; sous un voile, la brume gardait un gris de plein jour avant le lever.
+  - **Relief lointain** (`api/terrain.js`, `TERRAIN_V` 2): grille polaire `far` de 1 à 20 km, anneaux espacés de 1 % de leur
+    rayon, 720 directions (217 000 points, précision presque constante à l'écran), LiDAR 8 m jusqu'à 2 km, 16 m jusqu'à
+    4 km, 32 m jusqu'à 12 km, 64 m au-delà (fenêtres rondes), Terrain Tiles z11 et z10 en secours; 15 premiers anneaux
+    partis de la surface de la grille carrée (raccord exact); 2,7 s par lieu, 1 Mo, une fois par lieu (cache). Écart au
+    LiDAR: 0,7 m de 2 à 4 km, 1,3 m de 4 à 7 km, 1,6 m de 7 à 12 km (contre 8 à 16 m). Relief incomplet (panne d'une
+    source): `src.partial`, pas de cache durable; second essai sur les lectures LiDAR et les tuiles.
+  - **Raccord** (`engine.js`): maillage proche limité au carré de 1 km, coins hors du cercle éliminés au dessin et dans la
+    carte d'ombre (`gndDepthMat`); maillage polaire `gndPol` au-delà (normales tirées de la grille, ombre portée sur le site
+    jusqu'à 10 km); rues, parcs et surfaces pavées coupés au cercle de 1 km (`clipDisk`); lacs creusés aussi dans le relief
+    lointain, rives prises sur le relief précis. `terrain.hTri` combine les deux grilles.
+  - **Soleil sur les sommets**: chaque sommet du sol marche vers le soleil dans deux cartes de hauteurs (±1,5 km à 5,9 m,
+    puis la grille polaire), jusqu'à 20 km, courbure et réfraction comprises, disque de 0,53°; recalcul au pixel près le
+    long des limites d'ombre. Hors de la carte d'ombre, cette visibilité remplace l'ombre (`getShadow`, `SUN_VIS`); après la
+    brume s'ajoute la part du soleil direct transmise par l'air (exp(-3,912 d / V), visibilité prévue, 46 km au plus),
+    pondérée par la part de l'heure au soleil (pas par iv: sous des nuages bas épars, tout le lointain s'allumerait).
+    Couleur et force: même soleil que le sol, à la hauteur apparente (un sommet voit le soleil avant le lever au sol).
+  - **Forêt au loin**: au-delà de 700 à 1000 m, le sol prend la teinte d'un couvert forestier (feuillus 45 %, conifères
+    55 %, ombre entre les cimes), avec des massifs de 60 à 700 m et un moutonnement des cimes de 6 à 15 m effacé sous le
+    pixel; ville: gris brun. Sans cela, une montagne au soleil ressemblait à une dune de sable.
+  - **Brume plafonnée par le ciel dessiné**: une bande de 64 directions lit la carte cubique de l'ambiance juste au-dessus
+    de l'horizon (1,5 à 4,5°, nuages compris) après chaque mise à jour; la brume du sol ne dépasse plus 0,45 fois cette
+    clarté dans la direction regardée. Pas les jours de fumée (rendu validé, inchangé).
+  - **Première heure après le lever**: part de l'heure au soleil = direct moyen de l'heure / direct moyen par ciel clair
+    (référence de Meinel au soleil bas, dniClear au-dessus de 20°: un matin dégagé donnait 0,47 au lieu de 1); heure trop
+    sombre: rangée voisine du côté du soleil (`row.next` ajouté par la fiche); part directe tirée du direct et du diffus
+    bruts (`diffuse` ajouté à la rangée); interpolée à l'heure affichée pour les sommets. Légende: « soleil direct -- »
+    quand la donnée manque, comme la pastille.
+  - **Barre « ombre du terrain »** (`HORIZON_V` 2): profil jusqu'à 20 km (au lieu de 5) avec courbure, sur le relief précis;
+    pas de cache durable sur un relief incomplet. **Carte d'ombre sur 20 km** (au lieu de 10, constantes PCSS doublées et
+    pénombres identiques): une crête à 14 km laissait une bande au soleil autour du projet et les bâtiments au soleil alors
+    que la barre annonçait l'ombre. Reflet du soleil hors cadre: relief testé jusqu'à 20 km, courbure comprise.
+  - Relecture critique (cinq angles, chaque défaut vérifié par un sceptique: 24 confirmés, 4 réfutés), corrigée: plafond de
+    la brume étendu à tous les matériaux soumis à la brume (un lac à 2 km restait pâle), lueur de la ville épargnée la nuit,
+    fondu sous la fumée; lumière transmise au loin limitée par l'ombre réellement calculée (bâtiments, arbres, nuages);
+    visibilité au pixel calculée seulement quand elle sert; soleil des sommets éteint sous -2,8°; parcs qui contiennent le
+    projet coupés correctement; anneau 0 recalé après le creusage des lacs; hauteur au-delà de 1 km dans le plan des
+    triangles dessinés (maison posée loin); teinte de forêt jamais à moins de 700 m du sujet; second essai des lectures
+    seulement après un échec rapide; banc tools/sky aligné sur la fiche (heure la plus proche, rangée suivante).
+  - **Soleil près du projet au soleil bas**: iv ne descend plus sous 0,8 fois la part de l'heure au soleil (par ciel dégagé
+    au lever, la part directe brute tombait à 0,5 parce que le diffus domine sur l'horizontale; 0,8 = sa valeur à midi par
+    ciel dégagé, sur laquelle la lumière a été calée); le soleil lointain prend la même échelle (min(part de l'heure, iv)).
+  - Vérifié: 28 scènes du banc avant et après (identiques à l'oeil), sept lieux (Québec, Montréal, Percé, Tremblant,
+    Toronto, Stowe sans LiDAR canadien, Baie-Saint-Paul), 16 ms par image au lever et à midi en Retina simulé.
+  - Limites: sans neige (saisons non faites), une forêt d'octobre au soleil reste plus sombre que les sommets enneigés des
+    photos; ICON ne voit pas le soleil rasant qui passe sous le bord d'un plafond (photos 1 et 2): ce cas reste gris si la
+    prévision locale est couverte.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

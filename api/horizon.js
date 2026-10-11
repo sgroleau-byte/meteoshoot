@@ -1,4 +1,4 @@
-// Fonction serveur (Vercel): profil d'horizon du relief réel autour d'un lieu, pour la barre « ombre du terrain » de la
+// Fonction serveur (Vercel): profil d'horizon du relief réel autour d'un lieu (jusqu'à 20 km, courbure comprise depuis la v633.194), pour la barre « ombre du terrain » de la
 // bande horaire de la fiche projet. Même relief que la vue 3D (buildTerrain de api/terrain.js: LiDAR de Ressources
 // naturelles Canada, sinon modèle numérique d'élévation) et même calcul (src/scene3d/horizon.js), donc la barre de la
 // fiche et celle de la 3D sont les mêmes, que la 3D ait été ouverte ou non. Avant (jusqu'à la v633.185), la fiche
@@ -10,7 +10,7 @@
 // Essai local: node api/horizon.js --test 46.1374 -70.6695
 
 import { buildTerrain } from './terrain.js';
-import { HORIZON_V, horizonProfile, gridSampler } from '../src/scene3d/horizon.js';
+import { HORIZON_V, horizonProfile, gridSampler, farSampler, farHeights, combinedSampler } from '../src/scene3d/horizon.js';
 
 export const maxDuration = 60;
 
@@ -20,7 +20,9 @@ export async function buildHorizon(lat, lng, log = () => {}) {
   // Même grille que celle que la 3D reçoit (hauteurs quantifiées au décimètre): profil identique au sien.
   const N = t.ax.length, b = Buffer.from(t.h, 'base64'), q = new Int16Array(b.buffer, b.byteOffset, N * N);
   const H = new Float32Array(N * N); for (let k = 0; k < N * N; k++) H[k] = t.hMin + q[k] / 10;
-  const hTri = gridSampler(t.ax, H);
+  // Relief lointain polaire (v633.194) au-delà de 1 km, comme le client.
+  const farFn = t.far ? farSampler(t.far, farHeights(t.far, (b64, n) => { const bb = Buffer.from(b64, 'base64'); return new Int16Array(bb.buffer, bb.byteOffset, n); })) : null;
+  const hTri = combinedSampler(gridSampler(t.ax, H), farFn, t.far ? t.far.r0 : 0);
   return { v: HORIZON_V, origin: [lat, lng], profile: horizonProfile(hTri), eye: Math.round((hTri(0, 0) + 1.6) * 10) / 10, src: t.src, ms: { terrain: t.ms.total, total: Date.now() - t0 } };
 }
 
@@ -35,7 +37,7 @@ export default async function handler(req, res) {
     const h = await buildHorizon(lat, lng, (m) => console.log('[horizon]', m));
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=2592000');
+    res.setHeader('Cache-Control', h.src && h.src.partial ? 'public, max-age=300' : 'public, max-age=86400, s-maxage=2592000'); // relief incomplet: pas de cache durable
     res.end(JSON.stringify(h));
   } catch (e) {
     console.error('[horizon]', e);

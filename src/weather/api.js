@@ -208,11 +208,12 @@ export const fetchSmoke = async (lat, lng) => {
 };
 
 // Orage et averses (vue 3D, 8 octobre 2026): code météo brut (80 à 82 averses, 95 à 99 orage), rayonnement direct sur le sol
-// horizontal (W/m², moyenne de l'heure précédente) et nuage convectif d'ICON, base et épaisseur en mètres (0: aucun). GFS n'a
+// horizontal et diffus (W/m², moyennes de l'heure précédente; le diffus sert à la 3D quand sunFraction est trop sombre pour
+// être calculé, v633.194) et nuage convectif d'ICON, base et épaisseur en mètres (0: aucun). GFS n'a
 // pas de nuage convectif; les 36 premières heures (celles de la 3D) viennent d'ICON tant qu'il répond.
 const convective = (h, i) => {
   const b = h.convective_cloud_base?.[i], t = h.convective_cloud_top?.[i];
-  return { wc: h.weathercode?.[i] ?? null, direct: h.direct_radiation?.[i] ?? null, convBase: b > 0 ? Math.round(b) : 0, convDepth: b > 0 && t > b ? Math.round(t - b) : 0 };
+  return { wc: h.weathercode?.[i] ?? null, direct: h.direct_radiation?.[i] ?? null, diffuse: h.diffuse_radiation?.[i] ?? null, convBase: b > 0 ? Math.round(b) : 0, convDepth: b > 0 && t > b ? Math.round(t - b) : 0 };
 };
 
 // Forme des nuages (vue 3D, 9 octobre 2026), d'ICON: profil vertical de la nébulosité sur 12 niveaux de pression (1000 à
