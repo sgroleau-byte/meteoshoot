@@ -873,6 +873,11 @@ importé, lui, est le fichier de l'architecte.
     250 ms » à la fin de la pousse était l'attente volontaire de 220 ms avant l'accumulation (aucune image dessinée), pas une
     saccade.
   - Déroulé mesuré en local: ciel bleu dès 0 ms, fondu de la scène vers 0,8 s, pousse jusqu'à 3,6 s.
+- v633.193 (11 octobre 2026), **lampadaires sans point lumineux** (« est-ce qu'on peut laisser l'effet des lumières de
+  rue sans montrer de point? »): les têtes lumineuses (une tache additive posée à 7,5 m au-dessus de chaque lampadaire,
+  sans poteau) flottaient dans le vide la nuit. Elles sont retirées avec leur matériau et leur texture; la lumière au sol,
+  sur les murs et dans les arbres (carte vue du dessus `lampU`, `LAMP_LIGHT` 0,5) ne change pas. Vérifié au banc de nuit
+  (Retina simulé, quatre vues): seuls les pixels des anciens points et de leur halo changent, moins de 0,12 % de l'image.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

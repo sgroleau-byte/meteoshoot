@@ -369,14 +369,6 @@ function leafTex(th = 0.5) {
   for (let i = 0; i < N * N; i++) { const v = f[i] > th ? 255 : 0; d[i * 4] = rank[i]; d[i * 4 + 1] = v; d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }
   x.putImageData(im, 0, 0); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
 }
-// Tache de lumière ronde et douce (alpha seulement): flaques des lampadaires et têtes lumineuses.
-function glowTex() {
-  const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
-  const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
-  for (let k = 0; k <= 16; k++) { const o = k / 16; g.addColorStop(o, `rgba(255,255,255,${(Math.exp(-4.5 * o * o) - Math.exp(-4.5)) / (1 - Math.exp(-4.5))})`); } // décroissance douce, sans bord
-  x.fillStyle = g; x.fillRect(0, 0, 128, 128);
-  return new THREE.CanvasTexture(c);
-}
 const shapeOf = (o, holes) => { const s = new THREE.Shape(o.map(p => new THREE.Vector2(p[0], p[1]))); (holes || []).forEach(h => s.holes.push(new THREE.Path(h.map(p => new THREE.Vector2(p[0], p[1]))))); return s; };
 
 export function createScene3D(container, opts = {}) {
@@ -474,10 +466,10 @@ export function createScene3D(container, opts = {}) {
   const crownGeo = lobes(), crownGeoMid = lobes(1, 3), crownGeoFar = new THREE.IcosahedronGeometry(1, 1), crownGeoShadow = lobes(1);
   const conGeo = conifer(), conGeoLow = conifer(6, CON_TIERS_LOW);
   const trunkGeo = new THREE.CylinderGeometry(0.16, 0.26, 1, 6), trunkGeoLow = new THREE.CylinderGeometry(0.16, 0.26, 1, 3, 1, true);
-  // Éclairage de nuit (7 octobre 2026): lampadaires peints (flaque de lumière au sol, tête lumineuse) et lueur de la
-  // ville; ils s'allument avec les fenêtres. Pas de vraies sources de lumière: des centaines resteraient légères.
+  // Éclairage de nuit (7 octobre 2026): lampadaires peints (lumière au sol, sans tête visible depuis le 11 octobre 2026:
+  // un point lumineux sans poteau flottait dans le vide) et lueur de la ville; ils s'allument avec les fenêtres. Pas de
+  // vraies sources de lumière: des centaines resteraient légères.
   const LAMP_COL = new THREE.Color(1.0, 0.7, 0.42); // blanc chaud (DEL d'environ 3000 K), en linéaire
-  const GLOW = glowTex();
   // Lumière des lampadaires: carte vue du dessus (intensité, et hauteur du sol pour l'éteindre en hauteur), lue par les
   // matériaux du sol, des rues, des murs et des arbres. Diffuse: chaque surface la reçoit dans sa propre couleur.
   const lampU = { uLampMap: { value: new THREE.DataTexture(new Uint16Array(4), 1, 1, THREE.RGFormat, THREE.HalfFloatType) }, uLampK: { value: 0 }, uLampHalf: { value: LAMP_HALF }, uLampCol: { value: LAMP_COL }, uWet: { value: 0 } };
@@ -503,9 +495,8 @@ export function createScene3D(container, opts = {}) {
     };
     mat.customProgramCacheKey = () => 'lamp-' + key; // un programme par matériau (les fonctions se ressemblent)
   };
-  const lampHeadMat = new THREE.PointsMaterial({ map: GLOW, color: LAMP_COL, size: 2.2, sizeAttenuation: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
   const CITY_GLOW = new THREE.Color(0.62, 0.47, 0.33); // rebond chaud des rues éclairées sur les murs et les arbres
-  let lampMeshes = [], urban = 0; // urban: 0 en campagne, 1 en ville (densité des bâtiments)
+  let urban = 0; // urban: 0 en campagne, 1 en ville (densité des bâtiments)
   // Surfaces au sol: pas d'écriture de profondeur et un ordre de rendu par couche (gazon, asphalte, pavé, rails, rues,
   // trottoirs), sinon des surfaces à quelques millimètres l'une de l'autre scintillent à 200 m (triangles qui clignotent).
   const flat = (h, y) => {
@@ -664,7 +655,7 @@ export function createScene3D(container, opts = {}) {
   const NEAR = 230;
   const nearXY = (x, n) => Math.hypot(x, n) < NEAR;
   let winLights = [];
-  function clearStatics() { statics.forEach(m => { S.remove(m); if (!m.userData.sharedGeo) m.geometry && m.geometry.dispose(); if (m.isInstancedMesh) m.dispose(); }); statics = []; treesI = null; winLights.forEach(l => { S.remove(l); l.dispose && l.dispose(); }); winLights = []; lampMeshes = []; urban = 0; }
+  function clearStatics() { statics.forEach(m => { S.remove(m); if (!m.userData.sharedGeo) m.geometry && m.geometry.dispose(); if (m.isInstancedMesh) m.dispose(); }); statics = []; treesI = null; winLights.forEach(l => { S.remove(l); l.dispose && l.dispose(); }); winLights = []; urban = 0; }
   // Pousse de la scène (voir growU): démarre à la reconstruction qui suit l'arrivée des environs (setData), 2,5 s.
   let growing = false, growT0 = 0, growNext = false;
   const GROW_TOTAL = 2.5;
@@ -777,8 +768,8 @@ export function createScene3D(container, opts = {}) {
     addMesh(g, roofMat, 0, true, false);
   }
   // Lampadaires le long des rues (pas de relevé réel: positions tirées des rues): un tous les 38 m environ, en
-  // alternant les côtés, au bord de la chaussée, sans doublon aux intersections; jusqu'à 420 m du projet. Chaque
-  // flaque suit le relief (petite grille drapée), la tête lumineuse est un point à 7,5 m.
+  // alternant les côtés, au bord de la chaussée, sans doublon aux intersections; jusqu'à 420 m du projet. Seule leur
+  // lumière est dessinée (carte vue du dessus), pas de tête lumineuse.
   function lamps(roads, bld) {
     urban = clamp((bld.filter(b => Math.hypot(...centroid(b[0])) < 300).length - 15) / 200);
     const pos = [], grid = new Map(), cell = (x, n) => Math.round(x / 16) + ',' + Math.round(n / 16);
@@ -811,9 +802,6 @@ export function createScene3D(container, opts = {}) {
     const tex = new THREE.DataTexture(half, N, N, THREE.RGFormat, THREE.HalfFloatType); tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.needsUpdate = true;
     if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
     lampU.uLampMap.value = tex;
-    const hp = new Float32Array(pos.length * 3); pos.forEach(([x, n], i) => { hp[i * 3] = x; hp[i * 3 + 1] = terrain.hTri(x, n) + 7.5; hp[i * 3 + 2] = -n; });
-    const hg = new THREE.BufferGeometry(); hg.setAttribute('position', new THREE.BufferAttribute(hp, 3));
-    const heads = new THREE.Points(hg, lampHeadMat); heads.renderOrder = 9; heads.visible = false; S.add(heads); statics.push(heads); lampMeshes.push(heads);
   }
   // Arbres: mesurés par LiDAR ([x, n, h, r, k]: hauteur, rayon de couronne, k 1 conifère; près d'un bâtiment, plus
   // dx, dn (centre réel de la couronne) et o (feuillage mesuré au-dessus du toit)) ou, à défaut, points d'Overture
@@ -1366,7 +1354,7 @@ export function createScene3D(container, opts = {}) {
     if (model) model.win.forEach(m => { m.emissiveIntensity = wallMat.emissiveIntensity; }); // vitres du modèle importé
     // Lampadaires et lueur de la ville: même allumage que les fenêtres, à petite dose (on devine les rues et les volumes).
     const lampK = uNight.value, city = urban * lampK;
-    lampU.uLampK.value = LAMP_LIGHT * lampK; lampHeadMat.opacity = lampK; lampMeshes.forEach(m => { m.visible = lampK > 0.01; });
+    lampU.uLampK.value = LAMP_LIGHT * lampK;
     fill.intensity += CITY_FILL * city; fill.groundColor.lerp(CITY_GLOW, 0.55 * city);
     const soft = twi * (1 - nightF); twL.intensity = 1.8 * soft; twL.color.copy(L(mixHex('#9fb0e0', '#e8bc92', glow * 0.5)));
     twL.target.position.copy(T0); twL.position.copy(T0).add(new THREE.Vector3(Math.sin(bearing) * Math.cos(0.17), Math.sin(0.17), -Math.cos(bearing) * Math.cos(0.17)).multiplyScalar(400));
@@ -1696,7 +1684,7 @@ export function createScene3D(container, opts = {}) {
     dispose() {
       running = false; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); window.removeEventListener('keydown', onKey, true); window.removeEventListener('keyup', onKeyUp, true); clearStatics(); clearTimeout(modelTimer); dropModel(); sat = null; placeSat();
       [sceneRT, aoRT, aoRT2, compRT, reflRT, reflRT2, cubeRT, skyRT, envRT, cloudRT, cloudRTHi, accA, accB].forEach(r => r && r.dispose()); pmrem.dispose(); noiseTex.dispose();
-      [skyMat, skyMatIn, cloudPassMat, accMat, aoMat, blurMat, compMat, reflMat, rblurMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, shadowMat, conMat, fillMat, edgeMat, waterMat, cloudMat, lampHeadMat, ...Object.values(flatMats)].forEach(m => m.dispose()); GLOW.dispose(); if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
+      [skyMat, skyMatIn, cloudPassMat, accMat, aoMat, blurMat, compMat, reflMat, rblurMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, shadowMat, conMat, fillMat, edgeMat, waterMat, cloudMat, ...Object.values(flatMats)].forEach(m => m.dispose()); if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
       [skyGeo, crownGeo, crownGeoMid, crownGeoFar, crownGeoShadow, conGeo, conGeoLow, trunkGeo, trunkGeoLow, sg, gnd && gnd.geometry, gndFar.geometry, quad.geometry].forEach(g => g && g.dispose()); FT.map.dispose(); FT.rough.dispose(); FT.emis.dispose(); gndTex.dispose(); gndTexNear.dispose(); gndMat.dispose(); gndMatFar.dispose(); leafMask.dispose(); conMask.dispose(); edgeMask.dispose();
       R.dispose(); R.forceContextLoss(); if (el.parentNode) el.parentNode.removeChild(el);
     },
