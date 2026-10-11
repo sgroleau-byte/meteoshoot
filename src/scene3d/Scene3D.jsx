@@ -102,6 +102,12 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
   const eng = useRef(null);
   const [info, setInfo] = useState(null);
   const [status, setStatus] = useState(null); // { text, busy }: busy = anneau d'attente, sinon message seul (erreur)
+  // Anneau d'attente affiché: il garde le dernier message le temps de s'effacer en fondu (avant: il disparaissait d'un coup).
+  const [shownStatus, setShownStatus] = useState(null), [statusOut, setStatusOut] = useState(false);
+  useEffect(() => {
+    if (status) { setShownStatus(status); setStatusOut(false); return; }
+    setStatusOut(true); const id = setTimeout(() => setShownStatus(null), 450); return () => clearTimeout(id);
+  }, [status]);
   const [engReady, setEngReady] = useState(0); // compte des moteurs créés: relance les effets qui en dépendent
   // Modèle d'architecte importé: { info, pl } une fois posé; prep = progression des préparations en cours (0 à 1) par
   // projet: la préparation continue si la vue se ferme ou si l'on passe à un autre projet. dl = projet dont le modèle
@@ -151,6 +157,10 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
     if (!visible || !box.current || !lat || !lng) return;
     let cancelled = false;
     setStatus({ text: 'Chargement', busy: true });
+    // Environs et relief demandés tout de suite, en même temps que le moteur (avant: seulement une fois le moteur chargé,
+    // donc en série). Ce sont des promesses gardées en mémoire par lieu: les demander tôt ne coûte rien de plus.
+    const pScene = loadScene(lat, lng), pTerrain = loadTerrain(lat, lng);
+    pScene.catch(() => {}); pTerrain.catch(() => {}); // traitées plus bas; évite l'avertissement si le moteur ne se charge pas
     import('./engine.js').then(m => {
       if (cancelled || !box.current) return;
       const e = m.createScene3D(box.current, { onInfo: setInfo, onModel: (pl) => { setMdl(v => v && { ...v, pl }); keep(pl); } });
@@ -161,9 +171,9 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
       setStatus({ text: 'Environs en préparation', busy: true });
       // Environs (Overture) et relief (LiDAR) arrivent chacun de leur côté; l'anneau d'attente reste tant qu'il en manque un.
       let pending = 2, failed = false; const done = () => { pending--; if (pending <= 0 && !failed && !cancelled && eng.current === e) setStatus(null); };
-      loadScene(lat, lng).then(d => { if (!cancelled && eng.current === e) { e.setData(d); done(); } })
+      pScene.then(d => { if (!cancelled && eng.current === e) { e.setData(d); done(); } })
         .catch(err => { console.warn('[scene3d] environs indisponibles:', err); failed = true; if (!cancelled) setStatus({ text: 'Environs indisponibles, bâtiments du projet seulement', busy: false }); });
-      loadTerrain(lat, lng).then(t => { if (!cancelled && eng.current === e) { e.setTerrain(t); if (onHorizon) { const h = e.horizonProfile(); if (h) onHorizon(h); } done(); } }) // profil d'horizon du relief réel vers la fiche (ombre du terrain)
+      pTerrain.then(t => { if (!cancelled && eng.current === e) { e.setTerrain(t); if (onHorizon) { const h = e.horizonProfile(); if (h) onHorizon(h); } done(); } }) // profil d'horizon du relief réel vers la fiche (ombre du terrain)
         .catch(err => { console.warn('[scene3d] relief indisponible, sol plat:', err); done(); });
     }).catch(err => {
       console.error('[scene3d] moteur:', err); if (cancelled) return;
@@ -299,7 +309,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
   const whitePill = { background: '#fff', borderRadius: '13px', padding: '4px 8px 1px 8px', userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'none' };
   const bebas = { fontSize: '17px', letterSpacing: '0.04em', lineHeight: '1' };
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 6, background: '#202427', overflow: 'hidden' }}>
+    <div style={{ position: 'absolute', inset: 0, zIndex: 6, background: 'linear-gradient(180deg, #7397c2 0%, #9cb8d6 38%, #c3d3e2 62%, #cdd6de 100%)', overflow: 'hidden' }}>{/* ciel clair en attendant la première image; le moteur apparaît en fondu par-dessus */}
       <div ref={box} style={{ position: 'absolute', inset: 0 }}/>
       {/* Modèle d'architecte (.kmz de SketchUp): import, puis placement. La maison se glisse dans la vue pour la déplacer
           tant que le cadenas est ouvert (fixée à chaque retour).
@@ -367,12 +377,14 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
           <text x="17" y="4.2" textAnchor="middle" fontSize="7" fontFamily="Avenir Next, Avenir, sans-serif" fontWeight="600" fill="#fff" transform={`rotate(${info.northDeg.toFixed(1)} 17 2)`}>N</text>
         </g>
       </svg>}
-      {status && <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', pointerEvents: 'none', animation: 'msFade 0.4s ease both' }}>
-        {status.busy && <svg width="34" height="34" viewBox="0 0 30 30" style={{ animation: 'scene3dSpin 1.1s linear infinite', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.35))' }}>
+      {shownStatus && <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, transform: 'translateY(-50%)', opacity: statusOut ? 0 : 1, transition: 'opacity 0.45s ease', pointerEvents: 'none' }}>{/* effacement en fondu (dehors), apparition par l'animation (dedans: une animation en mode both écraserait l'opacité) */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', animation: 'msFade 0.4s ease both' }}>
+        {shownStatus.busy && <svg width="34" height="34" viewBox="0 0 30 30" style={{ animation: 'scene3dSpin 1.1s linear infinite', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.35))' }}>
           <circle cx="15" cy="15" r="12" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5"/>
           <circle cx="15" cy="15" r="12" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="22 53.4"/>
         </svg>}
-        <div className="font-bebas-book" style={{ fontSize: '13px', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.8)', textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}>{status.text.toUpperCase()}</div>
+        <div className="font-bebas-book" style={{ fontSize: '13px', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.8)', textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}>{shownStatus.text.toUpperCase()}</div>
+        </div>
       </div>}
     </div>
   );

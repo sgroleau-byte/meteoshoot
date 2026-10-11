@@ -386,7 +386,9 @@ export function createScene3D(container, opts = {}) {
   const R = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   R.setPixelRatio(DPR); R.setSize(W, H); R.shadowMap.enabled = true; R.shadowMap.type = PCSS_OK ? THREE.BasicShadowMap : THREE.PCFShadowMap;
   R.outputColorSpace = THREE.LinearSRGBColorSpace; R.toneMapping = THREE.NoToneMapping; R.autoClear = true;
-  R.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none';
+  // Invisible jusqu'à la première image utile, puis fondu (voir frame): le conteneur montre un ciel bleu en attendant.
+  R.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none;opacity:0;transition:opacity 0.7s ease';
+  const createdAt = performance.now(); let terrainIn = false, shown = false, shownAt = 0;
   container.appendChild(R.domElement);
 
   // ---- ciel, environnement lumineux
@@ -591,6 +593,10 @@ export function createScene3D(container, opts = {}) {
   alloc();
   const qScene = new THREE.Scene(), qCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)); qScene.add(quad);
   function pass(mat, rt) { quad.material = mat; R.setRenderTarget(rt); R.render(qScene, qCam); }
+  // Préchauffage: compile le shader de l'accumulation et alloue ses cibles pleine résolution dès la création (et après un
+  // redimensionnement); sinon la première passe, juste à la fin de la pousse de la scène, figeait une image 250 ms.
+  function warmAcc() { accMat.uniforms.tA.value = cloudRT.texture; accMat.uniforms.tB.value = cloudRT.texture; accMat.uniforms.uW.value = 1; pass(accMat, accA); pass(accMat, accB); pass(accMat, cloudRTHi); R.setRenderTarget(null); }
+  warmAcc();
   const kern = []; for (let i = 0; i < 12; i++) { const v = new THREE.Vector3(hsh(i, 3, 1) * 2 - 1, hsh(i, 3, 2) * 2 - 1, 0.15 + 0.85 * hsh(i, 3, 3)).normalize(); const s = i / 12; v.multiplyScalar(0.12 + 0.88 * s * s); kern.push(v); }
   const aoMat = new THREE.ShaderMaterial({ uniforms: { tDepth: { value: null }, uRes: { value: new THREE.Vector2() }, uProj: { value: new THREE.Matrix4() }, uProjInv: { value: new THREE.Matrix4() }, uR: { value: 2.4 }, uBias: { value: 0.04 }, uInt: { value: 1.6 }, uK: { value: kern } }, vertexShader: QV, fragmentShader: AO_FRAG });
   const blurMat = new THREE.ShaderMaterial({ uniforms: { tAO: { value: null }, tDepth: { value: null }, uDir: { value: new THREE.Vector2() }, uNF: { value: new THREE.Vector2(1, 60000) } }, vertexShader: QV, fragmentShader: BLUR_FRAG });
@@ -676,7 +682,9 @@ export function createScene3D(container, opts = {}) {
       m.instanceMatrix.needsUpdate = true;
     });
   }
-  function startGrow(now) { growing = true; growT0 = now; growU.uGrow.value = 0; growU.uReveal.value = 0; treeGrowStep(0); dirty = true; }
+  // Horloge de la pousse en attente (-1): elle part à la première image affichée après l'apparition du canevas, sinon son début
+  // se perdait derrière la compilation des environs (356 ms) ou pendant que le canevas était encore invisible.
+  function startGrow() { growing = true; growT0 = -1; growU.uGrow.value = 0; growU.uReveal.value = 0; treeGrowStep(0); dirty = true; }
   function finishGrow() { growing = false; growNext = false; growU.uGrow.value = 1e4; growU.uReveal.value = 1e6; treeGrowStep(1e4); dirty = true; }
   function addMesh(g, mat, y, near, shadows, order = 0) { const m = new THREE.Mesh(g, mat); m.position.y = y; m.renderOrder = order; m.receiveShadow = true; if (shadows) m.castShadow = true; m.userData.pt = !!near; S.add(m); statics.push(m); return m; }
   // Surfaces au sol (parcs, asphalte, eau): items = [{ o: contour, h: trous }], séparés proche/loin, triangulées en 2D
@@ -1147,7 +1155,9 @@ export function createScene3D(container, opts = {}) {
       lamps(data.roads, data.bld);
     }
     blocks(list);
-    if (growNext && data && !modelOnly) startGrow(performance.now()); else if (!growing) { growU.uGrow.value = 1e4; growU.uReveal.value = 1e6; }
+    // Pousse: lancée une fois à l'arrivée des environs; un relief qui arrive pendant la pousse ne la relance pas (les maisons
+    // s'enfonçaient et remontaient).
+    if (growNext && data && !modelOnly && !growing) startGrow(); else if (!growing) { growU.uGrow.value = 1e4; growU.uReveal.value = 1e6; }
     // Point de vue sur la première forme dessinée; sans forme, sur l'édifice (Overture) sous le point du projet, sinon le plus proche à moins de 60 m.
     let focus = mRing || (drawn.length ? drawn[0].p : null), focusH = mRing ? model.h : drawn.length ? (drawn[0].hEff ?? 9) : 9;
     if (!focus && data) {
@@ -1255,10 +1265,13 @@ export function createScene3D(container, opts = {}) {
   function frame(now) {
     if (!running) return; raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    if (growing) { const gt = (now - growT0) / 1000; growU.uGrow.value = gt; growU.uReveal.value = 650 * (1 - Math.pow(1 - Math.min(1, gt / 1.1), 2)); treeGrowStep(gt); if (gt >= GROW_TOTAL) finishGrow(); dirty = true; }
+    if (growing && growT0 < 0 && shown && now - shownAt > 250) growT0 = now; // la scène apparaît d'abord, puis les environs poussent
+    if (growing && growT0 >= 0) { const gt = (now - growT0) / 1000; growU.uGrow.value = gt; growU.uReveal.value = 650 * (1 - Math.pow(1 - Math.min(1, gt / 1.1), 2)); treeGrowStep(gt); if (gt >= GROW_TOTAL) finishGrow(); dirty = true; }
     const a = 1 - Math.exp(-dt * 3.5); let moving = false;
     ['cum', 'mid', 'high', 'iv', 'rain', 'wet', 'pud', 'fogK', 'fogTh', 'smk', 'storm', 'brk', 'l0b', 'l0t', 'l0c', 'l0k', 'l0w', 'l0s', 'l0d', 'm1b', 'm1t', 'm1c', 'm1k', 'hc', 'hk', 'ha', 'ht', 'shaft'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > (METRES.has(k) ? 0.5 : 0.0005)) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; }); // altitudes en mètres: seuil d'un demi-mètre (sinon la scène restait « en mouvement » 4 s et l'accumulation des nuages attendait)
     // Vue posée depuis 220 ms après un rendu en résolution réduite: une image de plus avec les nuages en pleine résolution.
+    if (!shown && (terrainIn || now - createdAt > 1200)) { shown = true; shownAt = now; R.domElement.style.opacity = '1'; dirty = true; } // fondu sur le ciel bleu du conteneur
+    if (growing && growT0 < 0) dirty = true; // attendre l'apparition en continuant à dessiner
     if (!dirty && !moving && accK < ACC_N && now - lastMoveAt > 220) { cloudHi = true; dirty = true; } // une passe d'accumulation par image
     if (!dirty && !moving && now - envAt > 400) {
       // Rien d'autre ne bouge: sous la pluie, seules les gouttes avancent (composition et lissage refaits, pas la scène),
@@ -1427,7 +1440,9 @@ export function createScene3D(container, opts = {}) {
       accMat.uniforms.tA.value = k === 0 ? cloudRTHi.texture : src.texture; accMat.uniforms.tB.value = cloudRTHi.texture; accMat.uniforms.uW.value = 1 / (k + 1); pass(accMat, dst);
       skyU.tCloud.value = dst.texture; skyU.uCloudPx.value.set(1 / PW, 1 / PH); accK = k + 1; usedHi = accK >= ACC_N;
     } else {
-      CM.uQual.value = 0.65; CM.uJit.value = 0; CM.uSub.value.set(0, 0); CM.uRes.value.set(cloudRT.width, cloudRT.height); // en mouvement: moins de pas (l'accumulation à l'arrêt reprend la pleine qualité) pass(cloudPassMat, cloudRT); skyU.tCloud.value = cloudRT.texture; skyU.uCloudPx.value.set(1 / cloudRT.width, 1 / cloudRT.height);
+      // En mouvement: moins de pas (l'accumulation à l'arrêt reprend la pleine qualité). Attention: ce commentaire doit rester sur
+      // sa propre ligne; placé au milieu de la ligne (v633.191), il désactivait la passe: ciel noir au chargement, nuages figés en mouvement.
+      CM.uQual.value = 0.65; CM.uJit.value = 0; CM.uSub.value.set(0, 0); CM.uRes.value.set(cloudRT.width, cloudRT.height); pass(cloudPassMat, cloudRT); skyU.tCloud.value = cloudRT.texture; skyU.uCloudPx.value.set(1 / cloudRT.width, 1 / cloudRT.height);
     }
     cloudHi = false;
     let vc = mv([0.88, 0.89, 0.90], [0.64, 0.66, 0.69], thick); vc = mv(vc, mv([0.62, 0.62, 0.66], [0.95, 0.72, 0.55], 0.6), uW * 0.5);
@@ -1490,7 +1505,10 @@ export function createScene3D(container, opts = {}) {
     // Reflet des flaques (beaucoup de pluie seulement): calculé ici (images complètes); les images de gouttes seules
     // réutilisent reflRT.
     const reflK = cur.pud > 0.01 ? 0.8 * cur.pud : 0;
-    if (reflK > 0) { if (!skyFresh || skyGap !== U.uSunGap.value) { const pa = cloudU.uPixAng.value; cloudU.uPixAng.value = 2 / 256; skyCam.update(R, skyScene); cloudU.uPixAng.value = pa; skyFresh = true; skyGap = U.uSunGap.value; } // les flaques reflètent le ciel affiché, trouée comprise const RU = reflMat.uniforms; RU.tCol.value = sceneRT.texture; RU.tDepth.value = sceneRT.depthTexture; RU.uProj.value.copy(cam.projectionMatrix); RU.uProjInv.value.copy(cam.projectionMatrixInverse); RU.uUp.value.set(0, 1, 0).transformDirection(cam.matrixWorldInverse); RU.uV2W.value.setFromMatrix4(cam.matrixWorld); RU.uCamW.value.copy(cam.position); RU.uPud.value = cur.pud; RU.uTx.value.set(4 / PW, 4 / PH); pass(reflMat, reflRT2); // normale du sol mesurée sur 4 pixels: au loin, la profondeur arrondie la ferait hésiter d'une ligne à l'autre
+    if (reflK > 0) { if (!skyFresh || skyGap !== U.uSunGap.value) { const pa = cloudU.uPixAng.value; cloudU.uPixAng.value = 2 / 256; skyCam.update(R, skyScene); cloudU.uPixAng.value = pa; skyFresh = true; skyGap = U.uSunGap.value; }
+      // Les flaques reflètent le ciel affiché, trouée comprise. (Ce commentaire, placé au milieu de la ligne depuis la v633.174,
+      // désactivait toute la passe des reflets jusqu'au 11 octobre 2026.)
+      const RU = reflMat.uniforms; RU.tCol.value = sceneRT.texture; RU.tDepth.value = sceneRT.depthTexture; RU.uProj.value.copy(cam.projectionMatrix); RU.uProjInv.value.copy(cam.projectionMatrixInverse); RU.uUp.value.set(0, 1, 0).transformDirection(cam.matrixWorldInverse); RU.uV2W.value.setFromMatrix4(cam.matrixWorld); RU.uCamW.value.copy(cam.position); RU.uPud.value = cur.pud; RU.uTx.value.set(4 / PW, 4 / PH); pass(reflMat, reflRT2); // normale du sol mesurée sur 4 pixels: au loin, la profondeur arrondie la ferait hésiter d'une ligne à l'autre
       rblurMat.uniforms.tSrc.value = reflRT2.texture; rblurMat.uniforms.uDir.value.set(0, 1.8 / reflRT.height); pass(rblurMat, reflRT); } // flou vertical d'environ ±7 lignes
     const CU = compMat.uniforms; CU.tRefl.value = reflRT.texture; CU.uRefl.value = reflK; CU.tDepth.value = sceneRT.depthTexture; CU.uSunUV.value.set(sunPx, sunPy); CU.uAspect.value = W / H; CU.uFlare.value = kFl * (0.35 + 0.65 * iv) * (1 - 0.85 * cum) * sunVis * treeSun * (1 - 0.5 * rainK) * Math.sqrt(smokeT) * (fogSig > 0 ? Math.exp(-fogSig * Math.max(0, fogTopW - cam.position.y) / Math.max(Math.sin(el), 0.05)) : 1); CU.uRays.value = iv * iv * (1 - 0.7 * veil); CU.uVeilW.value = 1 + 1.2 * high + 0.5 * mid; CU.uVis.value = visCPU;
     CU.uDs.value = smooth(1, -4, realDeg); CU.uFog.value.set(fog.near, fog.far); // bleu désaturé: heure bleue et nuit
@@ -1526,7 +1544,7 @@ export function createScene3D(container, opts = {}) {
     const sl = rgb(sc0).map(v => Math.pow(v, 2.2)); CU.uSunC.value.set(sl[0], sl[1], sl[2]);
     compMat.uniforms.tCol.value = sceneRT.texture; compMat.uniforms.tAO.value = aoRT.texture; compMat.uniforms.tBloom.value = bloomA.texture; pass(compMat, compRT);
     fxMat.uniforms.tDiffuse.value = compRT.texture; fxMat.uniforms.resolution.value.set(1 / PW, 1 / PH); pass(fxMat, null);
-    if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.dbg = { storm: cur.storm, brk: cur.brk, pSun: tg.pSun, camSun, subjSun, gap: gapS, uExp: compMat.uniforms.uExp.value, hidden: brkHide.size, cur: { ...cur }, tg: { ...tg }, names: cloudNames.slice(), accK, usedHi }; // vérification en développement
+    if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.dbg = { storm: cur.storm, brk: cur.brk, pSun: tg.pSun, camSun, subjSun, gap: gapS, uExp: compMat.uniforms.uExp.value, hidden: brkHide.size, cur: { ...cur }, tg: { ...tg }, names: cloudNames.slice(), accK, usedHi, growing }; // vérification en développement
     if (import.meta.env.DEV && window.__scene3dCore && window.__scene3dCore.afterFrame) window.__scene3dCore.afterFrame(PW, PH, usedHi); // mesure en développement (usedHi: nuages en pleine résolution)
     // Légende: condition de lumière, parts de nuages, position du soleil
     const w = weatherRow || {}; const low = w.cloudLow ?? null, alt = Math.max(w.cloudMid ?? 0, w.cloudHigh ?? 0), sun = w.sunFraction != null ? Math.round(w.sunFraction * 100) : null;
@@ -1579,7 +1597,7 @@ export function createScene3D(container, opts = {}) {
 
   function resize() {
     const w = Math.max(2, container.clientWidth), h = Math.max(2, container.clientHeight); if (w === W && h === H) return;
-    W = w; H = h; R.setSize(W, H); cam.aspect = W / H; cam.updateProjectionMatrix(); alloc(); dirty = true;
+    W = w; H = h; R.setSize(W, H); cam.aspect = W / H; cam.updateProjectionMatrix(); alloc(); warmAcc(); dirty = true;
   }
   return {
     setProject({ lat: la, lng: ln, buildings, orientation: ori }) {
@@ -1594,7 +1612,7 @@ export function createScene3D(container, opts = {}) {
     // Historique: open-elevation donnait 29 à 35° vers l'est à Stoneham contre 14 à 20° au LiDAR, d'où une « ombre du
     // terrain » jusqu'à midi en octobre. null sans relief réel.
     horizonProfile() { return !terrain || terrain.flat ? null : horizonProfile(terrain.hTri); },
-    setTerrain(t) { terrain = makeTerrain(t); rebuild(); },
+    setTerrain(t) { terrain = makeTerrain(t); terrainIn = true; rebuild(); },
     setTime(ms) { if (ms !== dateMs) { dateMs = ms; dirty = true; } },
     // Fumée de feux au sol à l'heure affichée (FireWork, microgrammes par mètre cube), ou null. Dessinée à partir de
     // 20 seulement (prudence: la couche mêle le fond urbain, 5 à 15 en ville), entière vers 150.

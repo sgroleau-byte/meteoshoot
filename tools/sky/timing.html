@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>Chronologie du chargement 3D</title>
+<style>html,body{margin:0;height:100%;background:#111;overflow:hidden}#box{position:absolute;inset:0;background:linear-gradient(180deg, #7397c2 0%, #9cb8d6 38%, #c3d3e2 62%, #cdd6de 100%)}</style></head>
+<body><div id="box"></div>
+<script>var isNativeApp = false; var isDev = true; window.__T = { t0: performance.now(), ev: [] }; window.__mark = (k) => window.__T.ev.push([k, Math.round(performance.now() - window.__T.t0)]);</script>
+<script type="module">
+// Chronologie du chargement de la vue 3D comme dans Scene3D.jsx: import dynamique du moteur, création, environs et relief en parallèle.
+import { loadScene } from '/src/scene3d/data.js';
+import { loadTerrain } from '/src/scene3d/terrain.js';
+const q = new URLSearchParams(location.search), lat = Number(q.get('lat') || 47.01031), lng = Number(q.get('lng') || -71.37338);
+__mark('module');
+const pScene = loadScene(lat, lng).then(d => { __mark('environs reçus'); return d; });
+const pTer = loadTerrain(lat, lng).then(t => { __mark('relief reçu'); return t; });
+const m = await import('/src/scene3d/engine.js'); __mark('moteur importé');
+const e = m.createScene3D(document.getElementById('box'), {}); __mark('moteur créé');
+const core = window.__scene3dCore; let nf = 0, last = performance.now();
+const h2f = (h) => { const sg = (h & 0x8000) ? -1 : 1, e = (h >> 10) & 0x1f, f = h & 0x3ff; if (e === 0) return sg * Math.pow(2, -14) * (f / 1024); if (e === 31) return f ? NaN : sg * Infinity; return sg * Math.pow(2, e - 15) * (1 + f / 1024); };
+window.__probe = []; const probeTex = () => { if (!q.get('probe')) return; const sk = core.sky, rts = sk.rts(), t = sk.skyU.tCloud.value, which = t === rts.cloudRT.texture ? 'réduite' : 'accum'; const rt = which === 'réduite' ? rts.cloudRT : null; let T = null; if (rt) { const px = new Uint16Array(4); core.R.readRenderTargetPixels(rt, Math.floor(rt.width / 2), rt.height - 5, 1, 1, px); T = Array.from(px).map(h2f).map(v => +v.toFixed(3)); } window.__probe.push([Math.round(performance.now() - __T.t0), which, JSON.stringify(T), core.dbg && core.dbg.growing]); };
+core.afterFrame = () => { probeTex(); nf++; const now = performance.now(); const dt = now - last; last = now; const d = core.dbg || {}; if (nf <= 3 || dt > 60) __mark('image ' + nf + ' (' + Math.round(dt) + ' ms) accK ' + d.accK + ' pousse ' + (d.growing ? 'oui' : 'non')); };
+e.setProject({ lat, lng, buildings: [], orientation: ['PM'] }); e.setTime(new Date('2026-10-11T14:00').getTime()); e.setWeather(null);
+pScene.then(d => { e.setData(d); __mark('setData'); });
+pTer.then(t => { e.setTerrain(t); __mark('setTerrain'); });
+</script></body></html>

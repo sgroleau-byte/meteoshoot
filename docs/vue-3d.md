@@ -848,6 +848,31 @@ importé, lui, est le fichier de l'architecte.
     aberrante, `H.coverage`, et les vraies rangées ICON du lieu de la capture.
   - Contrôle: les 28 scénarios de référence (sans valeur aberrante), la vraie journée de Delson (6 h 55, 7 h 22, 13 h,
     18 h 13, 18 h 25), la couverture des trois types et le coût.
+- v633.192 (11 octobre 2026), **chargement sans ciel noir, apparition progressive** (« quand la scène load, le ciel est
+  noir... met le bleu par défaut comme s'il faisait soleil », « rendre le loading plus progressif sans retarder le temps que
+  ça prend? Là il y a un petit truc au centre, boum, tout apparaît d'un coup »). Filmé au banc (`tools/sky/timing.html`:
+  chronologie du chargement; captures de page toutes les 100 ms).
+  - **Ciel noir: régression de la v633.191.** Un commentaire `//` ajouté au milieu d'une ligne de la boucle d'image désactivait
+    la passe réduite des nuages: au chargement, la sphère du ciel lisait une texture jamais dessinée (tout à zéro, transparence
+    comprise) et restait noire pendant toute la pousse, jusqu'à la première accumulation (3,5 à 4 s); en mouvement, les
+    nuages restaient figés sur la dernière image accumulée. Corrigé (commentaire sur sa propre ligne). Même défaut trouvé sur
+    la ligne des **reflets de flaques**: désactivés depuis la v633.174 (8 octobre) par un commentaire au milieu de la ligne,
+    rétablis (vérifié sous 9 mm/h avec trois heures de pluie avant). Recherche systématique faite sur les fichiers de la 3D:
+    plus aucun cas. Règle: dans les lignes longues du moteur, jamais de commentaire `//` suivi de code.
+  - **Fond:** dégradé de ciel clair (#7397c2 vers #cdd6de) dans le conteneur au lieu du gris très sombre #202427.
+  - **Apparition:** le canevas est invisible jusqu'à ce que le relief soit posé (au plus tard 1,2 s après la création), puis
+    apparaît en fondu (0,7 s) sur ce ciel; la pousse des environs part 250 ms après l'apparition (son horloge attendait
+    avant: elle partait à `setData` et perdait son premier tiers derrière la compilation des environs, 200 à 360 ms, ou
+    pendant que le canevas était caché); un relief qui arrive pendant la pousse ne la relance plus (les maisons
+    s'enfonçaient et remontaient).
+  - **Plus rapide:** environs et relief demandés en même temps que le moteur (`Scene3D.jsx`), au lieu d'attendre son
+    chargement: ils arrivent en série plus tôt. Rien n'est retardé: l'état final dépend de toute façon du relief et des
+    environs.
+  - **Anneau d'attente:** il s'efface en fondu (0,45 s) au lieu de disparaître d'un coup.
+  - Préchauffage des cibles de l'accumulation des nuages à la création et au redimensionnement. Note de mesure: l'« image de
+    250 ms » à la fin de la pousse était l'attente volontaire de 220 ms avant l'accumulation (aucune image dessinée), pas une
+    saccade.
+  - Déroulé mesuré en local: ciel bleu dès 0 ms, fondu de la scène vers 0,8 s, pousse jusqu'à 3,6 s.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
