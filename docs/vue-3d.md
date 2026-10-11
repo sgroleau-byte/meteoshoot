@@ -935,6 +935,11 @@ importé, lui, est le fichier de l'architecte.
   - Limites: sans neige (saisons non faites), une forêt d'octobre au soleil reste plus sombre que les sommets enneigés des
     photos; ICON ne voit pas le soleil rasant qui passe sous le bord d'un plafond (photos 1 et 2): ce cas reste gris si la
     prévision locale est couverte.
+- v633.195 (11 octobre 2026), **plein jour un peu plus foncé** (« en pleine journée même en gros soleil, je trouve l'image un
+  peu fade. Possible de la foncer un peu? »): exposition baissée de 20 % au plein soleil (`DAY_DARK`), selon la force du
+  soleil (iv) et sa hauteur (de 10 à 30°): l'herbe au soleil revient dans les tons moyens, feuillages plus denses. Lever,
+  coucher, ciel couvert et nuit inchangés (vérifié au banc: exposition identique au coucher). Essais à 13 et 20 %: 20 %
+  choisi par Stéphane (« -20 est la bonne »).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
