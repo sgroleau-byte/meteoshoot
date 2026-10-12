@@ -706,6 +706,9 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   // lieu de s'y cogner au ras du sol; en se rapprochant, elle redescend jusqu'à hauteur d'oeil. Un glisser vertical reste respecté.
   const ZOOM_CLIMB = 0.25;
   const setR = (r) => { const r1 = clampR(r); camH = Math.max(1.2, Math.min(320, camH + (r1 - Rr) * ZOOM_CLIMB)); Rr = r1; dirty = true; };
+  // Boutons + et -: la distance glisse vers une cible (constante de temps 90 ms, environ 95 % en 270 ms) au lieu de sauter;
+  // des clics rapprochés s'additionnent sur la cible. Molette et pincement restent directs (et coupent un glissement en cours).
+  let zoomTo = null;
   let rainAt = 0; // dernière image de pluie seule (voir frame)
   // Percée (voir frame): rayon du disque dégagé autour du projet (fixé par pickView), groupes d'ombre retirés, trouée du ciel
   // autour du soleil (+1 ouverte, -1 refermée, 0 motif libre) et son état lissé.
@@ -1442,7 +1445,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       return;
     }
     if (!ptrs.size) el.style.cursor = e.altKey ? 'move' : model && pickModel(e) ? 'move' : 'grab'; // Option enfoncée: la vue se déplace
-    if (pinch && ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y) || 1; setR(pinch.r0 * pinch.d0 / d); return; }
+    if (pinch && ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y) || 1; zoomTo = null; setR(pinch.r0 * pinch.d0 / d); return; }
     if (!drag || e.pointerId !== drag.id) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag = { x: e.clientX, y: e.clientY, id: drag.id };
     if (e.altKey) { panView(dx, dy); el.style.cursor = 'move'; return; } // la touche peut être prise ou lâchée en plein geste
@@ -1468,12 +1471,13 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   };
   const onKeyUp = (e) => { if (e.key === 'Alt' && !ptrs.size) el.style.cursor = 'grab'; };
   window.addEventListener('keydown', onKey, true); window.addEventListener('keyup', onKeyUp, true);
-  el.addEventListener('wheel', e => { e.preventDefault(); setR(Rr * Math.exp(e.deltaY * 0.0015)); }, { passive: false });
+  el.addEventListener('wheel', e => { e.preventDefault(); zoomTo = null; setR(Rr * Math.exp(e.deltaY * 0.0015)); }, { passive: false });
 
   const vF = new THREE.Vector3(); let last = performance.now(), raf = 0;
   function frame(now) {
     if (!running) return; raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (zoomTo != null) { if (Math.abs(zoomTo - Rr) < 0.05) { setR(zoomTo); zoomTo = null; } else setR(Rr + (zoomTo - Rr) * (1 - Math.exp(-dt / 0.09))); }
     if (growing && growT0 < 0 && shown && now - shownAt > 250) growT0 = now; // la scène apparaît d'abord, puis les environs poussent
     if (growing && growT0 >= 0) { const gt = (now - growT0) / 1000; growU.uGrow.value = gt; growU.uReveal.value = 650 * (1 - Math.pow(1 - Math.min(1, gt / 1.1), 2)); treeGrowStep(gt); if (gt >= GROW_TOTAL) finishGrow(); dirty = true; }
     const a = 1 - Math.exp(-dt * 3.5); let moving = false;
@@ -1935,7 +1939,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     resize,
     getView() { return { az, camH, Rr, ct: ct.toArray(), time: new Date(dateMs).toString().slice(0, 24) }; },
     setView(v) { if (v.az != null) az = v.az; if (v.camH != null) camH = v.camH; if (v.Rr != null) Rr = v.Rr; if (v.ct) ct.fromArray(v.ct); dirty = true; },
-    zoom(f) { setR(Rr * f); }, // f < 1: on s'approche
+    zoom(f) { zoomTo = clampR((zoomTo ?? Rr) * f); dirty = true; }, // f < 1: on s'approche; glissement doux dans frame
     // Modèle importé: glb (ArrayBuffer) et info de modelImport.js, placement gardé ou null (placement par défaut). Renvoie le placement.
     async setModel(glb, info, placement) {
       dropModel();
