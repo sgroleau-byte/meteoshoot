@@ -359,7 +359,11 @@ vec4 clouds(vec3 ro, vec3 rd, float jit, float quality) {
   vec3 col = vec3(0.0); float T = 1.0, tFirst = -1.0;
   float ga = acos(clamp(dot(rd, uSun), -1.0, 1.0)), gR = uGapR * (0.7 + 0.6 * tex3(tNoise, vec3(rd.xz * 3.0, 0.5), 128.0).g);
   float gp = 1.0 - smoothstep(0.35 * gR, gR, ga);
-  float covK = 1.0 + gp * (uSunGap > 0.0 ? -0.75 : 0.9) * abs(uSunGap);
+  /* Trouée refermée (caméra à l'ombre d'un nuage): la couche basse est épaissie autour du soleil pour le cacher. Sous un ciel
+     déjà couvert (plus de 80 %), le soleil est caché de toute façon et l'épaississement dessinait un gros rond gris foncé qui
+     suivait le soleil (Stéphane, 12 octobre 2026, v633.206): il s'efface avec la couverture. Lumière de la scène inchangée
+     (la capture d'ambiance se fait sans trouée, voir envNow). */
+  float covK = 1.0 + gp * (uSunGap > 0.0 ? -0.75 : 0.9 * (1.0 - smoothstep(0.55, 0.8, uLay0.z))) * abs(uSunGap);
   marchShaft(ro, rd, jit, col, T);
   marchLayer(ro, rd, 0, jit, covK, quality, col, T, tFirst);
   marchLayer(ro, rd, 1, jit, 1.0, quality, col, T, tFirst);
