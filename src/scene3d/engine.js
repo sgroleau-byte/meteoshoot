@@ -1100,7 +1100,13 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     // loin pour que son sommet et son pied tiennent dans l'angle vertical de la caméra (avec 20 % de marge). En largeur, la
     // moitié la plus large de l'empreinte doit tenir dans l'angle horizontal (format portrait compté comme 1,2 au moins:
     // sur un téléphone, on ne recule pas à 400 m pour une barre de 150 m).
-    const liftH = Hb > 18 ? Math.min(120, 1.7 + (Hb - 18) * 0.4) : 1.7;
+    // Caméra: hauteur d'oeil jusqu'à 12 m; au-delà, au-dessus du toit (1,6 m par mètre, puis plus doucement pour une tour).
+    const liftH = Hb > 12 ? Math.min(120, 1.7 + (Hb - 12) * 1.6, 20 + Hb * 0.35) : 1.7;
+    // Vue 3/4: orientation dominante des murs (moyenne circulaire sur quatre fois l'angle, pondérée par la longueur) et
+    // ses quatre diagonales à 45°; l'écart à la diagonale la plus proche coûte 1 point par degré (le côté soleil, 0,6).
+    let wC = 0, wS = 0; for (let i = 0; i < target.length; i++) { const a = target[i], b = target[(i + 1) % target.length]; const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy); if (l < 0.5) continue; const t = Math.atan2(dx, dy) * 4; wC += l * Math.cos(t); wS += l * Math.sin(t); }
+    const wallBea = Math.atan2(wS, wC) / 4 * 180 / Math.PI;
+    const diagDev = (bea) => { const d = ((bea - wallBea - 45) % 90 + 90) % 90; return Math.min(d, 90 - d); };
     const aimH = Math.max(Math.min(14, 4 + size * 0.1), Hb * 0.55), aimY = base + aimH;
     const tv = Math.tan(cam.fov * Math.PI / 360) * 0.8, th = tv * Math.max(1.2, W / H), half = Math.atan(tv);
     // d: distance à la façade la plus proche (sommet et pied vus de là); la visée, elle, est au centre, hd plus loin.
@@ -1137,6 +1143,14 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
         }
         if (need > 120) continue;
         const eye = g0 + need;
+        // Part du bâtiment cachée par les voisins au premier plan (en angle, du pied au toit, sur chaque visée): même vue
+        // de haut, un immeuble planté devant mange le bas de l'image.
+        let hideF = 0;
+        for (const [ax, an] of aimsB) {
+          const dS = Math.hypot(ax - px, an - py) || 1, aFoot = Math.atan((base + 0.5 - eye) / dS), aTop = Math.atan((base + Hb - eye) / dS); let aHid = aFoot;
+          for (const b of nearB) { if (!segHitsRing(p, [ax, an], b.r)) continue; let dN = 0; for (const q of b.r) dN = Math.max(dN, Math.hypot(q[0] - px, q[1] - py)); aHid = Math.max(aHid, Math.atan((b.top - eye) / Math.max(1, Math.min(dN, dS - 1)))); } // c'est l'arête la plus lointaine du toit qui monte le plus haut dans l'image
+          hideF += Math.min(1, Math.max(0, (aHid - aFoot) / Math.max(0.01, aTop - aFoot))) / aimsB.length;
+        }
         const gx = tc[0] - px, gy = tc[1] - py, g2 = gx * gx + gy * gy || 1;
         // Pas dans un arbre ni le nez dans une couronne (portée dessinée), et le moins d'arbres possible entre
         // la caméra et le bâtiment. En forêt dense, aucun point n'est libre: on garde le moins encombré, vu de plus haut.
@@ -1162,7 +1176,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
         const blocked = corners.filter(c => near.some(r => segHitsRing(p, c, r))).length; // pied des coins caché (2D)
         const hidden = terrain.blocked(px, py, eye, tc[0], tc[1], aimY) ? 1 : 0; // le relief cache le bâtiment
         let roadD = Infinity; roads.forEach(r => { if (r.k !== 0) return; const P = r.p; for (let i = 0; i < P.length - 1; i++) { const a = P[i], b = P[i + 1]; const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy || 1; let t = ((px - a[0]) * dx + (py - a[1]) * dy) / l2; t = Math.max(0, Math.min(1, t)); roadD = Math.min(roadD, Math.hypot(px - a[0] - t * dx, py - a[1] - t * dy)); } });
-        const score = -Math.abs(bea - pref) * 0.6 - Math.abs(rad - radPref) * 0.8 - blocked * 25 - hidden * 40 + (roadD < 7 ? 8 : 0) - treePen - Math.min(screen, 8) * 12 - trunkHit * 30 - (need - liftH) * 1.0;
+        const score = -Math.abs(bea - pref) * 0.6 - diagDev(bea) * 1.0 - Math.abs(rad - radPref) * 0.8 - blocked * 8 - hidden * 40 + (roadD < 7 ? 8 : 0) - treePen - Math.min(screen, 8) * 12 - trunkHit * 30 - (need - liftH) * 1.0 - hideF * 80;
         if (under) { if (!bestUnder || score > bestUnder.s) bestUnder = { s: score, px, py, screen, screenC, under, need }; }
         else if (!best || score > best.s) best = { s: score, px, py, screen, screenC, need };
       }

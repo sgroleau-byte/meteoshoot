@@ -1123,9 +1123,11 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     setSunHourDisplay(min2);
     sunHourTargetRef.current = min2;
 
-    // Animate slider to center of range
+    // Le curseur glisse vers l'heure du créneau: 25 min avant le coucher en PM (aussi si les deux ou aucun), 25 min
+    // après le lever en AM seul.
+    const amOnly = Array.isArray(project?.orientation) && project.orientation.includes('AM') && !project.orientation.includes('PM');
     setTimeout(() => {
-      const targetH = min2 + range2 / 2;
+      const targetH = amOnly ? sr2 + 25 / 60 : ss2 - 25 / 60;
       const sliderDur = 1000;
       const sT0 = performance.now();
       const startH = min2;
@@ -1138,7 +1140,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       };
       requestAnimationFrame(animSlider);
     }, 200);
-  }, [project?.lat, project?.lng]);
+  }, [project?.lat, project?.lng, project?.orientation]);
 
   // Repli après 6 s sans tuiles (clé refusée, réseau, script Google jamais chargé): la fenêtre se dévoile quand même,
   // sinon la vue 3D, le menu SAT/SAT2/3D et le curseur, qui ne dépendent pas de Google, resteraient cachés.
