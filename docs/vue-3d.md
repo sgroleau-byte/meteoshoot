@@ -1005,6 +1005,13 @@ importé, lui, est le fichier de l'architecte.
   d'ombre que `compile()` ne couvre pas. Banc (tools/sky): 0 programme compilé au basculement (19 avant, puis 4), première
   image après le basculement 3 à 10 ms (35 à 44 avant). Reste une image de 230 ms environ 1 à 2 s après tout changement
   d'heure: première passe des nuages en pleine résolution (déjà connue, pas propre à la nuit).
+- v633.202 (12 octobre 2026), **iPad: curseur de l'heure et paysage** (« le slider est très difficile à attraper... il faut
+  s'y reprendre 3-4 fois », « moindrement que le gros doigt n'est pas précisément au centre ça ne fonctionne pas »; « en mode
+  paysage l'info de gauche prend toute la place et la carte 1/5 dans le coin de l'écran »): sur tout écran tactile sans souris
+  (`touchSlider`, media `(hover: none)`), la bande entière du curseur prend le doigt comme sur l'iPhone, au lieu du seul
+  pouce du réglage natif; la carte passe au-dessus des champs jusqu'à 1300 px de large (1100 avant: en paysage sur iPad, 1180
+  à 1210 px, la carte n'avait que 352 px, maintenant 1084). Vérifié au simulateur iPad Air 11 (doigt posé à 150 px du pouce:
+  l'heure saute sous le doigt et le suit) et en Chrome à 1180 x 820. Mac inchangé (fenêtre plus large que 1300 px).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

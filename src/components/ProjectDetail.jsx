@@ -122,10 +122,15 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   const autocompleteRef = React.useRef(null);
   const departureInputRef = React.useRef(null);
   const isMobile = useIsMobile();
-  // Sous 1100 px (iPad en portrait, fenêtre étroite), la colonne de la carte n'a plus de place à droite des
-  // champs de 700 px: la carte passe au-dessus, sur toute la largeur.
+  // Écran tactile sans souris (iPad, iPhone tenu à l'horizontale): le curseur de l'heure se prend sur toute la bande, pas sur
+  // le seul pouce du réglage natif (sur iPad il fallait s'y reprendre à 3 ou 4 fois, « moindrement que le gros doigt n'est
+  // pas précisément au centre ça ne fonctionne pas »: Stéphane, 12 octobre 2026).
+  const touchSlider = isMobile || (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(hover: none)').matches);
+  // Sous 1300 px (iPad en portrait comme en paysage, fenêtre étroite), la colonne de la carte n'a plus de place à droite des
+  // champs de 700 px (en paysage sur iPad Pro 11, 1210 px: la carte n'avait que 350 px, « 1/5 dans le coin de l'écran »,
+  // Stéphane, 12 octobre 2026): elle passe au-dessus, sur toute la largeur.
   const viewportWidth = useViewportWidth();
-  const stackMap = !isMobile && viewportWidth < 1100;
+  const stackMap = !isMobile && viewportWidth < 1300;
   const departureAutocompleteRef = React.useRef(null);
   const mapContainerRef = React.useRef(null);
   const flareCanvasRef = React.useRef(null);
@@ -2537,7 +2542,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                     }}>
                       
                       {/* Slider track area: centered vertically in 172px zone */}
-                      {isMobile && <div
+                      {touchSlider && <div
                         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'auto', zIndex: 3, touchAction: 'none', padding: '0 16px' }}
                         onTouchStart={e => {
                           e.preventDefault();
@@ -2609,7 +2614,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                             width: '100%', appearance: 'none', WebkitAppearance: 'none',
                             background: 'transparent', position: 'relative', zIndex: 2,
                             outline: 'none', cursor: 'pointer',
-                            pointerEvents: isMobile ? 'none' : 'auto'
+                            pointerEvents: touchSlider ? 'none' : 'auto'
                           }}
                         />
                       </div>
