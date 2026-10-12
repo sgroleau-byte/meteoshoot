@@ -988,6 +988,11 @@ importé, lui, est le fichier de l'architecte.
     barre au niveau 40) et cachait la légende.
   Pincement à deux doigts vérifié. Reste à mesurer la fluidité sur un vrai iPhone (le simulateur dessine avec la puce du
   Mac) et à réinstaller l'app native sur l'iPhone de Stéphane (version d'avant la 3D).
+- v633.200 (12 octobre 2026), **téléphone: ni MAISON ni SOL SAT dans la 3D** (« on devrait peut-être enlever les options
+  maison et sol sat sur iphone », « peut-être le laisser sur ipad »): sous 768 px, seule la pastille MÉTÉO / SOLEIL reste;
+  le modèle importé depuis le Mac s'affiche quand même. iPad (plus de 768 px) et ordinateur inchangés. App native
+  v633.199 installée sur son iPhone 15 Pro le matin même: « aussi fluide que sur le mac ou presque », aucune baisse de
+  qualité sur téléphone.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

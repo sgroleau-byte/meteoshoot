@@ -320,7 +320,8 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
           En haut à gauche sous la boussole (left 14, top 104, 34 de haut), loin de la colonne des formes et de SAT / 3D. */}
       <input ref={fileRef} type="file" accept=".kmz" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; onFile(f); }}/>
       <div style={{ position: 'absolute', top: '148px', left: '14px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '6px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(232,228,220,0.25)', borderRadius: '16px', padding: '2px 3px 2px 6px', whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.4)' }}>
+        {/* Téléphone: ni import du modèle ni SOL SAT (réglages de bureau; le modèle importé s'affiche quand même): à la demande de Stéphane, 12 octobre 2026 */}
+        {!isMobile &&         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(232,228,220,0.25)', borderRadius: '16px', padding: '2px 3px 2px 6px', whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.4)' }}>
           {prepP != null ? <>
             <svg width="18" height="18" viewBox="0 0 30 30" style={{ animation: 'scene3dSpin 1.1s linear infinite', position: 'relative', top: '1px' }}><circle cx="15" cy="15" r="12" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="3"/><circle cx="15" cy="15" r="12" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeDasharray="22 53.4"/></svg>
             <span className="font-bebas-bold" style={{ ...bebas, color: '#fff', padding: '3px 6px 0 0' }}>PRÉPARATION {Math.round(prepP * 100)} %</span>
@@ -353,19 +354,19 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
               </button>
             </>}
           </>}
-        </div>
-        <div onClick={toggleSat} title={satOn ? 'Retirer l’image satellite du sol' : 'Poser l’image satellite de Plans sur le sol (repère pour placer la maison)'} style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: satBusy ? 'wait' : 'pointer', borderRadius: '16px', padding: '4px 10px 3px 8px', whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.4)', background: satOn ? '#fff' : 'rgba(232,228,220,0.25)', userSelect: 'none', WebkitUserSelect: 'none' }}>
+        </div>}
+        {!isMobile &&         <div onClick={toggleSat} title={satOn ? 'Retirer l’image satellite du sol' : 'Poser l’image satellite de Plans sur le sol (repère pour placer la maison)'} style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: satBusy ? 'wait' : 'pointer', borderRadius: '16px', padding: '4px 10px 3px 8px', whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.4)', background: satOn ? '#fff' : 'rgba(232,228,220,0.25)', userSelect: 'none', WebkitUserSelect: 'none' }}>
           {satBusy ? <svg width="14" height="14" viewBox="0 0 30 30" style={{ animation: 'scene3dSpin 1.1s linear infinite', position: 'relative', top: '1px' }}><circle cx="15" cy="15" r="12" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="3"/><circle cx="15" cy="15" r="12" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeDasharray="22 53.4"/></svg>
             : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={satOn ? '#000' : '#fff'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative', top: '1px' }}><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>}
           <span className="font-bebas-bold" style={{ fontSize: '15px', letterSpacing: '0.04em', lineHeight: '1', color: satOn ? '#000' : '#fff', paddingTop: '2px' }}>SOL SAT</span>
-        </div>
+        </div>}
         {/* Météo de la 3D: MÉTÉO (prévision de l'heure) ou SOLEIL (journée ensoleillée, pour lire les ombres); tracé Lucide sun. */}
         {onToggleSunny && <div onClick={onToggleSunny} title={sunny ? 'Journée ensoleillée : cliquer pour remettre la météo prévue' : 'Couper la météo : journée ensoleillée pour voir les ombres'} style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', borderRadius: '16px', padding: '4px 10px 3px 8px', whiteSpace: 'nowrap', boxShadow: '0 2px 12px rgba(0,0,0,0.4)', background: sunny ? '#fff' : 'rgba(232,228,220,0.25)', userSelect: 'none', WebkitUserSelect: 'none' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={sunny ? '#000' : '#fff'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative', top: '1px' }}><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
           <span className="font-bebas-bold" style={{ fontSize: '15px', letterSpacing: '0.04em', lineHeight: '1', color: sunny ? '#000' : '#fff', paddingTop: '2px' }}>{sunny ? 'SOLEIL' : 'MÉTÉO'}</span>
         </div>}
-        {mdl && prepP == null && !locked && <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.75)', textShadow: '0 1px 2px rgba(0,0,0,0.5)', paddingLeft: '6px', pointerEvents: 'none' }}>Glisser la maison pour la déplacer, cadenas pour la fixer</div>}
-        {mdlErr && <div style={{ fontSize: '11px', color: '#ffb4a8', textShadow: '0 1px 2px rgba(0,0,0,0.5)', paddingLeft: '6px', maxWidth: '240px' }}>{mdlErr}</div>}
+        {!isMobile && mdl && prepP == null && !locked && <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.75)', textShadow: '0 1px 2px rgba(0,0,0,0.5)', paddingLeft: '6px', pointerEvents: 'none' }}>Glisser la maison pour la déplacer, cadenas pour la fixer</div>}
+        {!isMobile && mdlErr && <div style={{ fontSize: '11px', color: '#ffb4a8', textShadow: '0 1px 2px rgba(0,0,0,0.5)', paddingLeft: '6px', maxWidth: '240px' }}>{mdlErr}</div>}
       </div>
       {info && <div onClick={isMobile ? () => setLegendOpen(v => !v) : undefined} style={{ position: 'absolute', left: '14px', right: isMobile ? '14px' : undefined, bottom: '12px', fontSize: isMobile ? '11px' : '12px', lineHeight: '1.45', color, pointerEvents: isMobile ? 'auto' : 'none', cursor: isMobile ? 'pointer' : undefined, userSelect: 'none', WebkitUserSelect: 'none', textShadow: info.light ? '0 1px 2px rgba(0,0,0,0.35)' : 'none' }}>
         <div>{info.cond}{isMobile && <span style={{ opacity: 0.6, marginLeft: '8px', fontSize: '10px', letterSpacing: '0.08em' }}>{legendOpen ? 'MOINS' : 'PLUS'}</span>}</div>
