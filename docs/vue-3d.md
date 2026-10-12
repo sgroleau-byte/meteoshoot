@@ -945,7 +945,7 @@ importé, lui, est le fichier de l'architecte.
   v633.195 ne valait qu'au plein soleil (pondérée par iv), et l'exposition automatique remontait la scène voilée jusqu'à la
   délaver. Elle vaut maintenant pour tout le plein jour (hauteur du soleil de 10 à 30°), sauf sous un orage (rendu sombre
   validé). Lever, coucher et nuit inchangés; banc: plein soleil et orage identiques, voile et couvert plus denses.
-- v633.197 (11 octobre 2026), **nuages plus fidèles à leur sorte** (« toutes les sortes de nuages illustrées de façon le
+- v633.197 (11 octobre 2026, **retirée le soir même**, voir v633.198), **nuages plus fidèles à leur sorte** (« toutes les sortes de nuages illustrées de façon le
   plus réaliste possible... si l'application dit qu'il y a telle sorte de nuage, il faut que ça ressemble à telle sorte de
   nuage »; à 17 h, la 3D montrait des nuages gris d'orage pour 60 % de nuages bas sans convection):
   - **Classement** (sky.js `classifyClouds`): couches d'après l'humidité aux 14 niveaux de pression demandés à ICON
@@ -973,6 +973,10 @@ importé, lui, est le fichier de l'architecte.
   - Banc: orage et pluie identiques (écarts dus aux gouttes animées), 12 sortes de nuages à midi et le cas réel du 11
     octobre (planches dans _METEOSHOOT/verification_nuages/). Piège: une sonde à un seul tramage ment pour un champ à seuil
     raide (l'image posée moyenne 8 tramages).
+- v633.198 (11 octobre 2026), **retour au rendu de la v633.196** (« c'est dégueu, revient à la version d'avant », capture de
+  la fiche en ligne: ciel couvert brun, granuleux comme du sable, coupé par une bande): engine.js, sky.js et api.js remis
+  à l'identique de la v633.196. Ce qui avait été appris en v633.197 (repères de la banque photos-architecture, pièges du
+  banc) reste noté ci-dessus; toute reprise se fera par petites étapes montrées en planche avant publication.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

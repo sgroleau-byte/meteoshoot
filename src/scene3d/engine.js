@@ -22,7 +22,7 @@ import { horizonProfile, curvDrop } from './horizon.js';
 import { prisms, fitTree, reachOf, sheetCellBlocked, sheetTriTooClose, LOBE_PARTS, CON_TIERS, CON_TIERS_LOW } from './clearance.js';
 import { segDist, dpClosed, regularizeRing } from './ring.js';
 import { roofFaces, roofTop } from './roof.js';
-import { makeNoiseTextures, CLOUD_GLSL, CLOUD_PASS_FRAG, sunAtAltitude, classifyClouds, diffTrans } from './sky.js';
+import { makeNoiseTextures, CLOUD_GLSL, CLOUD_PASS_FRAG, sunAtAltitude, classifyClouds } from './sky.js';
 
 // Ombres PCSS (percentage-closer soft shadows) greffées sur le mode d'ombre « de base » de three (carte de profondeur en
 // pleine précision, lue directement): pénombre nette au contact et de plus en plus large en s'éloignant de l'objet qui
@@ -74,11 +74,6 @@ let PCSS_OK = false;
   PCSS_OK = true;
 })();
 if (!PCSS_OK) console.warn('[scene3d] chunk d’ombre de three inattendu: ombres PCF au lieu de PCSS');
-// Ciel couvert au gris (Stéphane, 11 octobre 2026: « il ne faut pas que le ciel soit 100 % blanc, quand il fait nuage il faut
-// gris »; « jamais trop blanc, sauf les gros cumulonimbus en hauteur super éclairés »). Base d'un couvert bas ou d'un
-// altostratus assombrie dans le ciel dessiné seulement (pas dans la lumière d'ambiance de la scène), et exposition moins
-// relevée sous un couvert. Valeurs calées sur les photos de sa banque d'images (photos-architecture.com).
-let GREY_SKY = 0.3, GREY_EXP = 0.5;
 const DAY_DARK = 0.2; // assombrissement du plein jour (exposition: 20 %, choisi par Stéphane parmi 13 et 20 % en v633.195; tout le jour depuis la v633.196), voir uExp
 const SUNMAP_HALF = 1500, SUNMAP_N = 512; // carte de hauteurs proche de la visibilité du soleil: ±1,5 km, 5,9 m par case (v633.194)
 const SHADOW_SPAN = 20000; // plage de profondeur de la carte d'ombre (mètres vers le soleil): le relief lointain porte son ombre
@@ -121,7 +116,7 @@ function sunExtinction(y, turb, ray) {
 // fumée; puis les nuages volumétriques de sky.js par-dessus (passe à résolution réduite lue dans tCloud, ou calcul en
 // ligne pour les cartes cubiques de la lumière d'ambiance et des flaques: INLINE). Composition en linéaire:
 // ciel x transmittance des nuages + radiance des nuages. Les nuages eux-mêmes (formes, lumière) sont dans sky.js.
-const SKY_HEAD = `uniform float uDirect,uWarm,uTw,uNight,uGlow,uTurb,uRay,uSkyK,uZen,uSmoke,uGrey;uniform vec3 uSunCol;uniform sampler2D tCloud;uniform vec2 uRes,uCloudPx;varying vec3 vDir;
+const SKY_HEAD = `uniform float uDirect,uWarm,uTw,uNight,uGlow,uTurb,uRay,uSkyK,uZen,uSmoke;uniform vec3 uSunCol;uniform sampler2D tCloud;uniform vec2 uRes,uCloudPx;varying vec3 vDir;
 const vec3 LUMW=vec3(0.2126,0.7152,0.0722);
 // Ciel clair de Preetham (modèle analytique de lumière du jour, comme Sky.js de three): diffusion de Rayleigh (bleu du ciel) et de
 // Mie (halo blanc autour du soleil, brume à l'horizon), extinction Fex le long du rayon. uTurb = turbidité (brume), uRay = part
@@ -170,7 +165,7 @@ vec4 cl=clouds(uCamW,rd,ignoise(gl_FragCoord.xy)*0.8+0.1,0.5);
 #else
 vec2 cuv=gl_FragCoord.xy/uRes,cpx=0.5*uCloudPx;vec4 cl=0.25*(texture2D(tCloud,cuv+cpx)+texture2D(tCloud,cuv-cpx)+texture2D(tCloud,cuv+vec2(cpx.x,-cpx.y))+texture2D(tCloud,cuv+vec2(-cpx.x,cpx.y)));/* quatre lectures décalées d'un demi-texel de la texture des nuages: lisse le grain du tramage */
 #endif
-vec3 cc=mix(cl.rgb,dot(cl.rgb,LUMW)*vec3(1.12,0.9,0.66),uSmoke*0.75)*(1.0-0.2*uSmoke)*(1.0-uGrey);/* ciel couvert: base des nuages ramenée au gris (GREY_SKY) */
+vec3 cc=mix(cl.rgb,dot(cl.rgb,LUMW)*vec3(1.12,0.9,0.66),uSmoke*0.75)*(1.0-0.2*uSmoke);
 gl_FragColor=vec4(lin*cl.a+cc,1.0);}`;
 const SKY_GLSL = SKY_HEAD + CLOUD_GLSL + SKY_MAIN;
 const SKY_VERT = `varying vec3 vDir;void main(){vec4 wp=modelMatrix*vec4(position,1.0);vDir=wp.xyz-cameraPosition;gl_Position=projectionMatrix*viewMatrix*wp;}`;
@@ -412,9 +407,8 @@ export function createScene3D(container, opts = {}) {
   // résolution réduite, texture tCloud), la sphère du ciel vue par la caméra et sa variante INLINE des cartes cubiques.
   const noiseTex = makeNoiseTextures(R);
   const V3 = () => ({ value: new THREE.Vector3() });
-  const cloudU = { tNoise: { value: noiseTex.base }, tDetail: { value: noiseTex.detail }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunL: V3(), uSunM: V3(), uSunH: V3(), uAmbZ: V3(), uAmbH: V3(), uAmbG: V3(), uOff: V3(), uCamW: V3(), uLay0: { value: new THREE.Vector4(800, 1600, 0, 1) }, uLay0b: { value: new THREE.Vector4() }, uLay1: { value: new THREE.Vector4(3200, 4300, 0, 1) }, uCld: { value: new THREE.Vector4(0.5, 0, 0, 0) }, uOvc: { value: 0 }, uHi: { value: new THREE.Vector4(0, 1, 9000, 1) }, uGround: { value: 0 }, uSunGap: { value: 0 }, uGapR: { value: 0.1 }, uSteps: { value: 1 }, uShaft: { value: 0 }, uHz: { value: Array.from({ length: 9 }, () => new THREE.Vector3()) }, uPixAng: { value: 0.001 }, uSunLk: { value: Array.from({ length: 7 }, () => new THREE.Vector3()) }, uSunMk: { value: Array.from({ length: 7 }, () => new THREE.Vector3()) }, uSunHk: { value: Array.from({ length: 7 }, () => new THREE.Vector3()) } };
-  const SUN_STEP = 0.75 * Math.PI / 180; // pas de la table du soleil des couches (sky.js sunAt)
-  const skyU = { ...cloudU, uCum: { value: 0 }, uMid: { value: 0 }, uHigh: { value: 0 }, uDirect: { value: 1 }, uWarm: { value: 0 }, uTw: { value: 0 }, uNight: { value: 0 }, uGlow: { value: 0 }, uSmoke: { value: 0 }, uGrey: { value: 0 }, uTurb: { value: 2.5 }, uRay: { value: 1.5 }, uSkyK: { value: 0.2 }, uZen: { value: 0.1 }, uStorm: { value: 0 }, uSunCol: { value: new THREE.Vector3(1, 1, 1) }, tCloud: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uCloudPx: { value: new THREE.Vector2(1, 1) } };
+  const cloudU = { tNoise: { value: noiseTex.base }, tDetail: { value: noiseTex.detail }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunL: V3(), uSunM: V3(), uSunH: V3(), uAmbZ: V3(), uAmbH: V3(), uAmbG: V3(), uOff: V3(), uCamW: V3(), uLay0: { value: new THREE.Vector4(800, 1600, 0, 1) }, uLay0b: { value: new THREE.Vector4() }, uLay1: { value: new THREE.Vector4(3200, 4300, 0, 1) }, uHi: { value: new THREE.Vector4(0, 1, 9000, 1) }, uGround: { value: 0 }, uSunGap: { value: 0 }, uGapR: { value: 0.1 }, uSteps: { value: 1 }, uShaft: { value: 0 }, uHz: { value: Array.from({ length: 9 }, () => new THREE.Vector3()) }, uPixAng: { value: 0.001 } };
+  const skyU = { ...cloudU, uCum: { value: 0 }, uMid: { value: 0 }, uHigh: { value: 0 }, uDirect: { value: 1 }, uWarm: { value: 0 }, uTw: { value: 0 }, uNight: { value: 0 }, uGlow: { value: 0 }, uSmoke: { value: 0 }, uTurb: { value: 2.5 }, uRay: { value: 1.5 }, uSkyK: { value: 0.2 }, uZen: { value: 0.1 }, uStorm: { value: 0 }, uSunCol: { value: new THREE.Vector3(1, 1, 1) }, tCloud: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uCloudPx: { value: new THREE.Vector2(1, 1) } };
   const skyMat = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: skyU, vertexShader: SKY_VERT, fragmentShader: SKY_GLSL });
   const skyMatIn = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: skyU, defines: { INLINE: 1 }, vertexShader: SKY_VERT, fragmentShader: SKY_GLSL });
   const cloudPassMat = new THREE.ShaderMaterial({ uniforms: { ...cloudU, uProjInv: { value: new THREE.Matrix4() }, uV2W: { value: new THREE.Matrix3() }, uRes: { value: new THREE.Vector2(1, 1) }, uSub: { value: new THREE.Vector2() }, uJit: { value: 0 }, uQual: { value: 1 } }, vertexShader: QV, fragmentShader: CLOUD_PASS_FRAG });
@@ -701,7 +695,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
 
   // ---- état: lieu, heure, météo, caméra
   let lat = 46.8, lng = -71.2, origin = null, projLocal = [], orientation = [], style = null, data = null, dateMs = Date.now();
-  const tg = { cum: 0, mid: 0, high: 0, iv: 1, rain: 0, wet: 0, pud: 0, fogK: 0, fogTh: 600, smk: 0, storm: 0, brk: 0, pSun: 0, l0b: 800, l0t: 1600, l0c: 0, l0k: 1, l0w: 0, l0s: 0, l0d: 0, m1b: 3200, m1t: 4300, m1c: 0, m1k: 1, hc: 0, hk: 1, ha: 9000, ht: 1, shaft: 0, l0T: 0.5, m1T: 0.6, hT: 1, prot: 0 }, cur = { ...tg }; // l0T, m1T: transmission diffuse des couches (épaisseur optique d'ICON); hT: épaisseur optique du voile d'altitude; prot: heure d'orage, d'averse, de pluie ou de neige (rendu d'avant)
+  const tg = { cum: 0, mid: 0, high: 0, iv: 1, rain: 0, wet: 0, pud: 0, fogK: 0, fogTh: 600, smk: 0, storm: 0, brk: 0, pSun: 0, l0b: 800, l0t: 1600, l0c: 0, l0k: 1, l0w: 0, l0s: 0, l0d: 0, m1b: 3200, m1t: 4300, m1c: 0, m1k: 1, hc: 0, hk: 1, ha: 9000, ht: 1, shaft: 0 }, cur = { ...tg };
   let cloudNames = []; // mots de la légende (classifyClouds)
   let smokeUg = null; // fumée de feux au sol (microgrammes par mètre cube, FireWork) à l'heure affichée
   let az = Math.PI * 1.2, camH = 1.7, Rr = 75; const ct = new THREE.Vector3(0, 10, 0);
@@ -1444,7 +1438,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     if (growing && growT0 < 0 && shown && now - shownAt > 250) growT0 = now; // la scène apparaît d'abord, puis les environs poussent
     if (growing && growT0 >= 0) { const gt = (now - growT0) / 1000; growU.uGrow.value = gt; growU.uReveal.value = 650 * (1 - Math.pow(1 - Math.min(1, gt / 1.1), 2)); treeGrowStep(gt); if (gt >= GROW_TOTAL) finishGrow(); dirty = true; }
     const a = 1 - Math.exp(-dt * 3.5); let moving = false;
-    ['cum', 'mid', 'high', 'iv', 'rain', 'wet', 'pud', 'fogK', 'fogTh', 'smk', 'storm', 'brk', 'l0b', 'l0t', 'l0c', 'l0k', 'l0w', 'l0s', 'l0d', 'm1b', 'm1t', 'm1c', 'm1k', 'hc', 'hk', 'ha', 'ht', 'shaft', 'l0T', 'm1T', 'hT', 'prot'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > (METRES.has(k) ? 0.5 : 0.0005)) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; }); // altitudes en mètres: seuil d'un demi-mètre (sinon la scène restait « en mouvement » 4 s et l'accumulation des nuages attendait)
+    ['cum', 'mid', 'high', 'iv', 'rain', 'wet', 'pud', 'fogK', 'fogTh', 'smk', 'storm', 'brk', 'l0b', 'l0t', 'l0c', 'l0k', 'l0w', 'l0s', 'l0d', 'm1b', 'm1t', 'm1c', 'm1k', 'hc', 'hk', 'ha', 'ht', 'shaft'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > (METRES.has(k) ? 0.5 : 0.0005)) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; }); // altitudes en mètres: seuil d'un demi-mètre (sinon la scène restait « en mouvement » 4 s et l'accumulation des nuages attendait)
     // Vue posée depuis 220 ms après un rendu en résolution réduite: une image de plus avec les nuages en pleine résolution.
     if (!shown && (terrainIn || now - createdAt > 1200)) { shown = true; shownAt = now; R.domElement.style.opacity = '1'; dirty = true; } // fondu sur le ciel bleu du conteneur
     if (growing && growT0 < 0) dirty = true; // attendre l'apparition en continuant à dessiner
@@ -1554,12 +1548,8 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     // direct): l'exposition automatique remontait la scène sous un voile ou un couvert jusqu'à la rendre délavée. Selon la
     // hauteur du soleil (de 10 à 30°): lever, coucher et nuit inchangés; orage épargné (rendu sombre validé, exposition
     // déjà réglée pour l'ombre).
-    // indice de ciel couvert: couche basse continue et stratiforme, ou altostratus étendu; ni orage ni averse, ni nuit
-    if (import.meta.env.DEV && window.__scene3dCore && window.__scene3dCore.grey) ({ sky: GREY_SKY, exp: GREY_EXP } = window.__scene3dCore.grey);
-    const ovc = (1 - cur.prot) * (1 - cur.storm) * smooth(2, 8, realDeg) * Math.max(smooth(0.7, 0.95, cur.l0c) * (1 - smooth(0.6, 0.9, cur.l0k)), smooth(0.7, 0.95, cur.m1c) * (1 - smooth(0.3, 0.7, cur.m1k)));
-    skyMat.uniforms.uGrey.value = GREY_SKY * ovc; cloudU.uOvc.value = ovc;
     const dayDark = 1 - DAY_DARK * smooth(10, 30, realDeg) * (1 - cur.storm);
-    compMat.uniforms.uExp.value = Math.max(0.5, Math.min(1.15 - 0.4 * twi, 0.64 * Math.pow(1 / Math.max(0.05, Math.min(1, tot)), 0.3 * (1 - GREY_EXP * ovc)))) * dayDark;
+    compMat.uniforms.uExp.value = Math.max(0.5, Math.min(1.15 - 0.4 * twi, 0.64 * Math.pow(1 / Math.max(0.05, Math.min(1, tot)), 0.3))) * dayDark;
     const U = skyMat.uniforms, dk = 0.5 + 0.5 * clamp((realDeg + 1) / 14), uW = clamp(1 - (realDeg - 1) / 22);
     U.uDirect.value = iv; U.uWarm.value = uW; U.uTw.value = twi; U.uNight.value = nightF; U.uGlow.value = glow;
     U.uStorm.value = cur.storm; U.uSunGap.value = gapS > 0 ? gapS * smooth(0.05, 0.3, iv) : gapS; U.uGapR.value = 0.07 + 0.12 * Math.sin(el); // trouée de 4° au ras de l'horizon à 11° haut dans le ciel
@@ -1574,8 +1564,8 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     const soft = twi * (1 - nightF); twL.intensity = 1.8 * soft; twL.color.copy(L(mixHex('#9fb0e0', '#e8bc92', glow * 0.5)));
     twL.target.position.copy(T0); twL.position.copy(T0).add(new THREE.Vector3(Math.sin(bearing) * Math.cos(0.17), Math.sin(0.17), -Math.cos(bearing) * Math.cos(0.17)).multiplyScalar(400));
     const sDir = new THREE.Vector3(Math.sin(bearing) * Math.cos(sp.altitude), Math.sin(sp.altitude), -Math.cos(bearing) * Math.cos(sp.altitude)); U.uSun.value.copy(sDir); const sc1 = rgb(sc0); U.uSunCol.value.set(sc1[0], sc1[1], sc1[2]);
-    const envNow = () => { const ug = U.uSunGap.value, pa = cloudU.uPixAng.value, gr = U.uGrey.value; U.uSunGap.value = 0; U.uGrey.value = 0; cloudU.uPixAng.value = 2 / 64; updateEnv(); U.uSunGap.value = ug; U.uGrey.value = gr; cloudU.uPixAng.value = pa; }; // la trouée autour du soleil ne compte pas dans la lumière d'ambiance (fait plus bas, après les nuages)
-    const key3 = [cumS, mid, high, iv, uW, dk, sDir.x, sDir.y, smk, cur.storm, cur.l0c, cur.l0k, cur.l0s, cur.m1c, cur.hc, cur.l0b, cur.l0t, cur.l0T, cur.m1T, cur.hT, cur.prot, smooth(2, 8, realDeg)].map(v => v.toFixed(2)).join(',');
+    const envNow = () => { const ug = U.uSunGap.value, pa = cloudU.uPixAng.value; U.uSunGap.value = 0; cloudU.uPixAng.value = 2 / 64; updateEnv(); U.uSunGap.value = ug; cloudU.uPixAng.value = pa; }; // la trouée autour du soleil ne compte pas dans la lumière d'ambiance (fait plus bas, après les nuages)
+    const key3 = [cumS, mid, high, iv, uW, dk, sDir.x, sDir.y, smk, cur.storm, cur.l0c, cur.l0k, cur.l0s, cur.m1c, cur.hc, cur.l0b, cur.l0t].map(v => v.toFixed(2)).join(',');
     const cgv = Math.max(0, new THREE.Vector3(vF.x, 0, vF.z).normalize().dot(sDir)), thick = 1 - iv;
     // Brouillard: couleur de l'horizon du même ciel physique dans la direction regardée (épaule comme dans le shader),
     // puis voile, cumulus, heure bleue et nuit comme le ciel; tout en linéaire.
@@ -1593,13 +1583,9 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     // « ne pousse pas trop les couleurs, il faut éviter de faux effets trop poussés »; une première version à 5 fois était trop).
     const kLow = 1 + 1.5 * smooth(8, -3, realDeg);
     const floorLow = 0.15 - 0.03 * smooth(3, -1, realDeg); // un peu moins de blanc gardé au ras de l'horizon: orangé, sans virer au magenta
-    const sunLayer = (hAlt, dEl = 0) => { const sa = sunAtAltitude(sp.altitude + dEl, hAlt, turb); const mx = Math.max(sa.rgb[0], sa.rgb[1], sa.rgb[2], 1e-4); const I = 10 * Math.pow(LUM(sa.rgb), 0.7) * sa.vis * smokeT * kLow; return sa.rgb.map((v, i) => ((1 - floorLow) * Math.pow(v / mx, 0.45) + floorLow) * (1 - [0, 0.18, 0.4][i] * smk) * I); };
+    const sunLayer = (hAlt) => { const sa = sunAtAltitude(sp.altitude, hAlt, turb); const mx = Math.max(sa.rgb[0], sa.rgb[1], sa.rgb[2], 1e-4); const I = 10 * Math.pow(LUM(sa.rgb), 0.7) * sa.vis * smokeT * kLow; return sa.rgb.map((v, i) => ((1 - floorLow) * Math.pow(v / mx, 0.45) + floorLow) * (1 - [0, 0.18, 0.4][i] * smk) * I); };
     const sL = sunLayer(cur.l0b + 0.3 * (cur.l0t - cur.l0b)), sM = sunLayer(0.5 * (cur.m1b + cur.m1t)), sH = sunLayer(cur.ha);
     cloudU.uSunL.value.fromArray(sL); cloudU.uSunM.value.fromArray(sM); cloudU.uSunH.value.fromArray(sH);
-    // Même lumière pour 7 hauteurs du soleil de -1,5° à +3° autour de celle du sol (pas de 0,75°): sky.js sunAt la lit selon la
-    // distance de chaque point de nuage vers le soleil (Terre ronde: dégradé du couchant et ombre de la Terre sur les couches).
-    const hL = cur.l0b + 0.3 * (cur.l0t - cur.l0b), hM = 0.5 * (cur.m1b + cur.m1t);
-    for (let k = 0; k < 7; k++) { const dEl = (k - 2) * SUN_STEP; cloudU.uSunLk.value[k].fromArray(k === 2 ? sL : sunLayer(hL, dEl)); cloudU.uSunMk.value[k].fromArray(k === 2 ? sM : sunLayer(hM, dEl)); cloudU.uSunHk.value[k].fromArray(k === 2 ? sH : sunLayer(cur.ha, dEl)); }
     // Ambiance: zénith et horizon du même ciel (en linéaire), puis heure bleue et nuit comme la sphère; sol: rebond de la lumière.
     const zp = preethamRadiance([0, 1, 0], sunV, turb, 1.5), zl = Math.max(LUM(zp), 1e-6); let zc = mv(zp.map(v => v / zl), [1, 1, 1], 0.35).map(v => v * zenTarget); const zlum = LUM(zc); zc = zc.map(v => v / (1 + 0.5 * zlum));
     // Horizon pour l'ambiance des nuages: moyenne sur les quatre points cardinaux (pas la direction de la caméra, sinon toute la
@@ -1634,10 +1620,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     cloudU.uPixAng.value = 2 * Math.tan(cam.fov * Math.PI / 360) / Math.max(1, PH); // pixel de l'image pleine résolution (même rendu en mouvement)
     const fogCov = fogSig > 0 ? 1 - Math.exp(-fogSig * fogThick) : 0, l0c = cam.position.y > fogTopW + 10 ? cur.l0c : Math.max(cur.l0c, fogCov);
     cloudU.uLay0.value.set(T0y + cur.l0b, T0y + cur.l0t, l0c, fogCov > cur.l0c && cam.position.y <= fogTopW + 10 ? Math.min(cur.l0k, 0.1) : cur.l0k);
-    // Poids de la loi physique de la lumière transmise (sky.js scat): nul pour les orages, averses, pluie et neige (rendu validé
-    // par les photos) et sous 2° de soleil (couchers validés), plein à partir de 8°.
-    const wN = smooth(2, 8, realDeg) * (1 - cur.prot) * (1 - cur.storm);
-    cloudU.uLay0b.value.set(cur.l0w, cur.l0s, cur.l0T, cur.l0d); cloudU.uCld.value.set(cur.m1T, wN, cur.hT, 1 - cur.prot); cloudU.uLay1.value.set(T0y + cur.m1b, T0y + cur.m1t, cur.m1c, cur.m1k); cloudU.uHi.value.set(cur.hc, cur.hk, T0y + cur.ha, cur.ht);
+    cloudU.uLay0b.value.set(cur.l0w, cur.l0s, 0, cur.l0d); cloudU.uLay1.value.set(T0y + cur.m1b, T0y + cur.m1t, cur.m1c, cur.m1k); cloudU.uHi.value.set(cur.hc, cur.hk, T0y + cur.ha, cur.ht);
     cloudU.uGround.value = T0y; cloudU.uCamW.value.copy(cam.position); cloudU.uShaft.value = cur.shaft * (1 - 0.5 * cur.brk);
     const drift = ((dateMs / 1000) % 1209600) * 5.5; cloudU.uOff.value.set(-drift * 0.93, 0, drift * 0.37); // 20 km/h; modulo 14 jours (6 650 km: précision de 0,5 m en flottants 32 bits), champ périodique de 28 560 km
     if (envNow && key3 !== envKey && now - envAt > 120) { envKey = key3; envAt = now; envNow(); }
@@ -1662,12 +1645,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       const typ = layer === 0 ? cur.l0k : cur.m1k, cov = layer === 0 ? cur.l0c : cur.m1c, thick = layer === 0 ? cur.l0t - cur.l0b : cur.m1t - cur.m1b;
       const sig = layer === 0 ? 0.03 + 0.04 * typ : 0.015 + 0.015 * typ, tau = thick * sig * (0.85 - 0.05 * typ) * (0.5 + 0.5 * cov), trans = 1 / (1 + 0.22 * tau), sun = layer === 0 ? sL : sM;
       const skyIrr = ambZ.map((v, i) => (0.65 * v + 0.35 * ambH[i]) * Math.PI), dark = layer === 0 ? cur.l0d : 0;
-      const old = sun.map((v, i) => ((v * Math.max(Math.sin(sp.altitude), 0) + skyIrr[i]) / Math.PI * 0.3 * trans + ambG[i] * 0.35 * trans) * (1 - dark * (1 - trans) * [0.22, 0.16, 0.05][i]));
-      if (wN <= 0.001) return old;
-      // Même loi physique que sky.js scat (v633.197): épaisseur optique d'ICON, deux flux, rebond du sol renvoyé par la base.
-      const T = layer === 0 ? cur.l0T : cur.m1T, tauC = (1 / Math.max(0.02, Math.min(1, T)) - 1) / 0.1125, mu0 = Math.max(Math.sin(sp.altitude), 0.05);
-      const Ts = (0.5 + 0.75 * mu0) / (1 + 0.1125 * tauC), Td = 1 / (1 + 0.1125 * tauC);
-      return old.map((o, i) => o + ((sun[i] * Math.max(Math.sin(sp.altitude), 0) * Ts + skyIrr[i] * Td) / Math.PI + ambG[i] * (1 - Td) - o) * wN);
+      return sun.map((v, i) => ((v * Math.max(Math.sin(sp.altitude), 0) + skyIrr[i]) / Math.PI * 0.3 * trans + ambG[i] * 0.35 * trans) * (1 - dark * (1 - trans) * [0.22, 0.16, 0.05][i]));
     };
     const fogSat = fogSig > 0 ? 1 - Math.exp(-fogSig * fogThick) : 0, wLow = Math.max(smooth(0.2, 0.75, cur.l0c), smooth(0.25, 0.85, fogSat)), wMid = smooth(0.3, 0.9, cur.m1c) * (1 - wLow);
     hc = mv(hc, lin(vc).map(v => v * 0.55), veil * (0.45 + 0.52 * thick * thick));
@@ -1682,8 +1660,8 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     // Le sol lointain reste nettement plus sombre que le ciel juste au-dessus de l'horizon (0,45 fois, comme par ciel clair):
     // sans ce facteur, les montagnes prenaient la clarté de la base des nuages et sortaient gris très pâle (Stéphane, 10 octobre 2026).
     const hcT = hc.slice();
-    if (wMid > 0) { const mr = slabRad(1); hc = mv(hc, mr.map((v, i) => v * 0.45 * 0.85 * (1 - U.uGrey.value) + hcT[i] * 0.15), wMid); }
-    if (wLow > 0) { const lr = fogSat > cur.l0c ? lin([0.50, 0.54, 0.60]).map(v => v * 0.65 * (1 - 0.8 * twi)) : slabRad(0).map(v => v * 0.45 * (1 - U.uGrey.value)); hc = mv(hc, lr.map((v, i) => v * 0.85 + hcT[i] * 0.15), wLow); } hc = mv(hc, lin([0.30, 0.21, 0.13]).map(v => v * 0.5), 0.28 * urban * nightF); hzU.uGlowL.value = 0.28 * urban * nightF * LUM(lin([0.30, 0.21, 0.13]).map(v => v * 0.5)); fog.color.setRGB(hc[0], hc[1], hc[2]); fog.near = 250 + camH * 4; fog.far = 1500 + camH * 14; // dernier mélange: pollution lumineuse au loin, en ville
+    if (wMid > 0) { const mr = slabRad(1); hc = mv(hc, mr.map((v, i) => v * 0.45 * 0.85 + hcT[i] * 0.15), wMid); }
+    if (wLow > 0) { const lr = fogSat > cur.l0c ? lin([0.50, 0.54, 0.60]).map(v => v * 0.65 * (1 - 0.8 * twi)) : slabRad(0).map(v => v * 0.45); hc = mv(hc, lr.map((v, i) => v * 0.85 + hcT[i] * 0.15), wLow); } hc = mv(hc, lin([0.30, 0.21, 0.13]).map(v => v * 0.5), 0.28 * urban * nightF); hzU.uGlowL.value = 0.28 * urban * nightF * LUM(lin([0.30, 0.21, 0.13]).map(v => v * 0.5)); fog.color.setRGB(hc[0], hc[1], hc[2]); fog.near = 250 + camH * 4; fog.far = 1500 + camH * 14; // dernier mélange: pollution lumineuse au loin, en ville
     if (cur.smk > 0) { const sl = LUM([fog.color.r, fog.color.g, fog.color.b]); fog.color.lerp(new THREE.Color(sl * 1.15, sl * 0.85, sl * 0.55), 0.6 * cur.smk); } // fumée: le voile du lointain prend aussi la teinte brun-orangé
     const rainK = cur.rain * (1 - RAIN_BRK * cur.brk); if (rainK > 0) { fog.near *= 1 - 0.6 * rainK; fog.far *= 1 - 0.5 * rainK; fog.color.lerp(new THREE.Color().setScalar(fog.color.r * 0.2126 + fog.color.g * 0.7152 + fog.color.b * 0.0722), 0.5 * rainK); } // pluie: visibilité réduite, grisaille
     lampU.uWet.value = cur.wet;
@@ -1882,21 +1860,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       const V = row?.visibility, sat = row?.fogThick != null, lowOk = (row?.cloudLow ?? 0) >= 80;
       tg.fogK = V != null && V >= 0 && sat && lowOk && !(tg.rain > 0) ? 3912 / Math.max(V, 40) * smooth(5000, 1000, V) : 0; tg.fogTh = Math.min(row?.fogThick ?? 600, 600);
       // Forme des nuages (sky.js, d'après le profil vertical, le nuage convectif, le CAPE et le code météo d'ICON).
-      // Épaisseur optique des nuages d'après ICON lui-même (v633.197): lumière totale reçue (direct + diffus, moyenne de l'heure
-      // écoulée) rapportée à celle d'un ciel clair (formule de Haurwitz, qui ne dépend que de la hauteur du soleil: valable
-      // partout), et cosinus moyen du soleil pondéré par le rayonnement. Heure trop sombre pour être mesurée (soleil bas, nuit):
-      // l'heure voisine du côté du soleil, sinon des épaisseurs a priori par type.
-      const sunOf = (rr) => {
-        if (!rr?.time || rr.direct == null || rr.diffuse == null) return null;
-        const te = new Date(rr.time).getTime(); let G = 0, M = 0, W = 0;
-        for (let k = 0; k < 12; k++) { const mu = Math.sin(SunCalc.getPosition(new Date(te - 3600000 + (k + 0.5) * 300000), lat, lng).altitude); if (mu > 0) { const g = 1098 * mu * Math.exp(-0.057 / mu); G += g; M += mu * g; W += g; } }
-        G /= 12; const mu = W > 0 ? M / W : 0;
-        return G >= 50 && mu >= 0.15 ? { mu, kc: (rr.direct + rr.diffuse) / G } : null;
-      };
-      let sunI = sunOf(row);
-      if (!sunI) { const si = sunOf(side); if (si) { const c2 = classifyClouds({ ...side, sunFraction: sOf(side) }, si); sunI = { mu: 0, kc: null, m: c2.m }; } }
-      const cl = classifyClouds(row ? { ...row, sunFraction: s } : row, sunI);
-      tg.l0T = cl.tauLow != null ? diffTrans(cl.tauLow) : 0.2; tg.m1T = cl.tauMid != null ? diffTrans(cl.tauMid) : 0.2; tg.hT = cl.tauHigh ?? 1; tg.prot = cl.prot ?? 0;
+      const cl = classifyClouds(row ? { ...row, sunFraction: s } : row);
       Object.assign(tg, { l0b: cl.low.base, l0t: cl.low.top, l0c: cl.low.cov, l0k: cl.low.type, l0w: cl.low.tower, l0s: cl.low.cb, l0d: cl.low.dark, m1b: cl.mid.base, m1t: cl.mid.top, m1c: cl.mid.cov, m1k: cl.mid.type, hc: cl.high.cov, hk: cl.high.type, ha: cl.high.alt, ht: cl.high.thick, shaft: cl.shaft });
       cloudNames = cl.names;
       // Brouillard ou stratus bas d'après le profil ICON (10 octobre 2026): les « nuages bas » d'ICON comptent la nappe elle-même.

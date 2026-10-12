@@ -69,20 +69,15 @@ export function makeNoiseTextures(R) {
 export const CLOUD_GLSL = `
 uniform sampler3D tNoise, tDetail;
 uniform vec3 uSun, uSunL, uSunM, uSunH, uAmbZ, uAmbH, uAmbG, uOff, uCamW;
-uniform vec3 uSunLk[7], uSunMk[7], uSunHk[7]; /* soleil reçu par chaque couche pour 7 hauteurs du soleil, de -1,5° à +3° autour de celle du sol (voir sunAt) */
 uniform vec4 uLay0, uLay0b, uLay1, uHi;
-uniform float uOvc; /* indice de ciel couvert (engine.js ovc): brume du lointain éclairée par le couvert, plus grise */
-uniform vec4 uCld; /* x: transmission diffuse de la couche moyenne (épaisseur optique d'ICON); y: poids de la loi physique de la lumière transmise (0: loi d'avant, orages et soleil sous 2°); z: épaisseur optique du voile d'altitude; w: poids de ce voile (0: voile d'avant, orages et averses); uLay0b.z: transmission diffuse de la couche basse */
 uniform vec3 uHz[9]; /* couleur du ciel clair au ras de l'horizon, de 0 à 180° du soleil par pas de 22,5° (linéaire) */
 uniform float uPixAng; /* taille angulaire d'un pixel (rad), pour le niveau de détail */
 float gLod = 0.0; /* niveau de détail du bruit pour l'échantillon courant (0: plein détail, 1: champ moyen) */
-float gCol = 0.55; /* épaisseur relative de la colonne au point (0 à 1, moyenne 0,55): écrite par dLow et dMid. Sans elle, les bases d'un couvert étaient un aplat (écart de 1 à 2 sur 255 entre parties sombres et claires, contre 28 à 45 dans les photos de Stéphane) */
 uniform float uGround, uSunGap, uGapR, uSteps, uShaft;
 const float PR = 6371000.0;
 const float PI = 3.14159265;
 float hg(float c, float g) { float g2 = g * g; return (1.0 - g2) / (4.0 * PI * pow(max(1.0 + g2 - 2.0 * g * c, 1e-4), 1.5)); }
 float rmp(float v, float a, float b) { return clamp((v - a) / max(b - a, 1e-5), 0.0, 1.0); }
-float tauOfT(float T) { return (1.0 / clamp(T, 0.02, 1.0) - 1.0) / 0.1125; } /* épaisseur optique d'après la transmission diffuse */
 float ignoise(vec2 p) { return fract(52.9829189 * fract(0.06711056 * p.x + 0.00583715 * p.y)); }
 /* Lecture lissée d'une texture 3D (n texels par période): l'interpolation trilinéaire est continue mais cassée à chaque
    texel; vue par la tranche (nuages de côté, près de l'horizon), chaque plan de cassure faisait une ligne horizontale.
@@ -97,20 +92,6 @@ vec2 rot2(vec2 v, float c, float s) { return vec2(c * v.x - s * v.y, s * v.x + c
    l'altitude plate et, vers 90 km, un rayon à 3° se croyait 640 m sous la base d'une couche à 5 km: la couche s'arrêtait net à
    élévation constante (« fin très sèche comme les vieux 3D », Stéphane, 11 octobre 2026). */
 float altC(vec3 p) { vec2 d = p.xz - uCamW.xz; return p.y + dot(d, d) * (0.5 / PR); }
-/* Soleil reçu en un point p d'une couche (layer 0 basse, 1 moyenne, 2 haute) et sa direction locale sdP. Sur la Terre ronde, le
-   soleil est plus haut de dS / PR (dS: distance horizontale vers le soleil) au-dessus d'un point situé vers le couchant: au
-   crépuscule, les nuages loin vers l'ouest reçoivent une lumière qui a frôlé la Terre plus haut (plus vive, orangée), ceux
-   au-dessus de soi une lumière plus basse et plus rougie (rose, puis lavande), puis l'ombre de la Terre. Une seule lumière pour
-   toute la couche faisait un voile uniforme saumon puis mauve (photos de Stéphane, 11 octobre 2026, 18 h 19 et 18 h 20).
-   Orages et averses: lumière d'avant (uCld.w nul). */
-vec3 sunAt(int layer, vec3 p, out vec3 sdP) {
-  vec2 sh = uSun.xz; float l = length(sh);
-  if (l < 1e-4) { sdP = uSun; return layer == 0 ? uSunLk[2] : layer == 1 ? uSunMk[2] : uSunHk[2]; }
-  float a = dot(p.xz - uCamW.xz, sh) / (l * PR) * uCld.w, ca = cos(a), sa = sin(a);
-  float c1 = l * ca - uSun.y * sa; sdP = vec3(sh.x / l * c1, uSun.y * ca + l * sa, sh.y / l * c1);
-  float x = clamp(a / 0.01308997 + 2.0, 0.0, 5.999); int i = int(x); float f = x - float(i);
-  return layer == 0 ? mix(uSunLk[i], uSunLk[i + 1], f) : layer == 1 ? mix(uSunMk[i], uSunMk[i + 1], f) : mix(uSunHk[i], uSunHk[i + 1], f);
-}
 /* Couleur du ciel clair au ras de l'horizon dans la direction rd (interpolée selon l'angle au soleil) */
 vec3 hzCol(vec3 rd) {
   float la = length(rd.xz), lb = length(uSun.xz);
@@ -140,7 +121,7 @@ vec2 shell(vec3 ro, vec3 rd, float hAlt) {
 /* Portion du rayon dans la couche d'altitudes [hb, ht]: (t0, t1), vide si t1 <= t0 */
 vec2 seg(vec3 ro, vec3 rd, float hb, float ht) {
   float h = ro.y - uGround; vec2 tb = shell(ro, rd, hb), tt = shell(ro, rd, ht); float t0, t1;
-  if (h < hb) { if (rd.y < -0.06) return vec2(1.0, 0.0); t0 = tb.y; t1 = tt.y; } /* rayons un peu sous l'horizontale: la couche reste visible au-dessus des vallées lointaines (à -0,6°, une ligne droite coupait le ciel) */
+  if (h < hb) { if (rd.y < -0.01) return vec2(1.0, 0.0); t0 = tb.y; t1 = tt.y; }
   else if (h < ht) { t0 = 0.0; t1 = tb.x > 0.0 ? tb.x : (rd.y < -0.002 ? (h - hb) / -rd.y : tt.y); }
   else { if (tt.x < 0.0) return vec2(1.0, 0.0); t0 = tt.x; t1 = tb.x > 0.0 ? tb.x : (rd.y < -0.002 ? (h - hb) / -rd.y : tt.y); }
   return vec2(max(t0, 0.0), t1);
@@ -170,8 +151,7 @@ float covField(vec2 xz, float cov, float full) {
 /* Couche basse. type: 0 stratus, 0,5 stratocumulus, 1 cumulus; tour: bourgeonnement vertical; cb: cumulonimbus (enclume).
    detail > 0,5: érosion fine. covK: facteur de couverture du rayon (trouée autour du soleil). hh: hauteur relative (sortie). */
 float dLow(vec3 p, float detail, float covK, out float hh) {
-  float base = uLay0.x, top = uLay0.y, typ = uLay0.w, tower = uLay0b.x, cb = uLay0b.y;
-  float cov = mix(clamp(uLay0.z * covK, 0.0, 1.0), uLay0.z, smoothstep(0.85, 0.97, uLay0.z) * uCld.w); /* couvert continu: la trouée ou le nuage qui cache le soleil n'y change rien (une tache grise à bord net) */
+  float base = uLay0.x, top = uLay0.y, cov = clamp(uLay0.z * covK, 0.0, 1.0), typ = uLay0.w, tower = uLay0b.x, cb = uLay0b.y;
   p.y = altC(p);
   float h = (p.y - base) / max(top - base, 1.0); hh = h;
   if (h <= 0.0 || h >= 1.0 || cov <= 0.002) return 0.0;
@@ -188,7 +168,7 @@ float dLow(vec3 p, float detail, float covK, out float hh) {
   vec3 qs = vec3(qw.x * sxz, (p.y - base) * sy + 1234.0, qw.y * sxz);
   vec4 n = tex3(tNoise, qs / 4500.0, 128.0); /* une seule lecture: la déformation du domaine suffit contre la répétition */
   float fb = n.g * 0.625 + n.b * 0.25 + n.a * 0.125;
-  float shape = rmp(n.r, -(1.0 - fb), 1.0); gCol = mix(0.55, smoothstep(0.25, 0.75, mix(clamp(w.z + 0.3, 0.0, 1.0), 0.6 * n.g + 0.4 * n.r, smoothstep(0.2, 0.6, typ))), mix(0.75, 1.0, typ)); /* épaisseur de la colonne: bosses de 1 km (cellules de Worley) d'un stratocumulus, grandes plages plus sombres ou plus claires (11 km) d'un stratus: modelé gris des bases */
+  float shape = rmp(n.r, -(1.0 - fb), 1.0);
   shape = mix(0.92, shape, mix(0.45, 1.0, typ)); /* stratiforme: champ presque uniforme */
   float grad = smoothstep(0.0, mix(0.12, 0.05, typ), h) * (1.0 - smoothstep(mix(0.3, 0.6, typ), 1.0, h));
   if (cb > 0.001) grad = max(grad, smoothstep(0.7, 0.88, h) * (1.0 - smoothstep(0.95, 1.0, h)) * cb);
@@ -209,7 +189,6 @@ float dLow(vec3 p, float detail, float covK, out float hh) {
      chou-fleur), un stratus garde sa transition douce. */
   return mix(d, smoothstep(0.0, 0.45, d), typ);
 }
-float midL(float typ) { return mix(6000.0, 2600.0, typ); } /* période du bruit de la couche moyenne (altostratus, altocumulus) */
 /* Couche moyenne. type: 0 altostratus (voile épais uniforme), 1 altocumulus (petits pelotons en nappe) */
 float dMid(vec3 p, float detail, out float hh) {
   float base = uLay1.x, top = uLay1.y, cov = uLay1.z, typ = uLay1.w;
@@ -223,11 +202,11 @@ float dMid(vec3 p, float detail, out float hh) {
      uniforme qui lisait comme une texture plaquée (Stéphane, 11 octobre 2026). */
   float covL = covField(q.xz * 1.3, cov, detail) * mix(1.0, 0.55 + 0.55 * smoothstep(-0.3, 0.3, w.z + 0.3), typ);
   if (covL <= 0.002) return 0.0;
-  float L = midL(typ) * (0.7 + 0.6 * (w.x + 0.5));
+  float L = mix(6000.0, 2600.0, typ) * (0.7 + 0.6 * (w.x + 0.5));
   vec3 qs = vec3(q.x * 1.4, (p.y - base) * 1.5 + 321.0, q.z);
   vec4 n = tex3(tNoise, qs / L, 128.0);
   float fb = n.g * 0.625 + n.b * 0.25 + n.a * 0.125;
-  float shape = rmp(n.r, -(1.0 - fb), 1.0); gCol = mix(0.55 + 0.6 * (smoothstep(0.2, 0.8, w.z + 0.3) - 0.5), shape, typ); /* altostratus: grandes plages plus ou moins épaisses (9 km) */
+  float shape = rmp(n.r, -(1.0 - fb), 1.0);
   shape = mix(0.9, shape, mix(0.3, 1.0, typ));
   float grad = smoothstep(0.0, 0.15, h) * (1.0 - smoothstep(0.5, 1.0, h));
   float covP = covMap(covL, typ);
@@ -249,7 +228,7 @@ float tauTo(vec3 p, vec3 sd, float thick, float covK, int layer, float jit) {
 }
 /* Lumière diffusée en un point du nuage: soleil (diffusion simple et multiple, fonction de phase avant et arrière), lumière
    transmise à travers l'épaisseur (ciel couvert clair, base d'orage sombre), ciel et rebond du sol */
-vec3 scat(vec3 p, vec3 rd, float h, float dloc, vec3 sd, vec3 sunRad, float sig, float tauSun, float tauUp, float cov, float dark, float tauC) {
+vec3 scat(vec3 p, vec3 rd, float h, float dloc, vec3 sd, vec3 sunRad, float sig, float tauSun, float tauUp, float cov, float dark) {
   float cs = dot(rd, sd);
   float ts = tauSun * sig; vec3 sun = vec3(0.0); float a = 1.0, b = 1.0, c = 1.0;
   for (int o = 0; o < 3; o++) { float ph = 0.5 * hg(cs, 0.65 * c) + 0.5 * hg(cs, -0.35 * c); sun += a * exp(-ts * b) * ph; a *= 0.5; b *= 0.5; c *= 0.5; }
@@ -260,20 +239,6 @@ vec3 scat(vec3 p, vec3 rd, float h, float dloc, vec3 sd, vec3 sunRad, float sig,
   vec3 skyI = uAmbZ * 0.65 + uAmbH * 0.35; vec3 skyIrr = mix(skyI, vec3(dot(skyI, vec3(0.2126, 0.7152, 0.0722))), 0.4) * PI; /* tout l'hémisphère éclaire le dessus: moins bleu que le zénith (une base de stratus au lever sortait bleu marine) */
   vec3 diff = (sunRad * max(sd.y, 0.0) + skyIrr) / PI * 0.36 * trans;
   vec3 amb = uAmbG * (1.0 - h) * 0.35 * trans;
-  /* Lumière transmise par la loi à deux flux (Lacis et Hansen, facteur d'asymétrie 0,85) avec l'épaisseur optique de la couche
-     tirée du rayonnement d'ICON (tauC, colonne au-dessus du point; fuite par les bords gardée par tauSun): l'ancienne loi
-     laissait passer 2 à 3 fois trop peu de lumière et l'épaisseur géométrique était 10 fois trop forte, d'où des bases gris
-     d'orage sous de simples stratocumulus (v633.197). Rebond du sol renvoyé par la base. Orages et soleil sous 2°: loi d'avant. */
-  if (uCld.y > 0.001) {
-    float tauA = min(tauC * clamp(1.0 - h, 0.0, 1.0), tauSun * sig) * (0.2 + 1.45 * gCol), mu0 = max(sd.y, 0.05); /* colonnes plus épaisses au coeur des pelotons: bosses grises et bords clairs d'un stratocumulus, un altostratus reste uniforme */
-    float Ts = (0.5 + 0.75 * mu0) / (1.0 + 0.1125 * tauA), Td = 1.0 / (1.0 + 0.1125 * tauA);
-    /* Lumière diffuse sortant de la base d'une couche épaisse: plus forte vers le zénith qu'au ras de l'horizon, (1 + 1,5 mu) / 2
-       (Eddington; ciel couvert normalisé de la Commission internationale de l'éclairage: horizon au tiers du zénith). Sans
-       ce terme, un couvert était un aplat uniforme, alors que les photos de Stéphane montrent le haut du ciel plus clair. */
-    float limb = mix(1.0, (1.0 + 1.5 * clamp(rd.y, 0.0, 1.0)) * 0.5, smoothstep(2.0, 8.0, tauA));
-    diff = mix(diff, (sunRad * max(sd.y, 0.0) * Ts + skyIrr * Td) / PI * limb, uCld.y);
-    amb = mix(amb, uAmbG * (1.0 - Td) * (1.0 - h), uCld.y);
-  }
   vec3 L = (sunRad * sun + diff + amb) * (0.85 + 0.3 * (1.0 - dloc)); /* parties moins denses un peu plus claires: texture de la base */
   return L * mix(vec3(1.0), vec3(0.78, 0.84, 0.95), dark * (1.0 - trans));
 }
@@ -282,45 +247,36 @@ vec3 scat(vec3 p, vec3 rd, float h, float dloc, vec3 sd, vec3 sunRad, float sig,
    champ de couverture à mi-hauteur, opacité par la longueur traversée, couleur calculée au point d'épaisseur optique 1, voilée
    par la brume de sa distance. Fonction lisse de la direction: pas de grain, et se raccorde à la marche quand les cellules
    deviennent plus petites qu'un pixel. */
-void slab(vec3 ro, vec3 rd, int layer, float t0, float t1, vec4 lay, float sig, float thick, float covK, float dark, vec3 hz, inout vec3 col, inout float T) {
+void slab(vec3 ro, vec3 rd, int layer, float t0, float t1, vec4 lay, float sig, float thick, float covK, vec3 sunRad, float dark, vec3 hz, inout vec3 col, inout float T) {
   if (t1 <= t0 || T < 0.015) return;
   gLod = 1.0; float hh0;
   vec3 pm = ro + rd * t0; pm.y += lay.x + 0.35 * thick - altC(pm);
-  float dm = layer == 0 ? dLow(pm, 0.0, covK, hh0) : dMid(pm, 0.0, hh0), colF = gCol;
+  float dm = layer == 0 ? dLow(pm, 0.0, covK, hh0) : dMid(pm, 0.0, hh0);
   if (dm <= 0.002) return;
   float ext = sig * dm * 0.7, A = 1.0 - exp(-(t1 - t0) * ext);
   float te = min(t0 + 1.0 / ext, t1);
-  vec3 pe = ro + rd * te; float ae = clamp(altC(pe), lay.x + mix(0.08, 0.05, uCld.w) * thick, lay.y - 0.08 * thick); pe.y += ae - altC(pe);
+  vec3 pe = ro + rd * te; float ae = clamp(altC(pe), lay.x + 0.08 * thick, lay.y - 0.08 * thick); pe.y += ae - altC(pe);
   /* mêmes paramètres que la marche au niveau de détail 1 (densité moyenne, colonne au-dessus comme dans la marche): les deux se
      raccordent sans bord */
   float dMeanS = sig * mix(0.85, 0.8, lay.w) * (0.5 + 0.5 * lay.z);
-  vec3 sdS; vec3 sunRad = sunAt(layer, pe, sdS);
-  float tsS = tauTo(pe, sdS, thick, covK, layer, 0.5); gCol = colF;
-  vec3 S = scat(pe, rd, (ae - lay.x) / thick, dm, sdS, sunRad, sig, tsS, (lay.y - ae) * dMeanS / sig, lay.z, dark, tauOfT(layer == 0 ? uLay0b.z : uCld.x));
+  vec3 S = scat(pe, rd, (ae - lay.x) / thick, dm, uSun, sunRad, sig, tauTo(pe, uSun, thick, covK, layer, 0.5), (lay.y - ae) * dMeanS / sig, lay.z, dark);
   col += T * mix(S, hz, hazeW(ro, ae, te)) * A; T *= 1.0 - A;
 }
 void marchLayer(vec3 ro, vec3 rd, int layer, float jit, float covK, float quality, inout vec3 col, inout float T, inout float tFirst) {
   vec4 lay = layer == 0 ? uLay0 : uLay1; if (lay.z <= 0.002) return;
   float hb = lay.x - uGround, ht = lay.y - uGround, thick = lay.y - lay.x;
   vec2 s = seg(ro, rd, hb, ht); if (s.y <= s.x) return;
+  vec3 sunRad = layer == 0 ? uSunL : uSunM;
   float typ = lay.w, sig = layer == 0 ? mix(0.03, 0.07, typ) : mix(0.015, 0.03, typ);
-  float dMean = sig * mix(0.85, 0.8, typ) * (0.5 + 0.5 * lay.z), dark = layer == 0 ? uLay0b.w : 0.0, tauC = tauOfT(layer == 0 ? uLay0b.z : uCld.x);
-  float Lf = layer == 0 ? 4500.0 : midL(typ), ady = max(abs(rd.y), 0.02);
-  vec3 hz = hzCol(rd) * (1.0 - 0.45 * uOvc); /* sous un couvert, la brume est éclairée par la base grise, pas par un ciel bleu */
+  float dMean = sig * mix(0.85, 0.8, typ) * (0.5 + 0.5 * lay.z), dark = layer == 0 ? uLay0b.w : 0.0;
+  float Lf = layer == 0 ? 4500.0 : mix(6000.0, 2600.0, typ), ady = max(abs(rd.y), 0.02);
+  vec3 hz = hzCol(rd);
   /* Partie marchée: jusqu'à la distance où le niveau de détail atteint 1 (empreinte d'un pixel = Lf / 6: la marche y est déjà
      passée progressivement au champ moyen), au plus 28 km (basse) ou 90 km (moyenne); le reste, jusqu'à la vraie sortie de la
      couche (400 km au plus au ras de l'horizon), en banc moyen calculé de la même façon: aucun raccord visible. */
   float sEnd = min(s.y, 400000.0), tLod = (Lf / 6.0) * ady / max(uPixAng, 1e-5);
-  float tCap = min(layer == 0 ? 28000.0 : 90000.0, tLod);
-  /* Raccord: là où la portée de la marche ne couvre plus qu'une petite part du trajet dans la couche, marche et banc moyen
-     depuis l'entrée sont calculés tous deux et fondus (jusqu'à une portée de 12 fois le trajet dans la couche). La bascule nette laissait une ligne
-     courbe dans le ciel au coucher, sous laquelle les nuages changeaient de clarté (v633.197). Orages: bascule d'avant. */
-  float qM = (tCap - s.x) / max(sEnd - s.x, 1.0), wM = mix(qM > 0.0 ? 1.0 : 0.0, smoothstep(0.0, 12.0, qM), uCld.w);
-  vec3 colS = col; float TS = T;
-  if (wM < 0.999) slab(ro, rd, layer, s.x, sEnd, lay, sig, thick, covK, dark, hz, colS, TS);
-  s.y = min(s.y, tCap);
-  if (wM < 0.001 || s.y <= s.x) { col = colS; T = TS; return; }
-  vec3 sdR; vec3 sunRad = sunAt(layer, ro + rd * s.x, sdR); /* soleil du point d'entrée, puis du premier impact */
+  s.y = min(s.y, min(layer == 0 ? 28000.0 : 90000.0, tLod));
+  if (s.y <= s.x) { slab(ro, rd, layer, s.x, sEnd, lay, sig, thick, covK, sunRad, dark, hz, col, T); return; }
   float sCap = s.y; /* fin de la portée de la marche: le banc moyen ne couvre que ce qui est au-delà */
   float nSteps = (layer == 0 ? 56.0 : 36.0) * quality;
   /* Pas: au plus un tiers de l'épaisseur de la couche (rayons rasants: la structure verticale reste échantillonnée),
@@ -337,18 +293,17 @@ void marchLayer(vec3 ro, vec3 rd, int layer, float jit, float covK, float qualit
     float dtC = dt0 * (1.0 + t / 11000.0), dt = fine > 0 ? dtC * 0.25 : dtC;
     vec3 p = ro + rd * t; float det = fine > 0 ? 1.0 - 0.9 * smoothstep(8000.0, 18000.0, t) : 0.0; /* érosion fine surtout de près */
     gLod = smoothstep(Lf / 40.0, Lf / 6.0, uPixAng * t / ady); /* empreinte d'un pixel sur la couche, étirée au ras de l'horizon */
-    float d = layer == 0 ? dLow(p, det, covK, hh) : dMid(p, det, hh), colF = gCol;
+    float d = layer == 0 ? dLow(p, det, covK, hh) : dMid(p, det, hh);
     if (d > 0.002 && fine == 0) { t = max(s.x, t - dtPrev); fine = 16; empty = 0; lit = 0; dtPrev = 0.0; continue; } /* premier impact: recul d'un pas, phase fine */
     if (d > 0.002) {
       if (tFirst < 0.0) tFirst = t;
-      if (hits == 0) sunRad = sunAt(layer, p, sdR);
       /* Lumière vers le soleil recalculée à chacun des quatre premiers échantillons (c'est là que la couleur du pixel se décide),
          puis tous les quatre: réutilisée depuis la frange mince de la base, très éclairée par le soleil rasant, elle faisait
          sortir le coeur dense comme éclairé à travers (bande blanche à bord net au coucher, vers le soleil). */
-      if (hits < 4 || lit <= 0) { tauSun = tauTo(p, sdR, thick, covK, layer, jit); lit = 4; gCol = colF; }
+      if (hits < 4 || lit <= 0) { tauSun = tauTo(p, uSun, thick, covK, layer, jit); lit = 4; }
       lit--; hits++;
       float ap = altC(p), tauUp = (lay.y - ap) * dMean / sig;
-      vec3 S = scat(p, rd, hh, d, sdR, sunRad, sig, tauSun, tauUp, lay.z, dark, tauC);
+      vec3 S = scat(p, rd, hh, d, uSun, sunRad, sig, tauSun, tauUp, lay.z, dark);
       float ext = exp(-max(d, 0.0) * sig * max(dt, 0.0));
       col += T * mix(S, hz, hazeW(ro, ap, t)) * (1.0 - ext); T *= ext; empty = 0;
     } else { empty++; }
@@ -357,8 +312,7 @@ void marchLayer(vec3 ro, vec3 rd, int layer, float jit, float covK, float qualit
   }
   /* Le reste de la couche au-delà de la portée, en banc moyen. Jamais le trou laissé par une marche interrompue de près
      (plafond d'itérations dans des cumulus épars): rempli au champ moyen, un cumulus à 10 % couvrait 78 % du ciel. */
-  slab(ro, rd, layer, sCap, sEnd, lay, sig, thick, covK, dark, hz, col, T);
-  col = mix(colS, col, wM); T = mix(TS, T, wM);
+  slab(ro, rd, layer, sCap, sEnd, lay, sig, thick, covK, sunRad, dark, hz, col, T);
 }
 /* Rideaux de pluie sous la base (averses, orage): voile gris sous les régions les plus couvertes */
 void marchShaft(vec3 ro, vec3 rd, float jit, inout vec3 col, inout float T) {
@@ -382,7 +336,7 @@ void cirrus(vec3 ro, vec3 rd, inout vec3 col, inout float T) {
   float cov = uHi.x, typ = uHi.y; if (cov <= 0.002 || T < 0.01) return;
   vec2 s = shell(ro, rd, uHi.z); float t = s.y; if (t <= 0.0 || rd.y < -0.06) return;
   vec3 p = ro + rd * t + uOff; vec2 pv = p.xz * (1.0 / 14000.0);
-  vec3 w = tex3(tNoise, vec3(pv * 0.35 + 0.17, 0.61), 128.0).rgb - vec3(0.5, 0.35, 0.3); pv += w.xy * mix(0.9, 0.25, uCld.w); /* déformation forte: tourbillons en empreinte digitale; faible: fibres presque parallèles, étirées par le vent comme de vrais cirrus (v633.197) */
+  vec3 w = tex3(tNoise, vec3(pv * 0.35 + 0.17, 0.61), 128.0).rgb - vec3(0.5, 0.35, 0.3); pv += w.xy * 0.9;
   float n1 = tex3(tNoise, vec3(pv * 0.5 + 0.2, 0.11), 128.0).r;
   float region = smoothstep(0.64 - 0.56 * cov, 0.8 - 0.45 * cov, n1);
   vec2 pr = vec2(pv.x * 0.35 + pv.y * 0.25, pv.y * 1.9 - pv.x * 0.5);
@@ -392,23 +346,13 @@ void cirrus(vec3 ro, vec3 rd, inout vec3 col, inout float T) {
   float aCir = region * wisp * 0.6;
   float aStr = 0.66 + 0.12 * smoothstep(0.3, 0.7, n1 * 0.6 + n2 * 0.4); /* cirrostratus: presque uniforme (un motif plus marqué faisait « texture plaquée ») */
   float a = mix(aCir, aStr, 1.0 - typ) * uHi.w;
-  /* Épaisseur optique d'ICON (uCld.z, v633.197): le voile laisse voir le ciel derrière lui selon son épaisseur le long du
-     regard (cosinus local au point du voile, Terre ronde), atténué deux fois moins que la lumière qu'il diffuse (les cristaux
-     de glace renvoient surtout vers l'avant: le bleu passe au travers, légèrement adouci). Un cirrostratus d'épaisseur 1 garde
-     un zénith bleu laiteux et blanchit vers l'horizon; l'ancien voile, opaque aux trois quarts partout, cachait tout le bleu
-     (photo de Stéphane, 11 octobre 2026, 18 h). Orages, averses, pluie: voile d'avant (uCld.w nul). */
-  float aBg = a;
-  if (uCld.w > 0.001) {
-    float dens = mix(aCir / 0.6, aStr / 0.72, 1.0 - typ), muV = max(rd.y + t * length(rd.xz) / PR, 0.04);
-    float tv = uCld.z * dens / muV; a = mix(a, 1.0 - exp(-tv), uCld.w); aBg = mix(aBg, 1.0 - exp(-0.5 * tv), uCld.w);
-  }
   if (a <= 0.002) return;
   /* Perspective atmosphérique: même brume que les couches (épaisseur d'air réellement traversée), couleur du ciel à l'horizon
      dans cette direction: le voile se fond dans l'horizon sans fin nette (« fin très sèche comme les vieux 3D »). */
-  vec3 sdH; vec3 sunH = sunAt(2, ro + rd * t, sdH); float cs = dot(rd, sdH);
-  vec3 L = sunH * (0.03 + 0.25 * hg(cs, 0.7) + 0.04 * hg(cs, -0.3)) * 2.0 + (uAmbZ * 0.8 + uAmbH * 0.2) * 0.9;
+  float cs = dot(rd, uSun);
+  vec3 L = uSunH * (0.03 + 0.25 * hg(cs, 0.7) + 0.04 * hg(cs, -0.3)) * 2.0 + (uAmbZ * 0.8 + uAmbH * 0.2) * 0.9;
   L = mix(L, hzCol(rd), hazeW(ro, uHi.z, t));
-  col += T * L * a; T *= 1.0 - aBg;
+  col += T * L * a; T *= 1.0 - a;
 }
 /* Tous les nuages pour un rayon: radiance prémultipliée et transmittance */
 vec4 clouds(vec3 ro, vec3 rd, float jit, float quality) {
@@ -467,7 +411,7 @@ export function sunAtAltitude(el0, h, turb, ray = 1.5) {
 // ---- Classement des nuages d'après la rangée horaire (ICON): couches basse, moyenne et haute avec leur forme.
 // Hauteurs en mètres au-dessus du sol. names: mots de la légende. Sans profil (rangée ancienne, GFS): règles simples sur
 // les parts bas/moyen/haut, le nuage convectif et le code météo.
-function classifyLegacy(row) {
+export function classifyClouds(row) {
   const r = row || {};
   const low = (r.cloudLow ?? 0) / 100, mid = (r.cloudMid ?? 0) / 100, high = (r.cloudHigh ?? 0) / 100;
   const wc = r.wc ?? 0, cape = r.cape ?? 0, precip = r.precip ?? 0, iv = r.sunFraction == null ? 0.02 : r.sunFraction;
@@ -523,102 +467,4 @@ function classifyLegacy(row) {
   if (mCov >= 0.05 && !(rain && low >= 0.05) && !(storm >= 0.9 && high >= 0.05)) names.push(mTyp >= 0.5 ? 'altocumulus' : 'altostratus');
   if (high >= 0.05) names.push(storm >= 0.9 ? 'enclume' : hTyp >= 0.5 ? 'cirrus' : 'cirrostratus');
   return { low: lowL, mid: midL, high: highL, names, shaft: Math.max(storm, wc >= 80 ? 0.5 : 0, precip >= 0.5 ? 0.4 : 0) * smooth(0.1, 2, precip) };
-}
-
-// ---- Classement des nuages (v633.197, Stéphane, 11 octobre 2026: « que les nuages soient le plus réalistes possible...
-// si l'application dit qu'il y a telle sorte de nuage, il faut que ça ressemble à telle sorte de nuage »). Le 11 octobre à
-// 17 h, ICON annonçait 60 % de nuages bas sans aucune convection; faute de niveau nuageux dans le profil, l'ancien
-// classement fabriquait un « cumulus » de 900 m d'épaisseur, et la 3D le dessinait en gris d'orage. Désormais:
-// - couches d'après l'humidité aux niveaux de pression (rapportée à la glace par grand froid), étages comme ICON (bas sous
-//   800 hPa, moyens jusqu'à 400 hPa, hauts au-dessus), sommet arrêté sous une inversion de température;
-// - cumulus seulement avec un signal de convection (nuage convectif d'ICON, CAPE, averses), soleil levé et air mélangé;
-//   stratus pour un couvert bas et continu sans convection; stratocumulus pour le reste, nuit comprise;
-// - épaisseur optique de chaque couche tirée du rayonnement d'ICON lui-même (lumière totale reçue au sol rapportée à celle
-//   d'un ciel clair, transmission d'Eddington): c'est elle qui fixe la clarté des bases (sky.js scat, uCld);
-// - heures d'orage, d'averse, de pluie ou de neige: classement d'avant, à l'identique (orages validés par les photos).
-// Valable partout: rien n'est propre à un lieu (étages par la pression, ciel clair de Haurwitz).
-const clamp01 = (x) => Math.max(0, Math.min(1, x));
-const sm = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
-const esw = (T) => 6.112 * Math.exp(17.62 * T / (243.12 + T)), esi = (T) => 6.112 * Math.exp(22.46 * T / (272.62 + T));
-const rhEff = (T, RH) => { const w = clamp01(-T / 20); return RH * (1 - w) + RH * esw(T) / esi(T) * w; }; // humidité effective: glace sous -20 °C
-const RH_WET = (p) => (p > 800 ? 85 : p > 400 ? 75 : 85);
-const G_ASY = 0.85;
-// Transmission totale d'une couche diffusante (approximation d'Eddington, sans absorption), soleil de cosinus mu.
-export const cloudTrans = (tau, mu) => { const m = Math.max(mu, 0.05); return ((2 / 3 + m) + (2 / 3 - m) * Math.exp(-tau / m)) / (4 / 3 + (1 - G_ASY) * tau); };
-// Transmission de la lumière diffuse (celle que voit la base): T = 1 / (1 + 0,1125 tau), et son inverse pour le shader.
-export const diffTrans = (tau) => 1 / (1 + 0.1125 * Math.max(tau, 0));
-// sun (facultatif): { mu, kc } de l'heure (cosinus moyen du soleil pondéré par le rayonnement, indice de ciel clair); voir
-// engine.js setWeather. Sans lui (nuit, harness), épaisseurs optiques a priori par type.
-export function classifyClouds(row, sun = null) {
-  const leg = classifyLegacy(row), r = row || {};
-  const wc = r.wc ?? 0, low = (r.cloudLow ?? 0) / 100, mid = (r.cloudMid ?? 0) / 100, high = (r.cloudHigh ?? 0) / 100;
-  const storm = wc >= 95 ? 1 : wc === 82 ? 0.9 : wc === 81 ? 0.75 : wc === 80 ? 0.6 : 0;
-  const rainNs = (wc >= 61 && wc <= 67) || (wc >= 71 && wc <= 77);
-  const prot = storm >= 0.45 || leg.low.cb > 0.3 || rainNs;
-  const out = { ...leg, prot: prot ? 1 : 0 };
-  if (prot) { out.tauLow = out.tauMid = out.tauHigh = null; return out; } // orages, averses, pluie, neige: comme avant
-  // ---- couches humides
-  const pl = Array.isArray(r.pl) ? r.pl : null, ok = pl && Array.isArray(r.plZ) && Array.isArray(r.plT) && Array.isArray(r.plRH) && r.plZ.length === pl.length;
-  const L = ok ? pl.map((p, k) => ({ p, z: r.plZ[k], T: r.plT[k], RH: r.plRH[k] })).filter(l => l.z > 30 && l.T != null && l.RH != null).map(l => ({ ...l, e: rhEff(l.T, l.RH) })) : [];
-  const layerOf = (inTier, defH) => {
-    if (!L.length) return null;
-    const ks = L.map((l, k) => (inTier(l.p) && l.e >= RH_WET(l.p) ? k : -1)).filter(k => k >= 0);
-    if (!ks.length) {
-      const c = L.map((l, k) => (inTier(l.p) ? k : -1)).filter(k => k >= 0); if (!c.length) return null;
-      const k0 = c.reduce((m, k) => (L[k].e > L[m].e ? k : m), c[0]); return { base: L[k0].z - defH / 2, top: L[k0].z + defH / 2, found: false, capped: false };
-    }
-    let best = [ks[0], ks[0]], cur = [ks[0], ks[0]]; // plus longue suite de niveaux humides
-    for (let a = 1; a < ks.length; a++) { if (ks[a] === cur[1] + 1) cur[1] = ks[a]; else cur = [ks[a], ks[a]]; if (cur[1] - cur[0] > best[1] - best[0]) best = [...cur]; }
-    const [k0, k1] = best, zb = L[k0].z - 0.5 * (L[k0].z - (k0 > 0 ? L[k0 - 1].z : 0)), zt = L[k1].z + 0.5 * ((k1 < L.length - 1 ? L[k1 + 1].z : L[k1].z + 600) - L[k1].z);
-    // couvercle: la température cesse de baisser juste au-dessus du dernier niveau humide (inversion)
-    let top = zt; if (k1 < L.length - 1 && (L[k1].T - L[k1 + 1].T) / ((L[k1 + 1].z - L[k1].z) / 1000) < 1) top = Math.min(zt, 0.5 * (L[k1].z + L[k1 + 1].z));
-    return { base: zb, top, found: true, capped: top < zt };
-  };
-  const bl = layerOf(p => p > 800, 300), bm = layerOf(p => p <= 800 && p > 400, 800), bh = layerOf(p => p <= 400, 1500);
-  // ---- couche basse
-  const lcl = r.lcl != null ? r.lcl : 700, cape = r.cape ?? 0, elev = r.elev ?? 0;
-  const cBase = r.convBase > 0 ? Math.max(150, r.convBase - elev) : 0, cDepth = r.convDepth ?? 0, convLow = cDepth > 0 && cBase > 0 && cBase < 3200;
-  const showers = (r.showers ?? 0) >= 0.1 || (wc >= 80 && wc <= 86), convSig = convLow || cape >= 50 || showers;
-  const drizzle = wc >= 51 && wc <= 57, fogCode = wc === 45 || wc === 48;
-  const kL = L.findIndex(l => l.z >= Math.min(lcl, 1500)), lapse = kL >= 0 && r.temp != null ? (r.temp - L[kL].T) / (L[kL].z / 1000) : 0;
-  let base, top, typ;
-  if (convLow) { base = cBase; top = cBase + cDepth; typ = 1; }
-  else if (bl && bl.found) { base = Math.max(bl.base, Math.min(lcl, bl.top - 100)); top = bl.top; typ = 0.45; }
-  else { base = lcl; top = lcl + 300; typ = 0.45; }
-  const sunUp = sun ? sun.mu > 0.02 : true;
-  if (!convLow && convSig && sunUp && lapse >= 6 && !(bl && bl.capped && bl.top - lcl < 400)) { typ = 0.85; top = Math.max(top, base + 400 + Math.min(1500, 2 * cape)); } // cumulus de convection
-  if (!convSig && low >= 0.9 && base < 400) typ = 0.1; // stratus
-  if (drizzle) typ = Math.min(typ, 0.15);
-  if (fogCode) { typ = 0; base = Math.min(base, 120); top = Math.max(top, 400); }
-  base = Math.max(120, Math.min(2600, base)); top = Math.max(base + 100, Math.min(4500, top));
-  const tower = leg.low.tower; // bourgeonnement (nuage convectif d'ICON): comme avant
-  // ---- couche moyenne
-  let mBase = bm ? bm.base : leg.mid.base, mTop = bm ? bm.top : leg.mid.top;
-  mBase = Math.max(top + 100, Math.min(6500, mBase)); mTop = Math.max(mBase + 300, Math.min(7500, mTop));
-  const mThick = mTop - mBase;
-  let mTyp = 1 - sm(0.6, 0.85, mid) * sm(1000, 2000, mThick); // altostratus: couvert et épais
-  // ---- couche haute
-  const hAlt = bh ? 0.5 * (bh.base + bh.top) : leg.high.alt, hTyp = 1 - sm(0.5, 0.85, high);
-  // ---- épaisseurs optiques: a priori par type, puis multiplicateur commun tiré du rayonnement d'ICON
-  const tLow0 = typ >= 0.75 ? (tower >= 0.5 ? 30 : 12) : typ < 0.3 ? (drizzle ? 15 : 10) : 7;
-  let tMid0 = mTyp < 0.5 ? 12 : 5; const tHigh0 = hTyp < 0.5 ? 1.5 : 0.8;
-  let m = 1;
-  if (sun && sun.mu >= 0.15 && sun.kc != null) {
-    const f = [low, mid, high], pr = [tLow0, tMid0, tHigh0], kc = Math.min(sun.kc, 1);
-    const Km = (k) => f.reduce((a, fi, i) => a * (1 - fi * (1 - cloudTrans(k * pr[i], sun.mu))), 1);
-    if (Km(0.05) <= kc) m = 0.05; else if (Km(10) >= kc) m = 10;
-    else { let a = 0.05, b = 10; for (let it = 0; it < 40; it++) { const k = Math.sqrt(a * b); if (Km(k) > kc) a = k; else b = k; } m = Math.sqrt(a * b); }
-  } else if (sun && sun.m != null) m = sun.m; // heure voisine (crépuscule, nuit)
-  const lim = (v, a, b) => Math.max(a, Math.min(b, v));
-  const tauLow = lim(m * tLow0, 2, 60), tauMid = lim(m * tMid0, 1, 40), tauHigh = lim(m * tHigh0, 0.2, 4);
-  if (tauMid >= 8 && mid >= 0.7) mTyp = Math.min(mTyp, 0.3); // couche moyenne épaisse et étendue: altostratus
-  const hThick = lim(0.4 + 0.4 * tauHigh, 0.45, 1); // opacité du voile d'altitude d'après son épaisseur optique
-  const lowL = { cov: low, base, top, type: typ, tower, cb: leg.low.cb, dark: 0 };
-  const midL = { cov: mid, base: mBase, top: mTop, type: mTyp };
-  const highL = { cov: high, type: hTyp, alt: Math.max(6000, Math.min(12000, hAlt)), thick: hThick };
-  const names = [];
-  if (low >= 0.05) names.push(fogCode ? 'stratus' : typ >= 0.75 ? (tower >= 0.5 ? 'cumulus bourgeonnants' : 'cumulus') : typ >= 0.3 ? 'stratocumulus' : 'stratus');
-  if (mid >= 0.05) names.push(mTyp >= 0.5 ? 'altocumulus' : 'altostratus');
-  if (high >= 0.05) names.push(hTyp >= 0.5 ? 'cirrus' : 'cirrostratus');
-  return { low: lowL, mid: midL, high: highL, names, shaft: leg.shaft, prot: 0, tauLow, tauMid, tauHigh, m };
 }
