@@ -680,8 +680,8 @@ importé, lui, est le fichier de l'architecte.
     condensation; type 0 stratus, 0,5 stratocumulus, 1 cumulus; bourgeonnement; cumulonimbus d'après le code 80 à 99 ou
     l'épaisseur convective), moyenne (altostratus si couverte et épaisse, sinon altocumulus) et haute (cirrus,
     cirrostratus au-delà de 50 %, enclume sous l'orage), plus les mots de la légende: « Nuages bas 40 % (cumulus), nuages
-    d'altitude 60 % (altocumulus et cirrus) ». Les couvertures par niveau d'ICON sous-estiment les parts bas/moyen/haut
-    (recouvrement maximal-aléatoire sur 20 niveaux): elles servent au placement vertical, les parts à la quantité.
+    d'altitude 60 % (altocumulus et cirrus) ». Les couvertures par niveau servent au placement vertical, les parts bas,
+    moyen et haut à la quantité. Depuis la v633.197, les couches viennent de l'humidité aux niveaux de pression (voir plus bas).
   - **Rendu:** couches basse et moyenne tracées par rayons (marche volumétrique) dans deux textures de bruit 3D générées
     sur la carte graphique à l'ouverture (Perlin-Worley 128³ tuilable et Worley 32³ d'érosion, `WebGL3DRenderTarget` couche
     par couche), coquilles sphériques (Terre de 6 371 km: les nuages se rejoignent à l'horizon et se fondent dans la brume
@@ -945,6 +945,34 @@ importé, lui, est le fichier de l'architecte.
   v633.195 ne valait qu'au plein soleil (pondérée par iv), et l'exposition automatique remontait la scène voilée jusqu'à la
   délaver. Elle vaut maintenant pour tout le plein jour (hauteur du soleil de 10 à 30°), sauf sous un orage (rendu sombre
   validé). Lever, coucher et nuit inchangés; banc: plein soleil et orage identiques, voile et couvert plus denses.
+- v633.197 (11 octobre 2026), **nuages plus fidèles à leur sorte** (« toutes les sortes de nuages illustrées de façon le
+  plus réaliste possible... si l'application dit qu'il y a telle sorte de nuage, il faut que ça ressemble à telle sorte de
+  nuage »; à 17 h, la 3D montrait des nuages gris d'orage pour 60 % de nuages bas sans convection):
+  - **Classement** (sky.js `classifyClouds`): couches d'après l'humidité aux 14 niveaux de pression demandés à ICON
+    (api.js, humidité rapportée à la glace par grand froid), étages comme ICON (bas sous 800 hPa, moyens jusqu'à 400 hPa),
+    sommet sous une inversion; cumulus seulement avec un signal de convection, de jour et en air mélangé; stratus pour un
+    couvert bas continu; orages, averses, pluie et neige: classement d'avant, à l'identique (`prot`).
+  - **Épaisseur optique tirée du rayonnement d'ICON** (direct plus diffus rapporté au ciel clair de Haurwitz, transmission
+    d'Eddington): elle fixe la clarté des bases par la loi à deux flux (`scat`, `uCld`); l'ancienne loi et l'épaisseur
+    géométrique donnaient des bases 2 à 3 fois trop sombres. Modelé des bases (`gCol`): bosses de 1 km d'un stratocumulus,
+    grandes plages d'un stratus ou d'un altostratus; base plus claire vers le zénith qu'à l'horizon (Eddington), brume
+    du lointain plus grise sous un couvert (`uOvc`).
+  - **Gris sous un couvert** (« il ne faut pas que le ciel soit 100 % blanc, quand il fait nuage il faut gris »;
+    « jamais trop blanc, sauf les gros cumulonimbus en hauteur super éclairés »): base d'un couvert bas ou d'un
+    altostratus assombrie de 30 % dans le ciel dessiné seulement (`GREY_SKY`, pas dans la lumière de la scène),
+    exposition moins relevée sous un couvert (`GREY_EXP`). Repères: 1 694 ciels de la banque photos-architecture.com
+    classés par sorte (couvert bas médian 227 sur 255 en haut du cadre, écart de 28 entre parties sombres et claires;
+    stratocumulus continu 212 et 41). Le modelé reste plus faible que dans les photos (le stratus surtout): à reprendre.
+  - **Cirrus** en fibres étirées par le vent (déformation 0,25 au lieu de 0,9, qui faisait des spirales); **voile
+    d'altitude** selon son épaisseur optique (le bleu passe au zénith, blanchit vers l'horizon).
+  - **Coucher**: soleil reçu en chaque point des couches selon sa distance vers le couchant (table de 7 hauteurs du
+    soleil, ombre de la Terre); nuages lointains vers l'ouest plus lumineux; ligne droite au-dessus des montagnes retirée
+    (couches visibles jusqu'à -3,4°); fondu entre la marche et le banc moyen (un arc net coupait le ciel). Il reste un arc
+    plus discret au coucher (déjà en v633.196), et le feu orange d'après le coucher (photo de 18 h 19) n'est pas reproduit.
+  - **Altocumulus**: inchangés (cinq essais de pelotons nets écartés: anneaux, grain, marbrure; à reprendre à part).
+  - Banc: orage et pluie identiques (écarts dus aux gouttes animées), 12 sortes de nuages à midi et le cas réel du 11
+    octobre (planches dans _METEOSHOOT/verification_nuages/). Piège: une sonde à un seul tramage ment pour un champ à seuil
+    raide (l'image posée moyenne 8 tramages).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

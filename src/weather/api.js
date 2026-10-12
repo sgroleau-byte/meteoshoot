@@ -222,7 +222,12 @@ const convective = (h, i) => {
 // rosée). Les hauteurs sont en mètres au-dessus du sol. Seulement pour les trois premiers jours (la 3D ne regarde que 36 h):
 // au-delà, rien, pour ne pas alourdir le cache. Un modèle sans ces champs (GFS, rangées anciennes du cache) donne null.
 const SKY_LEVELS = [1000, 950, 900, 850, 800, 700, 600, 500, 400, 300, 250, 200];
-const SKY_KEYS = ['cape', 'freezing_level_height', 'dew_point_2m', ...SKY_LEVELS.map(p => `cloud_cover_${p}hPa`), ...SKY_LEVELS.map(p => `geopotential_height_${p}hPa`)];
+// Couches humides (v633.197): humidité et température sur 14 niveaux (975 et 925 hPa en plus: c'est là que se trouvent
+// les stratocumulus et les stratus sous une inversion), pour situer les couches d'après l'humidité (rapportée à la glace par
+// grand froid), repérer les inversions et distinguer cumulus et stratocumulus; averses (précipitation convective). Le profil
+// de nébulosité sur 12 niveaux reste pour les orages et la brume de vallée validés.
+const PL_LEVELS = [1000, 975, 950, 925, 900, 850, 800, 700, 600, 500, 400, 300, 250, 200];
+const SKY_KEYS = ['cape', 'freezing_level_height', 'dew_point_2m', 'showers', ...SKY_LEVELS.map(p => `cloud_cover_${p}hPa`), ...PL_LEVELS.map(p => `geopotential_height_${p}hPa`), ...PL_LEVELS.map(p => `relative_humidity_${p}hPa`), ...PL_LEVELS.map(p => `temperature_${p}hPa`)];
 const skyProfile = (h, i, elev) => {
   if (i >= 72) return {};
   const cc = SKY_LEVELS.map(p => h[`cloud_cover_${p}hPa`]?.[i]);
@@ -236,13 +241,22 @@ const skyProfile = (h, i, elev) => {
     lcl: T != null && Td != null ? Math.max(100, Math.round(125 * (T - Td))) : null,
     prof: cc.map(v => Math.round(v)),
     profZ: zz.map(z => z == null ? null : Math.round((z - elev) / 10) * 10),
+    showers: h.showers?.[i] ?? null,
+    ...plProfile(h, i, elev),
   };
+};
+// Niveaux de pression pour les couches humides: pression, hauteur au-dessus du sol du modèle (m), température (°C) et
+// humidité relative (%, par rapport à l'eau); absent si un niveau manque (modèle qui ne les donne pas, ancien cache).
+const plProfile = (h, i, elev) => {
+  const z = PL_LEVELS.map(p => h[`geopotential_height_${p}hPa`]?.[i]), T = PL_LEVELS.map(p => h[`temperature_${p}hPa`]?.[i]), RH = PL_LEVELS.map(p => h[`relative_humidity_${p}hPa`]?.[i]);
+  if ([...z, ...T, ...RH].some(v => v == null)) return {};
+  return { pl: PL_LEVELS, plZ: z.map(v => Math.round(v - elev)), plT: T.map(v => Math.round(v * 10) / 10), plRH: RH.map(v => Math.round(v)) };
 };
 
 // Brouillard: variables de GFS en plus (visibilité en mètres, humidité au sol et à 1000, 975, 950, 925, 900 et 850 hPa,
 // altitude de ces niveaux en mètres au-dessus de la mer, soit jusqu'à environ 1500 m).
 const FOG_LEVELS = [1000, 975, 950, 925, 900, 850];
-const FOG_KEYS_GFS = ['visibility', 'relative_humidity_2m', ...FOG_LEVELS.map(p => `relative_humidity_${p}hPa`), ...FOG_LEVELS.map(p => `geopotential_height_${p}hPa`)];
+const FOG_KEYS_GFS = ['visibility', 'relative_humidity_2m', ...FOG_LEVELS.map(p => `relative_humidity_${p}hPa`), ...FOG_LEVELS.map(p => `geopotential_height_${p}hPa`)].filter(k => !SKY_KEYS.includes(k)); // déjà demandés avec les couches humides
 const FOG_RH = 95;
 // Haut d'une nappe de brouillard (mètres au-dessus de la mer): air saturé (humidité de 95 % et plus) depuis le sol
 // jusqu'au premier niveau qui ne l'est plus, l'altitude interpolée entre les deux. Nul si l'air n'est pas saturé au sol.
