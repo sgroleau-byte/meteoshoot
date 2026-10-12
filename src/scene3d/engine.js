@@ -701,6 +701,11 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   let smokeUg = null; // fumée de feux au sol (microgrammes par mètre cube, FireWork) à l'heure affichée
   let az = Math.PI * 1.2, camH = 1.7, Rr = 75; const ct = new THREE.Vector3(0, 10, 0);
   let rMin = 20; const R_MAX = 450; const clampR = (r) => Math.max(rMin, Math.min(R_MAX, r)); // distance caméra: hors du bâtiment visé, au plus 450 m
+  let othH = new Map(); // hauteur (m) de chaque voisin et de chaque forme dessinée, pour le choix du point de vue
+  // Zoom en grue: en reculant, la caméra monte (0,25 m par mètre de recul) pour passer au-dessus des voisins et des arbres au
+  // lieu de s'y cogner au ras du sol; en se rapprochant, elle redescend jusqu'à hauteur d'oeil. Un glisser vertical reste respecté.
+  const ZOOM_CLIMB = 0.25;
+  const setR = (r) => { const r1 = clampR(r); camH = Math.max(1.2, Math.min(320, camH + (r1 - Rr) * ZOOM_CLIMB)); Rr = r1; dirty = true; };
   let rainAt = 0; // dernière image de pluie seule (voir frame)
   // Percée (voir frame): rayon du disque dégagé autour du projet (fixé par pickView), groupes d'ombre retirés, trouée du ciel
   // autour du soleil (+1 ouverte, -1 refermée, 0 motif libre) et son état lissé.
@@ -1085,28 +1090,58 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     target.forEach(p => { minx = Math.min(minx, p[0]); miny = Math.min(miny, p[1]); maxx = Math.max(maxx, p[0]); maxy = Math.max(maxy, p[1]); });
     const corners = [[minx, miny], [maxx, maxy], [minx, maxy], [maxx, miny]];
     const pref = orientation.includes('PM') && !orientation.includes('AM') ? 215 : orientation.includes('AM') && !orientation.includes('PM') ? 140 : 180;
-    const size = Math.max(maxx - minx, maxy - miny); const radPref = Math.max(40, Math.min(110, size * 1.0 + 25)), aimY = base + Math.min(14, 4 + size * 0.1);
+    const size = Math.max(maxx - minx, maxy - miny), Hb = Math.max(3, focusH);
+    const hd = Math.max(...corners.map(([x, y]) => Math.hypot(x - tc[0], y - tc[1]))); // écart maximal entre une visée et le centre
+    // Cadrage de départ: le bâtiment entier dans l'image, du pied au toit et d'un bout à l'autre. Une maison se voit à hauteur
+    // d'oeil, à 40 m; une tour, de plus haut (environ 0,4 m par mètre au-delà de 18 m) en visant sa mi-hauteur, et d'assez
+    // loin pour que son sommet et son pied tiennent dans l'angle vertical de la caméra (avec 20 % de marge). En largeur, la
+    // moitié la plus large de l'empreinte doit tenir dans l'angle horizontal (format portrait compté comme 1,2 au moins:
+    // sur un téléphone, on ne recule pas à 400 m pour une barre de 150 m).
+    const liftH = Hb > 18 ? Math.min(120, 1.7 + (Hb - 18) * 0.4) : 1.7;
+    const aimH = Math.max(Math.min(14, 4 + size * 0.1), Hb * 0.55), aimY = base + aimH;
+    const tv = Math.tan(cam.fov * Math.PI / 360) * 0.8, th = tv * Math.max(1.2, W / H), half = Math.atan(tv);
+    // d: distance à la façade la plus proche (sommet et pied vus de là); la visée, elle, est au centre, hd plus loin.
+    const fitV = (d) => Math.atan((Hb + 2 - liftH) / d) - Math.atan((aimH - liftH) / (d + hd)) <= half && Math.atan((aimH - liftH) / (d + hd)) - Math.atan((-1 - liftH) / d) <= half;
+    let dV = 10; while (dV < R_MAX && !fitV(dV)) dV += 2;
+    const radPref = Math.max(40, Math.min(R_MAX - 60, Math.max(Math.min(110, size * 1.0 + 25), dV + hd, hd * 1.1 / th)));
     rMin = Math.max(15, Math.hypot(maxx - minx, maxy - miny) / 2 + 8); // on ne peut pas s'approcher au point d'entrer dans le bâtiment (8 m de marge)
     let best = null, bestUnder = null;
-    const near = others.filter(r => Math.hypot(centroid(r)[0] - tc[0], centroid(r)[1] - tc[1]) < 260);
+    // Voisins qui peuvent boucher la vue, avec leur sommet: de plus haut, on voit par-dessus les plus bas.
+    const near = others.filter(r => Math.hypot(centroid(r)[0] - tc[0], centroid(r)[1] - tc[1]) < radPref + 120);
+    const nearB = near.map(r => ({ r, c: centroid(r), top: groundOf(r).mean + (othH.get(r) ?? 15) }));
     // Arbres dessinés (trees()): couronne, tronc et genre. Visées: le centre, le haut du toit (bande de ciel) et les coins au pied.
     const tp = treePts.filter(t => Math.hypot(t[0] - tc[0], t[1] - tc[1]) < radPref + 80);
-    const aims = [[tc[0], tc[1], aimY], [tc[0], tc[1], base + Math.max(3, focusH) + 2], ...corners.map(([x, y]) => [x, y, base + 1.5])];
-    const hd = Math.max(...corners.map(([x, y]) => Math.hypot(x - tc[0], y - tc[1]))); // écart maximal entre une visée et le centre
+    const aims = [[tc[0], tc[1], aimY], [tc[0], tc[1], base + Hb + 2], ...corners.map(([x, y]) => [x, y, base + 1.5])];
+    // Visées pour les voisins: le centre à mi-hauteur et jusqu'à 12 sommets de l'empreinte à 6 m (ou au toit d'une petite
+    // maison): un voisin planté devant le milieu d'une longue façade compte même s'il laisse voir les deux bouts.
+    const vStep = Math.max(1, Math.ceil(target.length / 12));
+    const aimsB = [[tc[0], tc[1], aimY], ...target.filter((q, i) => i % vStep === 0).map(([x, y]) => [x, y, base + Math.min(Hb, 6)])];
+    const radStep = Math.max(6, Math.round(radPref / 15));
     for (let bea = pref - 80; bea <= pref + 80; bea += 5) {
-      for (let rad = Math.max(30, radPref - 40); rad <= radPref + 50; rad += 6) {
+      for (let rad = Math.max(30, radPref * 0.65); rad <= radPref * 1.35; rad += radStep) {
         const px = tc[0] + Math.sin(bea * Math.PI / 180) * rad, py = tc[1] + Math.cos(bea * Math.PI / 180) * rad, p = [px, py];
         if (near.some(r => pointInRing(p, r)) || pointInRing(p, target) || subj.some(r => pointInRing(p, r))) continue; // jamais dans le sujet (socle, aile) non plus
-        if (near.some(r => segHitsRing(p, tc, r))) continue;
+        // Voisins entre la caméra et le sujet (centre et coins à mi-hauteur): la caméra monte juste assez pour voir par-dessus
+        // (grue), ce qui coûte des points; au-delà de 120 m, le point est abandonné. Le croisement est pris au sommet du
+        // voisin le plus proche de la caméra sur la ligne (prudent).
+        const g0 = terrain.hTri(px, py); let need = liftH;
+        for (const b of nearB) for (const [ax, an, ay] of aimsB) {
+          if (!segHitsRing(p, [ax, an], b.r)) continue;
+          const dx = ax - px, dy = an - py, l2 = dx * dx + dy * dy || 1; let u = 1;
+          for (const q of b.r) u = Math.min(u, clamp(((q[0] - px) * dx + (q[1] - py) * dy) / l2));
+          if (u > 0.95) continue; // voisin collé au sujet: il ne cache pas la façade
+          need = Math.max(need, (b.top + 1 - ay * u) / (1 - u) - g0);
+        }
+        if (need > 120) continue;
+        const eye = g0 + need;
+        const gx = tc[0] - px, gy = tc[1] - py, g2 = gx * gx + gy * gy || 1;
         // Pas dans un arbre ni le nez dans une couronne (portée dessinée), et le moins d'arbres possible entre
         // la caméra et le bâtiment. En forêt dense, aucun point n'est libre: on garde le moins encombré, vu de plus haut.
         // Une couronne ne cache le bâtiment que si la ligne de visée la traverse (on voit sous une couronne haute).
         // Distance de l'oeil à l'enveloppe d'une couronne mesurée comme l'effacement près de l'objectif (nearFade): sous 3 m
         // elle serait effacée, jusqu'à 10 m en partie; tronc à moins de 1,2 m ou sous la jupe d'un conifère: trop près.
         let treePen = 0, under = false, screen = 0, screenC = 0, trunkHit = 0;
-        const eye = terrain.hTri(px, py) + 1.7;
         const AL = aims.map(([ax, an, ay]) => { const dx = ax - px, dy = an - py; return [dx, dy, dx * dx + dy * dy || 1, ay]; });
-        const gx = tc[0] - px, gy = tc[1] - py, g2 = gx * gx + gy * gy || 1;
         for (const t of tp) {
           const r = t[2], dt = Math.hypot(t[0] - px, t[1] - py), dv = Math.max(eye - t[5], t[4] - eye, 0), de = Math.hypot(Math.max(dt - r, 0), dv), dk = Math.hypot(t[6] - px, t[7] - py) - t[8];
           if (de < NEAR_LEAF[0] || dk < 1.2 || (t[10] && dt < r + 0.5 && eye < t[5])) under = true; else if (de < NEAR_LEAF[1]) treePen += (NEAR_LEAF[1] - de) * 4;
@@ -1121,19 +1156,21 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
             if (v > 0.03 && v < 0.9 && Math.hypot(px + v * dx - t[6], py + v * dy - t[7]) < t[8] + 0.1 && lv < Math.min(t[4], t[9])) trunkHit += 1 / aims.length; // tronc devant la façade
           }
         }
-        const blocked = corners.filter(c => near.some(r => segHitsRing(p, c, r))).length;
-        const hidden = terrain.blocked(px, py, terrain.hTri(px, py) + 1.7, tc[0], tc[1], aimY) ? 1 : 0; // le relief cache le bâtiment
+        const blocked = corners.filter(c => near.some(r => segHitsRing(p, c, r))).length; // pied des coins caché (2D)
+        const hidden = terrain.blocked(px, py, eye, tc[0], tc[1], aimY) ? 1 : 0; // le relief cache le bâtiment
         let roadD = Infinity; roads.forEach(r => { if (r.k !== 0) return; const P = r.p; for (let i = 0; i < P.length - 1; i++) { const a = P[i], b = P[i + 1]; const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy || 1; let t = ((px - a[0]) * dx + (py - a[1]) * dy) / l2; t = Math.max(0, Math.min(1, t)); roadD = Math.min(roadD, Math.hypot(px - a[0] - t * dx, py - a[1] - t * dy)); } });
-        const score = -Math.abs(bea - pref) * 0.6 - Math.abs(rad - radPref) * 0.8 - blocked * 25 - hidden * 40 + (roadD < 7 ? 8 : 0) - treePen - Math.min(screen, 8) * 12 - trunkHit * 30;
-        if (under) { if (!bestUnder || score > bestUnder.s) bestUnder = { s: score, px, py, screen, screenC, under }; }
-        else if (!best || score > best.s) best = { s: score, px, py, screen, screenC };
+        const score = -Math.abs(bea - pref) * 0.6 - Math.abs(rad - radPref) * 0.8 - blocked * 25 - hidden * 40 + (roadD < 7 ? 8 : 0) - treePen - Math.min(screen, 8) * 12 - trunkHit * 30 - (need - liftH) * 1.0;
+        if (under) { if (!bestUnder || score > bestUnder.s) bestUnder = { s: score, px, py, screen, screenC, under, need }; }
+        else if (!best || score > best.s) best = { s: score, px, py, screen, screenC, need };
       }
     }
     if (!best) best = bestUnder;
-    if (!best) { best = { px: tc[0] + Math.sin(pref * Math.PI / 180) * radPref, py: tc[1] + Math.cos(pref * Math.PI / 180) * radPref, screen: 0, under: true }; } // point non vérifié: au-dessus des cimes voisines
+    if (!best) { best = { px: tc[0] + Math.sin(pref * Math.PI / 180) * radPref, py: tc[1] + Math.cos(pref * Math.PI / 180) * radPref, screen: 0, under: true, walled: true }; } // point non vérifié: au-dessus des cimes voisines
     // Vue bouchée par les arbres (lot en forêt): au-dessus des cimes voisines plutôt qu'à hauteur d'oeil.
-    let lift = 1.7;
+    // Aucun point libre (tour entourée de tours): à mi-hauteur du sujet, par-dessus les voisins.
+    let lift = best.need ?? liftH;
     if (best.under || best.screenC >= 3) { const g0 = terrain.hTri(best.px, best.py); let top = 0; for (const t of tp) if (Math.hypot(t[0] - best.px, t[1] - best.py) < 25) top = Math.max(top, t[5] - g0); lift = Math.max(lift, Math.min(80, top + 5)); }
+    if (best.walled) lift = Math.max(lift, Hb * 0.5);
     ct.set(tc[0], aimY, -tc[1]); T0.set(tc[0], base, -tc[1]); sunL.target.position.copy(T0);
     az = Math.atan2(best.px - tc[0], best.py - tc[1]); Rr = clampR(Math.hypot(best.px - tc[0], best.py - tc[1])); camH = lift;
     brkR = Math.min(120, Math.max(BRK_R, rMin, Rr)); // percée: le point de vue de départ est dans le disque dégagé
@@ -1297,7 +1334,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       const l = new THREE.RectAreaLight(0xffd9a0, 0, e.len * 0.9, e.h * 0.7); const nx = e.nrm[0], nz = -e.nrm[1];
       l.position.set(e.mid[0] + nx * 0.4, e.base + e.h * 0.5, -e.mid[1] + nz * 0.4); l.lookAt(l.position.x + nx, l.position.y, l.position.z + nz); l.visible = false; S.add(l); winLights.push(l);
     });
-    const others = []; let kept = []; treeEnv = [];
+    const others = []; let kept = []; treeEnv = []; othH = new Map(); drawn.forEach(d => othH.set(d.p, d.hEff ?? 9));
     if (data) {
       data.bld.forEach(([p, h, fl, k, lid, , roof]) => {
         // Un voisin recouvert par un bâtiment dessiné disparaît: c'est le même édifice.
@@ -1305,6 +1342,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
         if (drawn.some(d => ringsOverlap(d.p, p)) || underModel(p)) return;
         others.push(p);
         const q = p[0], r = hsh(q[0], q[1], 5); const hh = k === 0 && !lid ? Math.max(h, 6.2) : h; // hauteur mesurée (LiDAR): telle quelle
+        othH.set(p, roof ? Math.max(hh, roofTop(roof) || 0) : hh);
         list.push({ p, h: hh, fl: Math.max(1, Math.min(k === 0 ? Math.max(fl, Math.round(hh / 3.1)) : fl, Math.floor(hh / 3.2))), col: L(k === 2 ? '#9a9a94' : k === 1 ? '#cfc7b8' : PAL_RES[Math.floor(r * PAL_RES.length)]), rc: L(ROOF[Math.floor(hsh(q[0], q[1], 6) * ROOF.length)]), roof: roof || null, hTop: roof ? Math.max(hh, roofTop(roof) || 0) : hh });
       });
       Object.keys(GC).forEach(k => addFlat(data.green.filter(p => p.k === k).map(p => ({ o: p.p })), flatMats[k], 0.03, 1));
@@ -1404,7 +1442,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       return;
     }
     if (!ptrs.size) el.style.cursor = e.altKey ? 'move' : model && pickModel(e) ? 'move' : 'grab'; // Option enfoncée: la vue se déplace
-    if (pinch && ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y) || 1; Rr = clampR(pinch.r0 * pinch.d0 / d); dirty = true; return; }
+    if (pinch && ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y) || 1; setR(pinch.r0 * pinch.d0 / d); return; }
     if (!drag || e.pointerId !== drag.id) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag = { x: e.clientX, y: e.clientY, id: drag.id };
     if (e.altKey) { panView(dx, dy); el.style.cursor = 'move'; return; } // la touche peut être prise ou lâchée en plein geste
@@ -1430,7 +1468,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   };
   const onKeyUp = (e) => { if (e.key === 'Alt' && !ptrs.size) el.style.cursor = 'grab'; };
   window.addEventListener('keydown', onKey, true); window.addEventListener('keyup', onKeyUp, true);
-  el.addEventListener('wheel', e => { e.preventDefault(); Rr = clampR(Rr * Math.exp(e.deltaY * 0.0015)); dirty = true; }, { passive: false });
+  el.addEventListener('wheel', e => { e.preventDefault(); setR(Rr * Math.exp(e.deltaY * 0.0015)); }, { passive: false });
 
   const vF = new THREE.Vector3(); let last = performance.now(), raf = 0;
   function frame(now) {
@@ -1897,7 +1935,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     resize,
     getView() { return { az, camH, Rr, ct: ct.toArray(), time: new Date(dateMs).toString().slice(0, 24) }; },
     setView(v) { if (v.az != null) az = v.az; if (v.camH != null) camH = v.camH; if (v.Rr != null) Rr = v.Rr; if (v.ct) ct.fromArray(v.ct); dirty = true; },
-    zoom(f) { Rr = clampR(Rr * f); dirty = true; }, // f < 1: on s'approche
+    zoom(f) { setR(Rr * f); }, // f < 1: on s'approche
     // Modèle importé: glb (ArrayBuffer) et info de modelImport.js, placement gardé ou null (placement par défaut). Renvoie le placement.
     async setModel(glb, info, placement) {
       dropModel();

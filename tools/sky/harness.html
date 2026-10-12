@@ -24,13 +24,15 @@ const lat = Number(q.get('lat') || 47.01031), lng = Number(q.get('lng') || -71.3
 // Maison du projet de Stéphane (Stoneham) par défaut: rectangle de 14 x 10 m, 7 m de haut, enduit blanc.
 const m = 1 / 111320, mL = m / Math.cos(lat * Math.PI / 180);
 const rect = (cx, cy, w, d) => [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([x, n]) => ({ lat: cy + n * m, lng: cx + x * mL }));
-const buildings = q.get('nobld') ? [] : [{ polygon: rect(lng, lat, 14, 10), height: Number(q.get('h') || 7), name: 'Maison', wallColor: '#e8e4dc' }];
+// bld=<JSON des formes du projet, comme en base> et orient=PM,AM: pour rejouer un vrai projet (banc du point de vue de départ).
+const buildings = q.get('nobld') ? [] : q.get('bld') ? JSON.parse(q.get('bld')) : [{ polygon: rect(lng, lat, Number(q.get('w') || 14), Number(q.get('d') || 10)), height: Number(q.get('h') || 7), name: 'Maison', wallColor: '#e8e4dc' }];
+const orientation = (q.get('orient') || 'PM').split(',');
 
 const box = document.getElementById('box');
 const log = [];
 const e = createScene3D(box, { onInfo: (i) => { window.H.info = i; } });
 window.__scene3d = e;
-e.setProject({ lat, lng, buildings, orientation: ['PM'] });
+e.setProject({ lat, lng, buildings, orientation });
 const status = { terrain: 'en cours', scene: 'en cours' };
 const ready = Promise.all([
   q.get('flat') ? Promise.resolve() : loadTerrain(lat, lng).then(t => { e.setTerrain(t); status.terrain = 'ok'; }).catch(err => { status.terrain = 'erreur: ' + err.message; }),
