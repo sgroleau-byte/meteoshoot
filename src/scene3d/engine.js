@@ -431,7 +431,8 @@ export function createScene3D(container, opts = {}) {
   const skyRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType }); const skyCam = new THREE.CubeCamera(1, 9000, skyRT); skyScene.add(skyCam); let skyFresh = false, skyGap = 0;
   const pmrem = new THREE.PMREMGenerator(R); pmrem.compileCubemapShader(); let envRT = null;
   let hzRT = null, hzMat = null; // bande de l'horizon du ciel dessiné (voir sunVisU), remplie après chaque carte cubique
-  function updateEnv() { skyFresh = false; cubeCam.update(R, skyScene); const nrt = pmrem.fromCubemap(cubeRT.texture); if (envRT) envRT.dispose(); envRT = nrt; S.environment = nrt.texture; if (hzMat) { const prv = R.getRenderTarget(); pass(hzMat, hzRT); R.setRenderTarget(prv); } }
+  let lastEnvMs = 0; // durée du dernier calcul d'ambiance (vérification en développement)
+  function updateEnv() { const tEnv = performance.now(); skyFresh = false; cubeCam.update(R, skyScene); const nrt = pmrem.fromCubemap(cubeRT.texture); if (envRT) envRT.dispose(); envRT = nrt; S.environment = nrt.texture; if (hzMat) { const prv = R.getRenderTarget(); pass(hzMat, hzRT); R.setRenderTarget(prv); }  lastEnvMs = performance.now() - tEnv; }
   const fog = new THREE.Fog(0xcccccc, 300, 1600); S.fog = fog;
   const gndTex = groundTex();
   // Sol en deux pièces: le relief (maillage non uniforme de terrain.js: 2 m au centre, 20 km de rayon; plat et maillé à
@@ -797,7 +798,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   // brouillard ferme l'horizon. Comme dans un jeu: tout le détail près du sujet, peu au loin.
   const NEAR = 230;
   const nearXY = (x, n) => Math.hypot(x, n) < NEAR;
-  let winLights = [];
+  let winLights = [], preLit = false, preFrame = false; // preLit: variante de nuit (lumières des fenêtres) déjà compilée pour ce décor; preFrame: une image à dessiner lumières visibles (intensité nulle) pour les programmes d'ombre
   // Part de l'heure au soleil (v633.194): direct moyen sur l'heure rapporté au direct moyen par ciel clair sur la même heure
   // (12 pas de 5 min). Référence par ciel clair: dniClear au-dessus de 20° (calée sur ICON), modèle de Meinel (masse d'air de
   // Kasten et Young) au soleil bas, où dniClear valait encore 270 W/m² à 1° (un matin dégagé sortait voilé: 0,47 au lieu de 1).
@@ -813,7 +814,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     const a = pRow ?? pNext ?? pPrev; if (a == null) return 0;
     const b = pNext ?? a; return a + (b - a) * clamp((t - (rowT - 1800000)) / 3600000);
   }
-  function clearStatics() { statics.forEach(m => { S.remove(m); if (!m.userData.sharedGeo) m.geometry && m.geometry.dispose(); if (m.isInstancedMesh) m.dispose(); }); statics = []; treesI = null; winLights.forEach(l => { S.remove(l); l.dispose && l.dispose(); }); winLights = []; urban = 0; }
+  function clearStatics() { statics.forEach(m => { S.remove(m); if (!m.userData.sharedGeo) m.geometry && m.geometry.dispose(); if (m.isInstancedMesh) m.dispose(); }); statics = []; treesI = null; winLights.forEach(l => { S.remove(l); l.dispose && l.dispose(); }); winLights = []; preLit = false; urban = 0; }
   // Pousse de la scène (voir growU): démarre à la reconstruction qui suit l'arrivée des environs (setData), 2,5 s.
   let growing = false, growT0 = 0, growNext = false;
   const GROW_TOTAL = 2.5;
@@ -1444,6 +1445,23 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     if (growing && growT0 < 0) dirty = true; // attendre l'apparition en continuant à dessiner
     if (!dirty && !moving && accK < ACC_N && now - lastMoveAt > 220) { cloudHi = true; dirty = true; } // une passe d'accumulation par image
     if (!dirty && !moving && now - envAt > 400) {
+      // Variante de nuit (ou de jour) compilée d'avance, en arrière-plan (extension KHR_parallel_shader_compile): au passage
+      // jour / nuit, les lumières des fenêtres apparaissent et three.js recompilait tous les programmes de rendu (gel de 3 à
+      // 4 s, iPad comme Mac; Stéphane, 12 octobre 2026). Seulement la scène posée: pousse finie, nuages accumulés, rien bougé
+      // depuis 1,5 s, pour ne gêner ni le chargement ni le curseur.
+      if (!preLit && !growing && winLights.length && accK >= ACC_N && now - lastMoveAt > 1500 && R.compileAsync) {
+        preLit = true; const was = winLights[0].visible; winLights.forEach(l => { l.visible = !was; });
+        if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.preLitAt = { at: now, programs: R.info.programs.length, lit: !was };
+        // Les programmes des matériaux (en parallèle), puis ceux de la lueur des fenêtres (passe de nuit seulement), puis une
+        // image dessinée lumières visibles mais éteintes (intensité nulle: rien ne change à l'écran) pour les programmes
+        // d'ombre, que compile() ne couvre pas. Au basculement réel, plus aucun programme à compiler.
+        try {
+          R.compileAsync(S, cam).then(() => { quad.material = brightMat; return R.compileAsync(qScene, qCam); }).then(() => { quad.material = gblurMat; return R.compileAsync(qScene, qCam); })
+            .then(() => { if (!was) { preFrame = true; dirty = true; } if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.preLitDone = R.info.programs.length; })
+            .catch((e) => console.warn('[scene3d] précompilation', e));
+        } catch (e) { console.warn('[scene3d] précompilation', e); }
+        winLights.forEach(l => { l.visible = was; });
+      }
       // Rien d'autre ne bouge: sous la pluie, seules les gouttes avancent (composition et lissage refaits, pas la scène),
       // 30 fois par seconde au plus (environ 1,5 ms de calcul graphique chaque fois), et seulement si la 3D est à l'écran.
       if (cur.rain * (1 - RAIN_BRK * cur.brk) > 0.005 && compRT && onScreen && now - rainAt >= 32) { rainAt = now; compMat.uniforms.uTime.value = (now / 1000) % 60; pass(compMat, compRT); pass(fxMat, null); }
@@ -1555,7 +1573,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     U.uStorm.value = cur.storm; U.uSunGap.value = gapS > 0 ? gapS * smooth(0.05, 0.3, iv) : gapS; U.uGapR.value = 0.07 + 0.12 * Math.sin(el); // trouée de 4° au ras de l'horizon à 11° haut dans le ciel
     wallMat.emissiveIntensity = 0.62 * smooth(1, -4, realDeg); // fenêtres chaudes, pas blanches
     uNight.value = smooth(1, -4, realDeg); // fenêtres discrètes le jour, d'origine dès la tombée du jour
-    winLights.forEach(l => { l.intensity = 0.32 * wallMat.emissiveIntensity / 0.62; l.visible = l.intensity > 0.01; }); // lumière des fenêtres sur le sol, les arbres et les voisins
+    const pf = preFrame; preFrame = false; winLights.forEach(l => { l.intensity = 0.32 * wallMat.emissiveIntensity / 0.62; l.visible = l.intensity > 0.01 || pf; }); // pf: image de précompilation (voir preLit) // lumière des fenêtres sur le sol, les arbres et les voisins
     if (model) model.win.forEach(m => { m.emissiveIntensity = wallMat.emissiveIntensity; }); // vitres du modèle importé
     // Lampadaires et lueur de la ville: même allumage que les fenêtres, à petite dose (on devine les rues et les volumes).
     const lampK = uNight.value, city = urban * lampK;
@@ -1737,7 +1755,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     const sl = rgb(sc0).map(v => Math.pow(v, 2.2)); CU.uSunC.value.set(sl[0], sl[1], sl[2]);
     compMat.uniforms.tCol.value = sceneRT.texture; compMat.uniforms.tAO.value = aoRT.texture; compMat.uniforms.tBloom.value = bloomA.texture; pass(compMat, compRT);
     fxMat.uniforms.tDiffuse.value = compRT.texture; fxMat.uniforms.resolution.value.set(1 / PW, 1 / PH); pass(fxMat, null);
-    if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.dbg = { storm: cur.storm, brk: cur.brk, pSun: tg.pSun, camSun, subjSun, gap: gapS, uExp: compMat.uniforms.uExp.value, hidden: brkHide.size, cur: { ...cur }, tg: { ...tg }, names: cloudNames.slice(), accK, usedHi, growing }; // vérification en développement
+    if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.dbg = { preLit, programs: R.info.programs.length, nWin: winLights.length, idleMs: Math.round(now - lastMoveAt), lastEnvMs: Math.round(lastEnvMs), storm: cur.storm, brk: cur.brk, pSun: tg.pSun, camSun, subjSun, gap: gapS, uExp: compMat.uniforms.uExp.value, hidden: brkHide.size, cur: { ...cur }, tg: { ...tg }, names: cloudNames.slice(), accK, usedHi, growing }; // vérification en développement
     if (import.meta.env.DEV && window.__scene3dCore && window.__scene3dCore.afterFrame) window.__scene3dCore.afterFrame(PW, PH, usedHi); // mesure en développement (usedHi: nuages en pleine résolution)
     // Légende: condition de lumière, parts de nuages, position du soleil
     const w = weatherRow || {}; const low = w.cloudLow ?? null, alt = Math.max(w.cloudMid ?? 0, w.cloudHigh ?? 0), sun = w.sunFraction != null ? Math.round(w.sunFraction * 100) : null;

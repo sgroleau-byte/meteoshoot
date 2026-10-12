@@ -993,6 +993,18 @@ importé, lui, est le fichier de l'architecte.
   le modèle importé depuis le Mac s'affiche quand même. iPad (plus de 768 px) et ordinateur inchangés. App native
   v633.199 installée sur son iPhone 15 Pro le matin même: « aussi fluide que sur le mac ou presque », aucune baisse de
   qualité sur téléphone.
+- v633.201 (12 octobre 2026), **plus de gel au passage jour / nuit** (« le seul moment où ça lague c'est au passage du jour
+  à la nuit, il y a 3-4 sec de blocage. Mais c'est souvent la même chose sur mac. Peut-être qu'il faudrait précharger le mode
+  nuit dans la cache aussi? »; contrainte: « il ne faudrait pas que ça nuise au loading de jour et au déplacement du
+  slider »). Cause: à la nuit, les lumières des fenêtres (RectAreaLight, 6 sur téléphone, 12 ailleurs) deviennent visibles
+  et three.js recompile tous les programmes de rendu (19 nouveaux programmes au banc), plus les programmes d'ombre et ceux de
+  la lueur des fenêtres (passe de nuit seulement); sur iPad et Safari la compilation est lente. Remède (`preLit`, engine.js):
+  une fois la scène posée (pousse finie, nuages accumulés, rien bougé depuis 1,5 s), compilation anticipée en arrière-plan de
+  la variante opposée (`compileAsync`, extension KHR_parallel_shader_compile): matériaux de la scène, puis lueur des fenêtres,
+  puis une image dessinée lumières visibles mais éteintes (intensité nulle, rien ne change à l'écran) pour les programmes
+  d'ombre que `compile()` ne couvre pas. Banc (tools/sky): 0 programme compilé au basculement (19 avant, puis 4), première
+  image après le basculement 3 à 10 ms (35 à 44 avant). Reste une image de 230 ms environ 1 à 2 s après tout changement
+  d'heure: première passe des nuages en pleine résolution (déjà connue, pas propre à la nuit).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
