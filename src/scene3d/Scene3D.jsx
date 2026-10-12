@@ -11,6 +11,7 @@ import { fetchSmokeHour, smokeHourCached } from '../weather/api.js';
 import { loadModel, loadPlacement, loadRetired, localState, saveModel, replaceModel, markSent, takePlacement, dropModel, retireModel, clearRetired, savePlacement } from './modelStore.js';
 import { cloudLoad, cloudFetchGlb, cloudSave, cloudPlacement, cloudDelete } from './modelCloud.js';
 import { loadSatImage } from './satDrape.js';
+import { useIsMobile } from '../hooks/useIsMobile.js';
 
 // Origine du moteur arrondie comme sceneKey (data.js). Un placement gardé porte o: [lat, lng], l'origine du moment:
 // si la position du projet a été corrigée depuis, l'écart est rendu en mètres pour que la maison reste au même endroit
@@ -101,6 +102,9 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
   const box = useRef(null);
   const eng = useRef(null);
   const [info, setInfo] = useState(null);
+  // Téléphone: légende réduite à la condition de lumière (une ligne), le reste au toucher; sur grand écran, légende complète.
+  const isMobile = useIsMobile();
+  const [legendOpen, setLegendOpen] = useState(false);
   const [status, setStatus] = useState(null); // { text, busy }: busy = anneau d'attente, sinon message seul (erreur)
   // Anneau d'attente affiché: il garde le dernier message le temps de s'effacer en fondu (avant: il disparaissait d'un coup).
   const [shownStatus, setShownStatus] = useState(null), [statusOut, setStatusOut] = useState(false);
@@ -363,12 +367,14 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
         {mdl && prepP == null && !locked && <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.75)', textShadow: '0 1px 2px rgba(0,0,0,0.5)', paddingLeft: '6px', pointerEvents: 'none' }}>Glisser la maison pour la déplacer, cadenas pour la fixer</div>}
         {mdlErr && <div style={{ fontSize: '11px', color: '#ffb4a8', textShadow: '0 1px 2px rgba(0,0,0,0.5)', paddingLeft: '6px', maxWidth: '240px' }}>{mdlErr}</div>}
       </div>
-      {info && <div style={{ position: 'absolute', left: '14px', bottom: '12px', fontSize: '12px', lineHeight: '1.45', color, pointerEvents: 'none', textShadow: info.light ? '0 1px 2px rgba(0,0,0,0.35)' : 'none' }}>
-        <div>{info.cond}</div>
-        {info.parts && <div style={{ opacity: 0.8 }}>{info.parts}</div>}
-        <div style={{ opacity: 0.75 }}>{info.where}</div>
-        {info.height && <div style={{ opacity: 0.75 }}>{info.height}</div>}
-        {info.srcLine && <div style={{ opacity: 0.6, fontSize: '11px' }}>{info.srcLine}</div>}
+      {info && <div onClick={isMobile ? () => setLegendOpen(v => !v) : undefined} style={{ position: 'absolute', left: '14px', right: isMobile ? '14px' : undefined, bottom: '12px', fontSize: isMobile ? '11px' : '12px', lineHeight: '1.45', color, pointerEvents: isMobile ? 'auto' : 'none', cursor: isMobile ? 'pointer' : undefined, userSelect: 'none', WebkitUserSelect: 'none', textShadow: info.light ? '0 1px 2px rgba(0,0,0,0.35)' : 'none' }}>
+        <div>{info.cond}{isMobile && <span style={{ opacity: 0.6, marginLeft: '8px', fontSize: '10px', letterSpacing: '0.08em' }}>{legendOpen ? 'MOINS' : 'PLUS'}</span>}</div>
+        {(!isMobile || legendOpen) && <>
+          {info.parts && <div style={{ opacity: 0.8 }}>{info.parts}</div>}
+          <div style={{ opacity: 0.75 }}>{info.where}</div>
+          {info.height && <div style={{ opacity: 0.75 }}>{info.height}</div>}
+          {info.srcLine && <div style={{ opacity: 0.6, fontSize: isMobile ? '10px' : '11px' }}>{info.srcLine}</div>}
+        </>}
       </div>}
       {info && <svg style={{ position: 'absolute', left: '14px', top: '104px', width: '34px', height: '34px', pointerEvents: 'none' }} viewBox="0 0 34 34">{/* boussole: en haut à gauche, sous la bande horaire, loin des boutons + et - et de la légende */}
         <circle cx="17" cy="17" r="15" fill="rgba(20,24,26,.35)" stroke="rgba(255,255,255,.55)" strokeWidth="1"/>
