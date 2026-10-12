@@ -1492,7 +1492,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       t2 = setTimeout(doResize, 300);
     }
     document.body.style.overflow = showMapFull ? 'hidden' : '';
-    return () => { clearTimeout(t1); clearTimeout(t2); document.body.style.overflow = ''; };
+    document.body.classList.toggle('ms-map-full', showMapFull); // téléphone: la barre du bas (niveau 40) passait par-dessus le plein écran (fiche au niveau 10); cachée pendant le plein écran (app.css)
+    return () => { clearTimeout(t1); clearTimeout(t2); document.body.style.overflow = ''; document.body.classList.remove('ms-map-full'); };
   }, [showMapFull]);
 
   // Fetch terrain elevation profile when position changes

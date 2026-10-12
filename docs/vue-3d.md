@@ -977,6 +977,17 @@ importé, lui, est le fichier de l'architecte.
   la fiche en ligne: ciel couvert brun, granuleux comme du sable, coupé par une bande): engine.js, sky.js et api.js remis
   à l'identique de la v633.196. Ce qui avait été appris en v633.197 (repères de la banque photos-architecture, pièges du
   banc) reste noté ci-dessus; toute reprise se fera par petites étapes montrées en planche avant publication.
+- v633.199 (12 octobre 2026), **la 3D sur iPhone et iPad** (« Ajoute le 3D à la version iPhone/iPad »): la vue existait
+  déjà dans le menu SAT de la carte, sur le web comme dans l'app native (Capacitor, vérifié au simulateur iPhone 17 Pro
+  avec une variante de test à session embarquée, jamais commitée). Trois corrections pour le téléphone:
+  - légende de la 3D réduite à la condition de lumière sous 768 px, « PLUS » / « MOINS » au toucher pour le détail;
+  - plein écran de la carte (satellite ou 3D) réparé: l'animation d'entrée de la fiche (`.ms-detail-enter`, fill `both`)
+    laissait un transform identité, la fiche devenait le repère des éléments `fixed` et le plein écran défilait avec la
+    page; fill `backwards` maintenant;
+  - barre du bas effacée pendant le plein écran (`body.ms-map-full`): elle passait par-dessus (fiche au niveau 10,
+    barre au niveau 40) et cachait la légende.
+  Pincement à deux doigts vérifié. Reste à mesurer la fluidité sur un vrai iPhone (le simulateur dessine avec la puce du
+  Mac) et à réinstaller l'app native sur l'iPhone de Stéphane (version d'avant la 3D).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

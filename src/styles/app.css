@@ -7,6 +7,8 @@
        droit) élargissait la page et l'écran glissait de gauche à droite. Le débordement est coupé au bord de
        l'écran, comme les vues téléphone (overflowX: 'clip'); clip ne crée pas de cadre de défilement. */
     #root { overflow-x: clip; }
+    /* Carte ou vue 3D en plein écran sur téléphone: la barre du bas s'efface (elle recouvrait la légende et les boutons) */
+    body.ms-map-full .mobile-bottom-nav { visibility: hidden !important; pointer-events: none !important; } /* !important: la barre règle sa visibilité en style en ligne (clavier ouvert) */
     /* Style detail scrollbar to match native thin look */
     .detail-scroll::-webkit-scrollbar { width: 8px; }
     .detail-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -451,7 +453,10 @@
     .ms-enter-nav { animation: msFade 0.6s cubic-bezier(0.4, 0, 0.2, 1) both; }
     .ms-enter-geo { animation: msGeoIn 0.9s cubic-bezier(0.16, 1, 0.3, 1) both; }
     .day-cell, .hour-scroll { animation: msRiseSmall 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
-    .ms-detail-enter { animation: msDetailIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    /* backwards (pas both): une fois entrée, la fiche ne garde aucune transformation; avec both, le transform identité
+       restait appliqué et la fiche devenait le repère des éléments fixed: la carte et la 3D en plein écran suivaient le
+       défilement de la fiche au lieu de couvrir l'écran (iPhone, 12 octobre 2026). */
+    .ms-detail-enter { animation: msDetailIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
     .ms-detail-leave { animation: msDetailOut 0.25s cubic-bezier(0.4, 0, 1, 1) both; pointer-events: none; }
     /* Brume: voile léger aux teintes de l'app, présent sous le splash, qui se dissipe pendant que l'interface émerge. */
     #msMist { position: fixed; inset: 0; z-index: 9998; pointer-events: none; opacity: 1;
