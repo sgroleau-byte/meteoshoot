@@ -25,7 +25,7 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
   const { advanceProject, deleteProject } = useStore();
   const { t } = useLang();
   const { reportWeather, clearWeather } = useWeatherStatus();
-  // Dernière prévision connue affichée tout de suite; la fraîche la remplace dès qu'elle arrive.
+  // Prévision fraîche déjà reçue (moins de 30 min) tout de suite, sinon rien jusqu'à l'arrivée de la vraie.
   const [weather, setWeather] = useState(() => peekWeather(project.lat, project.lng));
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReady, setConfirmReady] = useState(false);

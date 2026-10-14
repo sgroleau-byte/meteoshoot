@@ -73,14 +73,14 @@ const dropPastDays = (data) => {
   if (!daily.length) return null;
   return { ...data, daily, hourly: data.hourly.filter((h) => String(h.time).slice(0, 10) >= today) };
 };
-// Dernière prévision connue pour ce lieu (mémoire 30 min, sinon stockage local 24 h), sans les jours passés: la liste et la
-// fiche l'affichent tout de suite pendant que la fraîche arrive. Le 14 octobre 2026, la liste restait vide 30 s et plus
-// quand Open-Meteo traînait, alors que la prévision du matin était là.
+// Prévision fraîche déjà reçue pendant cette séance (moins de 30 min, la même que fetchWeather rendrait), lue sans
+// attendre: rouvrir un projet ou revenir à la liste ne fait pas clignoter la météo. Jamais la copie du stockage local:
+// une prévision plus vieille affichée sans le dire pendant le chargement trompait (v633.207, retirée en v633.208 à la
+// demande de Stéphane); la liste attend la vraie.
 export const peekWeather = (lat, lng) => {
   if (!lat || !lng || getWeatherSim()) return null;
   const mem = weatherMemCache.get(weatherCacheKey(lat, lng));
-  if (mem && Date.now() - mem.fetchedAt < WEATHER_MEM_TTL_MS) return mem.data;
-  return dropPastDays(readWeatherCache(lat, lng)?.data);
+  return mem && Date.now() - mem.fetchedAt < WEATHER_MEM_TTL_MS ? mem.data : null;
 };
 
 // Wrapper d'un appel Open-Meteo. Retourne un objet de resultat plutot que de throw,

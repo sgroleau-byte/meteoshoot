@@ -922,7 +922,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   useEffect(() => {
     if (!project?.lat || !project?.lng) return;
     let cancelled = false;
-    // Dernière prévision connue tout de suite (et pas celle du projet précédent), la fraîche par-dessus.
+    // Prévision fraîche déjà reçue (moins de 30 min) tout de suite, sinon rien; jamais celle du projet précédent.
     setWeather(peekWeather(project.lat, project.lng));
     (async () => {
       const result = await fetchWeather(project.lat, project.lng);
