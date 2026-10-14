@@ -31,29 +31,56 @@ try {
 export const WEATHER_CACHE_KEY = 'sp-weather-cache';
 export const WEATHER_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 h: au dela on considere obsolete
 export const weatherCacheKey = (lat, lng) => `${Number(lat).toFixed(3)},${Number(lng).toFixed(3)}`;
+// Une prévision pèse environ 85 Ko (14 octobre 2026): 50 entrées dépassaient le quota du stockage local de Safari, et
+// l'écriture échouait sans bruit (le cache ne se renouvelait plus). Le cache est donc lu une seule fois, gardé en mémoire,
+// limité aux 24 lieux les plus récents et écrit une fois par vague de réponses (au lieu de tout relire et réécrire à
+// chaque projet); si le quota refuse encore, on retire les plus vieux jusqu'à ce que ça passe.
+const WEATHER_CACHE_MAX = 24;
+let weatherCacheAll = null;
+let weatherCacheFlush = null;
+const weatherCacheEntries = () => {
+  if (!weatherCacheAll) {
+    try { weatherCacheAll = JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY) || '{}') || {}; } catch (e) { weatherCacheAll = {}; }
+  }
+  return weatherCacheAll;
+};
 export const readWeatherCache = (lat, lng) => {
-  try {
-    const all = JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY) || '{}');
-    const entry = all[weatherCacheKey(lat, lng)];
-    if (!entry || !entry.data || !entry.cachedAt) return null;
-    if (Date.now() - entry.cachedAt > WEATHER_CACHE_TTL_MS) return null;
-    return entry;
-  } catch (e) { return null; }
+  const entry = weatherCacheEntries()[weatherCacheKey(lat, lng)];
+  if (!entry || !entry.data || !entry.cachedAt) return null;
+  if (Date.now() - entry.cachedAt > WEATHER_CACHE_TTL_MS) return null;
+  return entry;
 };
 export const writeWeatherCache = (lat, lng, data) => {
-  try {
-    const all = JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY) || '{}');
-    all[weatherCacheKey(lat, lng)] = { data, cachedAt: Date.now() };
-    // Garde-fou taille: si plus de 50 entrees, on coupe les plus vieilles.
-    const entries = Object.entries(all);
-    if (entries.length > 50) {
-      entries.sort((a, b) => (b[1].cachedAt || 0) - (a[1].cachedAt || 0));
-      const trimmed = Object.fromEntries(entries.slice(0, 50));
-      localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify(trimmed));
-    } else {
-      localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify(all));
+  weatherCacheEntries()[weatherCacheKey(lat, lng)] = { data, cachedAt: Date.now() };
+  clearTimeout(weatherCacheFlush);
+  weatherCacheFlush = setTimeout(() => {
+    const entries = Object.entries(weatherCacheAll).sort((a, b) => (b[1].cachedAt || 0) - (a[1].cachedAt || 0));
+    for (let n = Math.min(entries.length, WEATHER_CACHE_MAX); n > 0; n = Math.floor(n / 2)) {
+      try {
+        weatherCacheAll = Object.fromEntries(entries.slice(0, n));
+        localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify(weatherCacheAll));
+        return;
+      } catch (e) { /* quota plein: on retire les plus vieux */ }
     }
-  } catch (e) { /* quota plein, on ignore */ }
+  }, 1500);
+};
+// Retire les jours passés d'une prévision gardée (celle d'hier soir commencerait à hier: le départ du jour serait faux).
+const dropPastDays = (data) => {
+  if (!data || !data.daily || !data.hourly) return null;
+  const d = new Date();
+  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const daily = data.daily.filter((x) => String(x.date).slice(0, 10) >= today);
+  if (!daily.length) return null;
+  return { ...data, daily, hourly: data.hourly.filter((h) => String(h.time).slice(0, 10) >= today) };
+};
+// Dernière prévision connue pour ce lieu (mémoire 30 min, sinon stockage local 24 h), sans les jours passés: la liste et la
+// fiche l'affichent tout de suite pendant que la fraîche arrive. Le 14 octobre 2026, la liste restait vide 30 s et plus
+// quand Open-Meteo traînait, alors que la prévision du matin était là.
+export const peekWeather = (lat, lng) => {
+  if (!lat || !lng || getWeatherSim()) return null;
+  const mem = weatherMemCache.get(weatherCacheKey(lat, lng));
+  if (mem && Date.now() - mem.fetchedAt < WEATHER_MEM_TTL_MS) return mem.data;
+  return dropPastDays(readWeatherCache(lat, lng)?.data);
 };
 
 // Wrapper d'un appel Open-Meteo. Retourne un objet de resultat plutot que de throw,
@@ -84,26 +111,40 @@ const withOpenMeteoSlot = async (task) => {
     if (next) next(); else openMeteoActive--;
   }
 };
-const fetchOpenMeteoOnce = async (url) => {
-  let res;
+// Délai maximal d'un appel (réponse normale: moins de 1,5 s). Sans lui, une connexion restée suspendue (au réveil du Mac,
+// réseau qui change) gardait sa place dans la file jusqu'à ce que le système abandonne, une minute environ, et toute la
+// liste attendait derrière (14 octobre 2026). Un appel abandonné ou une coupure réseau est retenté deux fois, sur une
+// connexion neuve, avec un délai qui s'allonge: une connexion morte est vite remplacée, mais un serveur seulement lent
+// a quand même le temps de répondre (un délai fixe l'aurait abandonné à chaque essai).
+const OPEN_METEO_TIMEOUT_MS = [12000, 25000, 45000];
+const OPEN_METEO_NETWORK_RETRY_MS = [400, 1500];
+const fetchOpenMeteoOnce = async (url, timeoutMs) => {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    res = await fetch(url);
-  } catch (e) {
-    return { error: 'network' };
+    let res;
+    try {
+      res = await fetch(url, { signal: ctl.signal });
+    } catch (e) {
+      return { error: 'network' };
+    }
+    if (!res.ok) {
+      return { error: 'api', status: res.status };
+    }
+    let body;
+    try {
+      body = await res.json();
+    } catch (e) {
+      // Corps coupé par le délai maximal: c'est le réseau, pas une réponse invalide.
+      return ctl.signal.aborted ? { error: 'network' } : { error: 'api', status: 'invalid' };
+    }
+    if (!body || !body.hourly) {
+      return { error: 'api', status: 'invalid' };
+    }
+    return { data: body };
+  } finally {
+    clearTimeout(timer);
   }
-  if (!res.ok) {
-    return { error: 'api', status: res.status };
-  }
-  let body;
-  try {
-    body = await res.json();
-  } catch (e) {
-    return { error: 'api', status: 'invalid' };
-  }
-  if (!body || !body.hourly) {
-    return { error: 'api', status: 'invalid' };
-  }
-  return { data: body };
 };
 
 export const fetchOpenMeteoModel = async (endpoint, qs) => {
@@ -116,11 +157,14 @@ export const fetchOpenMeteoModel = async (endpoint, qs) => {
   const pending = openMeteoInFlight.get(url);
   if (pending) return pending;
   const run = (async () => {
-    for (let attempt = 0; ; attempt++) {
+    for (let refused = 0, lost = 0; ;) {
       // La pause se fait hors de la file, pour ne pas bloquer une place pendant l'attente.
-      const result = await withOpenMeteoSlot(() => fetchOpenMeteoOnce(url));
-      if (result.status !== 429 || attempt >= OPEN_METEO_RETRY_MS.length) return result;
-      await new Promise((resolve) => setTimeout(resolve, OPEN_METEO_RETRY_MS[attempt] + Math.random() * 400));
+      const result = await withOpenMeteoSlot(() => fetchOpenMeteoOnce(url, OPEN_METEO_TIMEOUT_MS[lost]));
+      let wait;
+      if (result.status === 429 && refused < OPEN_METEO_RETRY_MS.length) wait = OPEN_METEO_RETRY_MS[refused++];
+      else if (result.error === 'network' && lost < OPEN_METEO_NETWORK_RETRY_MS.length) wait = OPEN_METEO_NETWORK_RETRY_MS[lost++];
+      else return result;
+      await new Promise((resolve) => setTimeout(resolve, wait + Math.random() * 400));
     }
   })();
   openMeteoInFlight.set(url, run);
@@ -316,8 +360,9 @@ export const fetchWeather = async (lat, lng) => {
               || { error: 'api', status: 'invalid' };
     // Filet: si on a une reponse encore exploitable en cache local, on la renvoie en mode "stale".
     const cached = readWeatherCache(lat, lng);
-    if (cached) {
-      return { data: cached.data, fromCache: true, cachedAt: cached.cachedAt, error: chosen.error, status: chosen.status };
+    const cachedData = cached && dropPastDays(cached.data);
+    if (cachedData) {
+      return { data: cachedData, fromCache: true, cachedAt: cached.cachedAt, error: chosen.error, status: chosen.status };
     }
     return { error: chosen.error, status: chosen.status };
   }

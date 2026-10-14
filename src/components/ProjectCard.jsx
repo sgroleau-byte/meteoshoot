@@ -8,7 +8,7 @@ import { useLang } from '../i18n/LangProvider.jsx';
 import { MandateType, renderMandate } from '../projects/constants.js';
 import { useStore } from '../projects/StoreProvider.jsx';
 import { daysSince, formatDateShort, formatDuration, formatTime } from '../utils/dates.js';
-import { fetchWeather } from '../weather/api.js';
+import { fetchWeather, peekWeather } from '../weather/api.js';
 import { calcDeparture, calcDepartureFromShootTime } from '../weather/departure.js';
 import { useWeatherStatus } from '../weather/WeatherStatusProvider.jsx';
 import { ShootCheckIcon, StarIcon, TrashIcon } from './icons/misc.jsx';
@@ -25,7 +25,8 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
   const { advanceProject, deleteProject } = useStore();
   const { t } = useLang();
   const { reportWeather, clearWeather } = useWeatherStatus();
-  const [weather, setWeather] = useState(null);
+  // Dernière prévision connue affichée tout de suite; la fraîche la remplace dès qu'elle arrive.
+  const [weather, setWeather] = useState(() => peekWeather(project.lat, project.lng));
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReady, setConfirmReady] = useState(false);
   const [confirmDone, setConfirmDone] = useState(false);

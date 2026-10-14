@@ -16,7 +16,7 @@ import { Scene3D } from '../scene3d/Scene3D.jsx';
 import { loadScene } from '../scene3d/data.js';
 import { daysSince, formatDateShort, formatDuration, formatTime } from '../utils/dates.js';
 import { linkifyPhonesInEditor } from '../utils/linkify.js';
-import { fetchWeather } from '../weather/api.js';
+import { fetchWeather, peekWeather } from '../weather/api.js';
 import { calcDeparture, calcDepartureFromShootTime } from '../weather/departure.js';
 import { getElevationProfile, isTerrainShadow } from '../weather/elevation.js';
 import { cloudcoverToIcon, veilIcon } from '../weather/iconsLogic.js';
@@ -922,6 +922,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   useEffect(() => {
     if (!project?.lat || !project?.lng) return;
     let cancelled = false;
+    // Dernière prévision connue tout de suite (et pas celle du projet précédent), la fraîche par-dessus.
+    setWeather(peekWeather(project.lat, project.lng));
     (async () => {
       const result = await fetchWeather(project.lat, project.lng);
       if (cancelled) return;
