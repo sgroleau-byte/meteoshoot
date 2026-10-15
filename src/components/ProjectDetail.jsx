@@ -16,7 +16,7 @@ import { Scene3D } from '../scene3d/Scene3D.jsx';
 import { loadScene } from '../scene3d/data.js';
 import { daysSince, formatDateShort, formatDuration, formatTime } from '../utils/dates.js';
 import { linkifyPhonesInEditor } from '../utils/linkify.js';
-import { fetchWeather, peekWeather } from '../weather/api.js';
+import { fetchSceneWeather, fetchWeather, mergeSceneWeather, peekWeather, weatherCacheKey } from '../weather/api.js';
 import { calcDeparture, calcDepartureFromShootTime } from '../weather/departure.js';
 import { getElevationProfile, isTerrainShadow } from '../weather/elevation.js';
 import { cloudcoverToIcon, veilIcon } from '../weather/iconsLogic.js';
@@ -70,8 +70,23 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   const sceneTimeMs = React.useMemo(() => { const d = new Date(sunDate); d.setHours(0, 0, 0, 0); return d.getTime() + sunHourDisplay * 3600000; }, [sunDate, sunHourDisplay]);
   // Au-delà de 36 h de prévision (ou dans le passé), la scène suppose une journée ensoleillée et aucune icône
   // météo n'est affichée près du curseur: la prévision horaire n'est plus assez sûre pour piloter la lumière.
+  // Données propres à la 3D (nuages moyens, hauts et par altitude, nuage convectif, brouillard): demandées seulement quand la
+  // 3D est affichée, la liste et la fiche n'en ont pas besoin (15 octobre 2026), puis fondues dans la prévision de la fiche.
+  const [sceneExtra, setSceneExtra] = useState(null); // { key: lieu, data: table heure -> champs }
+  useEffect(() => {
+    if (!view3d || !project?.lat || !project?.lng || !weather?.hourly) return;
+    const key = weatherCacheKey(project.lat, project.lng);
+    let cancelled = false;
+    fetchSceneWeather(project.lat, project.lng, weather).then((data) => { if (!cancelled && data) setSceneExtra({ key, data }); });
+    return () => { cancelled = true; };
+  }, [view3d, project?.lat, project?.lng, weather]);
+  const sceneWeather = React.useMemo(() => {
+    const key = project?.lat && project?.lng ? weatherCacheKey(project.lat, project.lng) : null;
+    return sceneExtra && sceneExtra.key === key ? mergeSceneWeather(weather, sceneExtra.data) : weather;
+  }, [weather, sceneExtra, project?.lat, project?.lng]);
   const sceneRowCache = React.useRef(new WeakMap()); // même objet pour la même heure: la 3D ne se recalcule pas à chaque pas du curseur
   const sceneWeatherRow = React.useMemo(() => {
+    const weather = sceneWeather;
     if (sceneSunny || !weather?.hourly?.length) return null;
     const now = Date.now(); if (sceneTimeMs > now + 36 * 3600000 || sceneTimeMs < now - 24 * 3600000) return null;
     let best = null, bd = Infinity;
@@ -82,7 +97,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     let row = sceneRowCache.current.get(best);
     if (!row) { const i = weather.hourly.indexOf(best); row = { ...best, prev: [1, 2, 3].map(k => weather.hourly[i - k] || null), next: weather.hourly[i + 1] || null }; sceneRowCache.current.set(best, row); }
     return row;
-  }, [weather, sceneTimeMs, sceneSunny]);
+  }, [sceneWeather, sceneTimeMs, sceneSunny]);
   const sunHourTargetRef = React.useRef(sunHour);
   const sunTimesSnapRef = React.useRef({ sr: 6, ss: 18 });
   

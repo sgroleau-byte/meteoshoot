@@ -213,7 +213,9 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
   useEffect(() => { if (eng.current) eng.current.setModelLocked(locked); if (locked) stopDrag(); }, [locked, engReady]);
   useEffect(() => { if (eng.current) eng.current.setProject({ lat, lng, buildings, orientation }); }, [buildings, orientation]);
   useEffect(() => { if (eng.current) eng.current.setTime(timeMs); }, [timeMs]);
-  useEffect(() => { if (eng.current) eng.current.setWeather(weatherRow); }, [weatherRow?.time, weatherRow?.cloudLow, weatherRow?.cloudMid, weatherRow?.cloudHigh, weatherRow?.sunFraction, weatherRow?.precip, weatherRow?.wc, weatherRow?.convBase, weatherRow?.convDepth, weatherRow?.direct, weatherRow?.diffuse, weatherRow?.visibility, weatherRow?.next?.direct, weatherRow?.cape, weatherRow?.lcl]);
+  // engReady: les données propres à la 3D arrivent à part (15 octobre 2026) et peuvent précéder la fin du chargement du
+  // moteur, qui démarre alors avec la rangée de base; on la réapplique dès qu'il est prêt.
+  useEffect(() => { if (eng.current) eng.current.setWeather(weatherRow); }, [engReady, weatherRow?.time, weatherRow?.cloudLow, weatherRow?.cloudMid, weatherRow?.cloudHigh, weatherRow?.sunFraction, weatherRow?.precip, weatherRow?.wc, weatherRow?.convBase, weatherRow?.convDepth, weatherRow?.direct, weatherRow?.diffuse, weatherRow?.visibility, weatherRow?.next?.direct, weatherRow?.cape, weatherRow?.lcl]);
   // Fumée de feux (FireWork) à l'heure affichée, seulement dans la fenêtre de prévision de la 3D (comme la météo) et un
   // jour où l'app en signale déjà (moyenne du jour, icône du soleil): par prudence, la couche horaire seule mêle le fond
   // urbain. Demandée un court instant après l'arrêt du curseur; une heure déjà lue s'affiche tout de suite, une réponse

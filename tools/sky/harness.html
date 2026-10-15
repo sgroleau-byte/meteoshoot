@@ -16,7 +16,7 @@ import { loadScene } from '/src/scene3d/data.js';
 import { loadTerrain } from '/src/scene3d/terrain.js';
 import SunCalc from 'suncalc';
 import { CLOUD_GLSL, classifyClouds } from '/src/scene3d/sky.js';
-import { fetchWeather } from '/src/weather/api.js';
+import { fetchSceneWeather, fetchWeather, mergeSceneWeather } from '/src/weather/api.js';
 import * as THREE from 'three';
 
 const q = new URLSearchParams(location.search);
@@ -180,7 +180,7 @@ uniform vec3 uDir; uniform float uJit, uQual; void main(){ vec3 rd = normalize(u
   // Prévision réelle (Open-Meteo, ICON puis GFS) du lieu du banc: rangées horaires complètes, avec les trois heures précédentes.
   async real() {
     const w = await fetchWeather(lat, lng); if (!w || !w.data) throw new Error('météo indisponible: ' + JSON.stringify(w && w.error));
-    const H = w.data.hourly; return H.map((h, i) => ({ ...h, prev: [1, 2, 3].map(k => H[i - k] || null), next: H[i + 1] || null, cls: classifyClouds(h) }));
+    const H = mergeSceneWeather(w.data, await fetchSceneWeather(lat, lng, w.data)).hourly; return H.map((h, i) => ({ ...h, prev: [1, 2, 3].map(k => H[i - k] || null), next: H[i + 1] || null, cls: classifyClouds(h) }));
   },
   setRow(row) { curMs = new Date(row.time).getTime() + 1800000; e.setTime(curMs); e.setWeather(row); },
   // Glissement du curseur simulé: à chaque image, l'heure avance de minPerFrame minutes (comme l'animation du curseur de la

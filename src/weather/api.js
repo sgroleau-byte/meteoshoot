@@ -258,10 +258,12 @@ export const fetchSmoke = async (lat, lng) => {
 // Orage et averses (vue 3D, 8 octobre 2026): code météo brut (80 à 82 averses, 95 à 99 orage), rayonnement direct sur le sol
 // horizontal et diffus (W/m², moyennes de l'heure précédente; le diffus sert à la 3D quand sunFraction est trop sombre pour
 // être calculé, v633.194) et nuage convectif d'ICON, base et épaisseur en mètres (0: aucun). GFS n'a
-// pas de nuage convectif; les 36 premières heures (celles de la 3D) viennent d'ICON tant qu'il répond.
+// pas de nuage convectif; les 36 premières heures (celles de la 3D) viennent d'ICON tant qu'il répond. Le code et le rayonnement
+// sont dans chaque rangée de la prévision; le nuage convectif vient des données de la 3D (fetchSceneWeather).
+const radiation = (h, i) => ({ wc: h.weathercode?.[i] ?? null, direct: h.direct_radiation?.[i] ?? null, diffuse: h.diffuse_radiation?.[i] ?? null });
 const convective = (h, i) => {
   const b = h.convective_cloud_base?.[i], t = h.convective_cloud_top?.[i];
-  return { wc: h.weathercode?.[i] ?? null, direct: h.direct_radiation?.[i] ?? null, diffuse: h.diffuse_radiation?.[i] ?? null, convBase: b > 0 ? Math.round(b) : 0, convDepth: b > 0 && t > b ? Math.round(t - b) : 0 };
+  return { convBase: b > 0 ? Math.round(b) : 0, convDepth: b > 0 && t > b ? Math.round(t - b) : 0 };
 };
 
 // Forme des nuages (vue 3D, 9 octobre 2026), d'ICON: profil vertical de la nébulosité sur 12 niveaux de pression (1000 à
@@ -308,6 +310,13 @@ export const fogTopFrom = (h, i, elev) => {
   return elev + 2000;
 };
 
+// Données de la liste, de la fiche, de la Route et de la météo de la position (15 octobre 2026): 10 horaires et 5
+// quotidiennes par modèle, soit 1,5 appel chez Open-Meteo, qui compte une requête pour chaque tranche de 10 données. Les
+// données de la vue 3D (nuages moyens, hauts et par altitude, nuage convectif, brouillard) triplaient ce poids à chaque
+// ouverture de la liste alors que la 3D sert rarement: fetchSceneWeather les demande seulement quand la 3D s'affiche.
+const HOURLY_KEYS = ['temperature_2m', 'weathercode', 'windspeed_10m', 'windgusts_10m', 'cloudcover', 'precipitation', 'precipitation_probability', 'direct_radiation', 'diffuse_radiation', 'cloudcover_low'];
+const DAILY_KEYS = ['weathercode', 'temperature_2m_max', 'temperature_2m_min', 'sunrise', 'sunset'];
+
 export const fetchWeather = async (lat, lng) => {
   // Hit mémoire frais (< 30 min): on resserre sans toucher au réseau. Ce sont des données
   // d'un succès récent, donc fraîches (fromCache:false, pas le badge "stale"). Court-circuit
@@ -323,20 +332,15 @@ export const fetchWeather = async (lat, lng) => {
   // les jours qu'il couvre, GFS (portee 16 j) pour completer jusqu'a 10 jours. La sortie
   // garde exactement la meme forme qu'une reponse Open-Meteo unique: ni l'affichage ni le
   // parsing plus bas ne changent.
-  const qs = `latitude=${lat}&longitude=${lng}&hourly=temperature_2m,weathercode,windspeed_10m,windgusts_10m,cloudcover,precipitation,precipitation_probability,direct_radiation,diffuse_radiation,convective_cloud_base,convective_cloud_top,${SKY_KEYS.join(',')},cloudcover_low,cloudcover_mid,cloudcover_high&daily=weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset&timezone=America/Toronto&forecast_days=10`;
-  // Brouillard (vue 3D): seul GFS (avec HRRR, 3 km, sur le sud du Québec) donne la visibilité ici; ICON, GEM et ECMWF
-  // ne la donnent pas. L'humidité au sol et aux niveaux de pression bas (avec leur altitude) donne le haut de la nappe.
-  const qsGfs = qs.replace('cloudcover_high&daily=', `cloudcover_high,${FOG_KEYS_GFS.join(',')}&daily=`);
+  const qs = `latitude=${lat}&longitude=${lng}&hourly=${HOURLY_KEYS.join(',')}&daily=${DAILY_KEYS.join(',')}&timezone=America/Toronto&forecast_days=10`;
   const [iconRes, gfsRes, smokeMap] = await Promise.all([
     fetchOpenMeteoModel('dwd-icon', qs),
-    fetchOpenMeteoModel('gfs', qsGfs),
+    fetchOpenMeteoModel('gfs', qs),
     fetchSmoke(lat, lng),   // ne rejette jamais: {} si pas de fumee / hors saison / panne
   ]);
   const icon = iconRes.data || null;
   const gfs = gfsRes.data || null;
 
-  const HOURLY_KEYS = ['temperature_2m', 'weathercode', 'windspeed_10m', 'windgusts_10m', 'cloudcover', 'precipitation', 'precipitation_probability', 'direct_radiation', 'diffuse_radiation', 'cloudcover_low', 'cloudcover_mid', 'cloudcover_high', 'convective_cloud_base', 'convective_cloud_top', ...SKY_KEYS];
-  const DAILY_KEYS = ['weathercode', 'temperature_2m_max', 'temperature_2m_min', 'sunrise', 'sunset'];
   const dateOf = (t) => String(t).slice(0, 10);
 
   const gfsOk = !!(gfs && gfs.hourly && gfs.daily && gfs.daily.time);
@@ -394,24 +398,14 @@ export const fetchWeather = async (lat, lng) => {
   HOURLY_KEYS.forEach((k) => { data.hourly[k] = []; });
   DAILY_KEYS.forEach((k) => { data.daily[k] = []; });
   data.daily.model = []; // 'icon' ou 'gfs' par jour: l'indice d'opportunite ne sort que sur ICON.
-
-  // Visibilité et épaisseur de la nappe au-dessus du sol (le haut moins l'altitude du lieu): toujours de GFS, quel que
-  // soit le modèle du jour. Une épaisseur plutôt qu'une altitude: la 3D la pose sur son propre sol (relief LiDAR, ou sol
-  // plat en attendant), qui diffère de l'altitude du modèle de quelques mètres à plusieurs dizaines.
-  data.hourly.visibility = []; data.hourly.fogThick = [];
-  const elev = gfsOk ? (gfs.elevation ?? 0) : 0;
-  hourlyTimes.forEach((t) => {
-    const gi = gfsOk ? gfsHourIdx[t] : null;
-    data.hourly.visibility.push(gi != null ? (gfs.hourly.visibility?.[gi] ?? null) : null);
-    const top = gi != null ? fogTopFrom(gfs.hourly, gi, elev) : null;
-    data.hourly.fogThick.push(top != null ? Math.max(10, Math.round(top - elev)) : null);
-  });
+  data.hourly.model = []; // idem par heure: les données de la 3D d'une heure viennent du même modèle (fetchSceneWeather)
 
   hourlyTimes.forEach((t) => {
     const useIcon = iconOk && dateOf(t) <= lastIconDate && (t in iconHourIdx);
     const src = useIcon ? icon : gfs;
     const si = useIcon ? iconHourIdx[t] : gfsHourIdx[t];
     data.hourly.time.push(t);
+    data.hourly.model.push(useIcon ? 'icon' : 'gfs');
     HOURLY_KEYS.forEach((k) => {
       const arr = src && src.hourly ? src.hourly[k] : null;
       data.hourly[k].push(arr && si != null ? (arr[si] ?? null) : null);
@@ -500,7 +494,7 @@ export const fetchWeather = async (lat, lng) => {
   };
 
   const formatted = {
-    hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), gust: data.hourly.windgusts_10m?.[i] != null ? Math.round(data.hourly.windgusts_10m[i]) : null, cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, precipProb: data.hourly.precipitation_probability?.[i] ?? null, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), cloudLow: data.hourly.cloudcover_low?.[i] ?? null, cloudMid: data.hourly.cloudcover_mid?.[i] ?? null, cloudHigh: data.hourly.cloudcover_high?.[i] ?? null, visibility: data.hourly.visibility?.[i] ?? null, fogThick: data.hourly.fogThick?.[i] ?? null, smoke: smokeMap[dateOf(t)] || 0, icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]), ...convective(data.hourly, i), ...skyProfile(data.hourly, i, iconOk ? (icon.elevation ?? elev) : elev) })),
+    hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), gust: data.hourly.windgusts_10m?.[i] != null ? Math.round(data.hourly.windgusts_10m[i]) : null, cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, precipProb: data.hourly.precipitation_probability?.[i] ?? null, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), cloudLow: data.hourly.cloudcover_low?.[i] ?? null, smoke: smokeMap[dateOf(t)] || 0, icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]), ...radiation(data.hourly, i), model: data.hourly.model[i] })),
     daily: data.daily.time.map((t,i) => {
       const stats = getDailyStats(t);
       // Use hourly-derived icon when available, fallback to daily weathercode
@@ -519,4 +513,74 @@ export const fetchWeather = async (lat, lng) => {
   // malgré les nouveaux essais), la prochaine ouverture retente plutôt que de garder 30 min des jours moins fiables.
   if (iconOk && gfsOk) weatherMemCache.set(memKey, { data: formatted, fetchedAt });
   return { data: formatted, fromCache: false, cachedAt: fetchedAt };
+};
+
+// Données de la vue 3D (15 octobre 2026), demandées seulement quand la 3D s'affiche, sur 3 jours (elle regarde 36 h) et pour
+// ce seul lieu: d'ICON, nuages moyens et hauts, nuage convectif et profil des nuages par altitude (avec la température, pour
+// la base des cumulus); de GFS, visibilité et nappe de brouillard. Une heure venue de GFS dans la prévision (ICON en panne)
+// prend aussi ses nuages chez GFS, comme avant. Rend une table heure -> champs à fondre dans les rangées de fetchWeather
+// (mergeSceneWeather), ou null si rien n'a répondu et qu'aucune copie n'est gardée.
+const SCENE_SKY_KEYS = ['temperature_2m', 'cloudcover_mid', 'cloudcover_high', 'convective_cloud_base', 'convective_cloud_top', ...SKY_KEYS];
+// Gardées 30 min en mémoire, et une copie locale (6 lieux, 24 h) sert de filet quand Open-Meteo ne répond pas, comme pour la
+// prévision. La clé porte le modèle des heures: des nuages de GFS (ICON en panne) ne servent jamais à des heures d'ICON.
+const SCENE_CACHE_KEY = 'sp-scene-weather-cache';
+const sceneMemCache = new Map(); // "lat,lng|modèle" -> { data, fetchedAt }
+const readSceneCache = (key) => {
+  try { const e = JSON.parse(localStorage.getItem(SCENE_CACHE_KEY) || '{}')[key]; return e && Date.now() - e.cachedAt < WEATHER_CACHE_TTL_MS ? e.data : null; } catch (e) { return null; }
+};
+const writeSceneCache = (key, data) => {
+  try {
+    const all = JSON.parse(localStorage.getItem(SCENE_CACHE_KEY) || '{}');
+    all[key] = { data, cachedAt: Date.now() };
+    localStorage.setItem(SCENE_CACHE_KEY, JSON.stringify(Object.fromEntries(Object.entries(all).sort((a, b) => b[1].cachedAt - a[1].cachedAt).slice(0, 6))));
+  } catch (e) { /* quota plein: pas de copie */ }
+};
+export const fetchSceneWeather = async (lat, lng, weather) => {
+  const hours = weather?.hourly || [];
+  if (!hours.length) return null;
+  // Heures des trois jours demandés (la prévision commence d'habitude à minuit aujourd'hui; une prévision gardée depuis la
+  // veille commence un jour plus tôt, d'où quatre jours ici).
+  const gfsRows = hours.slice(0, 96).some((h) => h.model === 'gfs');
+  const key = `${weatherCacheKey(lat, lng)}|${gfsRows ? 'gfs' : 'icon'}`;
+  const mem = sceneMemCache.get(key);
+  if (mem && Date.now() - mem.fetchedAt < WEATHER_MEM_TTL_MS) return mem.data;
+  const qs = (keys) => `latitude=${lat}&longitude=${lng}&hourly=${[...new Set(keys)].join(',')}&timezone=America/Toronto&forecast_days=3`;
+  const ok = (r) => (r.data && r.data.hourly && r.data.hourly.time ? r.data : null);
+  const [iconRes, gfsRes] = await Promise.all([
+    fetchOpenMeteoModel('dwd-icon', qs(SCENE_SKY_KEYS)),
+    fetchOpenMeteoModel('gfs', qs(gfsRows ? [...FOG_KEYS_GFS, ...SCENE_SKY_KEYS] : FOG_KEYS_GFS)),
+  ]);
+  const icon = ok(iconRes), gfs = ok(gfsRes);
+  // Nuages de GFS: déjà dans sa réponse s'il fournit des heures de la prévision; sinon demandés seulement si ICON a échoué.
+  const gfsSky = gfsRows ? gfs : (icon ? null : ok(await fetchOpenMeteoModel('gfs', qs(SCENE_SKY_KEYS))));
+  if (!icon && !gfs && !gfsSky) return readSceneCache(key);
+  const indexOf = (res) => { const m = {}; if (res) res.hourly.time.forEach((t, i) => { m[t] = i; }); return m; };
+  const iconIdx = indexOf(icon), gfsIdx = indexOf(gfs), skyIdx = indexOf(gfsSky);
+  const out = {};
+  hours.forEach((h) => {
+    if (!(h.time in iconIdx) && !(h.time in gfsIdx) && !(h.time in skyIdx)) return;
+    const x = {};
+    // Nuages: modèle de l'heure d'abord, l'autre à défaut. Altitude du sol de ce modèle pour les hauteurs.
+    const order = h.model === 'gfs' ? [[gfsSky, skyIdx], [icon, iconIdx]] : [[icon, iconIdx], [gfsSky, skyIdx]];
+    const src = order.find(([res, idx]) => res && h.time in idx);
+    if (src) {
+      const [res, idx] = src, i = idx[h.time];
+      Object.assign(x, { cloudMid: res.hourly.cloudcover_mid?.[i] ?? null, cloudHigh: res.hourly.cloudcover_high?.[i] ?? null }, convective(res.hourly, i), skyProfile(res.hourly, i, res.elevation ?? 0));
+    }
+    // Visibilité et épaisseur de la nappe au-dessus du sol (le haut moins l'altitude du lieu): toujours de GFS, quel que
+    // soit le modèle de l'heure. Une épaisseur plutôt qu'une altitude: la 3D la pose sur son propre sol (relief LiDAR, ou sol
+    // plat en attendant), qui diffère de l'altitude du modèle de quelques mètres à plusieurs dizaines.
+    const gi = gfs ? gfsIdx[h.time] : null, elev = gfs?.elevation ?? 0;
+    x.visibility = gi != null ? (gfs.hourly.visibility?.[gi] ?? null) : null;
+    const top = gi != null ? fogTopFrom(gfs.hourly, gi, elev) : null;
+    x.fogThick = top != null ? Math.max(10, Math.round(top - elev)) : null;
+    out[h.time] = x;
+  });
+  if (icon && gfs) { sceneMemCache.set(key, { data: out, fetchedAt: Date.now() }); writeSceneCache(key, out); }
+  return out;
+};
+// Prévision avec les données de la 3D fondues dans ses rangées horaires (les heures sans données restent telles quelles).
+export const mergeSceneWeather = (weather, scene) => {
+  if (!weather || !weather.hourly || !scene) return weather;
+  return { ...weather, hourly: weather.hourly.map((h) => (scene[h.time] ? { ...h, ...scene[h.time] } : h)) };
 };
