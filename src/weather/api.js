@@ -112,12 +112,15 @@ const withOpenMeteoSlot = async (task) => {
   }
 };
 // Délai maximal d'un appel (réponse normale: moins de 1,5 s). Sans lui, une connexion restée suspendue (au réveil du Mac,
-// réseau qui change) gardait sa place dans la file jusqu'à ce que le système abandonne, une minute environ, et toute la
-// liste attendait derrière (14 octobre 2026). Un appel abandonné ou une coupure réseau est retenté deux fois, sur une
-// connexion neuve, avec un délai qui s'allonge: une connexion morte est vite remplacée, mais un serveur seulement lent
-// a quand même le temps de répondre (un délai fixe l'aurait abandonné à chaque essai).
-const OPEN_METEO_TIMEOUT_MS = [12000, 25000, 45000];
-const OPEN_METEO_NETWORK_RETRY_MS = [400, 1500];
+// réseau qui change) garde sa place dans la file jusqu'à ce que le système abandonne. Mais le 15 octobre 2026, la vraie
+// lenteur venait du serveur: Open-Meteo surchargé, 31 s pour une réponse complète, puis plus rien en 90 s (« The service
+// is overloaded »): couper tôt ne ferait que relancer la même demande sur un serveur débordé. D'où un délai large, un
+// seul nouvel essai sur une connexion neuve, et deux essais rapprochés quand le serveur se dit surchargé (502, 503, 504):
+// un raté passager est absorbé, mais une vraie panne affiche vite la copie locale et la bannière (la liste attend la vraie
+// prévision depuis la v633.208, elle ne doit pas rester vide longtemps).
+const OPEN_METEO_TIMEOUT_MS = [40000, 60000];
+const OPEN_METEO_NETWORK_RETRY_MS = [1000];
+const OPEN_METEO_OVERLOAD_RETRY_MS = [1500, 4000];
 const fetchOpenMeteoOnce = async (url, timeoutMs) => {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
@@ -157,11 +160,12 @@ export const fetchOpenMeteoModel = async (endpoint, qs) => {
   const pending = openMeteoInFlight.get(url);
   if (pending) return pending;
   const run = (async () => {
-    for (let refused = 0, lost = 0; ;) {
+    for (let refused = 0, lost = 0, overloaded = 0; ;) {
       // La pause se fait hors de la file, pour ne pas bloquer une place pendant l'attente.
       const result = await withOpenMeteoSlot(() => fetchOpenMeteoOnce(url, OPEN_METEO_TIMEOUT_MS[lost]));
       let wait;
       if (result.status === 429 && refused < OPEN_METEO_RETRY_MS.length) wait = OPEN_METEO_RETRY_MS[refused++];
+      else if ([502, 503, 504].includes(result.status) && overloaded < OPEN_METEO_OVERLOAD_RETRY_MS.length) wait = OPEN_METEO_OVERLOAD_RETRY_MS[overloaded++];
       else if (result.error === 'network' && lost < OPEN_METEO_NETWORK_RETRY_MS.length) wait = OPEN_METEO_NETWORK_RETRY_MS[lost++];
       else return result;
       await new Promise((resolve) => setTimeout(resolve, wait + Math.random() * 400));
