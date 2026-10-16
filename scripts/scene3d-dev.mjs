@@ -1,4 +1,4 @@
-// Serveur local des fonctions /api/scene3d, /api/terrain, /api/horizon, /api/apple-snapshot, /api/metar et /api/goes pour le développement (npm run dev la joint par le
+// Serveur local des fonctions /api/scene3d, /api/terrain, /api/horizon, /api/apple-snapshot, /api/metar, /api/goes et /api/om pour le développement (npm run dev la joint par le
 // proxy Vite: /api -> localhost:3999). En production, Vercel sert api/scene3d.js directement.
 import http from 'http';
 import handler from '../api/scene3d.js';
@@ -7,6 +7,11 @@ import horizon from '../api/horizon.js';
 import appleSnapshot from '../api/apple-snapshot.js';
 import metar from '../api/metar.js';
 import goes from '../api/goes.js';
+import om from '../api/om.js';
+import { readFileSync, existsSync } from 'fs';
+// Clé Open-Meteo en local: fichier gardé hors du dépôt (sinon le relais utilise les serveurs ouverts)
+const OM_KEY_FILE = '/Users/sgroleau/Documents/_METEOSHOOT/cles-verif/open-meteo.txt';
+if (!process.env.OPEN_METEO_KEY && existsSync(OM_KEY_FILE)) process.env.OPEN_METEO_KEY = readFileSync(OM_KEY_FILE, 'utf8').trim();
 
 const port = Number(process.env.PORT) || 3999;
 http.createServer((req, res) => {
@@ -16,5 +21,6 @@ http.createServer((req, res) => {
   if (req.url.startsWith('/api/apple-snapshot')) { appleSnapshot(req, res); return; }
   if (req.url.startsWith('/api/metar')) { metar(req, res); return; }
   if (req.url.startsWith('/api/goes')) { goes(req, res); return; }
+  if (req.url.startsWith('/api/om')) { om(req, res); return; }
   res.statusCode = 404; res.end('introuvable');
 }).listen(port, () => console.log(`scene3d: http://localhost:${port}/api/scene3d?lat=46.8367&lng=-71.2336`));

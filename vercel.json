@@ -21,6 +21,9 @@
     "api/verif-snapshot.js": {
       "maxDuration": 120,
       "includeFiles": "src/weather/blendModel.json"
+    },
+    "api/om.js": {
+      "maxDuration": 60
     }
   },
   "github": {

@@ -1,6 +1,7 @@
 import { SHOOT_WINDOWS, isGoodWeather, sunlitFraction, weatherCodeIcon } from './iconsLogic.js';
 import { fetchObserved, applyObservedToHourly, applyNowcast } from './nowcast.js';
 import { clearDirHour } from './solar.js';
+import { openMeteoProxyUrl } from './openMeteoUrl.js';
 import { BLEND_MEMBERS, MEMBER_API, loadBlendModel, applyBlend } from './blend.js';
 
 // ===== WEATHER API =====
@@ -104,6 +105,7 @@ const OPEN_METEO_RETRY_MS = [600, 1500, 3000, 6000];
 let openMeteoActive = 0;
 const openMeteoWaiting = [];
 const openMeteoInFlight = new Map(); // url -> Promise du résultat
+let relayDownUntil = 0; // relais Open-Meteo (api/om.js) en panne: appels directs aux serveurs ouverts jusqu'à cette heure
 const withOpenMeteoSlot = async (task) => {
   // Une place qui se libère passe directement au premier en attente (le compte ne bouge pas): aucun nouvel appel ne
   // peut s'intercaler et dépasser la limite.
@@ -159,17 +161,27 @@ export const fetchOpenMeteoModel = async (endpoint, qs) => {
   const sim = getWeatherSim();
   if (sim === 'network') return { error: 'network' };
   if (sim === 'api') return { error: 'api', status: 503 };
+  // Forfait commercial (15 octobre 2026): les appels passent par le relais /api/om, qui ajoute la clé côté serveur. Si le
+  // relais manque (développement local sans lui: 404) ou tombe lui-même (500), les serveurs ouverts prennent le relais.
   const url = `https://api.open-meteo.com/v1/${endpoint}?${qs}`;
   const pending = openMeteoInFlight.get(url);
   if (pending) return pending;
   const run = (async () => {
+    let target = Date.now() < relayDownUntil ? url : openMeteoProxyUrl(endpoint, qs);
+    // Bascule vers les serveurs ouverts: relais absent (404), refus du relais lui-même (autre 4xx que 429: un vrai paramètre
+    // invalide redonnera la même erreur, sans dommage), clé refusée ou panne du relais (500), réseau, ou nouveaux essais
+    // épuisés sur le relais. La panne est retenue 5 minutes: les appels suivants vont directement aux serveurs ouverts.
+    const toDirect = () => { target = url; relayDownUntil = Date.now() + 5 * 60000; };
     for (let refused = 0, lost = 0, overloaded = 0; ;) {
       // La pause se fait hors de la file, pour ne pas bloquer une place pendant l'attente.
-      const result = await withOpenMeteoSlot(() => fetchOpenMeteoOnce(url, OPEN_METEO_TIMEOUT_MS[lost]));
+      const result = await withOpenMeteoSlot(() => fetchOpenMeteoOnce(target, OPEN_METEO_TIMEOUT_MS[lost]));
+      const st = typeof result.status === 'number' ? result.status : 0;
+      if (target !== url && ((st >= 400 && st < 500 && st !== 429) || st === 500 || (result.error === 'network' && lost === 0))) { toDirect(); continue; }
       let wait;
       if (result.status === 429 && refused < OPEN_METEO_RETRY_MS.length) wait = OPEN_METEO_RETRY_MS[refused++];
       else if ([502, 503, 504].includes(result.status) && overloaded < OPEN_METEO_OVERLOAD_RETRY_MS.length) wait = OPEN_METEO_OVERLOAD_RETRY_MS[overloaded++];
       else if (result.error === 'network' && lost < OPEN_METEO_NETWORK_RETRY_MS.length) wait = OPEN_METEO_NETWORK_RETRY_MS[lost++];
+      else if (target !== url && result.error) { toDirect(); refused = 0; overloaded = 0; lost = 0; continue; }
       else return result;
       await new Promise((resolve) => setTimeout(resolve, wait + Math.random() * 400));
     }

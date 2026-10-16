@@ -9,6 +9,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SERVICE_ROLE_KEY")!;
 const REPORT_TOKEN = Deno.env.get("VERIF_REPORT_TOKEN");
+const SNAPSHOT_TOKEN = Deno.env.get("VERIF_SNAPSHOT_TOKEN") ?? "";
 const SNAPSHOT_URL = "https://www.meteoshoot.com/api/verif-snapshot";
 
 const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status, headers: { "Content-Type": "application/json" } });
@@ -32,7 +33,7 @@ Deno.serve(async (req) => {
 
   const { data: last } = await db.from("cloud_verif").select("issued_at").order("issued_at", { ascending: false }).limit(1);
   if (last && last[0] && Date.now() - Date.parse(last[0].issued_at) < 150 * 60000) return json({ skipped: true, last: last[0].issued_at });
-  const res = await fetch(`${SNAPSHOT_URL}?h=${Math.floor(Date.now() / 3600000)}`, { signal: AbortSignal.timeout(110000) });
+  const res = await fetch(SNAPSHOT_URL, { headers: { "x-verif-token": SNAPSHOT_TOKEN }, signal: AbortSignal.timeout(110000) });
   if (!res.ok) return json({ error: `instantané ${res.status}` }, 502);
   const snap = await res.json();
   if (!snap || !Array.isArray(snap.stations) || !snap.stations.length) return json({ error: "instantané vide" }, 502);

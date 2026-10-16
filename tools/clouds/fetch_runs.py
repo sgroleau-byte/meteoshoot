@@ -7,7 +7,8 @@ S = [s for s in json.load(open('stations.json')) if s['id'] not in AUTO]
 lat = ','.join(str(s['lat']) for s in S); lon = ','.join(str(s['lon']) for s in S)
 MODELS = 'icon_global,ecmwf_ifs025,ecmwf_aifs025_single,ukmo_global_deterministic_10km,gfs_global,gfs_hrrr,gem_hrdps_continental,gem_regional'
 VARS = 'cloud_cover,cloud_cover_low,direct_radiation'
-KEY = os.environ.get('OPEN_METEO_KEY')  # forfait payant (facultatif): lu dans l'environnement, jamais affiché
+# Les archives exigent le forfait Professional: clé seulement si elle est donnée exprès (le forfait Standard ne les ouvre pas)
+KEY = os.environ.get('OPEN_METEO_KEY_PRO')  # forfait payant (facultatif): lu dans l'environnement, jamais affiché
 BASE = 'https://customer-single-runs-api.open-meteo.com/v1/forecast' if KEY else 'https://single-runs-api.open-meteo.com/v1/forecast'
 WEIGHT = len(S) * max(1, (3 * 8) / 10)  # 3 variables x 8 modèles par lieu
 used = {}
@@ -22,7 +23,7 @@ while d <= dt.date(2026, 10, 14):
         print('quota du jour atteint, reprise à', nxt.isoformat(), flush=True); time.sleep(max(60, (nxt - dt.datetime.now(dt.timezone.utc)).total_seconds())); continue
     models = MODELS.split(',')
     INTERNAL = {'cmc_gem_hrdps': 'gem_hrdps_continental', 'cmc_gem_rdps': 'gem_regional', 'ncep_hrrr_conus': 'gfs_hrrr', 'ukmo_global_deterministic_10km': 'ukmo_global_deterministic_10km'}
-    t0 = time.time()
+    t0 = time.time(); ok_try = True
     for k in range(10):
         url = f'{BASE}?latitude={lat}&longitude={lon}&run={d.isoformat()}T12:00&models={",".join(models)}&hourly={VARS}&forecast_days=3&timezone=GMT' + (f'&apikey={KEY}' if KEY else '')
         try:
@@ -39,9 +40,14 @@ while d <= dt.date(2026, 10, 14):
                 raw = mm.group(1)
                 name = next((v for k2, v in [('hrdps', 'gem_hrdps_continental'), ('rdps', 'gem_regional'), ('hrrr', 'gfs_hrrr'), ('ukmo', 'ukmo_global_deterministic_10km'), ('aifs', 'ecmwf_aifs025_single'), ('ifs', 'ecmwf_ifs025'), ('icon', 'icon_global'), ('gfs', 'gfs_global')] if k2 in raw), None)
                 if name in models: models.remove(name); print(d, 'sans', name, flush=True); continue
+            if 'Daily API request limit' in body and not KEY:
+                nxt = dt.datetime.combine(dt.datetime.now(dt.timezone.utc).date() + dt.timedelta(days=1), dt.time(0, 10), dt.timezone.utc)
+                print('quota quotidien épuisé, reprise à', nxt.isoformat(), flush=True); time.sleep(max(60, (nxt - dt.datetime.now(dt.timezone.utc)).total_seconds())); continue
             print('HTTP', e.code, d, body[:150], flush=True); time.sleep(60 * (k + 1))
         except Exception as e:
             print('err', d, str(e)[:200], flush=True); time.sleep(30 * (k + 1))
-    d += dt.timedelta(days=1)
+    else:
+        ok_try = False; print('jour manqué', d, flush=True)
+    if os.path.exists(f) or not ok_try: d += dt.timedelta(days=1)  # jour définitivement en échec: noté, on passe
     if not KEY: time.sleep(max(0, 3600 * WEIGHT / 4800 - (time.time() - t0)))  # rythme horaire
 print('FIN RUNS', flush=True)

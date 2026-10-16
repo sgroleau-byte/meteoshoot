@@ -87,7 +87,14 @@ Fausses alarmes à +1 h (ciel réel au plus 2/8, annoncé à 40 % ou plus) : 30 
    - Les traces de nuages moyens (moins de 8 %) ne sont pas dessinées.
    - La légende affiche une ligne « Observé ... ».
 
-## 4. Pièges
+## 4. Forfait Open-Meteo (15 octobre 2026)
+
+- Forfait Standard (usage commercial, 1 million d'appels par mois, serveurs réservés). Il n'ouvre pas les archives de prévisions : le banc de vérification utilise les serveurs ouverts.
+- Les appels de l'app passent par le relais `api/om.js` : la clé reste côté serveur (variable Vercel `OPEN_METEO_KEY`), et les réponses sont gardées 15 minutes par le CDN. Si le relais manque ou tombe, l'app revient aux serveurs ouverts.
+- Garde-fous du relais : un seul lieu pour la météo (plusieurs pour le relief), au plus 16 jours de prévision, 60 variables et 8 modèles.
+- En développement local, `scripts/scene3d-dev.mjs` lit la clé dans un fichier gardé hors du dépôt.
+
+## 5. Pièges
 
 - Le profil vertical des nuages qu'Open-Meteo donne pour ICON est calculé à partir de l'humidité (méthode de Sundqvist), pas par le schéma nuageux du modèle.
 - AIFS n'a qu'une valeur aux 6 h chez Open-Meteo ; les heures intermédiaires sont interpolées.

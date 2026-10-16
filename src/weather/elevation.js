@@ -1,5 +1,12 @@
 import { TBL_ELEVATION, supabase } from '../lib/supabase.js';
 import { loadHorizon } from '../scene3d/terrain.js';
+import { openMeteoProxyUrl } from './openMeteoUrl.js';
+
+// Altitude Open-Meteo par le relais du forfait commercial (api/om.js), serveurs ouverts si le relais manque ou tombe
+const fetchElevation = async (qs) => {
+  try { const r = await fetch(openMeteoProxyUrl('elevation', qs)); if (r.ok) return r; } catch (e) { /* relais injoignable */ }
+  return fetch(`https://api.open-meteo.com/v1/elevation?${qs}`);
+};
 
 // ===== TERRAIN ELEVATION PROFILE =====
 // Fetches horizon profile around a point (24 directions, 3km radius)
@@ -64,7 +71,7 @@ export const getElevationProfile = async (lat, lng) => {
   } catch(e) { 
     // Fallback to Open-Meteo
     try {
-      const res2 = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lng}`);
+      const res2 = await fetchElevation(`latitude=${lat}&longitude=${lng}`);
       const j2 = await res2.json();
       observerElev = j2.elevation?.[0] ?? j2.elevation ?? 0;
     } catch(e2) { console.warn('Observer elevation error:', e2); return null; }
@@ -97,7 +104,7 @@ export const getElevationProfile = async (lat, lng) => {
       const bLats = allLats.slice(i, i + batchSize).map(v => v.toFixed(5)).join(',');
       const bLngs = allLngs.slice(i, i + batchSize).map(v => v.toFixed(5)).join(',');
       try {
-        const res2 = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${bLats}&longitude=${bLngs}`);
+        const res2 = await fetchElevation(`latitude=${bLats}&longitude=${bLngs}`);
         const j2 = await res2.json();
         const elArr = Array.isArray(j2.elevation) ? j2.elevation : [j2.elevation];
         for (let k = 0; k < elArr.length; k++) elevations[i + k] = elArr[k] ?? 0;

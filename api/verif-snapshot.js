@@ -3,8 +3,7 @@
 // couverture combinée, puis correction par le ciel observé des premières heures) et relève les prévisions publiées par
 // Environnement Canada pour la ville la plus proche (horaire sur 24 h, par période sur 6 jours). Appelée toutes les 6 h par
 // la fonction Supabase cloud-verif, qui range l'instantané dans la table privée cloud_verif; la comparaison au ciel
-// observé se fait plus tard (tools/clouds/verif_live.py). Réponse gardée 2 h par le CDN: des appels répétés ne relancent
-// pas le calcul.
+// observé se fait plus tard (tools/clouds/verif_live.py). Réservée à cette fonction (jeton partagé VERIF_SNAPSHOT_TOKEN).
 //
 // GET /api/verif-snapshot  ->  { issued, stations: [{ id, lat, lon, f: { t0, icon, iconLow, comb, combLow, now, nowLow }, eccc }] }
 // Essai local: node api/verif-snapshot.js --test
@@ -15,6 +14,7 @@ import { applyObservedToHourly } from '../src/weather/nowcast.js';
 import { clearDirHour } from '../src/weather/solar.js';
 import { goesAt } from './goes.js';
 import { nearbyObs } from './metar.js';
+import { openMeteoUrl } from './om.js';
 
 export const maxDuration = 120;
 const STATIONS = [
@@ -29,7 +29,7 @@ const STATIONS = [
 const HOURS = 49; // de l'heure en cours à +48 h
 
 async function om(path, attempt = 0) {
-  const res = await fetch(`https://api.open-meteo.com/v1/${path}`, { signal: AbortSignal.timeout(45000) });
+  const res = await fetch(openMeteoUrl(path), { signal: AbortSignal.timeout(45000) }); // serveurs réservés avec la clé du forfait
   if ((res.status === 429 || res.status >= 500) && attempt < 3) { await new Promise((r) => setTimeout(r, 4000 * (attempt + 1))); return om(path, attempt + 1); }
   if (!res.ok) throw new Error(`open-meteo ${res.status}`);
   const j = await res.json(); return Array.isArray(j) ? j : [j];
@@ -89,14 +89,17 @@ export async function snapshot() {
       eccc: ec,
     });
   }
-  return { issued: new Date(now).toISOString(), version: 'v633.213', stations: out };
+  return { issued: new Date(now).toISOString(), version: 'v633.214', stations: out };
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Type', 'application/json'); res.setHeader('Cache-Control', 'no-store');
+  // Réservé à la fonction Supabase cloud-verif (jeton partagé): l'instantané utilise la clé payante d'Open-Meteo
+  const tok = (process.env.VERIF_SNAPSHOT_TOKEN || '').trim();
+  if (!tok || req.headers['x-verif-token'] !== tok) { res.statusCode = 401; res.end(JSON.stringify({ error: 'refusé' })); return; }
   try {
     const out = await snapshot();
-    res.statusCode = 200; res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=7200');
+    res.statusCode = 200;
     res.end(JSON.stringify(out));
   } catch (e) {
     console.error('[verif-snapshot]', e); res.statusCode = 502; res.end(JSON.stringify({ error: String((e && e.message) || e) }));
