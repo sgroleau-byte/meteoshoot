@@ -1,125 +1,184 @@
-// Correction des premières heures par le ciel observé (15 octobre 2026). Le 11 et le 15 octobre, ICON annonçait 34 à 60 %
-// de nuages bas en fin de journée alors que le satellite et l'aéroport voyaient un ciel presque dégagé depuis des heures.
-// Ici, chaque heure à venir mélange le ciel observé et la prévision (déjà combinée, src/weather/blend.js), le poids de
-// l'observé s'effaçant avec l'échéance: w·observé + (1 - w)·prévision, w = e^(-h/tau). Banc de vérification (12 mois,
-// 33 aéroports avec observateur): c'est la forme qui gagne, devant l'écart reporté (additif) et le rapport. Sur le fond
-// combiné, tau de 2,5 h (3 h pour les nuages bas): écart moyen au ciel observé de 12,4 points sans correction, 8,4 à
-// +1 h, 10,9 à +2 h, 11,7 à +3 h, plus de gain au-delà de 5 h. Voir docs/nuages-verification.md.
+// Correction des premières heures par le ciel observé (15 octobre 2026, recalée le 16 octobre). Le 11 et le 15 octobre,
+// ICON annonçait 34 à 60 % de nuages bas en fin de journée alors que le satellite et l'aéroport voyaient un ciel presque
+// dégagé depuis des heures. Chaque heure à venir corrige la prévision (déjà combinée, src/weather/blend.js) vers les deux
+// sources observées: prévision + ws x (satellite étalonné - prévision) + wa x (aéroport - prévision).
+//
+// Poids appris sur le banc de vérification (docs/nuages-verification.md): 4 mois de satellite GOES-19 (juin à octobre
+// 2026, une image par heure) au-dessus de 22 aéroports avec observateur, la prévision courte combinée comme fond, et
+// l'observateur de l'aéroport comme vérité h heures plus tard; l'aéroport « source » est soit celui du lieu, soit le plus
+// proche voisin (le cas d'un projet loin de l'aéroport). Ce que le banc a appris:
+// - le satellite brut se trompe: de jour, il voit « dégagé » là où l'observateur compte des petits nuages épars (sous
+//   5 % au satellite, l'observateur voit 23 % en moyenne). Le total de jour et les nuages bas de nuit passent donc par
+//   une table d'étalonnage; ailleurs, le satellite brut mélangé à la prévision fait mieux qu'étalonné;
+// - même étalonné, il vaut moins que la prévision seule (écart de 12,0 points contre 11,8 de jour): son poids au moment
+//   présent est d'environ 0,45 (0,4 la nuit et au crépuscule, infrarouge seulement), et s'efface en 2 à 3 h;
+// - l'aéroport du lieu remplace la prévision à l'heure présente et pèse encore 0,8 une heure plus tard; un aéroport à
+//   30 km ne pèse plus que 0,3 (0,5 la nuit, où les nappes basses sont étendues), à 120 km presque rien.
+// L'ancienne version (satellite pris tel quel, poids plein) rendait l'heure présente PIRE que la prévision seule de jour
+// loin d'un aéroport (écart de 11,9 à 14,9 points). Celle-ci, mesurée hors échantillon (tables calées sur une semaine sur
+// deux, vérifiées sur les autres): total de jour 11,9 -> 11,0 sans aéroport, 11,9 -> 9,9 avec un aéroport à moins de 60 km,
+// 11,8 -> 8,9 une heure plus tard au lieu même d'un aéroport; nuages bas de jour 16,5 -> 15,6 sans aéroport. Aussi bonne
+// ou meilleure que l'ancienne dans tous les cas (jour, nuit, distance, échéance).
 //
 // Sources (fonctions serveur): /api/goes (satellite GOES-19: fraction nuageuse par étage dans une boîte d'environ 30 km,
-// toutes les 5 minutes, jusqu'à 50,7° N) et /api/metar (aéroports dans un rayon de 90 km: huitièmes par couche, base, type).
+// toutes les 5 minutes, jusqu'à 50,7° N) et /api/metar (aéroports dans un rayon de 150 km: huitièmes par couche, base, type).
 // Fonctions pures (sauf fetchObserved): le banc les importe telles quelles.
 
+import { sunElevation } from './solar.js';
+
 export const NOWCAST = {
-  tauH: { tot: 2.5, low: 3, mid: 2.5, high: 2.5 }, // décroissance du poids de l'observé (heures): e^(-h/tau)
-  pastH: 1,           // heure passée la plus récente: observé à poids plein (les plus anciennes: historique de l'aéroport)
-  maxAgeMin: 80,      // observation plus vieille: ignorée
-  metarKm: 40,        // portée d'un aéroport: poids e^(-d/40 km), coupé à 90 km
-  satDay: 1.0,        // poids du satellite de jour, et la nuit (infrarouge seulement: nuages bas moins sûrs)
-  satNight: 0.5,
-  satHighBlind: 50,   // au-delà de ce % de nuages hauts, le satellite ne voit plus les nuages bas: on ne les corrige pas par lui
+  pastH: 1,        // heure passée la plus récente: observé du moment (les plus anciennes: historique de l'aéroport)
+  maxAgeMin: 80,   // observation plus vieille: ignorée
+  dayElev: 5,      // jour: soleil à plus de 5° au moment de l'observation (comme le banc)
+  satHighBlind: 50, // au-delà de ce % de nuages moyens et hauts vus d'en haut, le satellite ne sait rien des nuages bas
+  layersKm: 40,    // couches observées (type, base) seulement d'un aéroport à 40 km ou moins
+};
+
+// Tables du banc (tools/clouds/nowcast_fit.py): étalonnage du satellite (valeur observée au sol la plus probable pour
+// chaque valeur brute) et poids par échéance (lignes: h) et distance de l'aéroport (colonnes: km). pairSat et pairAp
+// quand les deux sources sont là, sat quand le satellite est seul, apOnly quand l'aéroport est seul (au nord de 50,7°).
+export const NOWCAST_TABLES = {
+  knots: [0,2,5,10,20,30,40,50,60,70,80,90,95,100], // satellite brut (%)
+  h: [0,1,2,3,4,6], // échéance depuis l'observation (h); nul au-delà de 8 h
+  km: [0, 30, 75, 120], // aéroport: au lieu, moins de 60 km, 60 à 90, 90 à 150 (nul à 150 km et plus)
+  tot: {
+    satDay: [15.2,27.4,30.0,37.2,50.1,54.7,61.4,65.7,71.6,75.3,80.0,84.1,86.1,94.9],
+    satNight: [0.0,2.0,5.0,10.0,20.0,30.0,40.0,50.0,60.0,70.0,80.0,90.0,95.0,100.0], // brut (l'étalonnage n'aide pas ici)
+    day: { sat: [0.45,0.3,0.1,0.05,0.05,0.0], pairSat: [[0.0,0.4,0.35,0.45],[0.0,0.25,0.15,0.3],[0.0,0.05,0.05,0.1],[0.0,0.0,0.0,0.05],[0.0,0.0,0.0,0.0],[0.0,0.0,0.0,0.0]], pairAp: [[1.0,0.3,0.15,0.05],[0.8,0.25,0.15,0.05],[0.35,0.15,0.1,0.05],[0.2,0.1,0.1,0.05],[0.1,0.05,0.05,0.05],[0.05,0.05,0.05,0.0]], apOnly: [[1.0,0.55,0.2,0.1],[1.0,0.35,0.15,0.1],[0.35,0.15,0.1,0.05],[0.2,0.05,0.05,0.05],[0.1,0.05,0.05,0.05],[0.05,0.0,0.0,0.0]] },
+    night: { sat: [0.4,0.35,0.2,0.1,0.05,0.05], pairSat: [[0.0,0.25,0.35,0.4],[0.0,0.25,0.3,0.35],[0.0,0.1,0.2,0.15],[0.0,0.1,0.1,0.1],[0.0,0.05,0.05,0.05],[0.0,0.05,0.05,0.0]], pairAp: [[1.0,0.5,0.4,0.1],[0.8,0.35,0.35,0.1],[0.45,0.2,0.2,0.05],[0.25,0.05,0.05,0.0],[0.1,0.05,0.05,0.0],[0.05,0.0,0.0,0.0]], apOnly: [[1.0,0.65,0.35,0.1],[1.0,0.45,0.3,0.05],[0.45,0.2,0.2,0.05],[0.2,0.1,0.1,0.05],[0.1,0.05,0.05,0.0],[0.05,0.0,0.0,0.0]] },
+  },
+  low: {
+    satDay: [0.0,2.0,5.0,10.0,20.0,30.0,40.0,50.0,60.0,70.0,80.0,90.0,95.0,100.0], // brut (l'étalonnage n'aide pas ici)
+    satNight: [1.4,2.0,2.8,3.9,4.9,12.8,30.7,70.3,78.1,82.4,93.8,95.9,96.3,96.4],
+    day: { sat: [0.5,0.4,0.25,0.2,0.15,0.0], pairSat: [[0.0,0.25,0.45,0.45],[0.0,0.2,0.4,0.35],[0.0,0.2,0.35,0.25],[0.0,0.15,0.25,0.15],[0.0,0.15,0.2,0.1],[0.0,0.0,0.05,0.05]], pairAp: [[1.0,0.5,0.2,0.15],[1.0,0.4,0.15,0.15],[0.5,0.25,0.1,0.1],[0.3,0.1,0.05,0.05],[0.15,0.0,0.0,0.0],[0.0,0.0,0.0,0.0]], apOnly: [[1.0,0.8,0.35,0.2],[1.0,0.65,0.3,0.15],[0.6,0.4,0.2,0.15],[0.35,0.2,0.15,0.1],[0.2,0.1,0.1,0.05],[0.0,0.0,0.0,0.0]] },
+    night: { sat: [0.5,0.5,0.4,0.3,0.25,0.15], pairSat: [[0.0,0.25,0.5,0.5],[0.0,0.25,0.5,0.5],[0.0,0.25,0.3,0.4],[0.0,0.25,0.15,0.3],[0.0,0.15,0.1,0.25],[0.0,0.15,0.1,0.1]], pairAp: [[1.0,0.65,0.5,0.0],[1.0,0.35,0.35,0.0],[1.0,0.2,0.2,0.0],[0.7,0.1,0.1,0.0],[0.5,0.1,0.1,0.0],[0.25,0.1,0.1,0.0]], apOnly: [[1.0,1.0,0.45,0.1],[1.0,0.7,0.4,0.1],[0.8,0.4,0.3,0.1],[0.5,0.2,0.2,0.05],[0.25,0.1,0.1,0.0],[0.1,0.0,0.0,0.0]] },
+  },
 };
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const toPct = (octas) => (octas == null ? null : Math.round(octas * 12.5));
+const u = (...a) => 1 - a.reduce((q, v) => q * (1 - v), 1);
+const interp = (xs, ys, x) => {
+  if (x <= xs[0]) return ys[0];
+  for (let i = 1; i < xs.length; i++) if (x <= xs[i]) return ys[i - 1] + (ys[i] - ys[i - 1]) * (x - xs[i - 1]) / (xs[i] - xs[i - 1]);
+  return ys[ys.length - 1];
+};
+const HX = [...NOWCAST_TABLES.h, 8]; // au-delà de 6 h, le poids va à zéro à 8 h
+const byH = (col, h) => interp(HX, [...col, 0], Math.max(0, h));
+// Poids d'une table [h][classe de distance] à l'échéance h et à d km (au-delà de la dernière classe: vers end à 150 km)
+const at2 = (tab, h, d, end) => {
+  const km = [...NOWCAST_TABLES.km, 150];
+  return interp(km, km.map((_, j) => (j < tab[0].length ? byH(tab.map((r) => r[j]), h) : end)), Math.min(150, Math.max(0, d)));
+};
+export const calibSat = (tier, day, v) => (v == null ? null : interp(NOWCAST_TABLES.knots, NOWCAST_TABLES[tier][day ? 'satDay' : 'satNight'], v));
 
-// Valeur observée par étage { tot, low, mid, high } (%) à partir des deux sources, avec leur poids, plus une description
-// pour la légende de la 3D et les couches observées (type, base au-dessus du lieu, huitièmes).
-export function fuseObserved({ goes, metar }, { elev = 0, sunUp = true, now = Date.now() } = {}) {
-  const P = NOWCAST, acc = { tot: [0, 0], low: [0, 0], mid: [0, 0], high: [0, 0] };
-  const add = (k, v, w) => { if (v == null || !(w > 0)) return; acc[k][0] += v * w; acc[k][1] += w; };
-  // âge de la source: son poids décroît comme celui de l'observé dans les heures à venir (une observation d'aéroport d'il y a
-  // 55 min ne vaut pas un satellite de 5 min); la fusion est datée de maintenant
-  const fresh = (t) => Math.exp(-Math.max(0, (now - t) / 3600000) / 2.5);
-  let layers = null, history = [], srcs = [];
-  // Satellite
+// Poids { ws, wa } d'un étage ('tot' ou 'low'): hSat et hAp = heures écoulées depuis chaque observation (null: absente),
+// d = distance de l'aéroport (km)
+export function nowcastWeights(tier, day, hSat, hAp, d) {
+  const T = NOWCAST_TABLES[tier][day ? 'day' : 'night'];
+  const hasS = hSat != null, hasA = hAp != null && d != null && d < 150;
+  let ws = 0, wa = 0;
+  if (hasS && hasA) { ws = at2(T.pairSat, hSat, d, byH(T.sat, hSat)); wa = at2(T.pairAp, hAp, d, 0); }
+  else if (hasS) ws = byH(T.sat, hSat);
+  else if (hasA) wa = at2(T.apOnly, hAp, d, 0);
+  const s = ws + wa; if (s > 1) { ws /= s; wa /= s; }
+  return { ws, wa };
+}
+
+// Ciel observé du lieu à partir des deux sources: satellite (valeurs brutes et heure de l'image) et aéroport avec
+// observateur le plus proche (huitièmes en %, distance, heure), plus les couches observées et l'historique de l'aéroport.
+export function fuseObserved({ goes, metar }, { elev = 0, lat = null, lng = null, sunUp = null, now = Date.now() } = {}) {
+  const P = NOWCAST;
+  const day = lat != null && lng != null ? sunElevation(now, lat, lng) > P.dayElev : sunUp !== false;
+  let sat = null, ap = null, layers = null, history = [];
+  const srcs = [];
   if (goes && goes.point && !goes.outside && goes.scan) {
-    const age = (now - new Date(goes.scan).getTime()) / 60000;
-    if (age <= P.maxAgeMin) {
-      const w = (sunUp ? P.satDay : P.satNight) * fresh(new Date(goes.scan).getTime()), p = goes.point;
+    const t = new Date(goes.scan).getTime();
+    if ((now - t) / 60000 <= P.maxAgeMin) {
+      const p = goes.point;
       // Tranches du satellite au-dessus de la mer (CF1 0 à 1,52 km, CF2 1,52 à 3,05, CF3 3,05 à 5,49, CF4 5,49 à 7,32, CF5 au-delà)
       // ramenées aux étages d'ICON et des aéroports (bas: jusqu'à 2 km au-dessus du sol, haut: au-delà d'environ 6 km)
-      const u = (...a) => 1 - a.reduce((q, v) => q * (1 - v), 1);
-      const cf = (p.cf || []).map((v) => (v || 0) / 100), f2 = Math.max(0, Math.min(1, (elev + 2000 - 1524) / 1524));
+      const cf = (p.cf || []).map((v) => (v || 0) / 100), f2 = clamp((elev + 2000 - 1524) / 1524, 0, 1);
       const sLow = cf.length === 5 ? Math.round(100 * u(cf[0], f2 * cf[1])) : p.low;
       const sMid = cf.length === 5 ? Math.round(100 * u((1 - f2) * cf[1], cf[2], 0.3 * cf[3])) : p.mid;
       const sHigh = cf.length === 5 ? Math.round(100 * u(0.7 * cf[3], cf[4])) : p.high;
-      add('tot', p.tcf, w); add('mid', sMid, w * 0.8); add('high', sHigh, w * 0.8);
-      // Sous une couche moyenne ou haute assez fournie, le satellite (qui voit le dessus) ne sait rien des nuages bas
-      if (Math.round(100 * u(sMid / 100, sHigh / 100)) < P.satHighBlind) add('low', sLow, w);
-      p.lowT = sLow; p.blind = Math.round(100 * u(sMid / 100, sHigh / 100)) >= P.satHighBlind;
-      srcs.push({ kind: 'sat', low: p.lowT, tot: p.tcf, blind: p.blind, night: !sunUp });
+      const blind = Math.round(100 * u((sMid || 0) / 100, (sHigh || 0) / 100)) >= P.satHighBlind;
+      sat = { t, tot: p.tcf, low: blind ? null : sLow, mid: sMid, high: sHigh, blind };
+      srcs.push({ kind: 'sat', low: sLow, tot: p.tcf, blind, night: !day });
     }
   }
-  // Aéroports: humains d'abord (ils voient tout le ciel et donnent les huitièmes); automatiques pour les nuages bas seulement
-  const st = (metar && metar.stations) || [];
-  let best = null;
-  for (const s of st) {
-    const o = s.obs && s.obs[0]; if (!o) continue;
-    const age = (now - new Date(o.t).getTime()) / 60000; if (age > P.maxAgeMin || s.km > 90) continue;
-    const w = Math.exp(-s.km / P.metarKm) * fresh(new Date(o.t).getTime());
-    if (o.human && o.tot != null) {
-      add('tot', toPct(o.tot), w); add('low', toPct(o.low), w); add('mid', toPct(o.mid), w * 0.7); add('high', toPct(o.high), w * 0.7);
-      if (!best || s.km < best.s.km) best = { s, o };
-    } else if (o.low != null) add('low', toPct(o.low), w * 0.6);
-  }
-  // Couches (type, base) seulement d'un aéroport assez proche: au-delà de 40 km, son ciel n'est plus celui du lieu
-  if (best && best.s.km > 40) best = { ...best, far: true };
+  // Aéroport avec observateur le plus proche (les stations automatiques ne voient que les nuages bas et n'ont pas été
+  // vérifiées sur le banc)
+  const st = ((metar && metar.stations) || []).filter((s) => s.km < 150);
+  const best = st.map((s) => ({ s, o: s.obs && s.obs[0] })).filter(({ o }) => o && o.human && o.tot != null && (now - new Date(o.t).getTime()) / 60000 <= P.maxAgeMin).sort((a, b) => a.s.km - b.s.km)[0];
   if (best) {
-    srcs.push({ kind: 'metar', id: best.s.id, name: best.s.name, km: best.s.km, t: best.o.t, tot: best.o.tot, low: best.o.low });
-    const dz = (best.s.elev ?? null) != null ? best.s.elev - elev : 0; // base au-dessus de l'aéroport -> au-dessus du lieu
-    layers = best.far ? null : best.o.layers.filter((l) => l.baseM != null).map((l) => ({ type: l.type, octas: l.octas, base: Math.max(100, l.baseM + dz) }));
-    const wb = Math.exp(-best.s.km / P.metarKm);
-    history = best.s.obs.filter((o) => o.human && o.tot != null).map((o) => ({ t: new Date(o.t).getTime(), tot: toPct(o.tot), low: toPct(o.low), mid: toPct(o.mid), high: toPct(o.high), totW: wb, lowW: wb, midW: wb * 0.7, highW: wb * 0.7 }));
+    const { s, o } = best;
+    ap = { t: new Date(o.t).getTime(), km: s.km, tot: toPct(o.tot), low: toPct(o.low), id: s.id, name: s.name };
+    srcs.push({ kind: 'metar', id: s.id, name: s.name, km: s.km, t: o.t, tot: o.tot, low: o.low });
+    const dz = (s.elev ?? null) != null ? s.elev - elev : 0; // base au-dessus de l'aéroport -> au-dessus du lieu
+    if (s.km <= P.layersKm) layers = o.layers.filter((l) => l.baseM != null).map((l) => ({ type: l.type, octas: l.octas, base: Math.max(100, l.baseM + dz) }));
+    history = s.obs.filter((x) => x.human && x.tot != null).map((x) => ({ t: new Date(x.t).getTime(), tot: toPct(x.tot), low: toPct(x.low) }));
   }
-  const out = {}; let any = false;
-  for (const k of Object.keys(acc)) { out[k] = acc[k][1] > 0 ? acc[k][0] / acc[k][1] : null; out[k + 'W'] = acc[k][1]; if (out[k] != null) any = true; }
-  if (!any) return null;
-  return { ...out, t: now, layers, history, srcs };
+  if (!sat && !ap) return null;
+  return { t: now, day, sat, ap, layers, history, srcs };
 }
 
-// Applique l'observé aux rangées horaires formatées (src/weather/api.js) d'un même lieu. Champs touchés: cloudcover,
-// cloudLow, et pour la 3D cloudMid/cloudHigh s'ils existent; garde les valeurs du modèle (cloudcoverModel, cloudLowModel)
-// et ajoute obsW (poids de l'observé, 0 à 1) et obsInfo (texte de la légende) aux heures corrigées.
+// Applique l'observé aux rangées horaires formatées (src/weather/api.js) d'un même lieu. Champs touchés: cloudcover et
+// cloudLow; garde les valeurs du modèle (cloudcoverModel, cloudLowModel) et ajoute obsW (poids total de l'observé, 0 à 1),
+// obsInfo (texte de la légende) et obsLayers (couches de l'aéroport) aux heures corrigées.
 export function applyNowcast(rows, obs, opts = {}) {
   if (!obs || !obs.t || !Array.isArray(rows) || !rows.length) return rows;
   const P = { ...NOWCAST, ...(opts.params || {}) }, tz = opts.tzOffsetMin;
   const msOf = (t) => (tz != null ? Date.parse(t + ':00Z') - tz * 60000 : new Date(t).getTime());
-  // Valeur du modèle à l'heure de l'observation (interpolée entre les deux heures pleines voisines)
-  const ts = rows.map((r) => msOf(r.time));
-  const at = (k) => {
-    let i = ts.findIndex((t) => t > obs.t); if (i <= 0) return i === 0 ? rows[0][k] : rows[rows.length - 1][k];
-    const a = rows[i - 1][k], b = rows[i][k]; if (a == null || b == null) return a ?? b;
-    return a + (b - a) * (obs.t - ts[i - 1]) / (ts[i] - ts[i - 1]);
-  };
-  const keys = { tot: 'cloudcover', low: 'cloudLow', mid: 'cloudMid', high: 'cloudHigh' };
+  const H = 3600000, hist = obs.history || [], ap = obs.ap, sat = obs.sat;
   // Historique de l'aéroport (heures passées, au plus 4 h): valeur observée la plus proche de l'heure de la rangée (20 min)
-  const hist = obs.history || [];
   const histAt = (t) => { let b = null; for (const x of hist) { const d = Math.abs(x.t - t); if (d <= 1200000 && (!b || d < Math.abs(b.t - t))) b = x; } return b; };
-  return rows.map((r, i) => {
-    const h = (ts[i] - obs.t) / 3600000;
-    let src = obs, w0 = 1;
-    if (h < -P.pastH) { const x = histAt(ts[i]); if (!x) return r; src = x; w0 = 1; }
+  const fields = { tot: 'cloudcover', low: 'cloudLow' };
+  return rows.map((r) => {
+    const tr = msOf(r.time);
+    let S = null, A = null, hS = null, hA = null;
+    if (tr < obs.t - P.pastH * H) { const x = ap && histAt(tr); if (!x) return r; A = x; hA = 0; }
+    else {
+      if (sat) { S = sat; hS = Math.max(0, (tr - sat.t) / H); }
+      if (ap) { A = ap; hA = Math.max(0, (tr - ap.t) / H); }
+    }
     const n = { ...r, cloudcoverModel: r.cloudcoverModel ?? r.cloudcover, cloudLowModel: r.cloudLowModel ?? r.cloudLow };
-    let wMax = 0;
-    for (const [k, f] of Object.entries(keys)) {
-      if (src[k] == null || r[f] == null) continue;
-      const tau = typeof P.tauH === 'number' ? P.tauH : P.tauH[k];
-      // poids de la source pour cet étage (un aéroport à 60 km pèse moins qu'un satellite au-dessus du lieu), puis échéance
-      const w = (h <= 0 ? w0 : Math.exp(-h / tau)) * clamp(src[k + 'W'] ?? 1, 0, 1);
-      if (w < 0.03) continue;
-      n[f] = Math.round(clamp(w * src[k] + (1 - w) * r[f], 0, 100)); wMax = Math.max(wMax, w);
+    let wMax = 0, wAp = 0;
+    for (const [k, f] of Object.entries(fields)) {
+      const m = r[f]; if (m == null) continue;
+      const sv = S && S[k] != null ? calibSat(k, obs.day, S[k]) : null, av = A && A[k] != null ? A[k] : null;
+      const { ws, wa } = nowcastWeights(k, obs.day, sv != null ? hS : null, av != null ? hA : null, ap ? ap.km : null);
+      if (ws + wa < 0.03) continue;
+      n[f] = Math.round(clamp(m + ws * ((sv ?? m) - m) + wa * ((av ?? m) - m), 0, 100));
+      wMax = Math.max(wMax, ws + wa); if (k === 'tot') wAp = wa;
     }
     if (wMax < 0.03) return r;
     n.obsW = Math.round(wMax * 100) / 100;
-    // cohérence: un total observé borne chaque étage (une boîte vue à 45 % sans nuages d'en haut ne peut pas avoir 70 % de
-    // nuages bas); sans total observé, le total couvre au moins chaque étage
-    if (src.tot != null && n.cloudcover != null) { for (const f of ['cloudLow', 'cloudMid', 'cloudHigh']) if (n[f] != null) n[f] = Math.min(n[f], n.cloudcover); }
-    else n.cloudcover = Math.max(n.cloudcover ?? 0, n.cloudLow ?? 0, n.cloudMid ?? 0, n.cloudHigh ?? 0);
-    if (h >= -P.pastH && wMax >= 0.5 && obs.layers) n.obsLayers = obs.layers;
-    if (h >= -P.pastH && wMax >= 0.3) n.obsInfo = obsText(obs);
+    // cohérence: les nuages bas ne dépassent pas le total
+    if (n.cloudLow != null && n.cloudcover != null) n.cloudLow = Math.min(n.cloudLow, n.cloudcover);
+    if (tr >= obs.t - P.pastH * H && wAp >= 0.3 && obs.layers) n.obsLayers = obs.layers;
+    if (tr >= obs.t - P.pastH * H && wMax >= 0.25) n.obsInfo = obsText(obs);
     return n;
   });
+}
+
+// Nuages moyens et hauts de la 3D accordés au total et aux nuages bas corrigés (recouvrement au hasard:
+// total = 1 - (1 - bas)(1 - moyens et hauts)). Les deux étages gardent leur proportion; s'il n'y en avait pas, la part
+// manquante va où le satellite en voit (sinon en haut). Rend { cloudMid, cloudHigh }.
+export function upperFromTotal(mid, high, tot, low, sat = null) {
+  if (tot == null) return { cloudMid: mid, cloudHigh: high };
+  const L = clamp((low ?? 0) / 100, 0, 0.99), T = clamp(tot / 100, 0, 1);
+  const U1 = clamp((T - L) / (1 - L), 0, 1), M = (mid ?? 0) / 100, Hh = (high ?? 0) / 100, U0 = u(M, Hh);
+  if (U0 < 0.02) {
+    if (U1 < 0.02) return { cloudMid: Math.round(M * 100), cloudHigh: Math.round(Hh * 100) };
+    const sm = sat && sat.mid != null ? sat.mid : 0, sh = sat && sat.high != null ? sat.high : 1, fm = sm + sh > 0 ? sm / (sm + sh) : 0;
+    return { cloudMid: Math.round(100 * U1 * fm), cloudHigh: Math.round(100 * U1 * (1 - fm)) };
+  }
+  // facteur commun k tel que u(kM, kH) = U1 (bissection; k plafonné pour qu'aucun étage ne dépasse 100 %)
+  let lo = 0, hi = 1 / Math.max(M, Hh, 1e-6);
+  for (let i = 0; i < 30; i++) { const k = (lo + hi) / 2; if (u(k * M, k * Hh) < U1) lo = k; else hi = k; }
+  const k = (lo + hi) / 2;
+  return { cloudMid: Math.round(clamp(k * M, 0, 1) * 100), cloudHigh: Math.round(clamp(k * Hh, 0, 1) * 100) };
 }
 
 const typeName = { ST: 'stratus', SC: 'stratocumulus', CU: 'cumulus', TCU: 'cumulus bourgeonnants', CB: 'cumulonimbus', SF: 'fractus', CF: 'fractus', NS: 'nimbostratus', AC: 'altocumulus', AS: 'altostratus', ACC: 'altocumulus', CI: 'cirrus', CS: 'cirrostratus', CC: 'cirrocumulus' };
@@ -130,7 +189,8 @@ export function obsText(obs) {
   if (sat && !(sat.night && m)) parts.push(sat.blind ? `satellite : total ${sat.tot} % (nuages bas cachés par le voile d'altitude)` : `satellite : nuages bas ${sat.low} %, total ${sat.tot} %`);
   if (m) {
     const L = (obs.layers || []).filter((l) => l.octas > 0).map((l) => `${l.octas < 1 ? 'traces de' : Math.round(l.octas) + '/8'} ${typeName[l.type] || 'nuages'} à ${Math.round(l.base / 10) * 10} m`);
-    parts.push(`${m.name.replace(/,.*$/, '')} (${Math.round(m.km)} km) : ${L.length ? L.join(', ') : 'ciel dégagé'}`);
+    const sky = obs.layers ? (L.length ? L.join(', ') : 'ciel dégagé') : `${Math.round(m.tot)}/8 du ciel couvert`;
+    parts.push(`${m.name.replace(/,.*$/, '')} (${Math.round(m.km)} km) : ${sky}`);
   }
   return parts.length ? 'Observé ' + parts.join(' ; ') : null;
 }
@@ -140,7 +200,7 @@ const API_BASE = (typeof __MS_TARGET__ !== 'undefined' && __MS_TARGET__ === 'nat
 export async function fetchObserved(lat, lng, timeoutMs = 4500) {
   const get = (u) => Promise.race([fetch(u).then((r) => (r.ok ? r.json() : null)).catch(() => null), new Promise((res) => setTimeout(() => res(null), timeoutMs))]);
   const q = `lat=${lat.toFixed(3)}&lng=${lng.toFixed(3)}`;
-  const [goes, metar] = await Promise.all([get(`${API_BASE}/api/goes?${q}`), get(`${API_BASE}/api/metar?${q}`)]);
+  const [goes, metar] = await Promise.all([get(`${API_BASE}/api/goes?${q}`), get(`${API_BASE}/api/metar?${q}&r=150`)]);
   return goes || metar ? { goes, metar } : null;
 }
 
@@ -153,7 +213,7 @@ export function applyObservedToHourly(hourly, raw, { lat, lng, tzOffsetMin = nul
   hourly.obsW = new Array(n).fill(0); hourly.obsInfo = new Array(n).fill(null); hourly.obsLayers = new Array(n).fill(null);
   if (!raw || !n) return null;
   const sunUp = (() => { try { return clearDir ? clearDir(now + 1800000) > 3 : true; } catch (e) { return true; } })();
-  const obs = fuseObserved(raw, { elev, sunUp, now });
+  const obs = fuseObserved(raw, { elev, lat, lng, sunUp, now });
   if (!obs) return null;
   const rows = hourly.time.map((t, i) => ({ time: t, cloudcover: hourly.cloudcover[i], cloudLow: hourly.cloudcover_low[i] }));
   const out = applyNowcast(rows, obs, { tzOffsetMin });

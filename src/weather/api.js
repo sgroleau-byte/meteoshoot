@@ -1,5 +1,5 @@
 import { SHOOT_WINDOWS, isGoodWeather, sunlitFraction, weatherCodeIcon } from './iconsLogic.js';
-import { fetchObserved, applyObservedToHourly, applyNowcast } from './nowcast.js';
+import { fetchObserved, applyObservedToHourly, upperFromTotal } from './nowcast.js';
 import { clearDirHour } from './solar.js';
 import { openMeteoProxyUrl } from './openMeteoUrl.js';
 import { BLEND_MEMBERS, MEMBER_API, loadBlendModel, applyBlend } from './blend.js';
@@ -630,8 +630,8 @@ export const fetchSceneWeather = async (lat, lng, weather) => {
   return finishScene(lat, lng, out, hours);
 };
 // Nuages moyens et hauts de la 3D à la lecture de la table (gardée brute en cache): en proportion du total combiné de la
-// prévision actuelle (blendK, heures d'ICON), puis corrigés par le dernier ciel observé du lieu (moins de 30 min), comme
-// les nuages bas et le total de la prévision (fetchWeather). Rend une copie.
+// prévision actuelle (blendK, heures d'ICON), puis, aux heures corrigées par le ciel observé du lieu, accordés au total et
+// aux nuages bas corrigés de la prévision (fetchWeather). Rend une copie.
 const finishScene = (lat, lng, out, hours) => {
   if (!out) return out;
   // rapport = total combiné de la prévision (avant le ciel observé) / total d'ICON de la table elle-même (son exécution peut être
@@ -643,11 +643,13 @@ const finishScene = (lat, lng, out, hours) => {
     res[t] = { ...x, cloudMid: sc(x.cloudMid), cloudHigh: sc(x.cloudHigh) };
     delete res[t].fromIcon; delete res[t].totScene;
   }
+  // Heures corrigées par le ciel observé (fetchWeather): moyens et hauts accordés au total et aux nuages bas corrigés
   const o = lastObserved.get(weatherCacheKey(lat, lng));
   if (!o || Date.now() - o.at > WEATHER_MEM_TTL_MS) return res;
-  const times = Object.keys(res).sort();
-  const rows = applyNowcast(times.map((t) => ({ time: t, cloudMid: res[t].cloudMid, cloudHigh: res[t].cloudHigh })), { ...o.obs, tot: null, low: null }, { tzOffsetMin: o.tzOffsetMin });
-  rows.forEach((r) => { if (r.obsW) res[r.time] = { ...res[r.time], cloudMid: r.cloudMid, cloudHigh: r.cloudHigh }; });
+  for (const h of hours || []) {
+    if (!h.obsW || !res[h.time]) continue;
+    res[h.time] = { ...res[h.time], ...upperFromTotal(res[h.time].cloudMid, res[h.time].cloudHigh, h.cloudcover, h.cloudLow, o.obs.sat) };
+  }
   return res;
 };
 // Prévision avec les données de la 3D fondues dans ses rangées horaires (les heures sans données restent telles quelles).

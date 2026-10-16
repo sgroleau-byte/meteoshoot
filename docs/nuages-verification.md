@@ -67,6 +67,28 @@
 
 Fausses alarmes à +1 h (ciel réel au plus 2/8, annoncé à 40 % ou plus) : 30 % sans correction, environ 14 % avec.
 
+Ce tableau mesurait l'aéroport du lieu lui-même. Pour un projet loin de l'aéroport, la correction de la v633.212 à 214 était fausse de jour.
+
+**Recalage du 16 octobre 2026 (v633.215) : satellite et aéroports voisins.**
+- Données : 4 mois de satellite GOES-19 (produit des couches nuageuses, une image par heure, 15 juin au 14 octobre 2026) au-dessus de 22 aéroports avec observateur. Vérité : l'observateur de l'aéroport, h heures plus tard. Source « aéroport » : celui du lieu, ou le plus proche voisin (médiane 143 km, de 20 à plusieurs centaines de km). Fond : la prévision courte combinée, la plus proche de ce que l'app a sous la main au moment présent.
+- Le satellite brut se trompe de façon systématique. De jour, sous 5 % au satellite, l'observateur voit 23 % en moyenne (petits nuages épars, que le sol voit tassés vers l'horizon) ; seul, il fait pire que la prévision (écart de 16,1 points contre 11,8). La nuit (infrarouge seulement), il n'est guère meilleur que la prévision.
+- L'ancienne correction prenait le satellite tel quel, à poids plein : de jour, loin d'un aéroport, elle rendait l'heure présente pire que la prévision seule (11,9 -> 14,9).
+- Nouvelle forme : prévision + ws x (satellite - prévision) + wa x (aéroport - prévision). Le satellite passe par une table d'étalonnage (valeur médiane observée au sol) pour le total de jour et les nuages bas de nuit ; ailleurs, le satellite brut mélangé à la prévision fait mieux. Les poids viennent d'une grille (écart absolu moyen minimal) par étage, jour ou nuit (soleil à plus de 5°), échéance et distance de l'aéroport. Ils ne montent jamais avec l'échéance, ni ceux de l'aéroport avec la distance.
+- Poids au moment présent, de jour : satellite seul 0,45 ; aéroport du lieu 1 (encore 0,8 une heure plus tard) ; aéroport à 30 km 0,3 avec un satellite à 0,4 ; à 120 km, presque rien. La nuit, l'aéroport voisin pèse plus (0,5 à 30 km) : les nappes basses nocturnes sont étendues.
+- Résultats hors échantillon (tables calées sur une semaine sur deux, vérifiées sur les autres ; le code de l'app rejoué par `tools/clouds/nowcast_replay.mjs`) :
+
+| Total, de jour, au moment présent | Prévision seule | Ancienne correction | Nouvelle |
+|---|---|---|---|
+| Aéroport du lieu (une heure plus tard) | 11,8 | 10,5 | 8,9 |
+| Aéroport à moins de 60 km | 11,9 | 13,1 | 9,9 |
+| Aéroport à 60 à 90 km | 12,5 | 14,2 | 11,7 |
+| Aéroport à 90 à 150 km | 11,0 | 15,2 | 10,1 |
+| Aucun aéroport à 150 km | 11,9 | 14,9 | 11,0 |
+
+- Nuages bas de jour, sans aéroport : 16,5 -> 15,6 (ancienne 16,6). La nuit, la nouvelle est aussi bonne ou meilleure que l'ancienne (total sans aéroport 15,7 -> 14,8, ancienne 15,1).
+- Un modèle appris (arbres, mêmes entrées) gagnait encore 0,3 à 1 point, surtout la nuit. Écarté pour l'instant : 4 mois d'été et d'automne seulement, et la neige au sol trompe le satellite de jour. À reprendre après un hiver de données.
+- Au crépuscule et à l'heure dorée (soleil entre -6° et 5°), le satellite vaut un peu plus que la nuit (poids 0,3 à 0,4) : ces heures restent dans la classe « nuit », faute de données pour une classe à part.
+
 ## 3. Dans l'app
 
 1. **Couverture combinée** (`src/weather/blend.js`, `blendModel.json`).
@@ -76,9 +98,10 @@ Fausses alarmes à +1 h (ciel réel au plus 2/8, annoncé à 40 % ou plus) : 30 
    - Les valeurs d'ICON restent dans `cloudcoverIcon`.
    - Les autres modèles arrivent par une requête de plus à Open-Meteo : couverture totale seulement, poids 1. On passe de 3,0 à 4,0 appels par lieu.
 2. **Ciel observé** (`src/weather/nowcast.js`).
-   - Sources : `api/goes.js` (satellite GOES-19, produit des couches nuageuses CCL, toutes les 5 minutes, cellules d'environ 10 km, jusqu'à 50,7° N) et `api/metar.js` (aéroports dans un rayon de 90 km).
+   - Sources : `api/goes.js` (satellite GOES-19, produit des couches nuageuses CCL, toutes les 5 minutes, cellules d'environ 10 km, jusqu'à 50,7° N) et `api/metar.js` (aéroports dans un rayon de 150 km ; seul l'aéroport avec observateur le plus proche compte).
    - `api/metar.js` lit le fichier de toutes les stations d'aviationweather.gov (mis à jour chaque minute) plutôt que son API, limitée à 100 requêtes par minute. Seul l'historique de 4 h de l'aéroport le plus proche passe par l'API.
-   - Les deux sources sont fusionnées avec leur poids (distance, jour et nuit, voile d'altitude qui cache les nuages bas au satellite).
+   - Chaque source a son poids, lu dans les tables du banc (`NOWCAST_TABLES`) selon l'étage, le jour ou la nuit, les heures écoulées depuis l'observation et la distance de l'aéroport. Sous un voile d'altitude, le satellite ne corrige pas les nuages bas.
+   - Dans la 3D, les nuages moyens et hauts sont accordés au total et aux nuages bas corrigés (`upperFromTotal`).
    - La correction s'applique aux nuages et au direct (part de l'heure au soleil), avant les statistiques du jour et l'indice AM/PM. L'heure passée prend l'historique de l'aéroport.
 3. **Vue 3D** (`src/scene3d/sky.js`, `engine.js`).
    - Les couches observées à l'aéroport donnent le type et la base des nuages bas, moyens et hauts.

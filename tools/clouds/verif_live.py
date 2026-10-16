@@ -55,18 +55,18 @@ for r in rows:
         if o is None: continue
         lead = (t - issued).total_seconds() / 3600
         recs.append({'station': r['station'], 'issued': issued, 't': t, 'lead': lead, 'obs': o, 'icon': f['icon'][k], 'comb': f['comb'][k],
-                     'now': f['now'][k] if k < len(f['now']) else np.nan, 'eccc': ech.get(t.strftime('%Y-%m-%dT%H'), np.nan)})
+                     'now': f['now'][k] if k < len(f['now']) else np.nan, 'nowFar': f['nowFar'][k] if k < len(f.get('nowFar') or []) else np.nan, 'eccc': ech.get(t.strftime('%Y-%m-%dT%H'), np.nan)})
 D = pd.DataFrame(recs)
 if D.empty: sys.exit('pas encore d\'heures observées après les instantanés')
 D['bucket'] = pd.cut(D['lead'], [-1, 6, 24, 48], labels=['0 à 6 h', '6 à 24 h', '24 à 48 h'])
 cat = lambda x: np.digitize(x, [26, 74])
 out = []
 for b, g in D.groupby('bucket', observed=True):
-    for src in ['icon', 'comb', 'now', 'eccc']:
+    for src in ['icon', 'comb', 'now', 'nowFar', 'eccc']:
         m = g[src].notna()
         if m.sum() < 20: continue
         e = g.loc[m]
-        out.append({'échéance': b, 'source': {'icon': 'ICON seul', 'comb': 'MeteoShoot combiné', 'now': 'MeteoShoot + observé', 'eccc': 'Environnement Canada'}[src],
+        out.append({'échéance': b, 'source': {'icon': 'ICON seul', 'comb': 'MeteoShoot combiné', 'now': 'MeteoShoot + observé', 'nowFar': 'MeteoShoot + observé, sans l\'aéroport du lieu', 'eccc': 'Environnement Canada'}[src],
                     'heures': int(m.sum()), 'écart moyen': round(float(np.mean(np.abs(e[src] - e['obs']))), 1),
                     'bonne catégorie': round(float(np.mean(cat(e[src]) == cat(e['obs']))), 3),
                     'dégagé annoncé couvert': round(float(np.mean(e.loc[e['obs'] <= 25, src] >= 74)) if (e['obs'] <= 25).any() else np.nan, 3)})

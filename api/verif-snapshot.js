@@ -77,19 +77,25 @@ export async function snapshot() {
     const gfsHourIdx = {}; if (G && G.hourly) G.hourly.time.forEach((t, i) => { gfsHourIdx[t] = i; });
     applyBlend(hourly, { model, gfs: G, gfsHourIdx, members: M, lat: la, lng: lo, tzOffsetMin: 0, now });
     let obs = null;
-    try { obs = { goes: await goesAt(la, lo), metar: await nearbyObs(la, lo) }; } catch (e) { obs = null; }
-    applyObservedToHourly(hourly, obs, { lat: la, lng: lo, tzOffsetMin: 0, elev: I.elevation ?? 0, now, clearDir: (t) => clearDirHour(t, la, lo) });
+    try { obs = { goes: await goesAt(la, lo), metar: await nearbyObs(la, lo, 150) }; } catch (e) { obs = null; }
+    // Deux corrections par le ciel observé: avec l'aéroport lui-même (un projet à l'aéroport) et sans lui (le cas courant
+    // d'un projet loin de l'aéroport: satellite et aéroports voisins seulement), pour ne pas se juger sur sa propre vérité
+    const far = { time: hourly.time, cloudcover: hourly.cloudcover.slice(), cloudcover_low: hourly.cloudcover_low.slice(), direct_radiation: hourly.direct_radiation.slice(), cloudcoverIcon: hourly.cloudcoverIcon, cloudLowIcon: hourly.cloudLowIcon };
+    const obsFar = obs && { goes: obs.goes, metar: obs.metar && { ...obs.metar, stations: (obs.metar.stations || []).filter((s) => s.id !== id) } };
+    const opts = { lat: la, lng: lo, tzOffsetMin: 0, elev: I.elevation ?? 0, now, clearDir: (t) => clearDirHour(t, la, lo) };
+    applyObservedToHourly(hourly, obs, opts);
+    applyObservedToHourly(far, obsFar, opts);
     const i0 = hourly.time.findIndex((t) => Date.parse(t + ':00Z') >= h0); if (i0 < 0) continue;
     const sl = (a) => a.slice(i0, i0 + HOURS).map((x) => (x == null ? null : Math.round(x)));
     let ec = null; try { ec = await eccc(id, la, lo); } catch (e) { ec = { error: String(e.message || e) }; }
     out.push({
       id, lat: la, lon: lo,
-      f: { t0: hourly.time[i0] + ':00Z', icon: sl(hourly.cloudcoverIcon), iconLow: sl(hourly.cloudLowIcon), comb: sl(hourly.cloudcoverModel), combLow: sl(hourly.cloudLowModel), now: sl(hourly.cloudcover).slice(0, 8), nowLow: sl(hourly.cloudcover_low).slice(0, 8) },
+      f: { t0: hourly.time[i0] + ':00Z', icon: sl(hourly.cloudcoverIcon), iconLow: sl(hourly.cloudLowIcon), comb: sl(hourly.cloudcoverModel), combLow: sl(hourly.cloudLowModel), now: sl(hourly.cloudcover).slice(0, 8), nowLow: sl(hourly.cloudcover_low).slice(0, 8), nowFar: sl(far.cloudcover).slice(0, 8), nowFarLow: sl(far.cloudcover_low).slice(0, 8) },
       obsUsed: !!(obs && (obs.goes?.point || obs.metar?.stations?.length)),
       eccc: ec,
     });
   }
-  return { issued: new Date(now).toISOString(), version: 'v633.214', stations: out };
+  return { issued: new Date(now).toISOString(), version: 'v633.215', stations: out };
 }
 
 export default async function handler(req, res) {
