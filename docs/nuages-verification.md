@@ -70,7 +70,7 @@ Fausses alarmes à +1 h (ciel réel au plus 2/8, annoncé à 40 % ou plus) : 30 
 Ce tableau mesurait l'aéroport du lieu lui-même. Pour un projet loin de l'aéroport, la correction de la v633.212 à 214 était fausse de jour.
 
 **Recalage du 16 octobre 2026 (v633.215) : satellite et aéroports voisins.**
-- Données : 4 mois de satellite GOES-19 (produit des couches nuageuses, une image par heure, 15 juin au 14 octobre 2026) au-dessus de 22 aéroports avec observateur. Vérité : l'observateur de l'aéroport, h heures plus tard. Source « aéroport » : celui du lieu, ou le plus proche voisin (médiane 143 km, de 20 à plusieurs centaines de km). Fond : la prévision courte combinée, la plus proche de ce que l'app a sous la main au moment présent.
+- Données : 4 mois de satellite GOES-19 (produit des couches nuageuses, une image par heure, 15 juin au 14 octobre 2026) au-dessus de 30 aéroports avec observateur. Vérité : l'observateur de l'aéroport, h heures plus tard. Source « aéroport » : celui du lieu, ou le plus proche voisin (médiane 143 km, de 20 à plusieurs centaines de km). Fond : la prévision courte combinée, la plus proche de ce que l'app a sous la main au moment présent.
 - Le satellite brut se trompe de façon systématique. De jour, sous 5 % au satellite, l'observateur voit 23 % en moyenne (petits nuages épars, que le sol voit tassés vers l'horizon) ; seul, il fait pire que la prévision (écart de 16,1 points contre 11,8). La nuit (infrarouge seulement), il n'est guère meilleur que la prévision.
 - L'ancienne correction prenait le satellite tel quel, à poids plein : de jour, loin d'un aéroport, elle rendait l'heure présente pire que la prévision seule (11,9 -> 14,9).
 - Nouvelle forme : prévision + ws x (satellite - prévision) + wa x (aéroport - prévision). Le satellite passe par une table d'étalonnage (valeur médiane observée au sol) pour le total de jour et les nuages bas de nuit ; ailleurs, le satellite brut mélangé à la prévision fait mieux. Les poids viennent d'une grille (écart absolu moyen minimal) par étage, jour ou nuit (soleil à plus de 5°), échéance et distance de l'aéroport. Ils ne montent jamais avec l'échéance, ni ceux de l'aéroport avec la distance.
@@ -88,6 +88,11 @@ Ce tableau mesurait l'aéroport du lieu lui-même. Pour un projet loin de l'aér
 - Nuages bas de jour, sans aéroport : 16,5 -> 15,6 (ancienne 16,6). La nuit, la nouvelle est aussi bonne ou meilleure que l'ancienne (total sans aéroport 15,7 -> 14,8, ancienne 15,1).
 - Un modèle appris (arbres, mêmes entrées) gagnait encore 0,3 à 1 point, surtout la nuit. Écarté pour l'instant : 4 mois d'été et d'automne seulement, et la neige au sol trompe le satellite de jour. À reprendre après un hiver de données.
 - Au crépuscule et à l'heure dorée (soleil entre -6° et 5°), le satellite vaut un peu plus que la nuit (poids 0,3 à 0,4) : ces heures restent dans la classe « nuit », faute de données pour une classe à part.
+
+**Essayé sans gain (16 octobre 2026).**
+- Déplacement des nuages : mouvement mesuré entre deux images satellite à 30 min d'écart (appariement de blocs, fenêtres de 41 x 41 cellules autour de 30 aéroports, 4 mois), puis valeur du satellite « en amont » du lieu. À aucune échéance (1 à 4 h), ni de jour ni de nuit, elle ne fait mieux que le satellite au-dessus du lieu (de jour à +1 h : 11,57 contre 11,53 ; moyenne le long du trajet, grande boîte de 110 km, mouvement net seulement : pareil). L'information du satellite s'efface en 1 à 2 h, quelle que soit la façon de la lire. Scripts : `tools/clouds/fetch_goes_win.py`, `nowcast_motion.py`.
+- Corriger la combinaison de la veille par son erreur des derniers jours au même aéroport (fenêtres de 1, 3 et 7 jours, moyenne ou médiane) : poids optimal nul, les erreurs ne persistent pas d'un jour à l'autre. Script : `tools/clouds/bias_recent.py`.
+- Entrées de plus pour la combinaison à courte échéance (humidité d'ICON à 925, 850 et 700 hPa, énergie convective, écart entre température et point de rosée, nuages moyens et hauts d'ICON) : 12,38 -> 12,20. Gain réel mais minime (0,2 point), qui coûterait des données de plus à chaque requête : pas retenu.
 
 ## 3. Dans l'app
 

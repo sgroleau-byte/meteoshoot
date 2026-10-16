@@ -4,7 +4,7 @@
 // sources observées: prévision + ws x (satellite étalonné - prévision) + wa x (aéroport - prévision).
 //
 // Poids appris sur le banc de vérification (docs/nuages-verification.md): 4 mois de satellite GOES-19 (juin à octobre
-// 2026, une image par heure) au-dessus de 22 aéroports avec observateur, la prévision courte combinée comme fond, et
+// 2026, une image par heure) au-dessus de 30 aéroports avec observateur, la prévision courte combinée comme fond, et
 // l'observateur de l'aéroport comme vérité h heures plus tard; l'aéroport « source » est soit celui du lieu, soit le plus
 // proche voisin (le cas d'un projet loin de l'aéroport). Ce que le banc a appris:
 // - le satellite brut se trompe: de jour, il voit « dégagé » là où l'observateur compte des petits nuages épars (sous
