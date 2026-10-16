@@ -1907,6 +1907,11 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       // soleil bas par ciel dégagé, s tombe à 0,5 parce que le diffus domine sur l'horizontale, alors que le faisceau est
       // entier; 0,8: la valeur de s à midi par ciel dégagé, sur laquelle la lumière a été calée).
       tg.cum = cum; tg.mid = (row?.cloudMid ?? 0) / 100; tg.high = (row?.cloudHigh ?? 0) / 100; tg.iv = clamp(Math.max(s, 0.8 * pS) / Math.max(0.1, 1 - cum));
+      // Pas de soleil du tout (direct sous 5 % du ciel clair, 16 octobre 2026): aucune lumière directe dans les trouées. Sous un
+      // couvert à 99 %, quelques W/m² de direct donnaient une part directe de 20 % (direct / global, petits nombres) divisée par
+      // la part dégagée (1 %), donc un soleil franc entre les ombres des nuages sous la pluie.
+      const pReal = pSunOf(row) ?? pSunOf(side);
+      if (pReal != null && pReal < 0.05) tg.iv = 0;
       // Pluie: nombre de gouttes de 0,1 mm/h (quelques-unes) à 8 mm/h (le maximum), en échelle logarithmique. Sous zéro ou
       // icône de neige: rien (la neige viendra à part). Sol mouillé: pluie de l'heure, ou des trois précédentes qui sèche.
       const rk = (h) => h && h.precip >= 0.1 && !(h.temp <= 0) && h.icon !== 'snow' ? clamp(Math.log10(1 + h.precip * 4) / Math.log10(33)) : 0;

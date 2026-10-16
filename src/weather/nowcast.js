@@ -281,8 +281,10 @@ export function applyObservedToHourly(hourly, raw, { lat, lng, tzOffsetMin = nul
       const cm = (opq(mix(lowM, lowB), mix(totM, totB)) + opq(mix(lowMp, lowBp), mix(totMp, totBp))) / 2, cn = (opq(lowN, totN) + opq(lowNp, totNp)) / 2;
       const cap = clearDir(msOf(r.time));
       // décalage additif: le ciel libéré (ou couvert) de nuages bas donne (ou retire) le direct d'un ciel clair sur cette part;
-      // un rapport ne remontait pas un direct nul (ICON couvert, ciel observé dégagé)
-      if (cap > 3) hourly.direct_radiation[i] = Math.round(Math.max(0, Math.min(Math.max(cap, d), d + cap * (cm - cn))));
+      // un rapport ne remontait pas un direct nul (ICON couvert, ciel observé dégagé). Pas pour quelques points de nuages (100
+      // ramené à 98 sous la pluie ajoutait un soleil fantôme), ni pour ajouter du soleil sous un ciel qui reste couvert.
+      const dc = cm - cn;
+      if (cap > 3 && Math.abs(dc) >= 0.05 && !(dc > 0 && cn >= 0.95)) hourly.direct_radiation[i] = Math.round(Math.max(0, Math.min(Math.max(cap, d), d + cap * dc)));
     }
   });
   return obs;
