@@ -11,6 +11,12 @@
     },
     "api/horizon.js": {
       "maxDuration": 60
+    },
+    "api/goes.js": {
+      "maxDuration": 30
+    },
+    "api/metar.js": {
+      "maxDuration": 20
     }
   },
   "github": {

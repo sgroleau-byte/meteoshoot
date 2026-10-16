@@ -407,7 +407,7 @@ export function createScene3D(container, opts = {}) {
   // résolution réduite, texture tCloud), la sphère du ciel vue par la caméra et sa variante INLINE des cartes cubiques.
   const noiseTex = makeNoiseTextures(R);
   const V3 = () => ({ value: new THREE.Vector3() });
-  const cloudU = { tNoise: { value: noiseTex.base }, tDetail: { value: noiseTex.detail }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunL: V3(), uSunM: V3(), uSunH: V3(), uAmbZ: V3(), uAmbH: V3(), uAmbG: V3(), uOff: V3(), uCamW: V3(), uLay0: { value: new THREE.Vector4(800, 1600, 0, 1) }, uLay0b: { value: new THREE.Vector4() }, uLay1: { value: new THREE.Vector4(3200, 4300, 0, 1) }, uHi: { value: new THREE.Vector4(0, 1, 9000, 1) }, uGround: { value: 0 }, uSunGap: { value: 0 }, uGapR: { value: 0.1 }, uSteps: { value: 1 }, uShaft: { value: 0 }, uHz: { value: Array.from({ length: 9 }, () => new THREE.Vector3()) }, uPixAng: { value: 0.001 } };
+  const cloudU = { tNoise: { value: noiseTex.base }, tDetail: { value: noiseTex.detail }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunL: V3(), uSunM: V3(), uSunH: V3(), uAmbZ: V3(), uAmbH: V3(), uAmbG: V3(), uOff: V3(), uCamW: V3(), uLay0: { value: new THREE.Vector4(800, 1600, 0, 1) }, uLay0b: { value: new THREE.Vector4(0, 0, 1, 0) }, uLay1: { value: new THREE.Vector4(3200, 4300, 0, 1) }, uHi: { value: new THREE.Vector4(0, 1, 9000, 1) }, uGround: { value: 0 }, uSunGap: { value: 0 }, uGapR: { value: 0.1 }, uSteps: { value: 1 }, uShaft: { value: 0 }, uHz: { value: Array.from({ length: 9 }, () => new THREE.Vector3()) }, uPixAng: { value: 0.001 } };
   const skyU = { ...cloudU, uCum: { value: 0 }, uMid: { value: 0 }, uHigh: { value: 0 }, uDirect: { value: 1 }, uWarm: { value: 0 }, uTw: { value: 0 }, uNight: { value: 0 }, uGlow: { value: 0 }, uSmoke: { value: 0 }, uTurb: { value: 2.5 }, uRay: { value: 1.5 }, uSkyK: { value: 0.2 }, uZen: { value: 0.1 }, uStorm: { value: 0 }, uSunCol: { value: new THREE.Vector3(1, 1, 1) }, tCloud: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uCloudPx: { value: new THREE.Vector2(1, 1) } };
   const skyMat = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: skyU, vertexShader: SKY_VERT, fragmentShader: SKY_GLSL });
   const skyMatIn = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: skyU, defines: { INLINE: 1 }, vertexShader: SKY_VERT, fragmentShader: SKY_GLSL });
@@ -696,7 +696,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
 
   // ---- état: lieu, heure, météo, caméra
   let lat = 46.8, lng = -71.2, origin = null, projLocal = [], orientation = [], style = null, data = null, dateMs = Date.now();
-  const tg = { cum: 0, mid: 0, high: 0, iv: 1, rain: 0, wet: 0, pud: 0, fogK: 0, fogTh: 600, smk: 0, storm: 0, brk: 0, pSun: 0, l0b: 800, l0t: 1600, l0c: 0, l0k: 1, l0w: 0, l0s: 0, l0d: 0, m1b: 3200, m1t: 4300, m1c: 0, m1k: 1, hc: 0, hk: 1, ha: 9000, ht: 1, shaft: 0 }, cur = { ...tg };
+  const tg = { cum: 0, mid: 0, high: 0, iv: 1, rain: 0, wet: 0, pud: 0, fogK: 0, fogTh: 600, smk: 0, storm: 0, brk: 0, pSun: 0, l0b: 800, l0t: 1600, l0c: 0, l0k: 1, l0w: 0, l0s: 0, l0d: 0, l0n: 1, m1b: 3200, m1t: 4300, m1c: 0, m1k: 1, hc: 0, hk: 1, ha: 9000, ht: 1, shaft: 0 }, cur = { ...tg };
   let cloudNames = []; // mots de la légende (classifyClouds)
   let smokeUg = null; // fumée de feux au sol (microgrammes par mètre cube, FireWork) à l'heure affichée
   let az = Math.PI * 1.2, camH = 1.7, Rr = 75; const ct = new THREE.Vector3(0, 10, 0);
@@ -1495,7 +1495,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     if (growing && growT0 < 0 && shown && now - shownAt > 250) growT0 = now; // la scène apparaît d'abord, puis les environs poussent
     if (growing && growT0 >= 0) { const gt = (now - growT0) / 1000; growU.uGrow.value = gt; growU.uReveal.value = 650 * (1 - Math.pow(1 - Math.min(1, gt / 1.1), 2)); treeGrowStep(gt); if (gt >= GROW_TOTAL) finishGrow(); dirty = true; }
     const a = 1 - Math.exp(-dt * 3.5); let moving = false;
-    ['cum', 'mid', 'high', 'iv', 'rain', 'wet', 'pud', 'fogK', 'fogTh', 'smk', 'storm', 'brk', 'l0b', 'l0t', 'l0c', 'l0k', 'l0w', 'l0s', 'l0d', 'm1b', 'm1t', 'm1c', 'm1k', 'hc', 'hk', 'ha', 'ht', 'shaft'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > (METRES.has(k) ? 0.5 : 0.0005)) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; }); // altitudes en mètres: seuil d'un demi-mètre (sinon la scène restait « en mouvement » 4 s et l'accumulation des nuages attendait)
+    ['cum', 'mid', 'high', 'iv', 'rain', 'wet', 'pud', 'fogK', 'fogTh', 'smk', 'storm', 'brk', 'l0b', 'l0t', 'l0c', 'l0k', 'l0w', 'l0s', 'l0d', 'l0n', 'm1b', 'm1t', 'm1c', 'm1k', 'hc', 'hk', 'ha', 'ht', 'shaft'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > (METRES.has(k) ? 0.5 : 0.0005)) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; }); // altitudes en mètres: seuil d'un demi-mètre (sinon la scène restait « en mouvement » 4 s et l'accumulation des nuages attendait)
     // Vue posée depuis 220 ms après un rendu en résolution réduite: une image de plus avec les nuages en pleine résolution.
     if (!shown && (terrainIn || now - createdAt > 1200)) { shown = true; shownAt = now; R.domElement.style.opacity = '1'; dirty = true; } // fondu sur le ciel bleu du conteneur
     if (growing && growT0 < 0) dirty = true; // attendre l'apparition en continuant à dessiner
@@ -1639,7 +1639,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     twL.target.position.copy(T0); twL.position.copy(T0).add(new THREE.Vector3(Math.sin(bearing) * Math.cos(0.17), Math.sin(0.17), -Math.cos(bearing) * Math.cos(0.17)).multiplyScalar(400));
     const sDir = new THREE.Vector3(Math.sin(bearing) * Math.cos(sp.altitude), Math.sin(sp.altitude), -Math.cos(bearing) * Math.cos(sp.altitude)); U.uSun.value.copy(sDir); const sc1 = rgb(sc0); U.uSunCol.value.set(sc1[0], sc1[1], sc1[2]);
     const envNow = () => { const ug = U.uSunGap.value, pa = cloudU.uPixAng.value; U.uSunGap.value = 0; cloudU.uPixAng.value = 2 / 64; updateEnv(); U.uSunGap.value = ug; cloudU.uPixAng.value = pa; }; // la trouée autour du soleil ne compte pas dans la lumière d'ambiance (fait plus bas, après les nuages)
-    const key3 = [cumS, mid, high, iv, uW, dk, sDir.x, sDir.y, smk, cur.storm, cur.l0c, cur.l0k, cur.l0s, cur.m1c, cur.hc, cur.l0b, cur.l0t].map(v => v.toFixed(2)).join(',');
+    const key3 = [cumS, mid, high, iv, uW, dk, sDir.x, sDir.y, smk, cur.storm, cur.l0c, cur.l0k, cur.l0s, cur.l0n, cur.m1c, cur.hc, cur.l0b, cur.l0t].map(v => v.toFixed(2)).join(',');
     const cgv = Math.max(0, new THREE.Vector3(vF.x, 0, vF.z).normalize().dot(sDir)), thick = 1 - iv;
     // Brouillard: couleur de l'horizon du même ciel physique dans la direction regardée (épaule comme dans le shader),
     // puis voile, cumulus, heure bleue et nuit comme le ciel; tout en linéaire.
@@ -1694,7 +1694,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     cloudU.uPixAng.value = 2 * Math.tan(cam.fov * Math.PI / 360) / Math.max(1, PH); // pixel de l'image pleine résolution (même rendu en mouvement)
     const fogCov = fogSig > 0 ? 1 - Math.exp(-fogSig * fogThick) : 0, l0c = cam.position.y > fogTopW + 10 ? cur.l0c : Math.max(cur.l0c, fogCov);
     cloudU.uLay0.value.set(T0y + cur.l0b, T0y + cur.l0t, l0c, fogCov > cur.l0c && cam.position.y <= fogTopW + 10 ? Math.min(cur.l0k, 0.1) : cur.l0k);
-    cloudU.uLay0b.value.set(cur.l0w, cur.l0s, 0, cur.l0d); cloudU.uLay1.value.set(T0y + cur.m1b, T0y + cur.m1t, cur.m1c, cur.m1k); cloudU.uHi.value.set(cur.hc, cur.hk, T0y + cur.ha, cur.ht);
+    cloudU.uLay0b.value.set(cur.l0w, cur.l0s, cur.l0n, cur.l0d); cloudU.uLay1.value.set(T0y + cur.m1b, T0y + cur.m1t, cur.m1c, cur.m1k); cloudU.uHi.value.set(cur.hc, cur.hk, T0y + cur.ha, cur.ht);
     cloudU.uGround.value = T0y; cloudU.uCamW.value.copy(cam.position); cloudU.uShaft.value = cur.shaft * (1 - 0.5 * cur.brk);
     const drift = ((dateMs / 1000) % 1209600) * 5.5; cloudU.uOff.value.set(-drift * 0.93, 0, drift * 0.37); // 20 km/h; modulo 14 jours (6 650 km: précision de 0,5 m en flottants 32 bits), champ périodique de 28 560 km
     if (envNow && key3 !== envKey && now - envAt > 120) { envKey = key3; envAt = now; envNow(); }
@@ -1717,7 +1717,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     // l'épaisseur: claire sous un stratus mince, très sombre sous un orage), avec un reste de brume; le voile d'altitude comme avant.
     const slabRad = (layer) => {
       const typ = layer === 0 ? cur.l0k : cur.m1k, cov = layer === 0 ? cur.l0c : cur.m1c, thick = layer === 0 ? cur.l0t - cur.l0b : cur.m1t - cur.m1b;
-      const sig = layer === 0 ? 0.03 + 0.04 * typ : 0.015 + 0.015 * typ, tau = thick * sig * (0.85 - 0.05 * typ) * (0.5 + 0.5 * cov), trans = 1 / (1 + 0.22 * tau), sun = layer === 0 ? sL : sM;
+      const sig = layer === 0 ? (0.03 + 0.04 * typ) * Math.max(0.05, cur.l0n) : 0.015 + 0.015 * typ, tau = thick * sig * (0.85 - 0.05 * typ) * (0.5 + 0.5 * cov), trans = 1 / (1 + 0.22 * tau), sun = layer === 0 ? sL : sM;
       const skyIrr = ambZ.map((v, i) => (0.65 * v + 0.35 * ambH[i]) * Math.PI), dark = layer === 0 ? cur.l0d : 0;
       return sun.map((v, i) => ((v * Math.max(Math.sin(sp.altitude), 0) + skyIrr[i]) / Math.PI * 0.3 * trans + ambG[i] * 0.35 * trans) * (1 - dark * (1 - trans) * [0.22, 0.16, 0.05][i]));
     };
@@ -1854,8 +1854,10 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     const ts = data && data.treesSrc, treeLine = ts && ts.n ? `Arbres LiDAR, conifères estimés d’après ${ts.essences && ts.essences.length ? ts.essences.join(' et ') : 'la forme des cimes'}` : '';
     const satNote = sat && sat.shift ? (sat.shift[0] || sat.shift[1] ? ` (recalée de ${Math.abs(sat.shift[0])} m ${sat.shift[0] >= 0 ? 'est' : 'ouest'} et ${Math.abs(sat.shift[1])} m ${sat.shift[1] >= 0 ? 'nord' : 'sud'})` : ' (non recalée)') : '';
     const srcLine = [relief, treeLine, pavedLine, sat ? SAT_CREDIT + satNote : ''].filter(Boolean).join(' · ');
-    const info = cond + '|' + parts + '|' + where + '|' + height + '|' + srcLine + '|' + (est > 0.55 ? 'dark' : 'light');
-    if (info !== lastInfo) { lastInfo = info; onInfo({ cond, parts, where, height, srcLine, light: est <= 0.55, northDeg: (Math.atan2(vF.x, -vF.z) * 180 / Math.PI) }); }
+    // Ciel observé (satellite, aéroport) qui a corrigé cette heure (src/weather/nowcast.js)
+    const obsLine = w.obsInfo || '';
+    const info = cond + '|' + parts + '|' + obsLine + '|' + where + '|' + height + '|' + srcLine + '|' + (est > 0.55 ? 'dark' : 'light');
+    if (info !== lastInfo) { lastInfo = info; onInfo({ cond, parts, obsLine, where, height, srcLine, light: est <= 0.55, northDeg: (Math.atan2(vF.x, -vF.z) * 180 / Math.PI) }); }
   }
   raf = requestAnimationFrame(frame);
   const ro = new ResizeObserver(() => resize()); ro.observe(container);
@@ -1934,8 +1936,15 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       const V = row?.visibility, sat = row?.fogThick != null, lowOk = (row?.cloudLow ?? 0) >= 80;
       tg.fogK = V != null && V >= 0 && sat && lowOk && !(tg.rain > 0) ? 3912 / Math.max(V, 40) * smooth(5000, 1000, V) : 0; tg.fogTh = Math.min(row?.fogThick ?? 600, 600);
       // Forme des nuages (sky.js, d'après le profil vertical, le nuage convectif, le CAPE et le code météo d'ICON).
-      const cl = classifyClouds(row ? { ...row, sunFraction: s } : row);
-      Object.assign(tg, { l0b: cl.low.base, l0t: cl.low.top, l0c: cl.low.cov, l0k: cl.low.type, l0w: cl.low.tower, l0s: cl.low.cb, l0d: cl.low.dark, m1b: cl.mid.base, m1t: cl.mid.top, m1c: cl.mid.cov, m1k: cl.mid.type, hc: cl.high.cov, hk: cl.high.type, ha: cl.high.alt, ht: cl.high.thick, shaft: cl.shaft });
+      // Épaisseur des nuages bas (sky.js): part au soleil et nuages bas d'ICON lui-même (direct et couverture avant la combinaison
+      // des modèles et le ciel observé), moyenne des heures T et T+1 (le rayonnement à T est la moyenne de l'heure précédente).
+      // Après le coucher, l'heure précédente seulement (au-delà, le ciel a pu changer).
+      const pIco = (r) => r ? pSunOf(r.directIcon != null ? { ...r, direct: r.directIcon } : r) : null, lowIco = (r) => r ? (r.cloudLowIcon ?? r.cloudLow) : null;
+      const pa = pIco(row), pb = pIco(row?.next), pp = pIco(row?.prev?.[0]);
+      const pThin = pa != null && pb != null ? (pa + pb) / 2 : pa ?? pb ?? pp;
+      const fThin = pa != null && pb != null ? ((lowIco(row) ?? 0) + (lowIco(row.next) ?? lowIco(row) ?? 0)) / 2 : pa != null ? lowIco(row) : pb != null ? lowIco(row.next) : lowIco(row?.prev?.[0]);
+      const cl = classifyClouds(row ? { ...row, sunFraction: s, pSun: pThin, pSunLow: fThin } : row);
+      Object.assign(tg, { l0b: cl.low.base, l0t: cl.low.top, l0c: cl.low.cov, l0k: cl.low.type, l0w: cl.low.tower, l0s: cl.low.cb, l0d: cl.low.dark, l0n: cl.low.thin ?? 1, m1b: cl.mid.base, m1t: cl.mid.top, m1c: cl.mid.cov, m1k: cl.mid.type, hc: cl.high.cov, hk: cl.high.type, ha: cl.high.alt, ht: cl.high.thick, shaft: cl.shaft });
       cloudNames = cl.names;
       // Brouillard ou stratus bas d'après le profil ICON (10 octobre 2026): les « nuages bas » d'ICON comptent la nappe elle-même.
       // Si aucun niveau de pression échantillonné au-dessus de la nappe (jusqu'à 2 500 m) ne porte de nuage, il n'y a pas de

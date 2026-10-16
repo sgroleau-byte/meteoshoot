@@ -1,10 +1,12 @@
-// Serveur local des fonctions /api/scene3d, /api/terrain, /api/horizon et /api/apple-snapshot pour le développement (npm run dev la joint par le
+// Serveur local des fonctions /api/scene3d, /api/terrain, /api/horizon, /api/apple-snapshot, /api/metar et /api/goes pour le développement (npm run dev la joint par le
 // proxy Vite: /api -> localhost:3999). En production, Vercel sert api/scene3d.js directement.
 import http from 'http';
 import handler from '../api/scene3d.js';
 import terrain from '../api/terrain.js';
 import horizon from '../api/horizon.js';
 import appleSnapshot from '../api/apple-snapshot.js';
+import metar from '../api/metar.js';
+import goes from '../api/goes.js';
 
 const port = Number(process.env.PORT) || 3999;
 http.createServer((req, res) => {
@@ -12,5 +14,7 @@ http.createServer((req, res) => {
   if (req.url.startsWith('/api/terrain')) { terrain(req, res); return; }
   if (req.url.startsWith('/api/horizon')) { horizon(req, res); return; }
   if (req.url.startsWith('/api/apple-snapshot')) { appleSnapshot(req, res); return; }
+  if (req.url.startsWith('/api/metar')) { metar(req, res); return; }
+  if (req.url.startsWith('/api/goes')) { goes(req, res); return; }
   res.statusCode = 404; res.end('introuvable');
 }).listen(port, () => console.log(`scene3d: http://localhost:${port}/api/scene3d?lat=46.8367&lng=-71.2336`));

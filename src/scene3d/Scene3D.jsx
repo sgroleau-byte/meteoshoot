@@ -215,7 +215,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
   useEffect(() => { if (eng.current) eng.current.setTime(timeMs); }, [timeMs]);
   // engReady: les données propres à la 3D arrivent à part (15 octobre 2026) et peuvent précéder la fin du chargement du
   // moteur, qui démarre alors avec la rangée de base; on la réapplique dès qu'il est prêt.
-  useEffect(() => { if (eng.current) eng.current.setWeather(weatherRow); }, [engReady, weatherRow?.time, weatherRow?.cloudLow, weatherRow?.cloudMid, weatherRow?.cloudHigh, weatherRow?.sunFraction, weatherRow?.precip, weatherRow?.wc, weatherRow?.convBase, weatherRow?.convDepth, weatherRow?.direct, weatherRow?.diffuse, weatherRow?.visibility, weatherRow?.next?.direct, weatherRow?.cape, weatherRow?.lcl]);
+  useEffect(() => { if (eng.current) eng.current.setWeather(weatherRow); }, [engReady, weatherRow?.time, weatherRow?.cloudLow, weatherRow?.cloudMid, weatherRow?.cloudHigh, weatherRow?.sunFraction, weatherRow?.precip, weatherRow?.wc, weatherRow?.convBase, weatherRow?.convDepth, weatherRow?.direct, weatherRow?.diffuse, weatherRow?.visibility, weatherRow?.next?.direct, weatherRow?.cape, weatherRow?.lcl, weatherRow?.obsInfo, weatherRow?.prev?.[0]?.direct]);
   // Fumée de feux (FireWork) à l'heure affichée, seulement dans la fenêtre de prévision de la 3D (comme la météo) et un
   // jour où l'app en signale déjà (moyenne du jour, icône du soleil): par prudence, la couche horaire seule mêle le fond
   // urbain. Demandée un court instant après l'arrêt du curseur; une heure déjà lue s'affiche tout de suite, une réponse
@@ -374,6 +374,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
         <div>{info.cond}{isMobile && <span style={{ opacity: 0.6, marginLeft: '8px', fontSize: '10px', letterSpacing: '0.08em' }}>{legendOpen ? 'MOINS' : 'PLUS'}</span>}</div>
         {(!isMobile || legendOpen) && <>
           {info.parts && <div style={{ opacity: 0.8 }}>{info.parts}</div>}
+          {info.obsLine && <div style={{ opacity: 0.8 }}>{info.obsLine}</div>}
           <div style={{ opacity: 0.75 }}>{info.where}</div>
           {info.height && <div style={{ opacity: 0.75 }}>{info.height}</div>}
           {info.srcLine && <div style={{ opacity: 0.6, fontSize: isMobile ? '10px' : '11px' }}>{info.srcLine}</div>}

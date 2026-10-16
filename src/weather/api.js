@@ -1,4 +1,7 @@
 import { SHOOT_WINDOWS, isGoodWeather, sunlitFraction, weatherCodeIcon } from './iconsLogic.js';
+import { fetchObserved, applyObservedToHourly, applyNowcast } from './nowcast.js';
+import { clearDirHour, sunElevation } from './solar.js';
+import { blendCloud, BLEND_MEMBERS, loadBlendModel } from './blend.js';
 
 // ===== WEATHER API =====
 // Mode simulation (uniquement en dev): permet de tester la banniere et le badge stale
@@ -317,6 +320,50 @@ export const fogTopFrom = (h, i, elev) => {
 const HOURLY_KEYS = ['temperature_2m', 'weathercode', 'windspeed_10m', 'windgusts_10m', 'cloudcover', 'precipitation', 'precipitation_probability', 'direct_radiation', 'diffuse_radiation', 'cloudcover_low'];
 const DAILY_KEYS = ['weathercode', 'temperature_2m_max', 'temperature_2m_min', 'sunrise', 'sunset'];
 
+// Champs ajoutés à une rangée formatée seulement quand ils servent (prévision gardée en cache local: poids)
+function extraCloudFields(h, i) {
+  const o = {};
+  if (h.blendK?.[i] != null) { o.blendK = h.blendK[i]; o.cloudcoverIcon = h.cloudcoverIcon[i]; o.cloudLowIcon = h.cloudLowIcon[i]; }
+  if (h.obsW?.[i]) { o.obsW = h.obsW[i]; o.cloudcoverModel = h.cloudcoverModel[i]; o.cloudLowModel = h.cloudLowModel[i]; o.directIcon = h.directIcon[i]; if (h.obsInfo[i]) o.obsInfo = h.obsInfo[i]; if (h.obsLayers[i]) o.obsLayers = h.obsLayers[i]; }
+  return o;
+}
+
+// Noms Open-Meteo des membres de la couverture combinée (ICON et GFS viennent des deux requêtes de base)
+const MEMBER_API = { GEM: 'gem_seamless', ECMWF: 'ecmwf_ifs025', AIFS: 'ecmwf_aifs025_single', UKMO: 'ukmo_seamless', NBM: 'ncep_nbm_conus', IFS9: 'ecmwf_ifs' };
+function applyBlend(hourly, { model, gfs, gfsHourIdx, members, lat, lng, tzOffsetMin, now = Date.now() }) {
+  const n = hourly.time.length;
+  hourly.cloudcoverIcon = hourly.cloudcover.slice(); hourly.cloudLowIcon = hourly.cloudcover_low.slice(); hourly.blendK = new Array(n).fill(null);
+  if (!model) return;
+  const msOf = (t) => (tzOffsetMin != null ? Date.parse(t + ':00Z') - tzOffsetMin * 60000 : new Date(t).getTime());
+  const memIdx = {}; if (members && members.hourly) members.hourly.time.forEach((t, i) => { memIdx[t] = i; });
+  const mem = (m, t) => { const a = members && members.hourly && members.hourly[`cloud_cover_${MEMBER_API[m]}`]; const i = memIdx[t]; return a && i != null ? a[i] : null; };
+  // part de l'heure au soleil prévue par ICON (direct rapporté au ciel clair), moyenne des rangées T et T+1 (le rayonnement
+  // est la moyenne de l'heure précédente), comme au banc
+  const pAt = (i) => { if (i >= n || hourly.direct_radiation[i] == null) return null; const c = clearDirHour(msOf(hourly.time[i]), lat, lng); return c >= 3 ? Math.min(1, hourly.direct_radiation[i] / c) : null; };
+  for (let i = 0; i < n; i++) {
+    if (hourly.model[i] !== 'icon') continue;
+    const t = hourly.time[i], ms = msOf(t), ahead = (ms - now) / 3600000;
+    if (ahead < -24 || ahead > 72) continue;
+    const ico = hourly.cloudcover[i]; if (ico == null) continue;
+    const p0 = pAt(i), p1 = pAt(i + 1), pSun = p0 != null && p1 != null ? (p0 + p1) / 2 : p0 ?? p1;
+    const gi = gfsHourIdx[t];
+    const f = { ICON: ico, GFS: gi != null && gfs ? gfs.hourly.cloudcover[gi] : null, GEM: mem('GEM', t), ECMWF: mem('ECMWF', t), AIFS: mem('AIFS', t), UKMO: mem('UKMO', t), NBM: mem('NBM', t), IFS9: mem('IFS9', t), ICONlow: hourly.cloudcover_low[i], pSun, sunEl: sunElevation(ms, lat, lng) };
+    // Au moins trois autres modèles à cette heure (sinon les arbres travailleraient sur des entrées qu'ils n'ont presque jamais vues manquer)
+    if (['GEM', 'ECMWF', 'AIFS', 'UKMO', 'IFS9'].filter((k) => f[k] != null).length < 3) continue;
+    const b = blendCloud(model, f, Math.max(0, ahead));
+    if (b == null) continue;
+    const low = hourly.cloudcover_low[i];
+    hourly.cloudcover[i] = b;
+    hourly.blendK[i] = Math.round(Math.min(3, b / Math.max(5, ico)) * 100) / 100;
+    // ICON presque sans nuages: la part basse du total combiné vient de GFS (même heure), sinon 60 % (moyenne observée au Québec)
+    const gT = gi != null && gfs ? gfs.hourly.cloudcover[gi] : null, gL = gi != null && gfs ? gfs.hourly.cloudcover_low?.[gi] : null;
+    if (low != null) hourly.cloudcover_low[i] = Math.round(Math.min(b, ico >= 5 ? low * b / ico : gT >= 10 && gL != null ? b * Math.min(1, gL / gT) : b * 0.6));
+  }
+}
+
+// Dernier ciel observé par lieu (fetchWeather), réutilisé pour corriger les nuages moyens et hauts de la 3D.
+const lastObserved = new Map();
+
 export const fetchWeather = async (lat, lng) => {
   // Hit mémoire frais (< 30 min): on resserre sans toucher au réseau. Ce sont des données
   // d'un succès récent, donc fraîches (fromCache:false, pas le badge "stale"). Court-circuit
@@ -333,11 +380,19 @@ export const fetchWeather = async (lat, lng) => {
   // garde exactement la meme forme qu'une reponse Open-Meteo unique: ni l'affichage ni le
   // parsing plus bas ne changent.
   const qs = `latitude=${lat}&longitude=${lng}&hourly=${HOURLY_KEYS.join(',')}&daily=${DAILY_KEYS.join(',')}&timezone=America/Toronto&forecast_days=10`;
-  const [iconRes, gfsRes, smokeMap] = await Promise.all([
+  // Autres modèles pour la couverture combinée (src/weather/blend.js): couverture totale seulement, 4 jours, poids 1 chez
+  // Open-Meteo. Requête facultative: attendue au plus 6 s après les deux modèles de base (Open-Meteo surchargé la faisait
+  // durer jusqu'à 100 s avec ses nouveaux essais); sans elle, ICON reste tel quel.
+  const membersP = fetchOpenMeteoModel('forecast', `latitude=${lat}&longitude=${lng}&hourly=cloud_cover&models=${BLEND_MEMBERS.map((m) => MEMBER_API[m]).filter(Boolean).join(',')}&timezone=America/Toronto&forecast_days=4`);
+  const [iconRes, gfsRes, smokeMap, observed, blendModel] = await Promise.all([
     fetchOpenMeteoModel('dwd-icon', qs),
     fetchOpenMeteoModel('gfs', qs),
     fetchSmoke(lat, lng),   // ne rejette jamais: {} si pas de fumee / hors saison / panne
+    getWeatherSim() ? Promise.resolve(null) : fetchObserved(lat, lng),   // satellite et aéroports; ne rejette jamais: null
+    loadBlendModel(),
   ]);
+  const membersRes = await Promise.race([membersP, new Promise((res) => setTimeout(() => res(null), 6000))]);
+  const membersOk = !!(membersRes && membersRes.data && membersRes.data.hourly);
   const icon = iconRes.data || null;
   const gfs = gfsRes.data || null;
 
@@ -370,7 +425,9 @@ export const fetchWeather = async (lat, lng) => {
     const cached = readWeatherCache(lat, lng);
     const cachedData = cached && dropPastDays(cached.data);
     if (cachedData) {
-      return { data: cachedData, fromCache: true, cachedAt: cached.cachedAt, error: chosen.error, status: chosen.status };
+      // Ciel observé de la copie: périmé, on le retire (pas d'« Observé » de la veille dans la légende de la 3D)
+      const noObs = cachedData && { ...cachedData, hourly: cachedData.hourly.map(({ obsW, obsInfo, obsLayers, ...h }) => h) };
+      return { data: noObs, fromCache: true, cachedAt: cached.cachedAt, error: chosen.error, status: chosen.status };
     }
     return { error: chosen.error, status: chosen.status };
   }
@@ -424,6 +481,19 @@ export const fetchWeather = async (lat, lng) => {
       data.daily[k].push(arr && si != null ? (arr[si] ?? null) : null);
     });
   });
+
+  // Couverture combinée (15 octobre 2026): sur les 72 premières heures d'ICON, la couverture totale vient du mélange appris
+  // sur 12 mois d'observations (ICON et les autres modèles, plus le soleil prévu par ICON); les nuages bas d'ICON suivent
+  // en proportion. Valeurs d'ICON gardées (cloudcoverIcon) et rapport gardé pour les nuages moyens et hauts de la 3D (blendK).
+  applyBlend(data.hourly, { model: blendModel, gfs, gfsHourIdx, members: membersRes && membersRes.data, lat, lng, tzOffsetMin: (iconOk ? icon : gfs)?.utc_offset_seconds != null ? (iconOk ? icon : gfs).utc_offset_seconds / 60 : null });
+
+  // Ciel observé (15 octobre 2026): le satellite GOES-19 et les aéroports voisins corrigent les premières heures (nuages et
+  // part de l'heure au soleil), avant les statistiques du jour et l'indice AM/PM (src/weather/nowcast.js). Le fuseau des
+  // heures est celui de la réponse (America/Toronto), pas celui de l'appareil.
+  const ref = iconOk ? icon : gfs;
+  const tzOffsetMin = ref && ref.utc_offset_seconds != null ? ref.utc_offset_seconds / 60 : null;
+  const obsUsed = applyObservedToHourly(data.hourly, observed, { lat, lng, tzOffsetMin, elev: ref?.elevation ?? 0, clearDir: (t) => clearDirHour(t, lat, lng) });
+  if (obsUsed) lastObserved.set(weatherCacheKey(lat, lng), { obs: obsUsed, tzOffsetMin, at: Date.now() });
 
   // Calculer stats journalières depuis les données horaires (6h-18h)
   const getDailyStats = (dateStr) => {
@@ -494,7 +564,7 @@ export const fetchWeather = async (lat, lng) => {
   };
 
   const formatted = {
-    hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), gust: data.hourly.windgusts_10m?.[i] != null ? Math.round(data.hourly.windgusts_10m[i]) : null, cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, precipProb: data.hourly.precipitation_probability?.[i] ?? null, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), cloudLow: data.hourly.cloudcover_low?.[i] ?? null, smoke: smokeMap[dateOf(t)] || 0, icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]), ...radiation(data.hourly, i), model: data.hourly.model[i] })),
+    hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), gust: data.hourly.windgusts_10m?.[i] != null ? Math.round(data.hourly.windgusts_10m[i]) : null, cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, precipProb: data.hourly.precipitation_probability?.[i] ?? null, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), cloudLow: data.hourly.cloudcover_low?.[i] ?? null, smoke: smokeMap[dateOf(t)] || 0, icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]), ...radiation(data.hourly, i), model: data.hourly.model[i], ...extraCloudFields(data.hourly, i) })),
     daily: data.daily.time.map((t,i) => {
       const stats = getDailyStats(t);
       // Use hourly-derived icon when available, fallback to daily weathercode
@@ -511,7 +581,7 @@ export const fetchWeather = async (lat, lng) => {
   writeWeatherCache(lat, lng, formatted);
   // Resservi < 30 min sans rappeler l'API, mais seulement si les deux modèles ont répondu: avec un seul (l'autre refusé
   // malgré les nouveaux essais), la prochaine ouverture retente plutôt que de garder 30 min des jours moins fiables.
-  if (iconOk && gfsOk) weatherMemCache.set(memKey, { data: formatted, fetchedAt });
+  if (iconOk && gfsOk && membersOk) weatherMemCache.set(memKey, { data: formatted, fetchedAt });
   return { data: formatted, fromCache: false, cachedAt: fetchedAt };
 };
 
@@ -520,7 +590,7 @@ export const fetchWeather = async (lat, lng) => {
 // la base des cumulus); de GFS, visibilité et nappe de brouillard. Une heure venue de GFS dans la prévision (ICON en panne)
 // prend aussi ses nuages chez GFS, comme avant. Rend une table heure -> champs à fondre dans les rangées de fetchWeather
 // (mergeSceneWeather), ou null si rien n'a répondu et qu'aucune copie n'est gardée.
-const SCENE_SKY_KEYS = ['temperature_2m', 'cloudcover_mid', 'cloudcover_high', 'convective_cloud_base', 'convective_cloud_top', ...SKY_KEYS];
+const SCENE_SKY_KEYS = ['temperature_2m', 'cloudcover', 'cloudcover_mid', 'cloudcover_high', 'convective_cloud_base', 'convective_cloud_top', ...SKY_KEYS];
 // Gardées 30 min en mémoire, et une copie locale (6 lieux, 24 h) sert de filet quand Open-Meteo ne répond pas, comme pour la
 // prévision. La clé porte le modèle des heures: des nuages de GFS (ICON en panne) ne servent jamais à des heures d'ICON.
 const SCENE_CACHE_KEY = 'sp-scene-weather-cache';
@@ -543,7 +613,7 @@ export const fetchSceneWeather = async (lat, lng, weather) => {
   const gfsRows = hours.slice(0, 96).some((h) => h.model === 'gfs');
   const key = `${weatherCacheKey(lat, lng)}|${gfsRows ? 'gfs' : 'icon'}`;
   const mem = sceneMemCache.get(key);
-  if (mem && Date.now() - mem.fetchedAt < WEATHER_MEM_TTL_MS) return mem.data;
+  if (mem && Date.now() - mem.fetchedAt < WEATHER_MEM_TTL_MS) return finishScene(lat, lng, mem.data, hours);
   const qs = (keys) => `latitude=${lat}&longitude=${lng}&hourly=${[...new Set(keys)].join(',')}&timezone=America/Toronto&forecast_days=3`;
   const ok = (r) => (r.data && r.data.hourly && r.data.hourly.time ? r.data : null);
   const [iconRes, gfsRes] = await Promise.all([
@@ -553,7 +623,7 @@ export const fetchSceneWeather = async (lat, lng, weather) => {
   const icon = ok(iconRes), gfs = ok(gfsRes);
   // Nuages de GFS: déjà dans sa réponse s'il fournit des heures de la prévision; sinon demandés seulement si ICON a échoué.
   const gfsSky = gfsRows ? gfs : (icon ? null : ok(await fetchOpenMeteoModel('gfs', qs(SCENE_SKY_KEYS))));
-  if (!icon && !gfs && !gfsSky) return readSceneCache(key);
+  if (!icon && !gfs && !gfsSky) return finishScene(lat, lng, readSceneCache(key), hours);
   const indexOf = (res) => { const m = {}; if (res) res.hourly.time.forEach((t, i) => { m[t] = i; }); return m; };
   const iconIdx = indexOf(icon), gfsIdx = indexOf(gfs), skyIdx = indexOf(gfsSky);
   const out = {};
@@ -565,7 +635,8 @@ export const fetchSceneWeather = async (lat, lng, weather) => {
     const src = order.find(([res, idx]) => res && h.time in idx);
     if (src) {
       const [res, idx] = src, i = idx[h.time];
-      Object.assign(x, { cloudMid: res.hourly.cloudcover_mid?.[i] ?? null, cloudHigh: res.hourly.cloudcover_high?.[i] ?? null }, convective(res.hourly, i), skyProfile(res.hourly, i, res.elevation ?? 0));
+      // Valeurs brutes (en cache); la couverture combinée et le ciel observé s'appliquent à la lecture (finishScene)
+      Object.assign(x, { cloudMid: res.hourly.cloudcover_mid?.[i] ?? null, cloudHigh: res.hourly.cloudcover_high?.[i] ?? null, totScene: res.hourly.cloudcover?.[i] ?? null, fromIcon: res === icon }, convective(res.hourly, i), skyProfile(res.hourly, i, res.elevation ?? 0));
     }
     // Visibilité et épaisseur de la nappe au-dessus du sol (le haut moins l'altitude du lieu): toujours de GFS, quel que
     // soit le modèle de l'heure. Une épaisseur plutôt qu'une altitude: la 3D la pose sur son propre sol (relief LiDAR, ou sol
@@ -577,7 +648,28 @@ export const fetchSceneWeather = async (lat, lng, weather) => {
     out[h.time] = x;
   });
   if (icon && gfs) { sceneMemCache.set(key, { data: out, fetchedAt: Date.now() }); writeSceneCache(key, out); }
-  return out;
+  return finishScene(lat, lng, out, hours);
+};
+// Nuages moyens et hauts de la 3D à la lecture de la table (gardée brute en cache): en proportion du total combiné de la
+// prévision actuelle (blendK, heures d'ICON), puis corrigés par le dernier ciel observé du lieu (moins de 30 min), comme
+// les nuages bas et le total de la prévision (fetchWeather). Rend une copie.
+const finishScene = (lat, lng, out, hours) => {
+  if (!out) return out;
+  // rapport = total combiné de la prévision (avant le ciel observé) / total d'ICON de la table elle-même (son exécution peut être
+  // plus ancienne que celle de la prévision)
+  const bOf = {}; (hours || []).forEach((h) => { if (h.blendK != null) bOf[h.time] = h.cloudcoverModel ?? h.cloudcover; });
+  const res = {};
+  for (const [t, x] of Object.entries(out)) {
+    const k = x.fromIcon !== false && bOf[t] != null && x.totScene != null ? Math.min(3, bOf[t] / Math.max(5, x.totScene)) : 1, sc = (v) => (v == null ? null : Math.round(Math.min(100, v * k)));
+    res[t] = { ...x, cloudMid: sc(x.cloudMid), cloudHigh: sc(x.cloudHigh) };
+    delete res[t].fromIcon; delete res[t].totScene;
+  }
+  const o = lastObserved.get(weatherCacheKey(lat, lng));
+  if (!o || Date.now() - o.at > WEATHER_MEM_TTL_MS) return res;
+  const times = Object.keys(res).sort();
+  const rows = applyNowcast(times.map((t) => ({ time: t, cloudMid: res[t].cloudMid, cloudHigh: res[t].cloudHigh })), { ...o.obs, tot: null, low: null }, { tzOffsetMin: o.tzOffsetMin });
+  rows.forEach((r) => { if (r.obsW) res[r.time] = { ...res[r.time], cloudMid: r.cloudMid, cloudHigh: r.cloudHigh }; });
+  return res;
 };
 // Prévision avec les données de la 3D fondues dans ses rangées horaires (les heures sans données restent telles quelles).
 export const mergeSceneWeather = (weather, scene) => {

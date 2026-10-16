@@ -267,7 +267,7 @@ void marchLayer(vec3 ro, vec3 rd, int layer, float jit, float covK, float qualit
   float hb = lay.x - uGround, ht = lay.y - uGround, thick = lay.y - lay.x;
   vec2 s = seg(ro, rd, hb, ht); if (s.y <= s.x) return;
   vec3 sunRad = layer == 0 ? uSunL : uSunM;
-  float typ = lay.w, sig = layer == 0 ? mix(0.03, 0.07, typ) : mix(0.015, 0.03, typ);
+  float typ = lay.w, sig = layer == 0 ? mix(0.03, 0.07, typ) * clamp(uLay0b.z, 0.05, 1.0) : mix(0.015, 0.03, typ); /* uLay0b.z: nuages bas minces (classifyClouds) */
   float dMean = sig * mix(0.85, 0.8, typ) * (0.5 + 0.5 * lay.z), dark = layer == 0 ? uLay0b.w : 0.0;
   float Lf = layer == 0 ? 4500.0 : mix(6000.0, 2600.0, typ), ady = max(abs(rd.y), 0.02);
   vec3 hz = hzCol(rd);
@@ -415,6 +415,8 @@ export function sunAtAltitude(el0, h, turb, ray = 1.5) {
 // ---- Classement des nuages d'après la rangée horaire (ICON): couches basse, moyenne et haute avec leur forme.
 // Hauteurs en mètres au-dessus du sol. names: mots de la légende. Sans profil (rangée ancienne, GFS): règles simples sur
 // les parts bas/moyen/haut, le nuage convectif et le code météo.
+// Types de nuages bas des METAR: forme (0 stratus, 0,5 stratocumulus, 1 cumulus) et épaisseur typique (m)
+const LOW_TYPES = { ST: { typ: 0.05, thick: 300 }, SF: { typ: 0.3, thick: 300 }, SC: { typ: 0.45, thick: 400 }, CF: { typ: 0.85, thick: 300 }, CU: { typ: 0.9, thick: 900 }, TCU: { typ: 1, thick: 2500 }, CB: { typ: 1, thick: 6000 }, NS: { typ: 0.1, thick: 2500 } };
 export function classifyClouds(row) {
   const r = row || {};
   const low = (r.cloudLow ?? 0) / 100, mid = (r.cloudMid ?? 0) / 100, high = (r.cloudHigh ?? 0) / 100;
@@ -440,35 +442,69 @@ export function classifyClouds(row) {
   const rain = (wc >= 61 && wc <= 67) || (wc >= 51 && wc <= 57) ? 1 : 0, snow = wc >= 71 && wc <= 77 ? 1 : 0, fogCode = wc === 45 || wc === 48 ? 1 : 0;
   // ---- couche basse
   const conv = cDepth > 0 && cBase > 0 && cBase < 3200;
-  const cb = Math.max(storm, smooth(5000, 9000, cDepth) * (precip >= 0.1 ? 1 : 0.6)) * smooth(0.2, 0.6, low);
-  const tower = Math.max(smooth(1500, 5000, cDepth), cb);
+  let cb = Math.max(storm, smooth(5000, 9000, cDepth) * (precip >= 0.1 ? 1 : 0.6)) * smooth(0.2, 0.6, low);
+  let tower = Math.max(smooth(1500, 5000, cDepth), cb);
   let base, top, typ;
+  // Couches observées à l'aéroport voisin (premières heures, src/weather/nowcast.js): type et base réels de la couche basse
+  const obsL = Array.isArray(r.obsLayers) ? r.obsLayers : null;
+  const oLow = obsL ? obsL.filter((l) => LOW_TYPES[l.type] != null && l.base < 2600).sort((a, b) => b.octas - a.octas)[0] : null;
   if (conv) { base = cBase; top = cBase + cDepth; typ = 1; }
   else if (bLow) { base = bLow.base; top = bLow.top; typ = low >= 0.9 && base < 500 ? 0 : low >= 0.65 ? 0.4 : 0.7; }
-  else { base = r.lcl != null ? r.lcl : 700; top = base + (low >= 0.65 ? 500 : 900); typ = low >= 0.95 ? 0.1 : low >= 0.65 ? 0.4 : 0.8; }
+  else if (prof && cape <= 300) {
+    // Profil sec (aucun niveau assez humide pour porter un nuage) et air stable (15 octobre 2026): les « nuages bas » d'ICON
+    // sont alors des nuages partiels diagnostiqués sous la maille, qui portent très peu d'eau (son propre rayonnement les
+    // traverse); on dessinait 900 m de cumulus, sombres au soleil bas. Couche mince de stratocumulus.
+    base = r.lcl != null ? r.lcl : 700; top = base + (low >= 0.65 ? 500 : 400); typ = low >= 0.95 ? 0.1 : low >= 0.65 ? 0.4 : low >= 0.3 ? 0.55 : 0.75;
+  } else { base = r.lcl != null ? r.lcl : 700; top = base + (low >= 0.65 ? 500 : 900); typ = low >= 0.95 ? 0.1 : low >= 0.65 ? 0.4 : 0.8; }
   if (cape > 300 && !conv) typ = Math.max(typ, 0.8); // air instable: cumulus
+  // Peu de nuages observés (moins de 30 %): toujours des bancs détachés (un champ stratiforme à faible couverture se diluait en
+  // un voile granuleux sur tout le ciel)
+  if (oLow) {
+    const T = LOW_TYPES[oLow.type]; base = oLow.base; typ = low < 0.3 ? Math.max(T.typ, 0.75) : T.typ; if (!conv || T.typ < 0.8) top = base + T.thick;
+    // cumulus bourgeonnants et cumulonimbus observés: la tour et l'enclume avec (sinon simple « cumulus »)
+    if (oLow.type === 'TCU') tower = Math.max(tower, 0.6);
+    if (oLow.type === 'CB') { cb = Math.max(cb, 0.6); tower = 1; }
+  }
   if (rain || snow) { typ = Math.min(typ, 0.15); top = Math.max(top, base + 2500); } // nimbostratus: couche épaisse et sombre
   if (fogCode) { typ = 0; base = Math.min(base, 120); top = Math.max(top, 400); }
   base = Math.max(120, Math.min(2600, base)); top = Math.max(base + 250, Math.min(cb > 0.3 ? 12500 : 4500, top));
   if (cb > 0.3) top = Math.max(top, 6000 + 5000 * cb); // cumulonimbus: tour jusqu'à l'enclume
-  const lowL = { cov: low, base, top, type: typ, tower, cb, dark: Math.max(cb, rain * 0.6, smooth(0.3, 0.05, iv) * smooth(0.6, 0.95, low) * 0.5) };
+  // Nuages bas minces (15 octobre 2026): si la part de l'heure au soleil prévue par ICON (pSun, direct rapporté au ciel clair)
+  // dépasse la part du ciel libre de nuages bas, ces nuages laissent passer le soleil: transmission du direct
+  // t = (pSun - (1 - f)) / f. ICON diagnostique souvent des nuages partiels presque sans eau (schéma sous la maille): on les
+  // dessine minces et clairs (densité réduite jusqu'à 0,2) au lieu d'une base sombre. pSunLow: couverture basse de l'heure
+  // où pSun a été mesuré (la rangée voisine au coucher).
+  let thin = 1;
+  const oConv = oLow && (oLow.type === 'CU' || oLow.type === 'TCU' || oLow.type === 'CB');
+  if (r.pSun != null && !conv && !oConv && cb < 0.3 && !rain && !snow && !fogCode) {
+    // Peu de nuages (moins de 20 %): petits nuages pleins (une couche diluée sur tout le ciel faisait un voile laiteux et granuleux)
+    const f = Math.max(0.05, (r.pSunLow ?? r.cloudLow ?? 0) / 100), t = (r.pSun - (1 - f)) / f;
+    if (t > 0) thin = 1 - 0.55 * Math.min(1, t / 0.6) * smooth(0.2, 0.4, f);
+  }
+  const lowL = { cov: low, base, top, type: typ, tower, cb, thin, dark: Math.max(cb, rain * 0.6, smooth(0.3, 0.05, iv) * smooth(0.6, 0.95, low) * 0.5) };
   // ---- couche moyenne
   let mBase, mTop, mTyp, mCov = mid;
   if (bMid) { mBase = bMid.base; mTop = bMid.top; } else { mBase = 3200; mTop = 4300; }
+  const oMid = obsL ? obsL.filter((l) => (l.type === 'AC' || l.type === 'AS' || l.type === 'ACC') && l.base >= 2000).sort((a, b) => b.octas - a.octas)[0] : null;
+  if (oMid) { mBase = oMid.base; mTop = Math.max(mTop, mBase + (oMid.type === 'AS' ? 1500 : 600)); }
   const mThick = mTop - mBase;
   mTyp = 1 - smooth(0.55, 0.85, mid) * smooth(800, 2000, mThick + 600 * (1 - iv)); // altostratus si couvert et épais
+  if (oMid) mTyp = oMid.type === 'AS' ? 0 : 1;
   if (rain) { mTyp = 0; mCov = Math.max(mCov, low); mBase = Math.min(mBase, top + 200); } // nimbostratus prolongé
   mBase = Math.max(lowL.top + 100, Math.min(6500, mBase)); mTop = Math.max(mBase + 300, Math.min(7500, mTop));
-  const midL = { cov: mCov, base: mBase, top: mTop, type: mTyp };
+  // Traces (moins de 8 %): rien. À si faible couverture, le champ des altocumulus se défaisait en un voile granuleux sur tout le
+  // ciel au lieu de quelques bancs (cas du 15 octobre: « traces d'altocumulus » à l'aéroport).
+  const midL = { cov: mCov < 0.08 ? 0 : mCov, base: mBase, top: mTop, type: mTyp };
   // ---- nuages hauts
-  const hAlt = bHigh ? bHigh.center : 9000;
+  const oHigh = obsL ? obsL.filter((l) => l.type === 'CI' || l.type === 'CS' || l.type === 'CC').sort((a, b) => b.octas - a.octas)[0] : null;
+  const hAlt = oHigh ? oHigh.base + 500 : bHigh ? bHigh.center : 9000;
   const hTyp = 1 - smooth(0.5, 0.85, high); // cirrostratus quand la couverture est forte
   const hThick = 0.55 + 0.45 * (1 - iv); // voile plus dense quand le soleil direct est faible
   const highL = { cov: high, type: hTyp, alt: Math.max(7000, Math.min(12000, hAlt)), thick: hThick };
   // ---- mots de la légende
   const names = [];
   if (low >= 0.05) names.push(cb >= 0.5 ? 'cumulonimbus' : rain || snow ? 'nimbostratus' : fogCode ? 'stratus' : typ >= 0.75 ? (tower >= 0.5 ? 'cumulus bourgeonnants' : 'cumulus') : typ >= 0.3 ? 'stratocumulus' : 'stratus');
-  if (mCov >= 0.05 && !(rain && low >= 0.05) && !(storm >= 0.9 && high >= 0.05)) names.push(mTyp >= 0.5 ? 'altocumulus' : 'altostratus');
+  if (midL.cov >= 0.05 && !(rain && low >= 0.05) && !(storm >= 0.9 && high >= 0.05)) names.push(mTyp >= 0.5 ? 'altocumulus' : 'altostratus');
   if (high >= 0.05) names.push(storm >= 0.9 ? 'enclume' : hTyp >= 0.5 ? 'cirrus' : 'cirrostratus');
   return { low: lowL, mid: midL, high: highL, names, shaft: Math.max(storm, wc >= 80 ? 0.5 : 0, precip >= 0.5 ? 0.4 : 0) * smooth(0.1, 2, precip) };
 }

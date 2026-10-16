@@ -148,7 +148,7 @@ uniform vec3 uDir; uniform float uJit, uQual; void main(){ vec3 rd = normalize(u
     const buf = new Float32Array(4), prev = R.getRenderTarget(), out = [];
     U.uLay1.value.z = 0; U.uHi.value.x = 0; U.uShaft.value = 0;
     for (const c of cases) {
-      U.uLay0.value.set(g + (c.base ?? 1000), g + (c.top ?? 2000), c.cov, c.typ ?? 1); U.uLay0b.value.set(c.tower ?? 0, c.cb ?? 0, 0, 0);
+      U.uLay0.value.set(g + (c.base ?? 1000), g + (c.top ?? 2000), c.cov, c.typ ?? 1); U.uLay0b.value.set(c.tower ?? 0, c.cb ?? 0, c.thin ?? 1, 0);
       let s1 = 0, op = 0, lum = 0;
       for (let i = 0; i < n; i++) { const y = ymin + (1 - ymin) * (i + 0.5) / n, r = Math.sqrt(1 - y * y), a = i * 2.39996; mat.uniforms.uDir.value.set(r * Math.cos(a), y, r * Math.sin(a)); R.setRenderTarget(rt); R.render(sc, cam); R.readRenderTargetPixels(rt, 0, 0, 1, 1, buf); s1 += 1 - buf[3]; if (buf[3] < 0.3) op++; lum += 0.2126 * buf[0] + 0.7152 * buf[1] + 0.0722 * buf[2]; }
       out.push({ ...c, frac: +(s1 / n).toFixed(3), opaque: +(op / n).toFixed(3), lum: +(lum / n).toFixed(4) });

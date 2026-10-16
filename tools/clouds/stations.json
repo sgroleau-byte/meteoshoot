@@ -1,0 +1,354 @@
+[
+{
+"id": "CYQB",
+"name": "Quebec/Lesage Intl",
+"lat": 46.791,
+"lon": -71.396,
+"elev": 73,
+"prov": "QC"
+},
+{
+"id": "CYBC",
+"name": "Baie Comeau Arpt",
+"lat": 49.135,
+"lon": -68.202,
+"elev": 20,
+"prov": "QC"
+},
+{
+"id": "CYBG",
+"name": "Bagotville",
+"lat": 48.331,
+"lon": -70.989,
+"elev": 151,
+"prov": "QC"
+},
+{
+"id": "CYGP",
+"name": "Gasp\u00e9 Arpt",
+"lat": 48.777,
+"lon": -64.478,
+"elev": 31,
+"prov": "QC"
+},
+{
+"id": "CYGR",
+"name": "\u00celes de la Madeleine Arpt",
+"lat": 47.425,
+"lon": -61.775,
+"elev": 4,
+"prov": "QC"
+},
+{
+"id": "CYHU",
+"name": "Montreal/St Hubert",
+"lat": 45.516,
+"lon": -73.415,
+"elev": 26,
+"prov": "QC"
+},
+{
+"id": "CYML",
+"name": "Charlevoix Arpt",
+"lat": 47.6,
+"lon": -70.232,
+"elev": 287,
+"prov": "QC"
+},
+{
+"id": "CYMT",
+"name": "Chibougamau Arpt",
+"lat": 49.779,
+"lon": -74.527,
+"elev": 388,
+"prov": "QC"
+},
+{
+"id": "CYMX",
+"name": "Montreal/Mirabel Arpt",
+"lat": 45.68,
+"lon": -74.038,
+"elev": 78,
+"prov": "QC"
+},
+{
+"id": "CYND",
+"name": "Gatineau/Ottawa Exec",
+"lat": 45.52,
+"lon": -75.563,
+"elev": 57,
+"prov": "QC"
+},
+{
+"id": "CYOY",
+"name": "Valcartier",
+"lat": 46.9003,
+"lon": -71.5033,
+"elev": 168,
+"prov": "QC"
+},
+{
+"id": "CYRJ",
+"name": "Roberval Arpt",
+"lat": 48.523,
+"lon": -72.266,
+"elev": 173,
+"prov": "QC"
+},
+{
+"id": "CYRQ",
+"name": "Trois-Rivi\u00e8res",
+"lat": 46.358,
+"lon": -72.68,
+"elev": 58,
+"prov": "QC"
+},
+{
+"id": "CYSC",
+"name": "Sherbrooke Arpt",
+"lat": 45.44,
+"lon": -71.692,
+"elev": 236,
+"prov": "QC"
+},
+{
+"id": "CYUL",
+"name": "Montreal/Trudeau Intl",
+"lat": 45.468,
+"lon": -73.742,
+"elev": 31,
+"prov": "QC"
+},
+{
+"id": "CYUY",
+"name": "Rouyn/Noranda Arpt",
+"lat": 48.209,
+"lon": -78.83,
+"elev": 304,
+"prov": "QC"
+},
+{
+"id": "CYVO",
+"name": "Val D'Or Arpt",
+"lat": 48.056,
+"lon": -77.779,
+"elev": 329,
+"prov": "QC"
+},
+{
+"id": "CYYY",
+"name": "Mont Joli Arpt",
+"lat": 48.609,
+"lon": -68.208,
+"elev": 43,
+"prov": "QC"
+},
+{
+"id": "CYZV",
+"name": "Sept-\u00celes Arpt",
+"lat": 50.217,
+"lon": -66.26,
+"elev": 43,
+"prov": "QC"
+},
+{
+"id": "CYEG",
+"name": "Edmonton Intl Arpt",
+"lat": 53.308,
+"lon": -113.592,
+"elev": 710,
+"prov": "AB"
+},
+{
+"id": "CYFC",
+"name": "Fredericton Intl",
+"lat": 45.873,
+"lon": -66.539,
+"elev": 16,
+"prov": "NB"
+},
+{
+"id": "CYGK",
+"name": "Kingston Arpt",
+"lat": 44.223,
+"lon": -76.599,
+"elev": 91,
+"prov": "ON"
+},
+{
+"id": "CYHZ",
+"name": "Halifax/Stanfield Intl",
+"lat": 44.8781,
+"lon": -63.5136,
+"elev": 136,
+"prov": "NS"
+},
+{
+"id": "CYJT",
+"name": "Stephenville Intl",
+"lat": 48.545,
+"lon": -58.564,
+"elev": 7,
+"prov": "NL"
+},
+{
+"id": "CYLW",
+"name": "Kelowna Arpt",
+"lat": 49.953,
+"lon": -119.375,
+"elev": 420,
+"prov": "BC"
+},
+{
+"id": "CYOW",
+"name": "Ottawa/Cartier Intl",
+"lat": 45.307,
+"lon": -75.66,
+"elev": 111,
+"prov": "ON"
+},
+{
+"id": "CYQG",
+"name": "Windsor Intl",
+"lat": 42.269,
+"lon": -82.963,
+"elev": 189,
+"prov": "ON"
+},
+{
+"id": "CYQM",
+"name": "Moncton Intl",
+"lat": 46.107,
+"lon": -64.682,
+"elev": 67,
+"prov": "NB"
+},
+{
+"id": "CYQR",
+"name": "Regina Intl Arpt",
+"lat": 50.427,
+"lon": -104.67,
+"elev": 576,
+"prov": "SK"
+},
+{
+"id": "CYQT",
+"name": "Thunder Bay Intl",
+"lat": 48.374,
+"lon": -89.33,
+"elev": 197,
+"prov": "ON"
+},
+{
+"id": "CYQY",
+"name": "Sydney Arpt",
+"lat": 46.166,
+"lon": -60.049,
+"elev": 58,
+"prov": "NS"
+},
+{
+"id": "CYSB",
+"name": "Sudbury Arpt",
+"lat": 46.622,
+"lon": -80.799,
+"elev": 349,
+"prov": "ON"
+},
+{
+"id": "CYSJ",
+"name": "Saint John Arpt",
+"lat": 45.309,
+"lon": -65.886,
+"elev": 89,
+"prov": "NB"
+},
+{
+"id": "CYTS",
+"name": "Timmins/Power Arpt",
+"lat": 48.568,
+"lon": -81.378,
+"elev": 290,
+"prov": "ON"
+},
+{
+"id": "CYVR",
+"name": "Vancouver Intl",
+"lat": 49.183,
+"lon": -123.168,
+"elev": 2,
+"prov": "BC"
+},
+{
+"id": "CYWG",
+"name": "Winnipeg Intl Arpt",
+"lat": 49.916,
+"lon": -97.249,
+"elev": 238,
+"prov": "MB"
+},
+{
+"id": "CYXE",
+"name": "Saskatoon/Diefenbaker Intl",
+"lat": 52.172,
+"lon": -106.695,
+"elev": 504,
+"prov": "SK"
+},
+{
+"id": "CYXS",
+"name": "Prince George Arpt",
+"lat": 53.884,
+"lon": -122.677,
+"elev": 685,
+"prov": "BC"
+},
+{
+"id": "CYXU",
+"name": "London Intl",
+"lat": 43.039,
+"lon": -81.162,
+"elev": 278,
+"prov": "ON"
+},
+{
+"id": "CYXX",
+"name": "Abbotsford Intl",
+"lat": 49.027,
+"lon": -122.377,
+"elev": 54,
+"prov": "BC"
+},
+{
+"id": "CYYC",
+"name": "Calgary Intl",
+"lat": 51.116,
+"lon": -114.011,
+"elev": 1085,
+"prov": "AB"
+},
+{
+"id": "CYYG",
+"name": "Charlottetown Arpt",
+"lat": 46.289,
+"lon": -63.128,
+"elev": 48,
+"prov": "PE"
+},
+{
+"id": "CYYT",
+"name": "St Johns Intl",
+"lat": 47.627,
+"lon": -52.748,
+"elev": 128,
+"prov": "NL"
+},
+{
+"id": "CYYZ",
+"name": "Toronto/Pearson Intl",
+"lat": 43.679,
+"lon": -79.629,
+"elev": 171,
+"prov": "ON"
+}
+]
