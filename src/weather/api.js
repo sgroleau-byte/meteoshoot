@@ -350,7 +350,7 @@ export const fetchWeather = async (lat, lng) => {
   // Autres modèles pour la couverture combinée (src/weather/blend.js): couverture totale seulement, 4 jours, poids 1 chez
   // Open-Meteo. Requête facultative: attendue au plus 6 s après les deux modèles de base (Open-Meteo surchargé la faisait
   // durer jusqu'à 100 s avec ses nouveaux essais); sans elle, ICON reste tel quel.
-  const membersP = fetchOpenMeteoModel('forecast', `latitude=${lat}&longitude=${lng}&hourly=cloud_cover&models=${BLEND_MEMBERS.map((m) => MEMBER_API[m]).filter(Boolean).join(',')}&timezone=America/Toronto&forecast_days=4`);
+  const membersP = fetchOpenMeteoModel('forecast', `latitude=${lat}&longitude=${lng}&hourly=cloud_cover,cloud_cover_low&models=${BLEND_MEMBERS.map((m) => MEMBER_API[m]).filter(Boolean).join(',')}&timezone=America/Toronto&forecast_days=4`);
   const [iconRes, gfsRes, smokeMap, observed, blendModel] = await Promise.all([
     fetchOpenMeteoModel('dwd-icon', qs),
     fetchOpenMeteoModel('gfs', qs),

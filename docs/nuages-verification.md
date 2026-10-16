@@ -56,6 +56,8 @@
 - Ce qui n'apporte rien de mesurable : apprendre sur les deux années (gain sur ICON de 4,75 points contre 4,83 sur une année), ajouter la saison et l'heure solaire, ou donner trois fois plus de poids aux heures de lever et de coucher (13,76 contre 13,80 aux fenêtres).
 - Le modèle de l'app reste celui de la dernière année : il reflète les versions actuelles des modèles (AIFS 2 depuis mai 2026). Script : `tools/clouds/train2.py`.
 
+**Nuages bas combinés (v633.213).** Une deuxième combinaison prédit les nuages bas à partir de la couverture basse et totale de chaque modèle (cible : couches observées sous 6 500 pieds). À courte échéance, sur 12 mois, l'écart moyen avec les nuages bas observés est de 18,3 points avec ICON seul, 16,9 avec la méthode précédente de l'app (bas d'ICON mis à l'échelle du total combiné) et 13,5 combinés (13,7 région exclue). Les fausses alarmes (nuages bas réels au plus 2/8, annoncés à 40 % ou plus) passent de 24 % à 9 %. La veille et l'avant-veille suivront : seule l'archive des calculs complets (depuis avril 2026, `tools/clouds/fetch_runs.py`) garde la couverture basse à ces échéances. Script : `tools/clouds/train_low.py`.
+
 **Ciel observé pour les heures suivantes** (fond : la combinaison de la veille). La correction qui gagne est `w·observé + (1 - w)·prévision`, avec `w = e^(-h/tau)` : tau de 2,5 h pour le total, 3 h pour les nuages bas. Elle bat l'écart additif et le rapport. Avec ICON seul comme fond, tau montait à 4 ou 5 h.
 
 | Heures après l'observation | 1 | 2 | 3 | 4 | 6 |

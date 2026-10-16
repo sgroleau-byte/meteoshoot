@@ -67,7 +67,7 @@ export async function snapshot() {
   // Requêtes l'une après l'autre (l'offre d'Open-Meteo refuse les requêtes simultanées quand le service est chargé)
   const icon = await om(`dwd-icon?${q}&hourly=cloudcover,cloudcover_low,direct_radiation`);
   const gfs = await om(`gfs?${q}&hourly=cloudcover,cloudcover_low`);
-  const mem = await om(`forecast?${q}&hourly=cloud_cover&models=${BLEND_MEMBERS.map((m) => MEMBER_API[m]).join(',')}`);
+  const mem = await om(`forecast?${q}&hourly=cloud_cover,cloud_cover_low&models=${BLEND_MEMBERS.map((m) => MEMBER_API[m]).join(',')}`);
   const now = Date.now(), h0 = Math.floor(now / 3600000) * 3600000;
   const out = [];
   for (let k = 0; k < STATIONS.length; k++) {
@@ -89,7 +89,7 @@ export async function snapshot() {
       eccc: ec,
     });
   }
-  return { issued: new Date(now).toISOString(), version: 'v633.212', stations: out };
+  return { issued: new Date(now).toISOString(), version: 'v633.213', stations: out };
 }
 
 export default async function handler(req, res) {
