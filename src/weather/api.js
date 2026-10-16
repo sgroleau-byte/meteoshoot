@@ -1,5 +1,5 @@
 import { SHOOT_WINDOWS, isGoodWeather, sunlitFraction, weatherCodeIcon } from './iconsLogic.js';
-import { fetchObserved, applyObservedToHourly, upperFromTotal } from './nowcast.js';
+import { fetchObserved, applyObservedToHourly, upperFromTotal, NOWCAST } from './nowcast.js';
 import { clearDirHour } from './solar.js';
 import { openMeteoProxyUrl } from './openMeteoUrl.js';
 import { BLEND_MEMBERS, MEMBER_API, loadBlendModel, applyBlend } from './blend.js';
@@ -643,12 +643,27 @@ const finishScene = (lat, lng, out, hours) => {
     res[t] = { ...x, cloudMid: sc(x.cloudMid), cloudHigh: sc(x.cloudHigh) };
     delete res[t].fromIcon; delete res[t].totScene;
   }
-  // Heures corrigées par le ciel observé (fetchWeather): moyens et hauts accordés au total et aux nuages bas corrigés
-  const o = lastObserved.get(weatherCacheKey(lat, lng));
-  if (!o || Date.now() - o.at > WEATHER_MEM_TTL_MS) return res;
+  // Heures corrigées par le ciel observé (fetchWeather): moyens et hauts accordés au total et aux nuages bas corrigés. Le
+  // satellite de la récupération qui a corrigé les heures dit où mettre des nuages d'altitude que la prévision n'avait pas.
+  const o = lastObserved.get(weatherCacheKey(lat, lng)), sat = o ? o.obs.sat : null;
+  // satellite qui ne voit rien en altitude: les étages ne montent pas au-dessus de la prévision (baisses permises)
+  const blindUp = !!(sat && sat.mid != null && sat.high != null && 1 - (1 - sat.mid / 100) * (1 - sat.high / 100) < 0.02);
+  // Part du ciel couverte par les étages (recouvrement au hasard: U = (total - bas)/(100 - bas)), puis répartie selon les
+  // proportions de la scène. L'écart dû à l'observé (corrigé moins prévision) pèse d'autant plus que l'observé s'efface: une
+  // heure où il ne change presque rien garde ses étages, et la 3D ne saute pas à la fin de la correction. Sous des nuages bas
+  // presque couvrants (corrigés ou prévus), le total ne dit rien des étages au-dessus: ceux de la prévision restent.
+  const P = NOWCAST.lowOpaque, Uof = (T, L) => Math.max(0, Math.min(1, (T - L) / (100 - L)));
   for (const h of hours || []) {
-    if (!h.obsW || !res[h.time]) continue;
-    res[h.time] = { ...res[h.time], ...upperFromTotal(res[h.time].cloudMid, res[h.time].cloudHigh, h.cloudcover, h.cloudLow, o.obs.sat) };
+    if (!h.obsW || !res[h.time] || h.cloudcover == null) continue;
+    const Lc = h.cloudLow ?? 0, Lm = h.cloudLowModel ?? Lc, Tm = h.cloudcoverModel ?? h.cloudcover;
+    if (Lc >= P || Lm >= P) continue;
+    const { cloudMid: m0, cloudHigh: h0 } = res[h.time], U0 = 1 - (1 - (m0 ?? 0) / 100) * (1 - (h0 ?? 0) / 100);
+    // quand l'observé domine (poids au-delà de 0,5: aéroport proche, ou satellite et aéroport ensemble; le satellite seul n'y
+    // arrive pas), la part d'altitude corrigée elle-même: la 3D montre alors le total observé même si les étages de la scène
+    // ne s'accordaient pas au total de la prévision; sinon l'écart seul (il respecte mieux les étages que le satellite voit)
+    const Uc = Uof(h.cloudcover, Lc), w = Math.max(0, Math.min(1, (h.obsW - 0.5) / 0.5));
+    const Ut = Math.max(0, Math.min(blindUp ? U0 : 1, w * Uc + (1 - w) * (U0 + Uc - Uof(Tm, Lm))));
+    res[h.time] = { ...res[h.time], ...upperFromTotal(m0, h0, 100 * Ut, 0, sat) };
   }
   return res;
 };

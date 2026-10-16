@@ -76,8 +76,11 @@ export async function snapshot() {
     const hourly = { time: I.hourly.time, cloudcover: I.hourly.cloudcover.slice(), cloudcover_low: I.hourly.cloudcover_low.slice(), direct_radiation: I.hourly.direct_radiation.slice(), model: I.hourly.time.map(() => 'icon') };
     const gfsHourIdx = {}; if (G && G.hourly) G.hourly.time.forEach((t, i) => { gfsHourIdx[t] = i; });
     applyBlend(hourly, { model, gfs: G, gfsHourIdx, members: M, lat: la, lng: lo, tzOffsetMin: 0, now });
-    let obs = null;
-    try { obs = { goes: await goesAt(la, lo), metar: await nearbyObs(la, lo, 150) }; } catch (e) { obs = null; }
+    // les deux sources séparément, comme fetchObserved: une panne du satellite ne fait pas perdre l'aéroport
+    let goes = null, metar = null;
+    try { goes = await goesAt(la, lo); } catch (e) { goes = null; }
+    try { metar = await nearbyObs(la, lo, 150); } catch (e) { metar = null; }
+    const obs = goes || metar ? { goes, metar } : null;
     // Deux corrections par le ciel observé: avec l'aéroport lui-même (un projet à l'aéroport) et sans lui (le cas courant
     // d'un projet loin de l'aéroport: satellite et aéroports voisins seulement), pour ne pas se juger sur sa propre vérité
     const far = { time: hourly.time, cloudcover: hourly.cloudcover.slice(), cloudcover_low: hourly.cloudcover_low.slice(), direct_radiation: hourly.direct_radiation.slice(), cloudcoverIcon: hourly.cloudcoverIcon, cloudLowIcon: hourly.cloudLowIcon };
@@ -95,7 +98,7 @@ export async function snapshot() {
       eccc: ec,
     });
   }
-  return { issued: new Date(now).toISOString(), version: 'v633.215', stations: out };
+  return { issued: new Date(now).toISOString(), version: 'v633.216', stations: out };
 }
 
 export default async function handler(req, res) {

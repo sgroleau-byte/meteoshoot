@@ -1939,7 +1939,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       // Épaisseur des nuages bas (sky.js): part au soleil et nuages bas d'ICON lui-même (direct et couverture avant la combinaison
       // des modèles et le ciel observé), moyenne des heures T et T+1 (le rayonnement à T est la moyenne de l'heure précédente).
       // Après le coucher, l'heure précédente seulement (au-delà, le ciel a pu changer).
-      const pIco = (r) => r ? pSunOf(r.directIcon != null ? { ...r, direct: r.directIcon } : r) : null, lowIco = (r) => r ? (r.cloudLowIcon ?? r.cloudLow) : null;
+      const pIco = (r) => r ? pSunOf(r.directIcon != null ? { ...r, direct: r.directIcon } : r) : null, lowIco = (r) => r ? (r.cloudLowIcon ?? r.cloudLowModel ?? r.cloudLow) : null;
       const pa = pIco(row), pb = pIco(row?.next), pp = pIco(row?.prev?.[0]);
       const pThin = pa != null && pb != null ? (pa + pb) / 2 : pa ?? pb ?? pp;
       const fThin = pa != null && pb != null ? ((lowIco(row) ?? 0) + (lowIco(row.next) ?? lowIco(row) ?? 0)) / 2 : pa != null ? lowIco(row) : pb != null ? lowIco(row.next) : lowIco(row?.prev?.[0]);
