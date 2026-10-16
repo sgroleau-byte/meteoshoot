@@ -232,7 +232,7 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
               style={{ display: 'flex', overflowX: actionsOpen ? 'hidden' : 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', marginTop: '6px', opacity: project.onHold ? 0.1 : 1, transition: 'opacity 0.3s' }}
             >
               <div style={{ flexShrink: 0 }} onClick={() => { if (!actionsOpen) onSelect(project); }}>
-                {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} orientation={project.orientation} onDayClick={() => { if (!actionsOpen) onSelect(project); }}/> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
+                {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} orientation={project.orientation} daytime={(project.mandates || []).includes('INT') && !(project.mandates || []).some((m) => m === 'EXT' || m === 'DRONE' || m === 'DRONE+C')} onDayClick={() => { if (!actionsOpen) onSelect(project); }}/> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
               </div>
             </div>
             {project.onHold && (
@@ -282,7 +282,7 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
         {/* Pendant le chargement, le squelette (plus large que les 9 jours) est rogné à leur largeur: la rangée
             garde sa taille finale et sa réduction sur iPad ne saute pas à l'arrivée de la météo. */}
         <div className="min-w-0" style={{ minWidth: '432px', overflow: "visible", ...(weather ? null : { width: '432px', overflow: 'hidden' }) }}>
-          {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} orientation={project.orientation} onDayClick={() => onSelect(project)} tapOpensDetail/> : <p className="text-charcoal-muted text-sm italic py-2 cursor-pointer" onClick={() => onSelect(project)}>{t('weatherUnavailable')}</p>}
+          {project.lat && project.lng ? <WeatherRow daily={weather?.daily} hourly={weather?.hourly} orientation={project.orientation} daytime={(project.mandates || []).includes('INT') && !(project.mandates || []).some((m) => m === 'EXT' || m === 'DRONE' || m === 'DRONE+C')} onDayClick={() => onSelect(project)} tapOpensDetail/> : <p className="text-charcoal-muted text-sm italic py-2 cursor-pointer" onClick={() => onSelect(project)}>{t('weatherUnavailable')}</p>}
         </div>
         <div onMouseEnter={() => { if (weatherRowDismiss.current) { weatherRowDismiss.current(); weatherRowDismiss.current = null; } }} onClick={() => onSelect(project)} className="cursor-pointer flex items-stretch flex-shrink-0 font-bebas-bold uppercase ml-4" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
           <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '75px' }}>

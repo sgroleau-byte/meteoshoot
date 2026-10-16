@@ -56,6 +56,7 @@ export const MEMBER_API = { GEM: 'gem_seamless', ECMWF: 'ecmwf_ifs025', AIFS: 'e
 export function applyBlend(hourly, { model, gfs, gfsHourIdx, members, lat, lng, tzOffsetMin, now = Date.now() }) {
   const n = hourly.time.length;
   hourly.cloudcoverIcon = hourly.cloudcover.slice(); hourly.cloudLowIcon = hourly.cloudcover_low.slice(); hourly.blendK = new Array(n).fill(null);
+  hourly.othersCloud = new Array(n).fill(null);
   if (!model) return;
   const msOf = (t) => (tzOffsetMin != null ? Date.parse(t + ':00Z') - tzOffsetMin * 60000 : new Date(t).getTime());
   const memIdx = {}; if (members && members.hourly) members.hourly.time.forEach((t, i) => { memIdx[t] = i; });
@@ -71,6 +72,10 @@ export function applyBlend(hourly, { model, gfs, gfsHourIdx, members, lat, lng, 
     const p0 = pAt(i), p1 = pAt(i + 1), pSun = p0 != null && p1 != null ? (p0 + p1) / 2 : p0 ?? p1;
     const gi = gfsHourIdx[t];
     const f = { ICON: ico, GFS: gi != null && gfs ? gfs.hourly.cloudcover[gi] : null, GEM: mem('GEM', t), ECMWF: mem('ECMWF', t), AIFS: mem('AIFS', t), UKMO: mem('UKMO', t), NBM: mem('NBM', t), IFS9: mem('IFS9', t), ICONlow: hourly.cloudcover_low[i], pSun, sunEl: sunElevation(ms, lat, lng) };
+    // Couverture moyenne des autres grands modèles (sans ICON, qui allume la bande dorée AM et PM): leur désaccord avec le
+    // soleil d'ICON rend un créneau incertain (src/weather/api.js, shootWindowStats)
+    const oth = ['GEM', 'GFS', 'ECMWF', 'AIFS', 'UKMO'].map((k) => f[k]).filter((v) => v != null);
+    if (oth.length >= 3) hourly.othersCloud[i] = oth.reduce((a, v) => a + v, 0) / oth.length;
     // Au moins trois autres modèles à cette heure (sinon les arbres travailleraient sur des entrées qu'ils n'ont presque jamais vues manquer)
     if (['GEM', 'ECMWF', 'AIFS', 'UKMO', 'IFS9'].filter((k) => f[k] != null).length < 3) continue;
     const b = blendCloud(model, f, Math.max(0, ahead));

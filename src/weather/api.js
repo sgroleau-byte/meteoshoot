@@ -1,4 +1,4 @@
-import { SHOOT_WINDOWS, isGoodWeather, sunlitFraction, weatherCodeIcon } from './iconsLogic.js';
+import { SHOOT_WINDOWS, SHOOT_OPP_MIN, isGoodWeather, sunlitFraction, weatherCodeIcon } from './iconsLogic.js';
 import { fetchObserved, applyObservedToHourly, upperFromTotal, NOWCAST } from './nowcast.js';
 import { clearDirHour } from './solar.js';
 import { openMeteoProxyUrl } from './openMeteoUrl.js';
@@ -521,11 +521,16 @@ export const fetchWeather = async (lat, lng) => {
   
   // Opportunite de shoot sur une fenetre (autour du lever ou du coucher). Renvoie { frac, cloud, precip }
   // ou null. frac = soleil direct pondere par l'intensite sur la fenetre (heures sombres ~ ignorees).
+  // Créneau de shoot (fenêtre d'heure dorée): part du direct d'ICON (bande dorée AM et PM), couverture, pluie, et désaccord
+  // des autres modèles. Banc (créneaux de 30 aéroports sur 12 mois, la veille): une bande allumée donne un soleil visible
+  // 90 % du temps quand les autres modèles (GEM, GFS, ECMWF, AIFS, UKMO) voient en moyenne moins de 50 % de nuages, 58 %
+  // sinon; une bande éteinte donne quand même du soleil 68 % du temps quand ils voient au plus 50 %, contre 23 % sinon.
+  // Ces deux cas sont marqués « incertain » (uncertain), sauf quand le ciel observé pèse déjà sur la fenêtre (obsW >= 0,3).
   const shootWindowStats = (centerISO, beforeMin, afterMin) => {
     if (!centerISO) return null;
     const c = new Date(centerISO).getTime();
     const start = c - beforeMin * 60000, end = c + afterMin * 60000;
-    let sumDirect = 0, sumTot = 0, cloudSum = 0, cloudN = 0, precip = false, any = false;
+    let sumDirect = 0, sumTot = 0, cloudSum = 0, cloudN = 0, othSum = 0, othN = 0, obsSum = 0, obsN = 0, precip = false, any = false;
     for (let i = 0; i < data.hourly.time.length; i++) {
       const tt = new Date(data.hourly.time[i]).getTime();
       if (tt - 3600000 < end && tt > start) {  // rayonnement Open-Meteo = moyenne de l'heure precedente [tt-1h, tt]
@@ -534,12 +539,18 @@ export const fetchWeather = async (lat, lng) => {
         if (dr != null && df != null) { sumDirect += dr; sumTot += dr + df; }
         const cc = data.hourly.cloudcover?.[i];
         if (cc != null) { cloudSum += cc; cloudN++; }
+        const oc = data.hourly.othersCloud?.[i];
+        if (oc != null) { othSum += oc; othN++; }
+        obsSum += data.hourly.obsW?.[i] || 0; obsN++;
         const wc = data.hourly.weathercode?.[i];
         if (wc != null && wc >= 51) precip = true;
       }
     }
     if (!any) return null;
-    return { frac: sumTot >= 50 ? sumDirect / sumTot : null, cloud: cloudN ? Math.round(cloudSum / cloudN) : null, precip };
+    const frac = sumTot >= 50 ? sumDirect / sumTot : null, others = othN ? othSum / othN : null;
+    const lit = frac != null && frac * 100 >= SHOOT_OPP_MIN;
+    const uncertain = !precip && frac != null && others != null && obsSum / obsN < 0.3 && (lit ? others >= 50 : others <= 50);
+    return { frac, cloud: cloudN ? Math.round(cloudSum / cloudN) : null, precip, uncertain };
   };
 
   const formatted = {
@@ -552,7 +563,15 @@ export const fetchWeather = async (lat, lng) => {
       const model = data.daily.model[i];
       const am = model === 'icon' ? shootWindowStats(data.daily.sunrise[i], SHOOT_WINDOWS.am.before, SHOOT_WINDOWS.am.after) : null;
       const pm = model === 'icon' ? shootWindowStats(data.daily.sunset[i], SHOOT_WINDOWS.pm.before, SHOOT_WINDOWS.pm.after) : null;
-      return { date: t, high: Math.round(data.daily.temperature_2m_max[i]), low: Math.round(data.daily.temperature_2m_min[i]), cloudcover: stats.cloudcover, sunFraction: stats.sunFraction, cloudLow: stats.cloudLow, smoke: smokeMap[dateOf(t)] || 0, icon, sunrise: data.daily.sunrise[i], sunset: data.daily.sunset[i], isGood: isGoodWeather(data.daily.weathercode[i]), model, am, pm };
+      // Plein jour (shooting intérieur), matin et après-midi séparés (le soleil n'entre pas par les mêmes fenêtres): de la fin
+      // de l'heure dorée du matin au midi solaire, puis du midi solaire au début de l'heure dorée du soir. Banc, la veille:
+      // soleil annoncé par ICON, visible environ 8 fois sur 10 si les autres modèles s'accordent, moins de 5 sinon.
+      const srMs = data.daily.sunrise[i] ? new Date(data.daily.sunrise[i]).getTime() : null, ssMs = data.daily.sunset[i] ? new Date(data.daily.sunset[i]).getTime() : null;
+      const noonMs = srMs != null && ssMs != null ? (srMs + ssMs) / 2 : null, noonISO = noonMs != null ? new Date(noonMs).toISOString() : null;
+      const amMin = noonMs != null ? (noonMs - srMs) / 60000 - SHOOT_WINDOWS.am.after : 0, pmMin = noonMs != null ? (ssMs - noonMs) / 60000 - SHOOT_WINDOWS.pm.before : 0;
+      const dam = model === 'icon' && amMin > 30 ? shootWindowStats(noonISO, amMin, 0) : null;
+      const dpm = model === 'icon' && pmMin > 30 ? shootWindowStats(noonISO, 0, pmMin) : null;
+      return { date: t, high: Math.round(data.daily.temperature_2m_max[i]), low: Math.round(data.daily.temperature_2m_min[i]), cloudcover: stats.cloudcover, sunFraction: stats.sunFraction, cloudLow: stats.cloudLow, smoke: smokeMap[dateOf(t)] || 0, icon, sunrise: data.daily.sunrise[i], sunset: data.daily.sunset[i], isGood: isGoodWeather(data.daily.weathercode[i]), model, am, pm, dam, dpm };
     })
   };
   // Conserve la reponse pour servir de filet quand l'API retombera en panne.

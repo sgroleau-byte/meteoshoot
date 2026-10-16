@@ -121,6 +121,12 @@ Ce tableau mesurait l'aéroport du lieu lui-même. Pour un projet loin de l'aér
    - Les traces de nuages moyens (moins de 8 %) ne sont pas dessinées.
    - La légende affiche une ligne « Observé ... ».
 
+4. **Prévision incertaine** (v633.217, `shootWindowStats` dans `src/weather/api.js`, `WeatherRow.jsx`).
+   - La bande dorée AM et PM vient du soleil direct d'ICON seul. Quand la moyenne des autres grands modèles (GEM, GFS, ECMWF, AIFS, UKMO, `othersCloud` dans `src/weather/blend.js`) n'est pas d'accord (au moins 50 % de nuages sous une bande allumée, au plus 50 % sous une bande éteinte), la boîte AM ou PM est coupée en diagonale, jaune et orange (infobulle « Prévision incertaine »). Essais rejetés par Stéphane : trait sous le %, contour, « ! », coin ou pastille orange (trop peu visibles ou confus).
+   - Banc, la veille (créneaux d'heure dorée de 30 aéroports sur 12 mois, soleil visible = part opaque observée d'au plus 50 %) : bande pleine, soleil visible 9 fois sur 10 ; créneau incertain, environ 6 fois sur 10 ; rien, environ 2 fois sur 10. Même règle valable en plein jour, matin et après-midi séparés (scripts `spread_decision5.py`, `spread_halfday.py` du banc).
+   - Projet seulement intérieur (mandat INT sans EXT ni drone) : la bande parle du plein jour, matin (fin de l'heure dorée au midi solaire) et après-midi (midi solaire au début de l'heure dorée du soir), les deux si le projet n'a pas d'orientation.
+   - Pas d'avertissement quand le ciel observé pèse déjà sur la fenêtre, ni au-delà des 72 heures où les autres modèles sont demandés. Aucun chiffre à l'écran (choix de Stéphane : les statistiques compliquent la décision).
+
 ## 4. Forfait Open-Meteo (15 octobre 2026)
 
 - Forfait Standard (usage commercial, 1 million d'appels par mois, serveurs réservés). Il n'ouvre pas les archives de prévisions : le banc de vérification utilise les serveurs ouverts.

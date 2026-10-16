@@ -108,6 +108,7 @@ export const TRANSLATIONS = {
 
     // Weather
     weatherUnavailable: 'Météo non disponible',
+    slotUncertain: 'Prévision incertaine',
     weatherApiDown: 'Service météo Open-Meteo temporairement indisponible. Les prévisions reviendront sous peu.',
     weatherNetworkDown: 'Vérifie ta connexion internet.',
     weatherStaleFrom: 'Données de',
@@ -312,6 +313,7 @@ export const TRANSLATIONS = {
 
     // Weather
     weatherUnavailable: 'Weather unavailable',
+    slotUncertain: 'Uncertain forecast',
     weatherApiDown: 'Open-Meteo weather service is temporarily unavailable. Forecasts will return shortly.',
     weatherNetworkDown: 'Check your internet connection.',
     weatherStaleFrom: 'Data from',

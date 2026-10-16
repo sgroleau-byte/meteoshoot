@@ -2156,7 +2156,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
             </div>
             <div className="border-b border-adaptive" style={{ marginTop: '12px', marginLeft: '-16px', marginRight: '-16px' }}/>
             <div style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', marginTop: '12px', marginLeft: '-16px', marginRight: '-16px', paddingLeft: '16px', paddingRight: '16px' }}>
-              {project.lat && project.lng ? <div style={{ zoom: 1.15 }}><WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10} orientation={project.orientation}/></div> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
+              {project.lat && project.lng ? <div style={{ zoom: 1.15 }}><WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10} orientation={project.orientation} daytime={(project.mandates || []).includes('INT') && !(project.mandates || []).some((m) => m === 'EXT' || m === 'DRONE' || m === 'DRONE+C')}/></div> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
             </div>
           </div>
         ) : (
@@ -2167,7 +2167,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
             {/* Pendant le chargement, le squelette (plus large que les 10 jours) est rogné à leur largeur (10 x 48 px x 1,15):
                 sans ça, les colonnes passaient sous les jours puis remontaient d'un coup à l'arrivée de la météo. */}
             <div className="min-w-0" style={project.lat && project.lng && !weather?.daily?.length ? { width: '552px', overflow: 'hidden' } : undefined}>
-              {project.lat && project.lng ? <div style={{ zoom: 1.15 }}><WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10} orientation={project.orientation}/></div> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
+              {project.lat && project.lng ? <div style={{ zoom: 1.15 }}><WeatherRow daily={weather?.daily} hourly={weather?.hourly} maxDays={10} orientation={project.orientation} daytime={(project.mandates || []).includes('INT') && !(project.mandates || []).some((m) => m === 'EXT' || m === 'DRONE' || m === 'DRONE+C')}/></div> : <p className="text-charcoal-muted text-sm italic py-2">{t('weatherUnavailable')}</p>}
             </div>
             <div className="flex items-stretch flex-shrink-0 font-bebas-bold uppercase" style={{ letterSpacing: '0.04em', fontSize: '22px', minHeight: '110px', lineHeight: '1', marginBottom: '-16px' }}>
               <div className="flex flex-col justify-center pl-2 border-l border-adaptive">
