@@ -247,7 +247,7 @@ gl_FragColor=vec4(mix(sky,texture2D(tCol,h).rgb,k)*w,w);}`;
 // rougit, et ne s'éteint qu'au ras de l'horizon; dessiné seulement sur le ciel (un relief ou un bâtiment le cache).
 // Reflet des flaques (reflRT, déjà flouté à la verticale dans frame: une flaque troublée par la pluie ne fait pas un
 // miroir net, et les traînées de nuages près de l'horizon s'y fondent) ajouté tel quel.
-const COMP_FRAG = `uniform sampler2D tCol,tAO,tBloom,tDepth;uniform float uExp,uAO,uBloom,uAspect,uFlare,uRays,uVeilW,uVis,uDs,uRain,uTime,uFocal,uSlant,uRefl,uFogSig,uFogTop,uFogAmp,uSmkSig,uSmkTop,uSunR;uniform vec2 uSunUV,uFog,uNF;uniform vec3 uSunC,uRainCol,uFogCol,uFogColTop,uFogSunTop,uSunW,uSmkCol,uCamW,uSunDisc;uniform mat3 uV2W;uniform mat4 uProjInv;uniform sampler2D tRefl;varying vec2 vUv;
+const COMP_FRAG = `uniform sampler2D tCol,tAO,tBloom,tDepth,tHz;uniform float uExp,uAO,uBloom,uAspect,uFlare,uRays,uVeilW,uVis,uDs,uRain,uTime,uFocal,uSlant,uRefl,uFogSig,uFogTop,uFogAmp,uSmkSig,uSmkTop,uSunR,uCbSig,uCbBase,uRvSig;uniform sampler2D tCld;uniform mat4 uVP;uniform vec2 uSunUV,uFog,uNF;uniform vec3 uSunC,uRainCol,uFogCol,uFogColTop,uFogSunTop,uSunW,uSmkCol,uCamW,uSunDisc;uniform mat3 uV2W;uniform mat4 uProjInv;uniform sampler2D tRefl;varying vec2 vUv;
 float fh(vec2 i){return fract(sin(dot(i,vec2(127.1,311.7)))*43758.5453);}
 float fn2(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(fh(i),fh(i+vec2(1.0,0.0)),f.x),mix(fh(i+vec2(0.0,1.0)),fh(i+vec2(1.0,1.0)),f.x),f.y);}
 /* Nappe de brouillard: comme lfog (plus bas), mais le sommet ondule (bruit en mètres au point où le rayon croise le plan du
@@ -272,6 +272,22 @@ return mix(c,fc,1.0-exp(-dens*L));}
 vec3 lfog(vec3 c,float sig,float top,vec3 col){if(sig<=0.0)return c;float z=texture2D(tDepth,vUv).x;vec4 pv=uProjInv*vec4(vUv*2.0-1.0,z*2.0-1.0,1.0);vec3 P=pv.xyz/pv.w;
 vec3 d=uV2W*normalize(P);float dist=z>=0.99999?1e5:length(P);float hc=uCamW.y,hp=hc+d.y*dist,lo=min(hc,hp),hi=max(hc,hp),sp=max(hi-lo,1e-3);
 float L=dist*0.5*(clamp((top-lo)/sp,0.0,1.0)+clamp((top+25.0-lo)/sp,0.0,1.0));return mix(c,col,1.0-exp(-sig*L));}
+/* Couleur du ciel dessiné juste au-dessus de l'horizon dans la direction d (16 octobre 2026): lumière des nuages de la passe
+   plein écran (tCld: lumière, transmittance), plus la bande d'horizon du ciel (tHz) pour ce qui passe entre eux. Direction
+   relevée à 2 degrés au moins puis projetée à l'écran; hors de l'écran (caméra qui plonge), la bande d'horizon seule. La passe
+   des nuages couvre tout l'écran, relief compris: la couleur ne dépend pas de ce qui cache le ciel. */
+vec3 airC(vec3 d){vec3 h=normalize(vec3(d.x,max(d.y,0.035*length(d.xz)),d.z));vec3 hz=texture2D(tHz,vec2(atan(h.x,-h.z)*0.15915494,0.5)).rgb;
+vec4 q=uVP*vec4(uCamW+h*1000.0,1.0);if(q.w<=0.0)return hz;vec2 u=q.xy/q.w*0.5+0.5;if(u.x<0.0||u.x>1.0||u.y<0.0||u.y>1.0)return hz;
+vec4 cl=texture2D(tCld,u);return cl.rgb+cl.a*hz;}
+/* Voile de pluie et sommets dans la base des nuages (16 octobre 2026), photos de Stéphane à Stoneham. Extinction exacte le long
+   du rayon vers la couleur du ciel à l'horizon (airC): sous la pluie, coefficient tiré de la visibilité prévue (uRvSig, en plus
+   de la brume ordinaire du lointain), le relief se fond peu à peu dans le gris des nuages; sous une couche basse couvrante, le
+   relief plus haut que sa base (un peu déchiquetée, densité qui monte sur 80 m) entre dans le nuage. Pour les sommets, seule la
+   partie du rayon au-dessus de la base du côté du point vu compte: une caméra haute n'est jamais noyée elle-même. */
+vec3 wfog(vec3 c){if(uRvSig<=0.0&&uCbSig<=0.0)return c;float z=texture2D(tDepth,vUv).x;if(z>=0.99999)return c;
+vec4 pv=uProjInv*vec4(vUv*2.0-1.0,z*2.0-1.0,1.0);vec3 P=pv.xyz/pv.w;vec3 d=uV2W*normalize(P);float dist=length(P),tau=uRvSig*dist;
+if(uCbSig>0.0){vec2 xz=uCamW.xz+d.xz*dist;float b=uCbBase+80.0*(fn2(xz*0.0035+3.0)-0.5),e=max(uCamW.y+d.y*dist-b,0.0);tau+=uCbSig*min(dist,(e<80.0?e*e/160.0:e-40.0)/max(abs(d.y),0.04));}
+return tau<0.002?c:mix(c,airC(d),1.0-exp(-tau));}
 float lz(float z){return (2.0*uNF.x*uNF.y)/(uNF.y+uNF.x-(2.0*z-1.0)*(uNF.y-uNF.x));}
 float h21(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
 float drops(vec2 px,float D,float zs,float sd){if(zs<D)return 0.0;
@@ -303,7 +319,7 @@ float a=atan(q.y,q.x),r1=pow(abs(cos(4.0*a+0.2)),110.0),r2=0.5*pow(abs(cos(4.0*a
 float rays=(r1+r2)*(0.65+0.35*cos(3.0*a+1.7))*exp(-d/0.17)*smoothstep(0.0,0.02,d);
 f+=core*rays*0.7*uRays*vis*vis;return f*uFlare*(0.6/uExp);}
 void main(){vec3 c=texture2D(tCol,vUv).rgb;float ao=texture2D(tAO,vUv).r;c*=mix(1.0,ao,uAO);
-if(uRefl>0.0){float zr=texture2D(tDepth,vUv).x;c+=texture2D(tRefl,vUv).rgb*uRefl*(1.0-smoothstep(uFog.x,uFog.y,lz(zr)));}c=lfogN(c,uFogSig,uFogTop,uFogCol,uFogColTop,uFogSunTop,uFogAmp);c=lfog(c,uSmkSig,uSmkTop,uSmkCol);
+if(uRefl>0.0){float zr=texture2D(tDepth,vUv).x;c+=texture2D(tRefl,vUv).rgb*uRefl*(1.0-smoothstep(uFog.x,uFog.y,lz(zr)));}c=lfogN(c,uFogSig,uFogTop,uFogCol,uFogColTop,uFogSunTop,uFogAmp);c=wfog(c);c=lfog(c,uSmkSig,uSmkTop,uSmkCol);
 if(uSunR>0.0&&texture2D(tDepth,vUv).x>=0.99999)c+=uSunDisc*smoothstep(uSunR,uSunR*0.8,length((vUv-uSunUV)*vec2(uAspect,1.0)));
 c+=texture2D(tBloom,vUv).rgb*uBloom;c+=flare();c=aces(c);gl_FragColor=vec4(rain(desat(pow(c,vec3(1.0/2.2))))+(ign(gl_FragCoord.xy)-0.5)/255.0,1.0);}`;
 
@@ -415,7 +431,7 @@ export function createScene3D(container, opts = {}) {
   // Accumulation des nuages une fois la vue posée: ACC_N passes avec tramage et décalage sous-pixel différents, moyennées
   // (anticrénelage: plus de grain sur les bords de cellules plus fins qu'un pixel). Deux cibles en alternance.
   const ACC_N = 8; let accK = 0, accA = null, accB = null;
-  const METRES = new Set(['fogTh', 'l0b', 'l0t', 'm1b', 'm1t', 'ha']); // valeurs interpolées en mètres
+  const METRES = new Set(['fogTh', 'l0b', 'l0t', 'm1b', 'm1t', 'ha', 'cbb']); // valeurs interpolées en mètres
   const accMat = new THREE.ShaderMaterial({ uniforms: { tA: { value: null }, tB: { value: null }, uW: { value: 1 } }, vertexShader: QV, fragmentShader: `uniform sampler2D tA,tB;uniform float uW;varying vec2 vUv;void main(){gl_FragColor=mix(texture2D(tA,vUv),texture2D(tB,vUv),uW);}` });
   const halton = (b, i) => { let f = 1, r = 0; i += 1; while (i > 0) { f /= b; r += f * (i % b); i = Math.floor(i / b); } return r; };
   let cloudRT = null, cloudRTHi = null, cloudHi = false, lastMoveAt = 0; // nuages: résolution réduite en mouvement, pleine une fois la vue posée
@@ -687,7 +703,8 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   const kern = []; for (let i = 0; i < 12; i++) { const v = new THREE.Vector3(hsh(i, 3, 1) * 2 - 1, hsh(i, 3, 2) * 2 - 1, 0.15 + 0.85 * hsh(i, 3, 3)).normalize(); const s = i / 12; v.multiplyScalar(0.12 + 0.88 * s * s); kern.push(v); }
   const aoMat = new THREE.ShaderMaterial({ uniforms: { tDepth: { value: null }, uRes: { value: new THREE.Vector2() }, uProj: { value: new THREE.Matrix4() }, uProjInv: { value: new THREE.Matrix4() }, uR: { value: 2.4 }, uBias: { value: 0.04 }, uInt: { value: 1.6 }, uK: { value: kern } }, vertexShader: QV, fragmentShader: AO_FRAG });
   const blurMat = new THREE.ShaderMaterial({ uniforms: { tAO: { value: null }, tDepth: { value: null }, uDir: { value: new THREE.Vector2() }, uNF: { value: new THREE.Vector2(1, 60000) } }, vertexShader: QV, fragmentShader: BLUR_FRAG });
-  const compMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, tAO: { value: null }, tBloom: { value: null }, tDepth: { value: null }, uExp: { value: 1 }, uAO: { value: 0.9 }, uBloom: { value: 0 }, uAspect: { value: 1 }, uFlare: { value: 0 }, uRays: { value: 0 }, uVeilW: { value: 1 }, uVis: { value: 1 }, uSunUV: { value: new THREE.Vector2(0.5, 0.5) }, uSunC: { value: new THREE.Vector3(1, 1, 1) }, uDs: { value: 0 }, uFog: { value: new THREE.Vector2(300, 1600) }, uNF: { value: new THREE.Vector2(1, 60000) }, uRain: { value: 0 }, uTime: { value: 0 }, uFocal: { value: 1000 }, uSlant: { value: 0.1 }, uRainCol: { value: new THREE.Vector3(0.6, 0.6, 0.6) }, tRefl: { value: null }, uRefl: { value: 0 }, uFogSig: { value: 0 }, uFogAmp: { value: 0 }, uFogColTop: { value: new THREE.Vector3(0.5, 0.5, 0.5) }, uFogSunTop: { value: new THREE.Vector3() }, uSunW: { value: new THREE.Vector3(0, 1, 0) }, uFogTop: { value: 9000 }, uFogCol: { value: new THREE.Vector3(0.5, 0.5, 0.5) }, uSmkSig: { value: 0 }, uSmkTop: { value: 2500 }, uSmkCol: { value: new THREE.Vector3(0.5, 0.4, 0.3) }, uSunR: { value: 0 }, uSunDisc: { value: new THREE.Vector3() }, uCamW: { value: new THREE.Vector3() }, uV2W: { value: new THREE.Matrix3() }, uProjInv: { value: new THREE.Matrix4() } }, vertexShader: QV, fragmentShader: COMP_FRAG });
+  const compMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, tAO: { value: null }, tBloom: { value: null }, tDepth: { value: null }, uExp: { value: 1 }, uAO: { value: 0.9 }, uBloom: { value: 0 }, uAspect: { value: 1 }, uFlare: { value: 0 }, uRays: { value: 0 }, uVeilW: { value: 1 }, uVis: { value: 1 }, uSunUV: { value: new THREE.Vector2(0.5, 0.5) }, uSunC: { value: new THREE.Vector3(1, 1, 1) }, uDs: { value: 0 }, uFog: { value: new THREE.Vector2(300, 1600) }, uNF: { value: new THREE.Vector2(1, 60000) }, uRain: { value: 0 }, uTime: { value: 0 }, uFocal: { value: 1000 }, uSlant: { value: 0.1 }, uRainCol: { value: new THREE.Vector3(0.6, 0.6, 0.6) }, tRefl: { value: null }, uRefl: { value: 0 }, uFogSig: { value: 0 }, uFogAmp: { value: 0 }, uFogColTop: { value: new THREE.Vector3(0.5, 0.5, 0.5) }, uFogSunTop: { value: new THREE.Vector3() }, uSunW: { value: new THREE.Vector3(0, 1, 0) }, uFogTop: { value: 9000 }, uFogCol: { value: new THREE.Vector3(0.5, 0.5, 0.5) }, uSmkSig: { value: 0 }, uSmkTop: { value: 2500 }, uSmkCol: { value: new THREE.Vector3(0.5, 0.4, 0.3) }, uCbSig: { value: 0 }, uCbBase: { value: 9000 }, uRvSig: { value: 0 }, tCld: { value: null }, uVP: { value: new THREE.Matrix4() }, tHz: { value: null }, uSunR: { value: 0 }, uSunDisc: { value: new THREE.Vector3() }, uCamW: { value: new THREE.Vector3() }, uV2W: { value: new THREE.Matrix3() }, uProjInv: { value: new THREE.Matrix4() } }, vertexShader: QV, fragmentShader: COMP_FRAG });
+  compMat.uniforms.tHz.value = hzRT.texture; // voile de pluie et sommets dans les nuages: ciel dessiné à l'horizon
   const rblurMat = new THREE.ShaderMaterial({ uniforms: { tSrc: { value: null }, uDir: { value: new THREE.Vector2() } }, vertexShader: QV, fragmentShader: RBLUR_FRAG });
   const reflMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, tDepth: { value: null }, uProj: { value: new THREE.Matrix4() }, uProjInv: { value: new THREE.Matrix4() }, uUp: { value: new THREE.Vector3(0, 1, 0) }, uTx: { value: new THREE.Vector2() }, tSky: { value: skyRT.texture }, uV2W: { value: new THREE.Matrix3() }, uCamW: { value: new THREE.Vector3() }, uPud: { value: 0 } }, vertexShader: QV, fragmentShader: REFL_FRAG });
   const brightMat = new THREE.ShaderMaterial({ uniforms: { tCol: { value: null }, uTh: { value: 0.3 } }, vertexShader: QV, fragmentShader: BRIGHT_FRAG });
@@ -696,7 +713,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
 
   // ---- état: lieu, heure, météo, caméra
   let lat = 46.8, lng = -71.2, origin = null, projLocal = [], orientation = [], style = null, data = null, dateMs = Date.now();
-  const tg = { cum: 0, mid: 0, high: 0, iv: 1, rain: 0, wet: 0, pud: 0, fogK: 0, fogTh: 600, smk: 0, storm: 0, brk: 0, pSun: 0, l0b: 800, l0t: 1600, l0c: 0, l0k: 1, l0w: 0, l0s: 0, l0d: 0, l0n: 1, m1b: 3200, m1t: 4300, m1c: 0, m1k: 1, hc: 0, hk: 1, ha: 9000, ht: 1, shaft: 0 }, cur = { ...tg };
+  const tg = { cum: 0, mid: 0, high: 0, iv: 1, rain: 0, wet: 0, pud: 0, rv: 0, cbs: 0, cbb: 600, fogK: 0, fogTh: 600, smk: 0, storm: 0, brk: 0, pSun: 0, l0b: 800, l0t: 1600, l0c: 0, l0k: 1, l0w: 0, l0s: 0, l0d: 0, l0n: 1, m1b: 3200, m1t: 4300, m1c: 0, m1k: 1, hc: 0, hk: 1, ha: 9000, ht: 1, shaft: 0 }, cur = { ...tg };
   let cloudNames = []; // mots de la légende (classifyClouds)
   let smokeUg = null; // fumée de feux au sol (microgrammes par mètre cube, FireWork) à l'heure affichée
   let az = Math.PI * 1.2, camH = 1.7, Rr = 75; const ct = new THREE.Vector3(0, 10, 0);
@@ -1495,7 +1512,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     if (growing && growT0 < 0 && shown && now - shownAt > 250) growT0 = now; // la scène apparaît d'abord, puis les environs poussent
     if (growing && growT0 >= 0) { const gt = (now - growT0) / 1000; growU.uGrow.value = gt; growU.uReveal.value = 650 * (1 - Math.pow(1 - Math.min(1, gt / 1.1), 2)); treeGrowStep(gt); if (gt >= GROW_TOTAL) finishGrow(); dirty = true; }
     const a = 1 - Math.exp(-dt * 3.5); let moving = false;
-    ['cum', 'mid', 'high', 'iv', 'rain', 'wet', 'pud', 'fogK', 'fogTh', 'smk', 'storm', 'brk', 'l0b', 'l0t', 'l0c', 'l0k', 'l0w', 'l0s', 'l0d', 'l0n', 'm1b', 'm1t', 'm1c', 'm1k', 'hc', 'hk', 'ha', 'ht', 'shaft'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > (METRES.has(k) ? 0.5 : 0.0005)) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; }); // altitudes en mètres: seuil d'un demi-mètre (sinon la scène restait « en mouvement » 4 s et l'accumulation des nuages attendait)
+    ['cum', 'mid', 'high', 'iv', 'rain', 'wet', 'pud', 'rv', 'cbs', 'cbb', 'fogK', 'fogTh', 'smk', 'storm', 'brk', 'l0b', 'l0t', 'l0c', 'l0k', 'l0w', 'l0s', 'l0d', 'l0n', 'm1b', 'm1t', 'm1c', 'm1k', 'hc', 'hk', 'ha', 'ht', 'shaft'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > (METRES.has(k) ? 0.5 : 0.0005)) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; }); // altitudes en mètres: seuil d'un demi-mètre (sinon la scène restait « en mouvement » 4 s et l'accumulation des nuages attendait)
     // Vue posée depuis 220 ms après un rendu en résolution réduite: une image de plus avec les nuages en pleine résolution.
     if (!shown && (terrainIn || now - createdAt > 1200)) { shown = true; shownAt = now; R.domElement.style.opacity = '1'; dirty = true; } // fondu sur le ciel bleu du conteneur
     if (growing && growT0 < 0) dirty = true; // attendre l'apparition en continuant à dessiner
@@ -1738,6 +1755,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     if (wLow > 0) { const lr = fogSat > cur.l0c ? lin([0.50, 0.54, 0.60]).map(v => v * 0.65 * (1 - 0.8 * twi)) : slabRad(0).map(v => v * 0.45); hc = mv(hc, lr.map((v, i) => v * 0.85 + hcT[i] * 0.15), wLow); } hc = mv(hc, lin([0.30, 0.21, 0.13]).map(v => v * 0.5), 0.28 * urban * nightF); hzU.uGlowL.value = 0.28 * urban * nightF * LUM(lin([0.30, 0.21, 0.13]).map(v => v * 0.5)); fog.color.setRGB(hc[0], hc[1], hc[2]); fog.near = 250 + camH * 4; fog.far = 1500 + camH * 14; // dernier mélange: pollution lumineuse au loin, en ville
     if (cur.smk > 0) { const sl = LUM([fog.color.r, fog.color.g, fog.color.b]); fog.color.lerp(new THREE.Color(sl * 1.15, sl * 0.85, sl * 0.55), 0.6 * cur.smk); } // fumée: le voile du lointain prend aussi la teinte brun-orangé
     const rainK = cur.rain * (1 - RAIN_BRK * cur.brk); if (rainK > 0) { fog.near *= 1 - 0.6 * rainK; fog.far *= 1 - 0.5 * rainK; fog.color.lerp(new THREE.Color().setScalar(fog.color.r * 0.2126 + fog.color.g * 0.7152 + fog.color.b * 0.0722), 0.5 * rainK); } // pluie: visibilité réduite, grisaille
+    { const CB = compMat.uniforms; CB.uRvSig.value = cur.rv * (1 - RAIN_BRK * cur.brk) / 1000; CB.uCbSig.value = 0.02 * cur.cbs; CB.uCbBase.value = T0.y + cur.cbb; } // voile de pluie et sommets dans la base des nuages dessinés (composition, wfog)
     lampU.uWet.value = cur.wet;
     R.setRenderTarget(sceneRT); R.render(S, cam);
     aoMat.uniforms.tDepth.value = sceneRT.depthTexture; aoMat.uniforms.uRes.value.set(PW, PH); aoMat.uniforms.uProj.value.copy(cam.projectionMatrix); aoMat.uniforms.uProjInv.value.copy(cam.projectionMatrixInverse); pass(aoMat, aoRT);
@@ -1780,7 +1798,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     const CU = compMat.uniforms; CU.tRefl.value = reflRT.texture; CU.uRefl.value = reflK; CU.tDepth.value = sceneRT.depthTexture; CU.uSunUV.value.set(sunPx, sunPy); CU.uAspect.value = W / H; CU.uFlare.value = kFl * (0.35 + 0.65 * iv) * (1 - 0.85 * cum) * sunVis * treeSun * (1 - 0.5 * rainK) * Math.sqrt(smokeT) * (fogSig > 0 ? Math.exp(-fogSig * Math.max(0, fogTopW - cam.position.y) / Math.max(Math.sin(el), 0.05)) : 1); CU.uRays.value = iv * iv * (1 - 0.7 * veil); CU.uVeilW.value = 1 + 1.2 * high + 0.5 * mid; CU.uVis.value = visCPU;
     CU.uDs.value = smooth(1, -4, realDeg); CU.uFog.value.set(fog.near, fog.far); // bleu désaturé: heure bleue et nuit
     // Brouillard en nappe: gris neutre plus clair que le voile habituel (lumière du ciel diffusée), lueur de la ville la nuit.
-    CU.uFogSig.value = fogSig; CU.uFogTop.value = fogTopW; CU.uCamW.value.copy(cam.position); CU.uV2W.value.setFromMatrix4(cam.matrixWorld); CU.uProjInv.value.copy(cam.projectionMatrixInverse);
+    CU.uFogSig.value = fogSig; CU.uFogTop.value = fogTopW; CU.uVP.value.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); CU.tCld.value = skyU.tCloud.value; CU.uCamW.value.copy(cam.position); CU.uV2W.value.setFromMatrix4(cam.matrixWorld); CU.uProjInv.value.copy(cam.projectionMatrixInverse);
     // Voile de fumée: 4 m² par gramme (environ 10 km de visibilité à 100 microgrammes), brun-orangé plus clair au soleil.
     CU.uSmkSig.value = smk > 0 && smokeUg > 0 ? 4e-6 * smokeUg * smk : 0; CU.uSmkTop.value = g0 + 2500;
     // Disque du soleil dans la fumée: transmission par couleur (le bleu s'éteint 1,6 fois plus vite que le vert, le rouge
@@ -1811,7 +1829,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     const sl = rgb(sc0).map(v => Math.pow(v, 2.2)); CU.uSunC.value.set(sl[0], sl[1], sl[2]);
     compMat.uniforms.tCol.value = sceneRT.texture; compMat.uniforms.tAO.value = aoRT.texture; compMat.uniforms.tBloom.value = bloomA.texture; pass(compMat, compRT);
     fxMat.uniforms.tDiffuse.value = compRT.texture; fxMat.uniforms.resolution.value.set(1 / PW, 1 / PH); pass(fxMat, null);
-    if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.dbg = { preLit, programs: R.info.programs.length, nWin: winLights.length, idleMs: Math.round(now - lastMoveAt), lastEnvMs: Math.round(lastEnvMs), storm: cur.storm, brk: cur.brk, pSun: tg.pSun, camSun, subjSun, gap: gapS, uExp: compMat.uniforms.uExp.value, hidden: brkHide.size, cur: { ...cur }, tg: { ...tg }, names: cloudNames.slice(), accK, usedHi, growing }; // vérification en développement
+    if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.dbg = { preLit, programs: R.info.programs.length, nWin: winLights.length, idleMs: Math.round(now - lastMoveAt), lastEnvMs: Math.round(lastEnvMs), storm: cur.storm, brk: cur.brk, pSun: tg.pSun, camSun, subjSun, gap: gapS, uExp: compMat.uniforms.uExp.value, wfog: [compMat.uniforms.uRvSig.value, compMat.uniforms.uCbSig.value, compMat.uniforms.uCbBase.value, T0.y], hidden: brkHide.size, cur: { ...cur }, tg: { ...tg }, names: cloudNames.slice(), accK, usedHi, growing }; // vérification en développement
     if (import.meta.env.DEV && window.__scene3dCore && window.__scene3dCore.afterFrame) window.__scene3dCore.afterFrame(PW, PH, usedHi); // mesure en développement (usedHi: nuages en pleine résolution)
     // Légende: condition de lumière, parts de nuages, position du soleil
     const w = weatherRow || {}; const low = w.cloudLow ?? null, alt = Math.max(w.cloudMid ?? 0, w.cloudHigh ?? 0), sun = w.sunFraction != null ? Math.round(w.sunFraction * 100) : null;
@@ -1920,6 +1938,13 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       // s'écoulant peu à peu: sous 4 mm, le sol est seulement plus foncé; reflet complet à partir de 12 mm.
       const mmOf = (h) => rk(h) > 0 ? h.precip : 0, acc = mmOf(row) + 0.75 * mmOf(pv[0]) + 0.5 * mmOf(pv[1]) + 0.3 * mmOf(pv[2]);
       tg.pud = smooth(4, 12, acc);
+      // Voile de pluie (16 octobre 2026): visibilité typique d'après deux ans d'observations d'aéroports sous la pluie. Pluie
+      // modérée ou forte (2,5 mm/h et plus): environ 5 km; bruine: 4 km; pluie faible: selon la base des nuages prévue
+      // (écart température / point de rosée, lcl): sous 150 m environ 8 km, de 150 à 300 m environ 16 km, plus haut 24 km,
+      // la brume ordinaire du lointain. rv: extinction en plus de celle-ci (par km, 3 / visibilité, seuil de contraste de 5 %).
+      const wcR = row?.wc ?? 0, prR = row?.precip ?? 0, lclR = row?.lcl, drz = wcR >= 51 && wcR <= 57 && !(row?.temp <= 0);
+      const visR = tg.rain > 0 || drz ? (prR >= 2.5 || [63, 65, 81, 82].includes(wcR) ? 5 : drz ? 4 : lclR != null && lclR < 150 ? 8 : lclR != null && lclR < 300 ? 16 : 24) : 24;
+      tg.rv = 3 / visR - 3 / 24;
       // Orage ou averses (8 octobre 2026), d'après ICON: code météo, sinon épaisseur du nuage convectif (atténuée sans pluie),
       // fois la couverture de la couche qui porte la base (la couche moyenne si la base est à 2500 m ou plus). Presque nul pour
       // la pluie ordinaire, le crachin et le couvert gris (été 2025 à Québec: 2 % des heures de pluie au-dessus de 0,45).
@@ -1959,7 +1984,16 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
         for (let i = 0; i < 12; i++) { const z = row.profZ[i]; if (z == null || z < tg.fogTh + 120 || z > 2500) continue; above = Math.max(above ?? 0, row.prof[i] || 0); }
         if (above != null && above < 25) tg.l0c = Math.min(tg.l0c, above / 100);
       }
-      if (!row) { tg.cum = 0; tg.mid = 0; tg.high = 0; tg.iv = 1; tg.rain = 0; tg.wet = 0; tg.pud = 0; tg.fogK = 0; tg.fogTh = 600; tg.storm = 0; tg.pSun = 1; tg.brk = 0; tg.l0c = 0; tg.m1c = 0; tg.hc = 0; tg.shaft = 0; cloudNames = []; }
+      // Sommets dans la base des nuages sous la pluie (16 octobre 2026): le profil d'ICON (niveaux de pression espacés de 500 m
+      // près du sol) place souvent la base de la couche trop haut; sous la pluie, le plafond observé aux aéroports suit l'écart
+      // température / point de rosée (lcl): médiane 150 m pour un lcl de 100 m, 305 m pour 125, 455 pour 175, 760 pour 250,
+      // 1 070 pour 375 (deux ans, 25 000 heures de pluie). Couches observées à l'aéroport voisin (premières heures): leur base.
+      const CEIL_RAIN = [[100, 170], [125, 305], [175, 455], [250, 760], [375, 1070], [575, 1430]];
+      const ceilRain = (l) => { if (l == null) return null; if (l <= CEIL_RAIN[0][0]) return CEIL_RAIN[0][1]; for (let i = 1; i < CEIL_RAIN.length; i++) if (l <= CEIL_RAIN[i][0]) { const [a, A] = CEIL_RAIN[i - 1], [b, B] = CEIL_RAIN[i]; return A + (B - A) * (l - a) / (b - a); } return l * 2.5; };
+      const rainy = tg.rain > 0 || (row?.wc >= 51 && row?.wc <= 57 && !(row?.temp <= 0));
+      tg.cbs = rainy ? smooth(0.8, 0.95, tg.l0c) : 0;
+      tg.cbb = row?.obsLayers?.length ? tg.l0b : Math.min(tg.l0b, ceilRain(row?.lcl) ?? tg.l0b);
+      if (!row) { tg.cum = 0; tg.mid = 0; tg.high = 0; tg.iv = 1; tg.rain = 0; tg.wet = 0; tg.pud = 0; tg.rv = 0; tg.cbs = 0; tg.fogK = 0; tg.fogTh = 600; tg.storm = 0; tg.pSun = 1; tg.brk = 0; tg.l0c = 0; tg.m1c = 0; tg.hc = 0; tg.shaft = 0; cloudNames = []; }
       // L'épaisseur ne glisse pas pendant que le brouillard apparaît ou disparaît (sinon la vue drone se noie un instant).
       if (!(tg.fogK > 0)) tg.fogTh = cur.fogTh; else if (cur.fogK < 1e-3) cur.fogTh = tg.fogTh;
       dirty = true;

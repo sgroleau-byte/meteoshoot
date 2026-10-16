@@ -1012,6 +1012,26 @@ importé, lui, est le fichier de l'architecte.
   pouce du réglage natif; la carte passe au-dessus des champs jusqu'à 1300 px de large (1100 avant: en paysage sur iPad, 1180
   à 1210 px, la carte n'avait que 352 px, maintenant 1084). Vérifié au simulateur iPad Air 11 (doigt posé à 150 px du pouce:
   l'heure saute sous le doigt et le suit) et en Chrome à 1180 x 820. Mac inchangé (fenêtre plus large que 1300 px).
+- v633.218 (16 octobre 2026), **plus de soleil fantôme sous la pluie** (capture de Stéphane: pluie, 100 % de nuages, aucun
+  soleil, et pourtant des percées dans la 3D): le soleil direct résiduel de la rangée (quelques W/m² sous un couvert total)
+  allumait les percées. Sous 5 % de soleil réel (`pSunOf`), plus aucune percée (`tg.iv = 0`). « ok ça semble plus réaliste ».
+- v633.219 (16 octobre 2026), **voile de pluie et sommets dans la base des nuages** (photos de Stéphane depuis son balcon à
+  Stoneham, sous la pluie: collines de plus en plus délavées avec la distance, sommet qui entre dans le nuage;
+  `references_ciel/` dans le dossier parent). Avant, sous la pluie, le relief lointain restait presque noir.
+  - Prévisible? Deux ans d'observations d'aéroports sous la pluie (25 000 heures avec ICON à courte échéance): la visibilité
+    suit l'intensité et la base prévue (écart température / point de rosée, `lcl`): pluie modérée ou forte environ 5 km,
+    bruine 4 km, pluie faible sous 150 m de base environ 8 km, de 150 à 300 m environ 16 km, plus haut 24 km (lointain net).
+    Le plafond observé sous la pluie suit aussi le `lcl`: médiane 150 m pour 100 m, 305 m pour 125, 455 pour 175, 760 pour
+    250, 1 070 pour 375. Le profil d'ICON (niveaux de pression espacés de 500 m près du sol) mettait la couche basse
+    dessinée à 1 300 m le 16 octobre; le plafond réel était vers 300 m.
+  - Rendu (`wfog` dans la composition, engine.js): extinction exacte le long du rayon, coefficient 3 / visibilité moins celui
+    de 24 km (la brume ordinaire du lointain est déjà là), vers la couleur du ciel dessiné juste au-dessus de l'horizon dans
+    la même direction (`airC`: passe des nuages plein écran, relief compris, plus la bande d'horizon pour ce qui passe entre
+    eux). Sous la pluie et une couche basse de 80 % et plus, le relief plus haut que le plafond (tableau ci-dessus, ou la
+    base observée à l'aéroport dans les premières heures) entre dans le nuage: base déchiquetée de 80 m, densité qui monte
+    sur 80 m, une caméra haute n'est jamais noyée elle-même.
+  - Banc (tools/sky, harnais): heure sans pluie identique au pixel près à la v633.218; le premier essai (brume de la scène
+    poussée vers la bande d'horizon) laissait le lointain sombre et a été abandonné.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
