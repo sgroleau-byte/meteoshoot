@@ -144,7 +144,7 @@ export default async function handler(req, res) {
   }
 }
 
-if (process.argv.includes('--test')) {
+if (process.argv.includes('--test') && import.meta.url === `file://${process.argv[1]}`) {
   const i = process.argv.indexOf('--test');
   const lat = parseFloat(process.argv[i + 1] || '46.84'), lng = parseFloat(process.argv[i + 2] || '-71.28');
   const t0 = Date.now();

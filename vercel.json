@@ -17,6 +17,10 @@
     },
     "api/metar.js": {
       "maxDuration": 20
+    },
+    "api/verif-snapshot.js": {
+      "maxDuration": 120,
+      "includeFiles": "src/weather/blendModel.json"
     }
   },
   "github": {

@@ -1,7 +1,7 @@
 import { SHOOT_WINDOWS, isGoodWeather, sunlitFraction, weatherCodeIcon } from './iconsLogic.js';
 import { fetchObserved, applyObservedToHourly, applyNowcast } from './nowcast.js';
-import { clearDirHour, sunElevation } from './solar.js';
-import { blendCloud, BLEND_MEMBERS, loadBlendModel } from './blend.js';
+import { clearDirHour } from './solar.js';
+import { BLEND_MEMBERS, MEMBER_API, loadBlendModel, applyBlend } from './blend.js';
 
 // ===== WEATHER API =====
 // Mode simulation (uniquement en dev): permet de tester la banniere et le badge stale
@@ -326,39 +326,6 @@ function extraCloudFields(h, i) {
   if (h.blendK?.[i] != null) { o.blendK = h.blendK[i]; o.cloudcoverIcon = h.cloudcoverIcon[i]; o.cloudLowIcon = h.cloudLowIcon[i]; }
   if (h.obsW?.[i]) { o.obsW = h.obsW[i]; o.cloudcoverModel = h.cloudcoverModel[i]; o.cloudLowModel = h.cloudLowModel[i]; o.directIcon = h.directIcon[i]; if (h.obsInfo[i]) o.obsInfo = h.obsInfo[i]; if (h.obsLayers[i]) o.obsLayers = h.obsLayers[i]; }
   return o;
-}
-
-// Noms Open-Meteo des membres de la couverture combinée (ICON et GFS viennent des deux requêtes de base)
-const MEMBER_API = { GEM: 'gem_seamless', ECMWF: 'ecmwf_ifs025', AIFS: 'ecmwf_aifs025_single', UKMO: 'ukmo_seamless', NBM: 'ncep_nbm_conus', IFS9: 'ecmwf_ifs' };
-function applyBlend(hourly, { model, gfs, gfsHourIdx, members, lat, lng, tzOffsetMin, now = Date.now() }) {
-  const n = hourly.time.length;
-  hourly.cloudcoverIcon = hourly.cloudcover.slice(); hourly.cloudLowIcon = hourly.cloudcover_low.slice(); hourly.blendK = new Array(n).fill(null);
-  if (!model) return;
-  const msOf = (t) => (tzOffsetMin != null ? Date.parse(t + ':00Z') - tzOffsetMin * 60000 : new Date(t).getTime());
-  const memIdx = {}; if (members && members.hourly) members.hourly.time.forEach((t, i) => { memIdx[t] = i; });
-  const mem = (m, t) => { const a = members && members.hourly && members.hourly[`cloud_cover_${MEMBER_API[m]}`]; const i = memIdx[t]; return a && i != null ? a[i] : null; };
-  // part de l'heure au soleil prévue par ICON (direct rapporté au ciel clair), moyenne des rangées T et T+1 (le rayonnement
-  // est la moyenne de l'heure précédente), comme au banc
-  const pAt = (i) => { if (i >= n || hourly.direct_radiation[i] == null) return null; const c = clearDirHour(msOf(hourly.time[i]), lat, lng); return c >= 3 ? Math.min(1, hourly.direct_radiation[i] / c) : null; };
-  for (let i = 0; i < n; i++) {
-    if (hourly.model[i] !== 'icon') continue;
-    const t = hourly.time[i], ms = msOf(t), ahead = (ms - now) / 3600000;
-    if (ahead < -24 || ahead > 72) continue;
-    const ico = hourly.cloudcover[i]; if (ico == null) continue;
-    const p0 = pAt(i), p1 = pAt(i + 1), pSun = p0 != null && p1 != null ? (p0 + p1) / 2 : p0 ?? p1;
-    const gi = gfsHourIdx[t];
-    const f = { ICON: ico, GFS: gi != null && gfs ? gfs.hourly.cloudcover[gi] : null, GEM: mem('GEM', t), ECMWF: mem('ECMWF', t), AIFS: mem('AIFS', t), UKMO: mem('UKMO', t), NBM: mem('NBM', t), IFS9: mem('IFS9', t), ICONlow: hourly.cloudcover_low[i], pSun, sunEl: sunElevation(ms, lat, lng) };
-    // Au moins trois autres modèles à cette heure (sinon les arbres travailleraient sur des entrées qu'ils n'ont presque jamais vues manquer)
-    if (['GEM', 'ECMWF', 'AIFS', 'UKMO', 'IFS9'].filter((k) => f[k] != null).length < 3) continue;
-    const b = blendCloud(model, f, Math.max(0, ahead));
-    if (b == null) continue;
-    const low = hourly.cloudcover_low[i];
-    hourly.cloudcover[i] = b;
-    hourly.blendK[i] = Math.round(Math.min(3, b / Math.max(5, ico)) * 100) / 100;
-    // ICON presque sans nuages: la part basse du total combiné vient de GFS (même heure), sinon 60 % (moyenne observée au Québec)
-    const gT = gi != null && gfs ? gfs.hourly.cloudcover[gi] : null, gL = gi != null && gfs ? gfs.hourly.cloudcover_low?.[gi] : null;
-    if (low != null) hourly.cloudcover_low[i] = Math.round(Math.min(b, ico >= 5 ? low * b / ico : gT >= 10 && gL != null ? b * Math.min(1, gL / gT) : b * 0.6));
-  }
 }
 
 // Dernier ciel observé par lieu (fetchWeather), réutilisé pour corriger les nuages moyens et hauts de la 3D.

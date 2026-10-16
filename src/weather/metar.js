@@ -50,7 +50,7 @@ export function parseMetar(raw) {
     // bornes de la catégorie du corps (couverture cumulée): total = couche la plus haute, bas = plus haute couche basse
     let tot = low + mid + high;
     if (layers.length) {
-      const [lo, hi] = CAT[layers[layers.length - 1].cover]; tot = Math.min(Math.max(tot, tot > 0 ? lo : 0), hi);
+      const [lo, hi] = CAT[layers[layers.length - 1].cover]; tot = Math.min(Math.max(tot, lo), hi); // même lecture que le banc (des traces seules comptent comme 1/8)
       const lows = layers.filter((l) => l.baseFt != null && l.baseFt <= LOW_MAX_FT);
       if (lows.length) { const [lo2, hi2] = CAT[lows[lows.length - 1].cover]; low = Math.min(Math.max(low, lo2), hi2); }
     }

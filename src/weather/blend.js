@@ -6,6 +6,8 @@
 // alourdir le démarrage), une table par échéance. Un modèle absent (hors domaine, panne) est simplement manquant: les
 // arbres savent s'en passer.
 
+import { clearDirHour, sunElevation } from './solar.js';
+
 // Modèles demandés à Open-Meteo en plus d'ICON et de GFS (doivent couvrir les entrées des arbres)
 export const BLEND_MEMBERS = ['GEM', 'ECMWF', 'AIFS', 'UKMO', 'NBM', 'IFS9'];
 
@@ -37,3 +39,40 @@ export function blendCloud(model, feats, hoursAhead) {
   const x = m.features.map((k) => (feats[k] == null ? NaN : feats[k]));
   return Math.max(0, Math.min(100, Math.round(predict(m, x))));
 }
+
+// Noms Open-Meteo des membres de la couverture combinée (ICON et GFS viennent des deux requêtes de base)
+export const MEMBER_API = { GEM: 'gem_seamless', ECMWF: 'ecmwf_ifs025', AIFS: 'ecmwf_aifs025_single', UKMO: 'ukmo_seamless', NBM: 'ncep_nbm_conus', IFS9: 'ecmwf_ifs' };
+
+// Application aux tableaux horaires d'une prévision (fetchWeather, et l'archive de vérification api/verif-snapshot.js):
+// réécrit cloudcover et cloudcover_low sur les 72 premières heures d'ICON; garde cloudcoverIcon, cloudLowIcon et blendK.
+export function applyBlend(hourly, { model, gfs, gfsHourIdx, members, lat, lng, tzOffsetMin, now = Date.now() }) {
+  const n = hourly.time.length;
+  hourly.cloudcoverIcon = hourly.cloudcover.slice(); hourly.cloudLowIcon = hourly.cloudcover_low.slice(); hourly.blendK = new Array(n).fill(null);
+  if (!model) return;
+  const msOf = (t) => (tzOffsetMin != null ? Date.parse(t + ':00Z') - tzOffsetMin * 60000 : new Date(t).getTime());
+  const memIdx = {}; if (members && members.hourly) members.hourly.time.forEach((t, i) => { memIdx[t] = i; });
+  const mem = (m, t) => { const a = members && members.hourly && members.hourly[`cloud_cover_${MEMBER_API[m]}`]; const i = memIdx[t]; return a && i != null ? a[i] : null; };
+  // part de l'heure au soleil prévue par ICON (direct rapporté au ciel clair), moyenne des rangées T et T+1 (le rayonnement
+  // est la moyenne de l'heure précédente), comme au banc
+  const pAt = (i) => { if (i >= n || hourly.direct_radiation[i] == null) return null; const c = clearDirHour(msOf(hourly.time[i]), lat, lng); return c >= 3 ? Math.min(1, hourly.direct_radiation[i] / c) : null; };
+  for (let i = 0; i < n; i++) {
+    if (hourly.model[i] !== 'icon') continue;
+    const t = hourly.time[i], ms = msOf(t), ahead = (ms - now) / 3600000;
+    if (ahead < -24 || ahead > 72) continue;
+    const ico = hourly.cloudcover[i]; if (ico == null) continue;
+    const p0 = pAt(i), p1 = pAt(i + 1), pSun = p0 != null && p1 != null ? (p0 + p1) / 2 : p0 ?? p1;
+    const gi = gfsHourIdx[t];
+    const f = { ICON: ico, GFS: gi != null && gfs ? gfs.hourly.cloudcover[gi] : null, GEM: mem('GEM', t), ECMWF: mem('ECMWF', t), AIFS: mem('AIFS', t), UKMO: mem('UKMO', t), NBM: mem('NBM', t), IFS9: mem('IFS9', t), ICONlow: hourly.cloudcover_low[i], pSun, sunEl: sunElevation(ms, lat, lng) };
+    // Au moins trois autres modèles à cette heure (sinon les arbres travailleraient sur des entrées qu'ils n'ont presque jamais vues manquer)
+    if (['GEM', 'ECMWF', 'AIFS', 'UKMO', 'IFS9'].filter((k) => f[k] != null).length < 3) continue;
+    const b = blendCloud(model, f, Math.max(0, ahead));
+    if (b == null) continue;
+    const low = hourly.cloudcover_low[i];
+    hourly.cloudcover[i] = b;
+    hourly.blendK[i] = Math.round(Math.min(3, b / Math.max(5, ico)) * 100) / 100;
+    // ICON presque sans nuages: la part basse du total combiné vient de GFS (même heure), sinon 60 % (moyenne observée au Québec)
+    const gT = gi != null && gfs ? gfs.hourly.cloudcover[gi] : null, gL = gi != null && gfs ? gfs.hourly.cloudcover_low?.[gi] : null;
+    if (low != null) hourly.cloudcover_low[i] = Math.round(Math.min(b, ico >= 5 ? low * b / ico : gT >= 10 && gL != null ? b * Math.min(1, gL / gT) : b * 0.6));
+  }
+}
+

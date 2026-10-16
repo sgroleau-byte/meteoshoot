@@ -62,30 +62,31 @@ def parse(metar):
         r.update(kind='auto-sky' if auto else 'sky',tot=tot,low=low,mid=None,high=None); return r
     return None
 
-out={}
-for f in sorted(glob.glob('obs/*.csv')):
-    sid=os.path.basename(f)[:-4]; rows={}
-    with open(f) as fh:
-        for row in csv.DictReader(fh):
-            v=row['valid']; m=row['metar']
-            if not m or m=='M': continue
-            mm=int(v[14:16])
-            # heure pleine: observation de routine à hh:00 (tolérance -10/+5 min), SPECI ignorés sauf si seuls
-            if mm>=50: 
-                # arrondi à l heure suivante
-                import datetime as dt
-                t=dt.datetime.strptime(v,'%Y-%m-%d %H:%M')+dt.timedelta(hours=1); key=t.strftime('%Y-%m-%dT%H:00')
-            elif mm<=5: key=v[:10]+'T'+v[11:13]+':00'
-            else: continue
-            p=parse(m)
-            if p is None: continue
-            p['spec']=m.startswith('SPECI') or ' SPECI ' in m[:12]
-            old=rows.get(key)
-            # préférer la routine (METAR) la plus proche de hh:00
-            score=(0 if not p['spec'] else 1, min(mm,60-mm) if mm>=50 else mm)
-            if old is None or score<old[0]: rows[key]=(score,p)
-    out[sid]={k:v[1] for k,v in rows.items()}
-    kinds={}
-    for p in out[sid].values(): kinds[p['kind']]=kinds.get(p['kind'],0)+1
-    print(sid,len(out[sid]),kinds)
-json.dump(out,open('truth.json','w'))
+if __name__ == '__main__':
+    out={}
+    for f in sorted(glob.glob('obs/*.csv')):
+        sid=os.path.basename(f)[:-4]; rows={}
+        with open(f) as fh:
+            for row in csv.DictReader(fh):
+                v=row['valid']; m=row['metar']
+                if not m or m=='M': continue
+                mm=int(v[14:16])
+                # heure pleine: observation de routine à hh:00 (tolérance -10/+5 min), SPECI ignorés sauf si seuls
+                if mm>=50: 
+                    # arrondi à l heure suivante
+                    import datetime as dt
+                    t=dt.datetime.strptime(v,'%Y-%m-%d %H:%M')+dt.timedelta(hours=1); key=t.strftime('%Y-%m-%dT%H:00')
+                elif mm<=5: key=v[:10]+'T'+v[11:13]+':00'
+                else: continue
+                p=parse(m)
+                if p is None: continue
+                p['spec']=m.startswith('SPECI') or ' SPECI ' in m[:12]
+                old=rows.get(key)
+                # préférer la routine (METAR) la plus proche de hh:00
+                score=(0 if not p['spec'] else 1, min(mm,60-mm) if mm>=50 else mm)
+                if old is None or score<old[0]: rows[key]=(score,p)
+        out[sid]={k:v[1] for k,v in rows.items()}
+        kinds={}
+        for p in out[sid].values(): kinds[p['kind']]=kinds.get(p['kind'],0)+1
+        print(sid,len(out[sid]),kinds)
+    json.dump(out,open('truth.json','w'))
