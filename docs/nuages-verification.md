@@ -50,6 +50,12 @@
 
 - La part de soleil direct prévue par ICON est une entrée clé : quand elle dépasse la part du ciel libre de nuages bas, les nuages d'ICON sont minces. Son schéma de couverture sous la maille produit des nuages partiels qui ne portent presque pas d'eau.
 
+**Deuxième année (octobre 2024 à octobre 2025), téléchargée le 16 octobre 2026.**
+- En apprenant sur une année et en testant sur l'autre (le test le plus dur : aucune semaine commune), le gain sur ICON tient. La veille, l'écart passe de 19,1 à 15,3 points (de 19,1 à 14,7 aux fenêtres de lever et de coucher). À courte échéance, il passe de 17,4 à 12,8 ; à deux jours, de 20,7 à 16,6.
+- Ce test est prudent : AIFS n'existe chez Open-Meteo qu'à partir du printemps 2025, et UKMO la veille qu'à partir d'octobre 2025.
+- Ce qui n'apporte rien de mesurable : apprendre sur les deux années (gain sur ICON de 4,75 points contre 4,83 sur une année), ajouter la saison et l'heure solaire, ou donner trois fois plus de poids aux heures de lever et de coucher (13,76 contre 13,80 aux fenêtres).
+- Le modèle de l'app reste celui de la dernière année : il reflète les versions actuelles des modèles (AIFS 2 depuis mai 2026). Script : `tools/clouds/train2.py`.
+
 **Ciel observé pour les heures suivantes** (fond : la combinaison de la veille). La correction qui gagne est `w·observé + (1 - w)·prévision`, avec `w = e^(-h/tau)` : tau de 2,5 h pour le total, 3 h pour les nuages bas. Elle bat l'écart additif et le rapport. Avec ICON seul comme fond, tau montait à 4 ou 5 h.
 
 | Heures après l'observation | 1 | 2 | 3 | 4 | 6 |
