@@ -25,6 +25,7 @@
 ## Workflow de déploiement
 
 - **Publier directement en prod par défaut.** Quand Stéphane demande un changement, après l'avoir codé: `npm run build` doit passer sans erreur, bump version `v633.X`, commit sur `dev`, puis `git push origin dev && git push origin dev:main`. Vercel détecte Vite (commande `npm run build`, dossier `dist`) et déploie le push sur `main`.
+- **Partout par défaut** (Stéphane, 16 octobre 2026: « je dois le mentionner à chaque fois que les mises à jour doivent se faire partout? »): toute version qui touche l'app (pas seulement le serveur `api/`) part aussi à TestFlight dans la foulée (`sh scripts/testflight.sh`, puis commit du numéro de build), sans qu'il ait à le demander. Le Mac (app web) se met à jour en rechargeant; l'iPhone et l'iPad par TestFlight.
 - Pas besoin de demander confirmation avant le push (override de la règle globale "toujours demander avant git push" pour ce projet).
 - Le branch `main` est utilisé par un worktree local, donc utiliser `git push origin dev:main` au lieu de checkout + merge.
 
