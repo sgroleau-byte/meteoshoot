@@ -132,6 +132,7 @@ Ce tableau mesurait l'aéroport du lieu lui-même. Pour un projet loin de l'aér
 - Forfait Standard (usage commercial, 1 million d'appels par mois, serveurs réservés). Il n'ouvre pas les archives de prévisions : le banc de vérification utilise les serveurs ouverts.
 - Les appels de l'app passent par le relais `api/om.js` : la clé reste côté serveur (variable Vercel `OPEN_METEO_KEY`), et les réponses sont gardées 15 minutes par le CDN. Si le relais manque ou tombe, l'app revient aux serveurs ouverts.
 - Garde-fous du relais : un seul lieu pour la météo (plusieurs pour le relief), au plus 16 jours de prévision, 60 variables et 8 modèles.
+- Correctif v633.220 (16 octobre 2026, Stéphane sur iPhone : chargement très long, « ça date d'il y a 6 heures ») : de la v633.214 à la v633.219, le relais refusait toutes les demandes de l'app (code 400). Les coordonnées des projets viennent de Google avec jusqu'à 15 décimales, le relais n'en acceptait que 6 ; les variables de la 3D par niveau de pression (`cloud_cover_1000hPa`) portent une majuscule, refusée elle aussi. L'app se rabattait en silence sur les serveurs ouverts, qui traitent une demande à la fois par adresse : lenteur, refus, puis copie locale de plusieurs heures. Vu dans les journaux de requêtes Vercel (`vercel logs requests`, chemin `/api/om`) : 273 demandes de l'app, toutes en 400. Le correctif est côté serveur : les apps déjà installées en profitent sans mise à jour.
 - En développement local, `scripts/scene3d-dev.mjs` lit la clé dans un fichier gardé hors du dépôt.
 
 ## 5. Pièges

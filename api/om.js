@@ -41,8 +41,11 @@ export default async function handler(req, res) {
   const seen = new Set();
   for (const k of url.searchParams.keys()) { if (!PARAMS.has(k) || seen.has(k)) { send(res, 400, { error: true, reason: 'demande refusée par le relais' }); return; } seen.add(k); }
   const ep = url.searchParams.get('ep'), get = (k) => url.searchParams.get(k);
-  const one = /^-?\d{1,2}(\.\d{1,6})?$/, oneL = /^-?\d{1,3}(\.\d{1,6})?$/, list = (v, re, max) => !!v && v.split(',').length <= max && v.split(',').every((x) => re.test(x));
-  const word = /^[a-z0-9_]+$/, nVars = (get('hourly') || '').split(',').filter(Boolean).length + (get('daily') || '').split(',').filter(Boolean).length;
+  // Coordonnées: jusqu'à 15 décimales (celles des projets viennent de Google; la limite de 6 refusait toutes les demandes de
+  // l'app du 16 octobre 2026, qui se rabattait alors sur les serveurs ouverts, lents et limités)
+  const one = /^-?\d{1,2}(\.\d{1,15})?$/, oneL = /^-?\d{1,3}(\.\d{1,15})?$/, list = (v, re, max) => !!v && v.split(',').length <= max && v.split(',').every((x) => re.test(x));
+  // Noms de variables: majuscules permises (niveaux de pression de la 3D: cloud_cover_1000hPa, aussi refusés jusque-là)
+  const word = /^[A-Za-z0-9_]+$/, nVars = (get('hourly') || '').split(',').filter(Boolean).length + (get('daily') || '').split(',').filter(Boolean).length;
   const nModels = Math.max(1, (get('models') || '').split(',').filter(Boolean).length), days = get('forecast_days');
   const ok = EPS.has(ep)
     && (ep === 'elevation' ? list(get('latitude'), one, 200) && list(get('longitude'), oneL, 200) : one.test(get('latitude') || '') && oneL.test(get('longitude') || ''))
