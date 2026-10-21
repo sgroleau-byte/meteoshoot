@@ -75,6 +75,20 @@ nul) au lieu de « --:-- ».
 v633.227: petites icônes des pourcentages = soleil et nuage de la rangée des jours en blanc plein (« tu prends ces
 icônes-là, mais en blanc seulement »).
 
+## Annonces vocales (v633.231, 21 octobre 2026)
+
+Demande de Stéphane: entendre, le téléphone dans la poche, « coucher du soleil dans 15 minutes » sans sortir le
+téléphone. `ios/App/App/ShootAnnouncer.swift`: notifications locales programmées à 45, 30, 15, 10 et 5 minutes avant
+l'événement visé, puis à l'heure même (« maintenant »), avec un clip vocal embarqué par moment (`Sounds/annonce-<coucher
+ou lever>-<minutes>.caf`, voix Amélie du Mac: `say -v Amélie` puis `afconvert -f caff -d LEI16`; Stéphane peut les
+remplacer par ses propres clips sous les mêmes noms, moins de 30 s). Programmées par le pont (`announce`) à chaque
+démarrage ou mise à jour de l'activité, annulées avec elle (`endAll`). Préférence « Annonces vocales » dans l'écran
+Préférences (`prefs.liveAnnounce`, activée par défaut), iPhone seulement (`announceAvailable`). Limites: iOS ne peut pas
+faire parler l'app fermée (d'où les clips); le commutateur silencieux et les modes Concentration coupent le son
+(alertes critiques réservées par Apple); Siri lit les notifications avec des AirPods si « Annoncer les notifications »
+est activé. Banc: `SIMCTL_CHILD_MS_LIVE_SAMPLE=annonce` programme « maintenant » dans 40 s (la permission de
+notification doit être accordée à la main dans le simulateur).
+
 Dynamic Island inchangée (Bebas Neue): compact (icône du soleil visé, compte à rebours), étendu (lever, coucher,
 nom, barre, nuages, trajet).
 

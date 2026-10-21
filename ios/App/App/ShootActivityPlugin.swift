@@ -18,6 +18,7 @@ public class ShootActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "start", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "end", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "sweep", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "announce", returnType: CAPPluginReturnPromise),
     ]
 
     static let finTaskIdentifier = "com.meteoshoot.app.fin-shooting"
@@ -63,6 +64,14 @@ public class ShootActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    // Annonces vocales du coucher ou du lever visé (ShootAnnouncer): targetDate en secondes depuis 1970, isSunrise,
+    // enabled (préférence de l'app).
+    @objc func announce(_ call: CAPPluginCall) {
+        guard let seconds = call.getDouble("targetDate") else { call.reject("targetDate manquant"); return }
+        ShootAnnouncer.schedule(target: Date(timeIntervalSince1970: seconds), isSunrise: call.getBool("isSunrise") ?? false, enabled: call.getBool("enabled") ?? true)
+        call.resolve()
+    }
+
     @objc func end(_ call: CAPPluginCall) {
         guard #available(iOS 16.2, *) else { call.resolve(); return }
         Task {
@@ -83,6 +92,7 @@ public class ShootActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     @available(iOS 16.2, *)
     static func endAll() async {
         ShootTripTracker.shared.stop()
+        ShootAnnouncer.cancel()
         for activity in Activity<ShootActivityAttributes>.activities {
             await activity.end(nil, dismissalPolicy: .immediate)
         }
@@ -120,6 +130,7 @@ public class ShootActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     static func startSampleIfAsked() {
         guard let mode = ProcessInfo.processInfo.environment["MS_LIVE_SAMPLE"], #available(iOS 16.2, *) else { return }
         if mode == "end" { Task { await endAll() }; return }   // MS_LIVE_SAMPLE=end: termine tout (capture sans carte)
+        if mode == "annonce" { ShootAnnouncer.schedule(target: Date().addingTimeInterval(40), isSunrise: false, enabled: true); return }   // annonce « maintenant » dans 40 s
         let now = Date()
         let target = now.addingTimeInterval(647 * 60)   // 10 h 47: le compte à rebours le plus large
         let state = ShootActivityAttributes.ContentState(

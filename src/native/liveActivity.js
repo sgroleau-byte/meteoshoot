@@ -6,10 +6,18 @@ import { isNative, platform } from './platform.js';
 // Sans effet hors de l'app iOS.
 const ShootActivity = registerPlugin('ShootActivity');
 export const liveActivityAvailable = isNative && platform === 'ios';
+// Annonces vocales: iPhone seulement (inutiles sur iPad et Mac, Stéphane le 21 octobre 2026).
+export const announceAvailable = liveActivityAvailable && /iPhone/.test(navigator.userAgent);
 
 export const startShootActivity = (projectId, state) => {
   if (!liveActivityAvailable) return;
   ShootActivity.start({ projectId, state: JSON.stringify(state) }).catch((e) => console.warn('Activité en direct:', e?.message || e));
+};
+
+// Annonces vocales du coucher ou du lever visé (ShootAnnouncer.swift): programmées avec l'activité, selon la préférence.
+export const announceSunEvent = (targetDate, isSunrise, enabled) => {
+  if (!announceAvailable) return;
+  ShootActivity.announce({ targetDate: Math.round(new Date(targetDate).getTime() / 1000), isSunrise: !!isSunrise, enabled: enabled !== false }).catch(() => {});
 };
 
 export const endShootActivity = () => {

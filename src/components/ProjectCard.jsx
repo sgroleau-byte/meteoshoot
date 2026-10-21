@@ -15,14 +15,14 @@ import { ShootCheckIcon, StarIcon, TrashIcon } from './icons/misc.jsx';
 import { WeatherRow, weatherRowDismiss } from './WeatherRow.jsx';
 import { getTravelTime } from '../maps/google.js';
 import { checkLocationPermission, getCurrentPosition } from '../native/geolocation.js';
-import { endShootActivity, hourAt, liveActivityAvailable, pickSunTarget, shootEndTime, startShootActivity, tripState } from '../native/liveActivity.js';
+import { announceSunEvent, endShootActivity, hourAt, liveActivityAvailable, pickSunTarget, shootEndTime, startShootActivity, tripState } from '../native/liveActivity.js';
 import { clearShootOfDay, getShootOfDay, setShootOfDayEnd, useShootOfDay } from '../native/shootOfDay.js';
 import { dayIcon } from '../weather/iconsLogic.js';
 
 // React.memo + actionsOpen (booléen): ouvrir ou fermer un tiroir ne redessine que la carte concernée, pas toute la liste
 // (sur iPad, redessiner les cartes larges à la fin du glissement le faisait accrocher).
 export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDownDrag, actionsOpen, setOpenActionsId }) => {
-  const { advanceProject, deleteProject } = useStore();
+  const { advanceProject, deleteProject, prefs } = useStore();
   const { t } = useLang();
   const { reportWeather, clearWeather } = useWeatherStatus();
   // Prévision fraîche déjà reçue (moins de 30 min) tout de suite, sinon rien jusqu'à l'arrivée de la vraie.
@@ -136,9 +136,10 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
         startDate: Math.round(target.barStart.getTime() / 1000),
         endDate: Math.round(endsAt / 1000),
       });
+      announceSunEvent(target.date, target.isSunrise, prefs?.liveAnnounce !== false);
     })();
     return () => { cancelled = true; };
-  }, [isShootOfDay, weather, project.id, project.name, project.lat, project.lng, project.orientation, project.travelTime, project.shootTime]);
+  }, [isShootOfDay, weather, project.id, project.name, project.lat, project.lng, project.orientation, project.travelTime, project.shootTime, prefs?.liveAnnounce]);
 
   // Couleurs adaptées au mode sombre/clair
   const colorActive = '#FAF9F7';

@@ -9,7 +9,20 @@
 /* Begin PBXBuildFile section */
 		08A7C59000F1247C1B549B3A /* MeteoShootViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC9C618CDAC7F9E485E609E9 /* MeteoShootViewController.swift */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
+		7A1C0E5D2B9F4C3A8D6E2130 /* annonce-coucher-0.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7A1C0E5D2B9F4C3A8D6E1130 /* annonce-coucher-0.caf */; };
+		7A1C0E5D2B9F4C3A8D6E2131 /* annonce-coucher-10.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7A1C0E5D2B9F4C3A8D6E1131 /* annonce-coucher-10.caf */; };
+		7A1C0E5D2B9F4C3A8D6E2132 /* annonce-coucher-15.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7A1C0E5D2B9F4C3A8D6E1132 /* annonce-coucher-15.caf */; };
+		7A1C0E5D2B9F4C3A8D6E2133 /* annonce-coucher-30.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7A1C0E5D2B9F4C3A8D6E1133 /* annonce-coucher-30.caf */; };
+		7A1C0E5D2B9F4C3A8D6E2134 /* annonce-coucher-45.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7A1C0E5D2B9F4C3A8D6E1134 /* annonce-coucher-45.caf */; };
+		7A1C0E5D2B9F4C3A8D6E2135 /* annonce-coucher-5.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7A1C0E5D2B9F4C3A8D6E1135 /* annonce-coucher-5.caf */; };
+		7A1C0E5D2B9F4C3A8D6E2136 /* annonce-lever-0.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7A1C0E5D2B9F4C3A8D6E1136 /* annonce-lever-0.caf */; };
+		7A1C0E5D2B9F4C3A8D6E2137 /* annonce-lever-10.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7A1C0E5D2B9F4C3A8D6E1137 /* annonce-lever-10.caf */; };
+		7A1C0E5D2B9F4C3A8D6E2138 /* annonce-lever-15.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7A1C0E5D2B9F4C3A8D6E1138 /* annonce-lever-15.caf */; };
+		7A1C0E5D2B9F4C3A8D6E2139 /* annonce-lever-30.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7A1C0E5D2B9F4C3A8D6E1139 /* annonce-lever-30.caf */; };
+		7A1C0E5D2B9F4C3A8D6E2140 /* annonce-lever-45.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7A1C0E5D2B9F4C3A8D6E1140 /* annonce-lever-45.caf */; };
+		7A1C0E5D2B9F4C3A8D6E2141 /* annonce-lever-5.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7A1C0E5D2B9F4C3A8D6E1141 /* annonce-lever-5.caf */; };
 		31F295CA3ABD12AC7E8688A0 /* ShootActivityPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFA21F786442B2EB6C97DDAA /* ShootActivityPlugin.swift */; };
+		7A1C0E5D2B9F4C3A8D6E1F21 /* ShootAnnouncer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1C0E5D2B9F4C3A8D6E1F20 /* ShootAnnouncer.swift */; };
 		7A1C0E5D2B9F4C3A8D6E1F11 /* ShootTripTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1C0E5D2B9F4C3A8D6E1F10 /* ShootTripTracker.swift */; };
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
@@ -76,6 +89,19 @@
 		CC9C618CDAC7F9E485E609E9 /* MeteoShootViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeteoShootViewController.swift; sourceTree = "<group>"; };
 		CDFC7E57A5E38E6858F22B7F /* BebasNeue Book.ttf */ = {isa = PBXFileReference; includeInIndex = 1; path = "BebasNeue Book.ttf"; sourceTree = "<group>"; };
 		CFA21F786442B2EB6C97DDAA /* ShootActivityPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShootActivityPlugin.swift; sourceTree = "<group>"; };
+		7A1C0E5D2B9F4C3A8D6E1130 /* annonce-coucher-0.caf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "annonce-coucher-0.caf"; path = "Sounds/annonce-coucher-0.caf"; sourceTree = "<group>"; };
+		7A1C0E5D2B9F4C3A8D6E1131 /* annonce-coucher-10.caf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "annonce-coucher-10.caf"; path = "Sounds/annonce-coucher-10.caf"; sourceTree = "<group>"; };
+		7A1C0E5D2B9F4C3A8D6E1132 /* annonce-coucher-15.caf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "annonce-coucher-15.caf"; path = "Sounds/annonce-coucher-15.caf"; sourceTree = "<group>"; };
+		7A1C0E5D2B9F4C3A8D6E1133 /* annonce-coucher-30.caf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "annonce-coucher-30.caf"; path = "Sounds/annonce-coucher-30.caf"; sourceTree = "<group>"; };
+		7A1C0E5D2B9F4C3A8D6E1134 /* annonce-coucher-45.caf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "annonce-coucher-45.caf"; path = "Sounds/annonce-coucher-45.caf"; sourceTree = "<group>"; };
+		7A1C0E5D2B9F4C3A8D6E1135 /* annonce-coucher-5.caf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "annonce-coucher-5.caf"; path = "Sounds/annonce-coucher-5.caf"; sourceTree = "<group>"; };
+		7A1C0E5D2B9F4C3A8D6E1136 /* annonce-lever-0.caf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "annonce-lever-0.caf"; path = "Sounds/annonce-lever-0.caf"; sourceTree = "<group>"; };
+		7A1C0E5D2B9F4C3A8D6E1137 /* annonce-lever-10.caf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "annonce-lever-10.caf"; path = "Sounds/annonce-lever-10.caf"; sourceTree = "<group>"; };
+		7A1C0E5D2B9F4C3A8D6E1138 /* annonce-lever-15.caf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "annonce-lever-15.caf"; path = "Sounds/annonce-lever-15.caf"; sourceTree = "<group>"; };
+		7A1C0E5D2B9F4C3A8D6E1139 /* annonce-lever-30.caf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "annonce-lever-30.caf"; path = "Sounds/annonce-lever-30.caf"; sourceTree = "<group>"; };
+		7A1C0E5D2B9F4C3A8D6E1140 /* annonce-lever-45.caf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "annonce-lever-45.caf"; path = "Sounds/annonce-lever-45.caf"; sourceTree = "<group>"; };
+		7A1C0E5D2B9F4C3A8D6E1141 /* annonce-lever-5.caf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "annonce-lever-5.caf"; path = "Sounds/annonce-lever-5.caf"; sourceTree = "<group>"; };
+		7A1C0E5D2B9F4C3A8D6E1F20 /* ShootAnnouncer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShootAnnouncer.swift; sourceTree = "<group>"; };
 		7A1C0E5D2B9F4C3A8D6E1F10 /* ShootTripTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShootTripTracker.swift; sourceTree = "<group>"; };
 		D78458C2FF63E47ADB864A29 /* ShootActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShootActivityAttributes.swift; sourceTree = "<group>"; };
 		EC875D1B45B9ED788EABC20B /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
@@ -148,6 +174,19 @@
 				50B271D01FEDC1A000F3C39B /* public */,
 				CC9C618CDAC7F9E485E609E9 /* MeteoShootViewController.swift */,
 				CFA21F786442B2EB6C97DDAA /* ShootActivityPlugin.swift */,
+				7A1C0E5D2B9F4C3A8D6E1130 /* annonce-coucher-0.caf */,
+				7A1C0E5D2B9F4C3A8D6E1131 /* annonce-coucher-10.caf */,
+				7A1C0E5D2B9F4C3A8D6E1132 /* annonce-coucher-15.caf */,
+				7A1C0E5D2B9F4C3A8D6E1133 /* annonce-coucher-30.caf */,
+				7A1C0E5D2B9F4C3A8D6E1134 /* annonce-coucher-45.caf */,
+				7A1C0E5D2B9F4C3A8D6E1135 /* annonce-coucher-5.caf */,
+				7A1C0E5D2B9F4C3A8D6E1136 /* annonce-lever-0.caf */,
+				7A1C0E5D2B9F4C3A8D6E1137 /* annonce-lever-10.caf */,
+				7A1C0E5D2B9F4C3A8D6E1138 /* annonce-lever-15.caf */,
+				7A1C0E5D2B9F4C3A8D6E1139 /* annonce-lever-30.caf */,
+				7A1C0E5D2B9F4C3A8D6E1140 /* annonce-lever-45.caf */,
+				7A1C0E5D2B9F4C3A8D6E1141 /* annonce-lever-5.caf */,
+				7A1C0E5D2B9F4C3A8D6E1F20 /* ShootAnnouncer.swift */,
 				7A1C0E5D2B9F4C3A8D6E1F10 /* ShootTripTracker.swift */,
 				D78458C2FF63E47ADB864A29 /* ShootActivityAttributes.swift */,
 			);
@@ -269,6 +308,18 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7A1C0E5D2B9F4C3A8D6E2130 /* annonce-coucher-0.caf in Resources */,
+				7A1C0E5D2B9F4C3A8D6E2131 /* annonce-coucher-10.caf in Resources */,
+				7A1C0E5D2B9F4C3A8D6E2132 /* annonce-coucher-15.caf in Resources */,
+				7A1C0E5D2B9F4C3A8D6E2133 /* annonce-coucher-30.caf in Resources */,
+				7A1C0E5D2B9F4C3A8D6E2134 /* annonce-coucher-45.caf in Resources */,
+				7A1C0E5D2B9F4C3A8D6E2135 /* annonce-coucher-5.caf in Resources */,
+				7A1C0E5D2B9F4C3A8D6E2136 /* annonce-lever-0.caf in Resources */,
+				7A1C0E5D2B9F4C3A8D6E2137 /* annonce-lever-10.caf in Resources */,
+				7A1C0E5D2B9F4C3A8D6E2138 /* annonce-lever-15.caf in Resources */,
+				7A1C0E5D2B9F4C3A8D6E2139 /* annonce-lever-30.caf in Resources */,
+				7A1C0E5D2B9F4C3A8D6E2140 /* annonce-lever-45.caf in Resources */,
+				7A1C0E5D2B9F4C3A8D6E2141 /* annonce-lever-5.caf in Resources */,
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
 				50B271D11FEDC1A000F3C39B /* public in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,
@@ -308,6 +359,7 @@
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 				08A7C59000F1247C1B549B3A /* MeteoShootViewController.swift in Sources */,
 				31F295CA3ABD12AC7E8688A0 /* ShootActivityPlugin.swift in Sources */,
+				7A1C0E5D2B9F4C3A8D6E1F21 /* ShootAnnouncer.swift in Sources */,
 				7A1C0E5D2B9F4C3A8D6E1F11 /* ShootTripTracker.swift in Sources */,
 				AFD539035F652B3B9CC55183 /* ShootActivityAttributes.swift in Sources */,
 			);
