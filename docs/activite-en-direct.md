@@ -39,9 +39,11 @@ Dynamic Island écrivait « 1 h 44 min » en mots).
 - Rangée 2: anneau du temps restant (anneau circulaire système, animé par iOS, du début de la barre à l'événement
   visé), « Coucher dans » (ou « Lever dans », compte à rebours), tracé pointillé de la route avec le point d'étape et
   les kilomètres, « Coucher du soleil » avec l'heure (« 19h45 »), étoiles à droite.
-- Les comptes à rebours sont au format de la minuterie d'iOS (`Text(timerInterval:)`, « 5:47:12 »): le format iOS 18
-  « heures et minutes » donnait « 1:44 » au simulateur mais « 5 hours, 47 minutes » sur l'iPhone de Stéphane
-  (v633.225, 21 octobre 2026); colonnes et route dimensionnées pour « 10:47:12 ». Les icônes météo sont celles de l'app (`WeatherIcon.jsx`) rendues en blanc par
+- Les comptes à rebours sont des « h:mm » calculés au rendu (v633.227), donc rafraîchis à chaque mise à jour de
+  l'activité: ouverture de l'app, et en route toutes les cinq minutes ou à chaque changement de distance (suivi du
+  trajet). Stéphane ne veut ni mots ni secondes; or le format iOS 18 « heures et minutes » donnait « 5 hours, 47
+  minutes » sur son iPhone, et la minuterie `Text(timerInterval:)` (« 5:47:12 ») ne se laisse pas découper (masque ou
+  cadre coupé: le texte disparaît). Les icônes météo sont celles de l'app (`WeatherIcon.jsx`) rendues en blanc par
   `node tools/live-icons/render.mjs` (`Images/weather-<code>.png`, à relancer si les icônes de l'app changent).
 - Écarts connus avec la maquette: les heures du compte à rebours ne sont pas complétées à deux chiffres (« 1:45 »
   et non « 01:45 », format système), et la petite aiguille dessinée dans l'anneau de la maquette n'existe pas
@@ -69,6 +71,9 @@ v633.226 (21 octobre 2026): titre en SF Pro Rounded Regular (plus Thin), aligné
 pourcentages = celles de la bande horaire (nuage plein, disque de soleil; les contours ressemblaient à une roue
 dentelée); sans trajet connu, l'heure de départ par défaut d'un shooting (une heure sur place avant le soleil, trajet
 nul) au lieu de « --:-- ».
+
+v633.227: petites icônes des pourcentages = soleil et nuage de la rangée des jours en blanc plein (« tu prends ces
+icônes-là, mais en blanc seulement »).
 
 Dynamic Island inchangée (Bebas Neue): compact (icône du soleil visé, compte à rebours), étendu (lever, coucher,
 nom, barre, nuages, trajet).

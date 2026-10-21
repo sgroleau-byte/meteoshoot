@@ -143,9 +143,9 @@ enum Live {
     static let row1LabelBaseline: CGFloat = 55.5, row1ValueBaseline: CGFloat = 72.5
     static let weatherLabelFromRight: CGFloat = 166, weatherLabelBaseline: CGFloat = 55.5
     static let weatherValuesFromRight: CGFloat = 34, weatherValuesBaseline: CGFloat = 72.5
-    static let smallIconOpacity: Double = 0.459    // calque à 117/255
-    static let cloudIconSize: CGFloat = 22, cloudIconBaseline: CGFloat = 17.2, cloudIconGapBefore: CGFloat = 3, cloudIconGapAfter: CGFloat = 1
-    static let sunIconSize: CGFloat = 22, sunIconBaseline: CGFloat = 15.8, sunIconGapBefore: CGFloat = 4, sunIconGapAfter: CGFloat = 1
+    static let smallIconOpacity: Double = 1.0      // blanc plein (maquette: 117/255; Stéphane, 21 octobre 2026: « en blanc seulement »)
+    static let cloudIconSize: CGFloat = 22, cloudIconBaseline: CGFloat = 17.4, cloudIconGapBefore: CGFloat = 3, cloudIconGapAfter: CGFloat = -0.6
+    static let sunIconSize: CGFloat = 22, sunIconBaseline: CGFloat = 15.8, sunIconGapBefore: CGFloat = 3.5, sunIconGapAfter: CGFloat = -2.5
     static let bigIconSize: CGFloat = 21, bigIconFromRight: CGFloat = 8, bigIconTop: CGFloat = 57
     // Rangée 2: anneau, compte à rebours, route, événement visé, étoiles
     static let ringCenter = CGPoint(x: 42.8, y: 112.5), ringDiameter: CGFloat = 24.4
@@ -175,17 +175,14 @@ extension View {
     func baseline(x: CGFloat, y: CGFloat) -> some View { modifier(Baseline(x: x, y: y)) }
 }
 
-// Compte à rebours animé par iOS, en chiffres seulement, format de la minuterie d'iOS (« 5:47:12 »). Le format iOS 18
-// « heures et minutes » donnait « 1:44 » au simulateur mais « 5 hours, 47 minutes » sur l'iPhone de Stéphane (21 octobre
-// 2026, refusé deux fois): seul Text(timerInterval:) garantit des chiffres partout.
+// Compte à rebours « h:mm », calculé au rendu (chaque mise à jour de l'activité: ouverture de l'app, positions du suivi
+// du trajet). Stéphane (21 octobre 2026) ne veut ni mots ni secondes; or les minuteries animées d'iOS donnent soit
+// « 5:47:12 » (impossible à découper: masque et cadre coupé font disparaître le texte), soit des mots sur son iPhone.
 struct MinuteCountdown: View {
     let to: Date?
     var body: some View {
-        if let to, to > Date() {
-            Text(timerInterval: Date()...to, countsDown: true, showsHours: true)
-        } else {
-            Text("0:00")
-        }
+        let remaining = max(0, Int(((to ?? Date()).timeIntervalSince(Date()) / 60).rounded()))
+        Text(String(format: "%d:%02d", remaining / 60, remaining % 60))
     }
 }
 

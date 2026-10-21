@@ -18,6 +18,7 @@ final class ShootTripTracker: NSObject, CLLocationManagerDelegate {
     private var started = false
     private var lastSentKm: Int?
     private var lastSentProgress: Double?
+    private var lastSentAt = Date.distantPast
 
     private override init() {
         super.init()
@@ -76,9 +77,10 @@ final class ShootTripTracker: NSObject, CLLocationManagerDelegate {
         let arrived = straight < 150
         let progress = arrived ? 1 : min(1, max(0, 1 - remaining / total))
         let km = arrived ? 0 : Int((remaining / 1000).rounded())
-        // Mise à jour seulement si quelque chose a changé de façon visible.
-        if lastSentKm == km, let p = lastSentProgress, abs(p - progress) < 0.02 { return }
-        lastSentKm = km; lastSentProgress = progress
+        // Mise à jour si quelque chose a changé de façon visible, ou toutes les cinq minutes en route (les comptes à
+        // rebours « h:mm » de la carte sont calculés au rendu).
+        if lastSentKm == km, let p = lastSentProgress, abs(p - progress) < 0.02, Date().timeIntervalSince(lastSentAt) < 300 { return }
+        lastSentKm = km; lastSentProgress = progress; lastSentAt = Date()
         state.routeProgress = progress
         state.kmText = "\(km) km"   // « 0 km » à l'arrivée (un mot plus long toucherait « Coucher du soleil »)
         state.remainingMeters = remaining
