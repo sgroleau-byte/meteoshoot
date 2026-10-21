@@ -128,7 +128,8 @@ struct SunBar: View {
 enum Live {
     static let k: CGFloat = 1.2                   // agrandissement général (titre, anneau, positions)
     static let cardWidth: CGFloat = 365.667       // 1097 px: largeur de la carte sur l'iPhone 15 Pro de la maquette
-    static let cardHeight: CGFloat = k * 113.667  // 136,4 pt (341 px dans la maquette)
+    static let cardHeight: CGFloat = 150           // maquette 113,67 x 1,2 = 136,4; bande du bas plus haute (Stéphane, 21 octobre 2026)
+    static let bandTop: CGFloat = 84               // bande colorée du bas: pleine largeur, jusqu'au bas de la carte (ses coins suivent ceux de la carte)
     static let centerX = cardWidth / 2
     // Typo (SF Pro = police système)
     static let titleFont = Font.system(size: 17.6, weight: .regular, design: .rounded)   // maquette 14,67 x 1,2; regular (Stéphane, 21 octobre 2026)
@@ -148,19 +149,19 @@ enum Live {
     static let sunIconSize: CGFloat = 22, sunIconBaseline: CGFloat = 15.8, sunIconGapBefore: CGFloat = 3.5, sunIconGapAfter: CGFloat = -2.5
     static let bigIconSize: CGFloat = 21, bigIconFromRight: CGFloat = 8, bigIconTop: CGFloat = 57
     // Rangée 2: anneau, compte à rebours, route, événement visé, étoiles
-    static let ringCenter = CGPoint(x: 42.8, y: 112.5), ringDiameter: CGFloat = 24.4
-    static let row2LabelX: CGFloat = 60.1, row2LabelBaseline: CGFloat = 106, row2ValueBaseline: CGFloat = 125
+    static let ringCenter = CGPoint(x: 42.8, y: 117), ringDiameter: CGFloat = 24.4
+    static let row2LabelX: CGFloat = 60.1, row2LabelBaseline: CGFloat = 110.5, row2ValueBaseline: CGFloat = 129.5
     static let targetCenterX: CGFloat = 272       // « Coucher du soleil » centré (259,12 dans la maquette)
-    static let starsFromRight: CGFloat = 8.0, starsTop: CGFloat = 96, starsSize = CGSize(width: 48.333, height: 33.333)
+    static let starsFromRight: CGFloat = 8.0, starsTop: CGFloat = 100.5, starsSize = CGSize(width: 48.333, height: 33.333)
     // Route (groupe ROUTE de la maquette, cotes de la maquette x 0,9 faute de place): boîte posée à (140, 93)
     static let routeScale: CGFloat = 0.9
-    static let routeBox = CGRect(x: 146, y: 93, width: 92 * routeScale, height: 45 * routeScale)
+    static let routeBox = CGRect(x: 146, y: 97.5, width: 92 * routeScale, height: 45 * routeScale)
     static let routeOrigin = CGPoint(x: 128, y: 73)   // origine de la boîte dans la maquette
     static let routeStart = CGPoint(x: 136.67, y: 96.33), routeC1 = CGPoint(x: 156.6, y: 115.83)
     static let routeC2 = CGPoint(x: 190.47, y: 79.07), routeEnd = CGPoint(x: 212.33, y: 96.0)
     static let routeLeftDot = CGPoint(x: 132.33, y: 92.33), routeRightDot = CGPoint(x: 215.33, y: 97.0)
     static let routeEtaDot = CGPoint(x: 176.73, y: 94.93), routeEtaRadius: CGFloat = 4.73
-    static let kmBaseline: CGFloat = 105
+    static let kmBaseline: CGFloat = 109.5
 }
 
 // Texte posé par sa ligne de base: (x, baseline) depuis le coin haut gauche du conteneur (overlay topLeading).
@@ -183,6 +184,31 @@ struct MinuteCountdown: View {
     var body: some View {
         let remaining = max(0, Int(((to ?? Date()).timeIntervalSince(Date()) / 60).rounded()))
         Text(String(format: "%d:%02d", remaining / 60, remaining % 60))
+    }
+}
+
+// Bande colorée du bas (dégradé de la maquette, lu dans le PSD: bleu nuit, bleu, orange, jaune, bleu pâle, puis
+// transparent vers la gauche) et voile bleu nuit en haut à droite. Dessinée pleine largeur: la carte système coupe
+// ses coins, la bande suit donc le contour (Stéphane, 21 octobre 2026: « qu'elle suive les courbes du contour »).
+struct LiveBand: View {
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .topLeading) {
+                RadialGradient(colors: [Look.color(0x04305C).opacity(0.75), Look.color(0x04305C).opacity(0)],
+                               center: UnitPoint(x: 1.0, y: 0.25), startRadius: 0, endRadius: geo.size.width * 0.42)
+                LinearGradient(stops: [
+                    .init(color: Look.color(0xAED2EC).opacity(0), location: 0),
+                    .init(color: Look.color(0xAED2EC).opacity(0.55), location: 0.36),
+                    .init(color: Look.color(0xECD190).opacity(0.85), location: 0.56),
+                    .init(color: Look.color(0xF19F6D).opacity(0.9), location: 0.655),
+                    .init(color: Look.color(0x187BE0).opacity(0.9), location: 0.735),
+                    .init(color: Look.color(0x04305C).opacity(0.9), location: 0.86),
+                    .init(color: Look.color(0x04305C).opacity(0.9), location: 1),
+                ], startPoint: .leading, endPoint: .trailing)
+                .frame(height: geo.size.height - Live.bandTop)
+                .offset(y: Live.bandTop)
+            }
+        }
     }
 }
 
@@ -270,7 +296,7 @@ struct LockScreenCard: View {
             .frame(height: Live.cardHeight)
             .frame(maxWidth: .infinity)
             // Dégradé de la maquette, étiré sur la carte
-            .background { (Look.image("live-gradient") ?? Image(uiImage: UIImage())).resizable() }
+            .background { LiveBand() }
             // Titre
             .overlay(alignment: .topLeading) {
                 Text(state.name).font(Live.titleFont).tracking(Live.titleTracking).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.7)
