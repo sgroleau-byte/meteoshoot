@@ -32,8 +32,7 @@ execFileSync(path.join(root, 'node_modules/esbuild/bin/esbuild'), [entry, '--bun
 rmSync(entry);
 const svgs = JSON.parse(execFileSync('node', [bundle]).toString());
 
-// 2. Tout en blanc (les noirs des masques restent noirs), traits épaissis comme dans la maquette (mesurés sur le
-// PSD: 1,6 x pour la grande icône, 1,15 x pour les deux petites), fond noir.
+// 2. Tout en blanc (les noirs des masques restent noirs), traits au facteur demandé (1 = trait de l'app), fond noir.
 const whiten = (svg, strokeScale) => svg
   .replace(/(stroke|fill)="(#(?!000\b)[0-9a-fA-F]{3,6})"/g, '$1="#fff"')
   .replace(/stroke-width="([0-9.]+)"/g, (_, w) => `stroke-width="${(parseFloat(w) * strokeScale).toFixed(2)}"`)
@@ -48,7 +47,8 @@ const whiten = (svg, strokeScale) => svg
 mkdirSync(out, { recursive: true });
 // Petites icônes des pourcentages: le soleil et le nuage de la rangée des jours (WeatherIcon.jsx), en blanc plein, trait
 // normal de l'app (Stéphane, 21 octobre 2026: « tu prends ces icônes-là, mais en blanc seulement »).
-const jobs = types.map((t) => [`weather-${t}`, t, 1.6]).concat([['small-cloud', 'cloudy', 1.15], ['small-sun', 'sunny', 1.15]]);
+// Trait normal de l'app partout (Stéphane, 21 octobre 2026: la grande icône épaissie à 1,6 était « ultra grasse »).
+const jobs = types.map((t) => [`weather-${t}`, t, 1.0]).concat([['small-cloud', 'cloudy', 1.0], ['small-sun', 'sunny', 1.0]]);
 for (const [name, t, strokeScale] of jobs) {
   const file = path.join(work, `${name}.svg`);
   writeFileSync(file, whiten(svgs[t], strokeScale));
