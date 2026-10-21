@@ -46,7 +46,11 @@ const whiten = (svg, strokeScale) => svg
   .replace(/<svg /, '<svg xmlns="http://www.w3.org/2000/svg" style="background:#000" ')
   .replace(/ class=""/g, '');
 mkdirSync(out, { recursive: true });
-const jobs = types.map((t) => [`weather-${t}`, t, 1.6]).concat([['small-cloud', 'cloudy', 1.15], ['small-sun', 'sunny', 1.15]]);
+// Petites icônes des pourcentages: celles de la bande horaire de la fiche (ProjectDetail.jsx: nuage plein, disque de
+// soleil), demandées par Stéphane le 21 octobre 2026 (les contours de la maquette ressemblaient à une roue dentelée).
+svgs['small-cloud'] = '<svg viewBox="0 0 32 32"><g fill="#fff"><circle cx="12" cy="18" r="6"/><circle cx="20" cy="16" r="7"/><rect x="8" y="18" width="15" height="6" rx="3"/></g></svg>';
+svgs['small-sun'] = '<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="8" fill="#fff"/></svg>';
+const jobs = types.map((t) => [`weather-${t}`, t, 1.6]).concat([['small-cloud', 'small-cloud', 1], ['small-sun', 'small-sun', 1]]);
 for (const [name, t, strokeScale] of jobs) {
   const file = path.join(work, `${name}.svg`);
   writeFileSync(file, whiten(svgs[t], strokeScale));

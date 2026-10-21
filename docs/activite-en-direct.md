@@ -65,6 +65,11 @@ réseau en arrière-plan.
 Essai au simulateur: `xcrun simctl privacy <udid> grant location-always com.meteoshoot.app`, puis
 `xcrun simctl location set <udid> 46.76,-71.30` (lieu d'essai: Assemblée nationale 46.8086, -71.2144).
 
+v633.226 (21 octobre 2026): titre en SF Pro Rounded Regular (plus Thin), aligné sur les étiquettes; petites icônes des
+pourcentages = celles de la bande horaire (nuage plein, disque de soleil; les contours ressemblaient à une roue
+dentelée); sans trajet connu, l'heure de départ par défaut d'un shooting (une heure sur place avant le soleil, trajet
+nul) au lieu de « --:-- ».
+
 Dynamic Island inchangée (Bebas Neue): compact (icône du soleil visé, compte à rebours), étendu (lever, coucher,
 nom, barre, nuages, trajet).
 

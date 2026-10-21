@@ -107,11 +107,14 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
       }
       if (target.date.getTime() > endsAt) return;
       // Heure du shooting entrée: départ = cette heure, le jour du shooting, moins le trajet; sinon calcul au soleil.
+      // Sans trajet connu (ni position, ni trajet planifié), l'heure par défaut d'un shooting: une heure sur place avant
+      // le soleil, trajet nul (Stéphane, 21 octobre 2026: pas de « --:-- »).
+      const travelSeconds = travel?.durationSeconds || 0;
       const depart = project.shootTime
-        ? calcDepartureFromShootTime(project.shootTime, travel?.durationSeconds, new Date(target.day.sunrise))
-        : calcDeparture(target.isSunrise ? target.day.sunrise : target.day.sunset, travel?.durationSeconds);
+        ? calcDepartureFromShootTime(project.shootTime, travelSeconds, new Date(target.day.sunrise))
+        : calcDeparture(target.isSunrise ? target.day.sunrise : target.day.sunset, travelSeconds);
       // Arrivée sur place: départ plus trajet (compte à rebours « Arrivé dans » de l'activité).
-      const arrive = depart && travel?.durationSeconds ? new Date(depart).getTime() + travel.durationSeconds * 1000 : null;
+      const arrive = depart ? new Date(depart).getTime() + travelSeconds * 1000 : null;
       // Météo à l'heure de l'événement visé (maquette Live.psd: « Météo au coucher du soleil »), sinon celle du jour.
       const hour = hourAt(weather.hourly, target.date, target.isSunrise);
       const cloud = hour?.cloudcover ?? target.day.cloudcover;

@@ -131,25 +131,25 @@ enum Live {
     static let cardHeight: CGFloat = k * 113.667  // 136,4 pt (341 px dans la maquette)
     static let centerX = cardWidth / 2
     // Typo (SF Pro = police système)
-    static let titleFont = Font.system(size: 17.6, weight: .thin, design: .rounded)   // maquette 14,67 x 1,2
+    static let titleFont = Font.system(size: 17.6, weight: .regular, design: .rounded)   // maquette 14,67 x 1,2; regular (Stéphane, 21 octobre 2026)
     static let labelFont = Font.system(size: 10.8, weight: .medium)                    // maquette 6,67 x 1,2 x 1,35
     static let valueFont = Font.system(size: 18.7, weight: .medium)                    // maquette 11,56 x 1,2 x 1,35
     static let weatherFont = Font.system(size: 13, weight: .medium)                  // maquette 9,56 x 1,2 x 1,18 (place pour « 10:47:12 »)
     static let titleTracking: CGFloat = -0.1, labelTracking: CGFloat = -0.3, valueTracking: CGFloat = 0, weatherTracking: CGFloat = -0.15
     // Titre
-    static let titleX: CGFloat = 37.5, titleBaseline: CGFloat = 21.9
+    static let titleX: CGFloat = 30, titleBaseline: CGFloat = 23   // aligné sur les étiquettes
     // Rangée 1: départ, arrivée (gauche), météo (droite)
     static let colAX: CGFloat = 30, colBX: CGFloat = 119   // place pour un compte à rebours « 10:47:12 »
-    static let row1LabelBaseline: CGFloat = 52, row1ValueBaseline: CGFloat = 69
-    static let weatherLabelFromRight: CGFloat = 166, weatherLabelBaseline: CGFloat = 52
-    static let weatherValuesFromRight: CGFloat = 37, weatherValuesBaseline: CGFloat = 69
+    static let row1LabelBaseline: CGFloat = 55.5, row1ValueBaseline: CGFloat = 72.5
+    static let weatherLabelFromRight: CGFloat = 166, weatherLabelBaseline: CGFloat = 55.5
+    static let weatherValuesFromRight: CGFloat = 34, weatherValuesBaseline: CGFloat = 72.5
     static let smallIconOpacity: Double = 0.459    // calque à 117/255
-    static let cloudIconSize: CGFloat = 22, cloudIconBaseline: CGFloat = 17.4, cloudIconGapBefore: CGFloat = 3, cloudIconGapAfter: CGFloat = -0.6
-    static let sunIconSize: CGFloat = 22, sunIconBaseline: CGFloat = 15.8, sunIconGapBefore: CGFloat = 3.5, sunIconGapAfter: CGFloat = -2.5
-    static let bigIconSize: CGFloat = 21, bigIconFromRight: CGFloat = 10, bigIconTop: CGFloat = 53.5
+    static let cloudIconSize: CGFloat = 22, cloudIconBaseline: CGFloat = 17.2, cloudIconGapBefore: CGFloat = 3, cloudIconGapAfter: CGFloat = 1
+    static let sunIconSize: CGFloat = 22, sunIconBaseline: CGFloat = 15.8, sunIconGapBefore: CGFloat = 4, sunIconGapAfter: CGFloat = 1
+    static let bigIconSize: CGFloat = 21, bigIconFromRight: CGFloat = 8, bigIconTop: CGFloat = 57
     // Rangée 2: anneau, compte à rebours, route, événement visé, étoiles
-    static let ringCenter = CGPoint(x: 42.8, y: 112.7), ringDiameter: CGFloat = 24.4
-    static let row2LabelX: CGFloat = 60.1, row2LabelBaseline: CGFloat = 107, row2ValueBaseline: CGFloat = 126
+    static let ringCenter = CGPoint(x: 42.8, y: 112.5), ringDiameter: CGFloat = 24.4
+    static let row2LabelX: CGFloat = 60.1, row2LabelBaseline: CGFloat = 106, row2ValueBaseline: CGFloat = 125
     static let targetCenterX: CGFloat = 272       // « Coucher du soleil » centré (259,12 dans la maquette)
     static let starsFromRight: CGFloat = 8.0, starsTop: CGFloat = 96, starsSize = CGSize(width: 48.333, height: 33.333)
     // Route (groupe ROUTE de la maquette, cotes de la maquette x 0,9 faute de place): boîte posée à (140, 93)
