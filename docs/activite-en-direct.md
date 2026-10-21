@@ -39,8 +39,9 @@ Dynamic Island écrivait « 1 h 44 min » en mots).
 - Rangée 2: anneau du temps restant (anneau circulaire système, animé par iOS, du début de la barre à l'événement
   visé), « Coucher dans » (ou « Lever dans », compte à rebours), tracé pointillé de la route avec le point d'étape et
   les kilomètres, « Coucher du soleil » avec l'heure (« 19h45 »), étoiles à droite.
-- Les comptes à rebours affichent heures et minutes (iOS 18, `Text(.currentDate, format: .timer)` à la minute; iOS
-  17 montre les secondes). Les icônes météo sont celles de l'app (`WeatherIcon.jsx`) rendues en blanc par
+- Les comptes à rebours sont au format de la minuterie d'iOS (`Text(timerInterval:)`, « 5:47:12 »): le format iOS 18
+  « heures et minutes » donnait « 1:44 » au simulateur mais « 5 hours, 47 minutes » sur l'iPhone de Stéphane
+  (v633.225, 21 octobre 2026); colonnes et route dimensionnées pour « 10:47:12 ». Les icônes météo sont celles de l'app (`WeatherIcon.jsx`) rendues en blanc par
   `node tools/live-icons/render.mjs` (`Images/weather-<code>.png`, à relancer si les icônes de l'app changent).
 - Écarts connus avec la maquette: les heures du compte à rebours ne sont pas complétées à deux chiffres (« 1:45 »
   et non « 01:45 », format système), et la petite aiguille dessinée dans l'anneau de la maquette n'existe pas

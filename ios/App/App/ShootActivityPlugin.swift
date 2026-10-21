@@ -121,12 +121,12 @@ public class ShootActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         guard let mode = ProcessInfo.processInfo.environment["MS_LIVE_SAMPLE"], #available(iOS 16.2, *) else { return }
         if mode == "end" { Task { await endAll() }; return }   // MS_LIVE_SAMPLE=end: termine tout (capture sans carte)
         let now = Date()
-        let target = now.addingTimeInterval(105 * 60)
+        let target = now.addingTimeInterval(647 * 60)   // 10 h 47: le compte à rebours le plus large
         let state = ShootActivityAttributes.ContentState(
             name: "Assemblée nationale - Salon bleu et Salon rouge", sunriseText: "06:58", sunsetText: "19:45",
             icon: "sunny-few-clouds", cloudText: "87%", tempText: "13°", sunText: "87%", travelText: "0H12", kmText: "5 km",
             destLat: 46.8086, destLng: -71.2144, travelMeters: 12000, remainingMeters: 5000, roadFactor: 1.3, routeProgress: 0.55,
-            departText: "14:45", arriveDate: now.addingTimeInterval(105 * 60), targetDate: target, targetIsSunrise: false,
+            departText: "14:45", arriveDate: now.addingTimeInterval(647 * 60), targetDate: target, targetIsSunrise: false,
             startDate: now.addingTimeInterval(-8.5 * 3600), endDate: target.addingTimeInterval(30 * 60))
         Task {
             await endAll()

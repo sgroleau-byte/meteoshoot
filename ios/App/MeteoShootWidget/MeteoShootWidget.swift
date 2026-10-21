@@ -134,27 +134,27 @@ enum Live {
     static let titleFont = Font.system(size: 17.6, weight: .thin, design: .rounded)   // maquette 14,67 x 1,2
     static let labelFont = Font.system(size: 10.8, weight: .medium)                    // maquette 6,67 x 1,2 x 1,35
     static let valueFont = Font.system(size: 18.7, weight: .medium)                    // maquette 11,56 x 1,2 x 1,35
-    static let weatherFont = Font.system(size: 14.3, weight: .medium)                  // maquette 9,56 x 1,2 x 1,25
+    static let weatherFont = Font.system(size: 13, weight: .medium)                  // maquette 9,56 x 1,2 x 1,18 (place pour « 10:47:12 »)
     static let titleTracking: CGFloat = -0.1, labelTracking: CGFloat = -0.3, valueTracking: CGFloat = 0, weatherTracking: CGFloat = -0.15
     // Titre
     static let titleX: CGFloat = 37.5, titleBaseline: CGFloat = 21.9
     // Rangée 1: départ, arrivée (gauche), météo (droite)
-    static let colAX: CGFloat = 39.3, colBX: CGFloat = 131
+    static let colAX: CGFloat = 30, colBX: CGFloat = 119   // place pour un compte à rebours « 10:47:12 »
     static let row1LabelBaseline: CGFloat = 52, row1ValueBaseline: CGFloat = 69
     static let weatherLabelFromRight: CGFloat = 166, weatherLabelBaseline: CGFloat = 52
     static let weatherValuesFromRight: CGFloat = 37, weatherValuesBaseline: CGFloat = 69
     static let smallIconOpacity: Double = 0.459    // calque à 117/255
-    static let cloudIconSize: CGFloat = 24.15, cloudIconBaseline: CGFloat = 19.1, cloudIconGapBefore: CGFloat = 5.5, cloudIconGapAfter: CGFloat = -0.65
-    static let sunIconSize: CGFloat = 24.0, sunIconBaseline: CGFloat = 17.4, sunIconGapBefore: CGFloat = 6.0, sunIconGapAfter: CGFloat = -2.75
+    static let cloudIconSize: CGFloat = 22, cloudIconBaseline: CGFloat = 17.4, cloudIconGapBefore: CGFloat = 3, cloudIconGapAfter: CGFloat = -0.6
+    static let sunIconSize: CGFloat = 22, sunIconBaseline: CGFloat = 15.8, sunIconGapBefore: CGFloat = 3.5, sunIconGapAfter: CGFloat = -2.5
     static let bigIconSize: CGFloat = 21, bigIconFromRight: CGFloat = 10, bigIconTop: CGFloat = 53.5
     // Rangée 2: anneau, compte à rebours, route, événement visé, étoiles
     static let ringCenter = CGPoint(x: 42.8, y: 112.7), ringDiameter: CGFloat = 24.4
     static let row2LabelX: CGFloat = 60.1, row2LabelBaseline: CGFloat = 107, row2ValueBaseline: CGFloat = 126
-    static let targetCenterX: CGFloat = 268       // « Coucher du soleil » centré (259,12 dans la maquette)
+    static let targetCenterX: CGFloat = 272       // « Coucher du soleil » centré (259,12 dans la maquette)
     static let starsFromRight: CGFloat = 8.0, starsTop: CGFloat = 96, starsSize = CGSize(width: 48.333, height: 33.333)
     // Route (groupe ROUTE de la maquette, cotes de la maquette x 0,9 faute de place): boîte posée à (140, 93)
     static let routeScale: CGFloat = 0.9
-    static let routeBox = CGRect(x: 140, y: 93, width: 92 * routeScale, height: 45 * routeScale)
+    static let routeBox = CGRect(x: 146, y: 93, width: 92 * routeScale, height: 45 * routeScale)
     static let routeOrigin = CGPoint(x: 128, y: 73)   // origine de la boîte dans la maquette
     static let routeStart = CGPoint(x: 136.67, y: 96.33), routeC1 = CGPoint(x: 156.6, y: 115.83)
     static let routeC2 = CGPoint(x: 190.47, y: 79.07), routeEnd = CGPoint(x: 212.33, y: 96.0)
@@ -175,17 +175,14 @@ extension View {
     func baseline(x: CGFloat, y: CGFloat) -> some View { modifier(Baseline(x: x, y: y)) }
 }
 
-// Compte à rebours animé par iOS, en chiffres seulement: « 1:44 » (heures et minutes, deux champs) sur iOS 18 et plus,
-// « 1:44:59 » (minuterie) avant. Le format « 1 heure et 44 minutes » en mots a été refusé par Stéphane le 21 octobre 2026.
+// Compte à rebours animé par iOS, en chiffres seulement, format de la minuterie d'iOS (« 5:47:12 »). Le format iOS 18
+// « heures et minutes » donnait « 1:44 » au simulateur mais « 5 hours, 47 minutes » sur l'iPhone de Stéphane (21 octobre
+// 2026, refusé deux fois): seul Text(timerInterval:) garantit des chiffres partout.
 struct MinuteCountdown: View {
     let to: Date?
     var body: some View {
         if let to, to > Date() {
-            if #available(iOS 18, *) {
-                Text(.currentDate, format: .timer(countingDownIn: to.addingTimeInterval(-24 * 3600)..<to, showsHours: true, maxFieldCount: 2))
-            } else {
-                Text(timerInterval: Date()...to, countsDown: true, showsHours: true)
-            }
+            Text(timerInterval: Date()...to, countsDown: true, showsHours: true)
         } else {
             Text("0:00")
         }
