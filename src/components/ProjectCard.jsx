@@ -15,7 +15,7 @@ import { ShootCheckIcon, StarIcon, TrashIcon } from './icons/misc.jsx';
 import { WeatherRow, weatherRowDismiss } from './WeatherRow.jsx';
 import { getTravelTime } from '../maps/google.js';
 import { checkLocationPermission, getCurrentPosition } from '../native/geolocation.js';
-import { endShootActivity, hourAt, liveActivityAvailable, pickSunTarget, shootEndTime, startShootActivity } from '../native/liveActivity.js';
+import { endShootActivity, hourAt, liveActivityAvailable, pickSunTarget, shootEndTime, startShootActivity, tripState } from '../native/liveActivity.js';
 import { clearShootOfDay, getShootOfDay, setShootOfDayEnd, useShootOfDay } from '../native/shootOfDay.js';
 import { dayIcon } from '../weather/iconsLogic.js';
 
@@ -72,10 +72,12 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
     let cancelled = false;
     (async () => {
       let travel = project.travelTime || null;
+      let here = null;   // position actuelle, pour la distance restante du suivi en direct (liveActivity.js)
       try {
         if ((await checkLocationPermission()) === 'granted') {
           const pos = await getCurrentPosition({ enableHighAccuracy: false, timeout: 8000 });
           travel = await getTravelTime(pos.coords.latitude, pos.coords.longitude, project.lat, project.lng);
+          here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         }
       } catch (e) { /* position indisponible: trajet planifié */ }
       if (cancelled) return;
@@ -123,6 +125,7 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
         sunText: hour?.sunFraction != null ? `${Math.round(hour.sunFraction * 100)}%` : '--',
         travelText: travel?.durationSeconds ? formatDuration(travel.durationSeconds).replace(/^0/, '') : null,
         kmText: travel?.distanceMeters ? `${Math.round(travel.distanceMeters / 1000)} km` : null,
+        ...tripState(project, travel, here),
         departText: depart ? formatTime(depart) : null,
         arriveDate: arrive ? Math.round(arrive / 1000) : null,
         targetDate: Math.round(target.date.getTime() / 1000),

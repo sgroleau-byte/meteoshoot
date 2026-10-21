@@ -9,6 +9,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Tâche de fond qui termine l'activité en direct à la fin du shooting (ShootActivityPlugin).
         ShootActivityPlugin.registerFinTask()
+        // Suivi du trajet vers le shooting du jour (activité en direct), repris à chaque lancement, y compris quand iOS
+        // relance l'app en arrière-plan pour un changement de position (clé launchOptions location).
+        if #available(iOS 16.2, *) { ShootTripTracker.shared.startIfNeeded() }
         #if DEBUG
         ShootActivityPlugin.startSampleIfAsked()
         #endif

@@ -46,6 +46,24 @@ Dynamic Island écrivait « 1 h 44 min » en mots).
   et non « 01:45 », format système), et la petite aiguille dessinée dans l'anneau de la maquette n'existe pas
   (l'anneau est dessiné et animé par iOS).
 
+## Suivi du trajet en direct (v633.224, 21 octobre 2026)
+
+Stéphane: « le nombre de kilomètres, quand c'est marqué 5 km avec le rond, c'est la distance entre moi et le shooting
+en ce moment, live. Puis le rond bouge jusqu'à ce que je sois arrivé à destination. » L'app ne tourne pas quand
+l'écran est verrouillé: `ios/App/App/ShootTripTracker.swift` suit la position en arrière-plan (permission de
+localisation « Toujours », demandée au démarrage de l'activité; mode d'arrière-plan `location`; changements
+significatifs pour qu'iOS relance l'app si elle a été fermée, `AppDelegate` reprend alors le suivi). À chaque position
+(filtre de 200 m): distance restante = distance à vol d'oiseau vers le lieu multipliée par le rapport route / vol
+d'oiseau mesuré au départ (`roadFactor`, calculé par `tripState` dans `src/native/liveActivity.js` avec la distance
+Google depuis la position actuelle, sinon fixé par le natif à la première position), avancement du rond = 1 moins
+distance restante sur la distance du trajet planifié (`travelMeters`, trajet depuis la maison). L'activité n'est mise à
+jour que si les kilomètres ou l'avancement (2 %) changent. À moins de 150 m: « Arrivé », rond au bout, suivi arrêté.
+Sans permission « Toujours » (ou refus), le rond reste là où l'app l'a laissé à sa dernière ouverture. Pas d'appel
+réseau en arrière-plan.
+
+Essai au simulateur: `xcrun simctl privacy <udid> grant location-always com.meteoshoot.app`, puis
+`xcrun simctl location set <udid> 46.76,-71.30` (lieu d'essai: Assemblée nationale 46.8086, -71.2144).
+
 Dynamic Island inchangée (Bebas Neue): compact (icône du soleil visé, compte à rebours), étendu (lever, coucher,
 nom, barre, nuages, trajet).
 

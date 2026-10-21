@@ -35,6 +35,28 @@ export const hourAt = (hourly, date, isSunrise) => {
   return hourly.find((h) => new Date(h.time).getTime() === ms) || null;
 };
 
+// Suivi du trajet en direct (ShootTripTracker.swift): lieu du shooting, distance du trajet planifié depuis la maison
+// (base de l'avancement), et si la position actuelle est connue, distance restante et avancement au démarrage. Le
+// rapport route / vol d'oiseau sert ensuite au natif pour estimer la distance restante sans appel réseau.
+const straightMeters = (a, b) => {
+  const R = 6371000, toRad = (d) => d * Math.PI / 180;
+  const dLat = toRad(b.lat - a.lat), dLng = toRad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+};
+export const tripState = (project, travel, here) => {
+  if (!project?.lat || !project?.lng) return {};
+  const total = project.travelTime?.distanceMeters || travel?.distanceMeters || null;
+  const out = { destLat: project.lat, destLng: project.lng, travelMeters: total };
+  if (here && travel?.distanceMeters && total) {
+    const straight = straightMeters(here, { lat: project.lat, lng: project.lng });
+    out.remainingMeters = travel.distanceMeters;
+    out.roadFactor = straight > 500 ? Math.min(2, Math.max(1, travel.distanceMeters / straight)) : 1.3;
+    out.routeProgress = Math.min(1, Math.max(0, 1 - travel.distanceMeters / total));
+  }
+  return out;
+};
+
 // Fin du shooting: 30 min après son dernier événement solaire, le jour de l'événement visé: le lever pour un projet
 // du matin seulement, sinon le coucher (projet du soir, matin et soir, ou sans orientation). En ms.
 export const SHOOT_END_DELAY_MS = 30 * 60000;

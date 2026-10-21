@@ -43,6 +43,8 @@
 	<true/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>MeteoShoot utilise votre position pour afficher la météo de l'endroit où vous êtes.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Le jour d'un shooting, MeteoShoot suit votre trajet en arrière-plan pour afficher sur l'écran verrouillé la distance qui reste jusqu'au lieu.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
@@ -67,6 +69,7 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
+		<string>location</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>

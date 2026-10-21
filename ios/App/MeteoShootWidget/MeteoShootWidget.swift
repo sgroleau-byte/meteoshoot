@@ -160,7 +160,7 @@ enum Live {
     static let routeC2 = CGPoint(x: 190.47, y: 79.07), routeEnd = CGPoint(x: 212.33, y: 96.0)
     static let routeLeftDot = CGPoint(x: 132.33, y: 92.33), routeRightDot = CGPoint(x: 215.33, y: 97.0)
     static let routeEtaDot = CGPoint(x: 176.73, y: 94.93), routeEtaRadius: CGFloat = 4.73
-    static let kmCenterX: CGFloat = routeBox.minX + (routeEtaDot.x - routeOrigin.x) * routeScale, kmBaseline: CGFloat = 105
+    static let kmBaseline: CGFloat = 105
 }
 
 // Texte posé par sa ligne de base: (x, baseline) depuis le coin haut gauche du conteneur (overlay topLeading).
@@ -217,8 +217,29 @@ struct TimerRing: View {
     }
 }
 
-// Groupe ROUTE: deux cercles creux, tracé pointillé en courbe, point d'étape plein avec son halo.
+// Point de la courbe de la route (paramètre 0 à 1) et paramètre du point d'étape de la maquette.
+enum RouteCurve {
+    static let designT: Double = 0.55
+    static func point(_ t: Double) -> CGPoint {
+        let p0 = Live.routeStart, p1 = Live.routeC1, p2 = Live.routeC2, p3 = Live.routeEnd
+        let u = 1 - t
+        let x = u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x
+        let y = u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y
+        return CGPoint(x: x, y: y)
+    }
+    // Abscisse du rond dans la carte; pour centrer les kilomètres, bornée pour que le texte reste au-dessus de la route.
+    static func dotX(_ progress: Double?) -> CGFloat {
+        Live.routeBox.minX + (point(progress ?? designT).x - Live.routeOrigin.x) * Live.routeScale
+    }
+    static func kmX(_ progress: Double?) -> CGFloat {
+        min(max(dotX(progress), Live.routeBox.minX + 16), Live.routeBox.maxX - 16)
+    }
+}
+
+// Groupe ROUTE: deux cercles creux, tracé pointillé en courbe, rond plein avec son halo à l'avancement du trajet
+// (position de la maquette si l'app ne suit pas le trajet).
 struct RouteView: View {
+    var progress: Double?
     var body: some View {
         let o = Live.routeOrigin
         Canvas { ctx, _ in
@@ -234,8 +255,8 @@ struct RouteView: View {
                 let r = CGRect(x: p(c).x - 3 * r0, y: p(c).y - 3 * r0, width: 6 * r0, height: 6 * r0)
                 ctx.stroke(Path(ellipseIn: r), with: .color(.white.opacity(a)), lineWidth: r0)
             }
-            // Halo doux puis point d'étape plein.
-            let e = p(Live.routeEtaDot)
+            // Halo doux puis rond plein, sur la courbe.
+            let e = p(RouteCurve.point(progress ?? RouteCurve.designT))
             let haloR: CGFloat = 16 * r0
             ctx.fill(Path(ellipseIn: CGRect(x: e.x - haloR, y: e.y - haloR, width: haloR * 2, height: haloR * 2)),
                      with: .radialGradient(Gradient(colors: [.white.opacity(0.26), .white.opacity(0)]), center: e, startRadius: 0, endRadius: haloR))
@@ -321,11 +342,11 @@ struct LockScreenCard: View {
                     .baseline(x: Live.row2LabelX, y: Live.row2ValueBaseline)
             }
             .overlay(alignment: .top) {
-                RouteView().offset(x: Live.routeBox.midX - Live.centerX, y: Live.routeBox.minY)
+                RouteView(progress: state.routeProgress).offset(x: Live.routeBox.midX - Live.centerX, y: Live.routeBox.minY)
             }
             .overlay(alignment: .top) {
                 Text(state.kmText ?? "").font(Live.labelFont).tracking(Live.labelTracking).foregroundStyle(.white).fixedSize()
-                    .baseline(x: Live.kmCenterX - Live.centerX, y: Live.kmBaseline)
+                    .baseline(x: RouteCurve.kmX(state.routeProgress) - Live.centerX, y: Live.kmBaseline)
             }
             .overlay(alignment: .top) {
                 Text("\(sunWordCap) du soleil").font(Live.labelFont).tracking(Live.labelTracking).foregroundStyle(.white).fixedSize()

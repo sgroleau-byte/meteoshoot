@@ -14,7 +14,13 @@ struct ShootActivityAttributes: ActivityAttributes {
         var tempText: String?        // « 13° » (température à l'heure de l'événement visé)
         var sunText: String?         // « 87% » (soleil direct à l'heure de l'événement visé, « -- » s'il fait nuit)
         var travelText: String?      // « 2H06 »
-        var kmText: String?          // « 202 km »
+        var kmText: String?          // « 5 km »: distance restante jusqu'au lieu (mise à jour en direct par ShootTripTracker)
+        var destLat: Double?         // lieu du shooting (suivi du trajet)
+        var destLng: Double?
+        var travelMeters: Double?    // distance du trajet planifié (route), base de l'avancement
+        var remainingMeters: Double? // distance restante (route estimée)
+        var roadFactor: Double?      // rapport route / vol d'oiseau, fixé au départ
+        var routeProgress: Double?   // avancement 0 à 1 du rond sur la route (nil: position de la maquette)
         var departText: String?      // « 16:05 »
         var arriveDate: Date?        // arrivée prévue sur place (départ plus trajet): compte à rebours « Arrivé dans »
         var targetDate: Date         // événement solaire visé par la barre et le compte à rebours
