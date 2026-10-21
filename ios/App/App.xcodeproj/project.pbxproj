@@ -19,6 +19,7 @@
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		568315351192F75F3ACC7395 /* BebasNeue Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 3CB7E885899B6FA212087994 /* BebasNeue Bold.ttf */; };
 		8D977AF59B1E79AB12D0E9B9 /* BebasNeue Book.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CDFC7E57A5E38E6858F22B7F /* BebasNeue Book.ttf */; };
+		7A1C0E5D2B9F4C3A8D6E1F03 /* Images in Resources */ = {isa = PBXBuildFile; fileRef = 7A1C0E5D2B9F4C3A8D6E1F02 /* Images */; };
 		93AB1C75410886DABAD4FB41 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76A4311BF6B99442CC5E446E /* WidgetKit.framework */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
 		9B24234A1C116C75E41A9B04 /* ShootActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78458C2FF63E47ADB864A29 /* ShootActivityAttributes.swift */; };
@@ -66,6 +67,7 @@
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
+		7A1C0E5D2B9F4C3A8D6E1F02 /* Images */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Images; sourceTree = "<group>"; };
 		76A4311BF6B99442CC5E446E /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/WidgetKit.framework; sourceTree = DEVELOPER_DIR; };
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
@@ -173,6 +175,7 @@
 				176D1ED8461DE079A5757ED7 /* MeteoShootWidget.swift */,
 				9B26C9F0E178D8141529F0B9 /* Info.plist */,
 				43A8E911E5054C7083E09438 /* Fonts */,
+				7A1C0E5D2B9F4C3A8D6E1F02 /* Images */,
 			);
 			name = MeteoShootWidget;
 			path = MeteoShootWidget;
@@ -278,6 +281,7 @@
 			files = (
 				568315351192F75F3ACC7395 /* BebasNeue Bold.ttf in Resources */,
 				8D977AF59B1E79AB12D0E9B9 /* BebasNeue Book.ttf in Resources */,
+				7A1C0E5D2B9F4C3A8D6E1F03 /* Images in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

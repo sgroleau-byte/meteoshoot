@@ -112,6 +112,25 @@ public class ShootActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         try? BGTaskScheduler.shared.submit(request)
     }
 
+    #if DEBUG
+    // Banc d'essai de la carte au simulateur, sans compte ni projet: l'état de la maquette Live.psd.
+    // SIMCTL_CHILD_MS_LIVE_SAMPLE=1 xcrun simctl launch booted com.meteoshoot.app   (appelé au lancement par AppDelegate)
+    static func startSampleIfAsked() {
+        guard ProcessInfo.processInfo.environment["MS_LIVE_SAMPLE"] != nil, #available(iOS 16.2, *) else { return }
+        let now = Date()
+        let target = now.addingTimeInterval(105 * 60)
+        let state = ShootActivityAttributes.ContentState(
+            name: "Assemblée nationale - Salon bleu et Salon rouge", sunriseText: "06:58", sunsetText: "19:45",
+            icon: "sunny-few-clouds", cloudText: "87%", tempText: "13°", sunText: "87%", travelText: "0H12", kmText: "5 km",
+            departText: "14:45", arriveDate: now.addingTimeInterval(105 * 60), targetDate: target, targetIsSunrise: false,
+            startDate: now.addingTimeInterval(-8.5 * 3600), endDate: target.addingTimeInterval(30 * 60))
+        Task {
+            await endAll()
+            _ = try? Activity.request(attributes: ShootActivityAttributes(projectId: "sample"), content: ActivityContent(state: state, staleDate: nil), pushType: nil)
+        }
+    }
+    #endif
+
     // Enregistré au lancement par AppDelegate (avant la fin du démarrage, comme l'exige iOS).
     static func registerFinTask() {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: finTaskIdentifier, using: nil) { task in

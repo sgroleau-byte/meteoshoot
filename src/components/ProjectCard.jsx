@@ -15,7 +15,7 @@ import { ShootCheckIcon, StarIcon, TrashIcon } from './icons/misc.jsx';
 import { WeatherRow, weatherRowDismiss } from './WeatherRow.jsx';
 import { getTravelTime } from '../maps/google.js';
 import { checkLocationPermission, getCurrentPosition } from '../native/geolocation.js';
-import { endShootActivity, liveActivityAvailable, pickSunTarget, shootEndTime, startShootActivity } from '../native/liveActivity.js';
+import { endShootActivity, hourAt, liveActivityAvailable, pickSunTarget, shootEndTime, startShootActivity } from '../native/liveActivity.js';
 import { clearShootOfDay, getShootOfDay, setShootOfDayEnd, useShootOfDay } from '../native/shootOfDay.js';
 import { dayIcon } from '../weather/iconsLogic.js';
 
@@ -108,15 +108,23 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
       const depart = project.shootTime
         ? calcDepartureFromShootTime(project.shootTime, travel?.durationSeconds, new Date(target.day.sunrise))
         : calcDeparture(target.isSunrise ? target.day.sunrise : target.day.sunset, travel?.durationSeconds);
+      // Arrivée sur place: départ plus trajet (compte à rebours « Arrivé dans » de l'activité).
+      const arrive = depart && travel?.durationSeconds ? new Date(depart).getTime() + travel.durationSeconds * 1000 : null;
+      // Météo à l'heure de l'événement visé (maquette Live.psd: « Météo au coucher du soleil »), sinon celle du jour.
+      const hour = hourAt(weather.hourly, target.date, target.isSunrise);
+      const cloud = hour?.cloudcover ?? target.day.cloudcover;
       startShootActivity(project.id, {
         name: project.name,
         sunriseText: formatTime(target.day.sunrise),
         sunsetText: formatTime(target.day.sunset),
-        icon: dayIcon(target.day),
-        cloudText: target.day.cloudcover != null ? `${target.day.cloudcover}%` : '--',
+        icon: dayIcon(hour || target.day),
+        cloudText: cloud != null ? `${cloud}%` : '--',
+        tempText: hour?.temp != null ? `${hour.temp}°` : null,
+        sunText: hour?.sunFraction != null ? `${Math.round(hour.sunFraction * 100)}%` : '--',
         travelText: travel?.durationSeconds ? formatDuration(travel.durationSeconds).replace(/^0/, '') : null,
-        kmText: travel?.distanceMeters ? `${Math.round(travel.distanceMeters / 1000)} KM` : null,
-        departText: depart ? formatTime(depart).replace(':', 'H') : null,
+        kmText: travel?.distanceMeters ? `${Math.round(travel.distanceMeters / 1000)} km` : null,
+        departText: depart ? formatTime(depart) : null,
+        arriveDate: arrive ? Math.round(arrive / 1000) : null,
         targetDate: Math.round(target.date.getTime() / 1000),
         targetIsSunrise: target.isSunrise,
         startDate: Math.round(target.barStart.getTime() / 1000),

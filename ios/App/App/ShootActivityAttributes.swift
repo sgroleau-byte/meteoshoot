@@ -9,11 +9,14 @@ struct ShootActivityAttributes: ActivityAttributes {
         var name: String
         var sunriseText: String      // « 06:42 »
         var sunsetText: String       // « 18:28 »
-        var icon: String             // code d'icône de l'app (partly-cloudy, rain...)
-        var cloudText: String        // « 91% »
+        var icon: String             // code d'icône de l'app (partly-cloudy, rain...) à l'heure de l'événement visé
+        var cloudText: String        // « 91% » (nuages à l'heure de l'événement visé)
+        var tempText: String?        // « 13° » (température à l'heure de l'événement visé)
+        var sunText: String?         // « 87% » (soleil direct à l'heure de l'événement visé, « -- » s'il fait nuit)
         var travelText: String?      // « 2H06 »
-        var kmText: String?          // « 202 KM »
-        var departText: String?      // « 16H05 »
+        var kmText: String?          // « 202 km »
+        var departText: String?      // « 16:05 »
+        var arriveDate: Date?        // arrivée prévue sur place (départ plus trajet): compte à rebours « Arrivé dans »
         var targetDate: Date         // événement solaire visé par la barre et le compte à rebours
         var targetIsSunrise: Bool
         var startDate: Date          // début de la barre de progression

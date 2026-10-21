@@ -9,6 +9,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Tâche de fond qui termine l'activité en direct à la fin du shooting (ShootActivityPlugin).
         ShootActivityPlugin.registerFinTask()
+        #if DEBUG
+        ShootActivityPlugin.startSampleIfAsked()
+        #endif
         return true
     }
 

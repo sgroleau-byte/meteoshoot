@@ -18,13 +18,33 @@ petite coche dorée (`ShootCheckIcon`). La marque est propre à l'appareil (`loc
 
 ## Ce que montre la carte
 
-Fond sombre translucide avec les halos discrets des cartes de l'app (teal, doré, voile blanc), Bebas Neue
-embarquée. Ligne dorée « SHOOTING DU JOUR », nom du projet, puis quatre chiffres avec légendes: lever,
-coucher, nuages (icône comme la bande météo), trajet (kilomètres en légende). Barre dorée qui avance du
-lever vers le coucher (ou des douze heures précédant un lever), compte à rebours « COUCHER DANS » ou
-« LEVER DANS » animé par iOS, et l'heure de départ (lever ou coucher moins le trajet moins une heure sur
-place). Dynamic Island: compact (icône du soleil visé, compte à rebours), étendu (lever, coucher, nom,
-barre, nuages, trajet).
+Depuis la v633.222 (21 octobre 2026), la carte de l'écran verrouillé reproduit la maquette de Stéphane
+`_METEOSHOOT/_PSD/Live.psd` (4 octobre 2026, écran d'iPhone 15 Pro à 3x: les cotes en points du code sont ses
+pixels divisés par 3, depuis le coin haut gauche de la carte système). Typo SF Pro, la police système, que
+Stéphane veut ensuite partout dans l'app: titre en SF Pro Rounded Thin (nom du projet), le reste en SF Pro Medium.
+Fond: matière translucide de l'écran verrouillé (plus de teinte sombre), avec le dégradé coloré et les étoiles de
+la maquette en images (`MeteoShootWidget/Images/live-gradient.png`, `live-stars.png`, exportés du PSD).
+
+- Rangée 1: « Heure du départ » (lever ou coucher moins le trajet moins une heure sur place), « Arrivé dans »
+  (compte à rebours jusqu'au départ plus le trajet, animé par iOS), puis « Météo au coucher du soleil » (ou au
+  lever): température, nuages avec l'icône nuage, soleil direct avec l'icône soleil, et la grande icône météo de
+  l'heure visée (`hourAt` dans `src/native/liveActivity.js`: l'heure du coucher, l'heure qui suit un lever).
+- Rangée 2: anneau du temps restant (anneau circulaire système, animé par iOS, du début de la barre à l'événement
+  visé), « Coucher dans » (ou « Lever dans », compte à rebours), tracé pointillé de la route avec le point d'étape et
+  les kilomètres, « Coucher du soleil » avec l'heure (« 19h45 »), étoiles à droite.
+- Les comptes à rebours affichent heures et minutes (iOS 18, `Text(.currentDate, format: .timer)` à la minute; iOS
+  17 montre les secondes). Les icônes météo sont celles de l'app (`WeatherIcon.jsx`) rendues en blanc par
+  `node tools/live-icons/render.mjs` (`Images/weather-<code>.png`, à relancer si les icônes de l'app changent).
+- Écarts connus avec la maquette: les heures du compte à rebours ne sont pas complétées à deux chiffres (« 1:45 »
+  et non « 01:45 », format système), et la petite aiguille dessinée dans l'anneau de la maquette n'existe pas
+  (l'anneau est dessiné et animé par iOS).
+
+Dynamic Island inchangée (Bebas Neue): compact (icône du soleil visé, compte à rebours), étendu (lever, coucher,
+nom, barre, nuages, trajet).
+
+Banc d'essai au simulateur, sans compte ni projet (build Debug): `SIMCTL_CHILD_MS_LIVE_SAMPLE=1 xcrun simctl launch
+booted com.meteoshoot.app` démarre l'activité avec l'état de la maquette (`startSampleIfAsked` dans
+`ShootActivityPlugin.swift`); verrouiller le simulateur pour voir la carte.
 
 Événement visé (`pickSunTarget` dans `src/native/liveActivity.js`): le lever pour un projet du matin (visé
 jusqu'à une heure après), le coucher pour un projet du soir, sinon le prochain des deux; aujourd'hui, puis

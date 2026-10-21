@@ -23,6 +23,18 @@ export const sweepShootActivities = () => {
   ShootActivity.sweep().catch(() => {});
 };
 
+// Entrée horaire de la prévision pour un événement solaire, comme la bande horaire de la fiche: l'heure du coucher
+// (ses nuages et son rayonnement sont la moyenne de l'heure qui le précède), l'heure qui suit un lever (sa moyenne
+// couvre le lever; celle d'avant est encore la nuit). null sans prévision horaire.
+export const hourAt = (hourly, date, isSunrise) => {
+  if (!hourly?.length || !date) return null;
+  const d = new Date(date);
+  d.setMinutes(0, 0, 0);
+  if (isSunrise) d.setHours(d.getHours() + 1);
+  const ms = d.getTime();
+  return hourly.find((h) => new Date(h.time).getTime() === ms) || null;
+};
+
 // Fin du shooting: 30 min après son dernier événement solaire, le jour de l'événement visé: le lever pour un projet
 // du matin seulement, sinon le coucher (projet du soir, matin et soir, ou sans orientation). En ms.
 export const SHOOT_END_DELAY_MS = 30 * 60000;
