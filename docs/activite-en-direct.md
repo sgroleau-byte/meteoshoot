@@ -22,8 +22,15 @@ Depuis la v633.222 (21 octobre 2026), la carte de l'écran verrouillé reproduit
 `_METEOSHOOT/_PSD/Live.psd` (4 octobre 2026, écran d'iPhone 15 Pro à 3x: les cotes en points du code sont ses
 pixels divisés par 3, depuis le coin haut gauche de la carte système). Typo SF Pro, la police système, que
 Stéphane veut ensuite partout dans l'app: titre en SF Pro Rounded Thin (nom du projet), le reste en SF Pro Medium.
-Fond: matière translucide de l'écran verrouillé (plus de teinte sombre), avec le dégradé coloré et les étoiles de
-la maquette en images (`MeteoShootWidget/Images/live-gradient.png`, `live-stars.png`, exportés du PSD).
+Fond: matière translucide de l'écran verrouillé sans teinte (`activityBackgroundTint(Color.clear)`, v633.223: Stéphane
+trouvait le fond par défaut trop opaque), avec le dégradé coloré et les étoiles de la maquette en images
+(`MeteoShootWidget/Images/live-gradient.png`, `live-stars.png`, exportés du PSD).
+
+v633.223 (21 octobre 2026, retours de Stéphane sur son iPhone: « tout est trop petit », « grossit encore la typo, en bas
+du titre »): carte agrandie de 1,2 (titre 17,6 pt, hauteur 136 pt), textes sous le titre agrandis encore (étiquettes
+10,8 pt, valeurs 18,7 pt, météo 14,3 pt), colonnes et rangées réespacées, route et étoiles à la taille de la maquette
+faute de place en largeur; les cotes sont dans l'enum `Live` du widget. Comptes à rebours en chiffres partout (la
+Dynamic Island écrivait « 1 h 44 min » en mots).
 
 - Rangée 1: « Heure du départ » (lever ou coucher moins le trajet moins une heure sur place), « Arrivé dans »
   (compte à rebours jusqu'au départ plus le trajet, animé par iOS), puis « Météo au coucher du soleil » (ou au

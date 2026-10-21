@@ -102,7 +102,7 @@ struct Countdown: View {
     var size: CGFloat = 18
     var body: some View {
         if state.targetIsAhead {
-            Text(state.targetDate, style: .relative)
+            Text(timerInterval: Date()...state.targetDate, countsDown: true, showsHours: true)
                 .font(Look.bebasBook(size)).foregroundStyle(Look.active).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
         } else {
             Text("MAINTENANT").font(Look.bebasBook(size)).foregroundStyle(Look.gold)
@@ -121,39 +121,46 @@ struct SunBar: View {
 
 // MARK: - Carte de l'écran verrouillé (maquette Live.psd)
 
-// Cotes de la maquette en points (pixels à 3x divisés par 3), depuis le coin haut gauche de la carte.
+// Cotes en points, depuis le coin haut gauche de la carte. Base: la maquette (pixels à 3x divisés par 3), puis les
+// retours de Stéphane du 21 octobre 2026: « tout est trop petit » (toute la carte x 1,2) et « grossit encore la typo,
+// en bas du titre » (textes sous le titre x 1,35 de plus, météo x 1,25); colonnes et rangées réespacées pour que
+// rien ne se touche; route et étoiles gardées à la taille de la maquette faute de place en largeur.
 enum Live {
+    static let k: CGFloat = 1.2                   // agrandissement général (titre, anneau, positions)
     static let cardWidth: CGFloat = 365.667       // 1097 px: largeur de la carte sur l'iPhone 15 Pro de la maquette
-    static let cardHeight: CGFloat = 113.667      // 341 px
+    static let cardHeight: CGFloat = k * 113.667  // 136,4 pt (341 px dans la maquette)
     static let centerX = cardWidth / 2
-    // Typo
-    static let titleFont = Font.system(size: 14.667, weight: .thin, design: .rounded)   // 44 px, SF Pro Rounded Thin
-    static let labelFont = Font.system(size: 6.667, weight: .medium)                    // 20 px, SF Pro Medium
-    static let valueFont = Font.system(size: 11.556, weight: .medium)                   // 34,7 px
-    static let weatherFont = Font.system(size: 9.556, weight: .medium)                  // 28,7 px
-    // Interlettrage: iOS espace plus les lettres que Photoshop aux petites tailles; compensation mesurée sur la capture.
-    static let titleTracking: CGFloat = -0.4, labelTracking: CGFloat = -0.6, valueTracking: CGFloat = -0.5, weatherTracking: CGFloat = -0.7
-    // Lignes de base (y) et bords gauches (x)
-    static let titleX: CGFloat = 31.28, titleBaseline: CGFloat = 18.27
-    static let colAX: CGFloat = 32.78, colBX: CGFloat = 96.78
-    static let row1LabelBaseline: CGFloat = 49.32, row1ValueBaseline: CGFloat = 60.65
-    static let weatherLabelFromRight: CGFloat = 144.89, weatherLabelBaseline: CGFloat = 49.65
-    static let weatherValuesFromRight: CGFloat = 50.0, weatherValuesBaseline: CGFloat = 61.95
+    // Typo (SF Pro = police système)
+    static let titleFont = Font.system(size: 17.6, weight: .thin, design: .rounded)   // maquette 14,67 x 1,2
+    static let labelFont = Font.system(size: 10.8, weight: .medium)                    // maquette 6,67 x 1,2 x 1,35
+    static let valueFont = Font.system(size: 18.7, weight: .medium)                    // maquette 11,56 x 1,2 x 1,35
+    static let weatherFont = Font.system(size: 14.3, weight: .medium)                  // maquette 9,56 x 1,2 x 1,25
+    static let titleTracking: CGFloat = -0.1, labelTracking: CGFloat = -0.3, valueTracking: CGFloat = 0, weatherTracking: CGFloat = -0.15
+    // Titre
+    static let titleX: CGFloat = 37.5, titleBaseline: CGFloat = 21.9
+    // Rangée 1: départ, arrivée (gauche), météo (droite)
+    static let colAX: CGFloat = 39.3, colBX: CGFloat = 131
+    static let row1LabelBaseline: CGFloat = 52, row1ValueBaseline: CGFloat = 69
+    static let weatherLabelFromRight: CGFloat = 166, weatherLabelBaseline: CGFloat = 52
+    static let weatherValuesFromRight: CGFloat = 37, weatherValuesBaseline: CGFloat = 69
     static let smallIconOpacity: Double = 0.459    // calque à 117/255
-    static let cloudIconSize: CGFloat = 16.1, cloudIconTop: CGFloat = 49.2, cloudIconGapBefore: CGFloat = 5.5, cloudIconGapAfter: CGFloat = -0.43
-    static let sunIconSize: CGFloat = 16.0, sunIconTop: CGFloat = 50.33, sunIconGapBefore: CGFloat = 6.0, sunIconGapAfter: CGFloat = -1.83
-    static let bigIconSize: CGFloat = 17.5, bigIconFromRight: CGFloat = 23.97, bigIconTop: CGFloat = 48.6
-    static let ringCenter = CGPoint(x: 35.67, y: 93.67), ringDiameter: CGFloat = 20.33
-    static let row2LabelX: CGFloat = 50.12, row2LabelBaseline: CGFloat = 91.32, row2ValueBaseline: CGFloat = 102.65
-    static let kmBaseline: CGFloat = 87.99
-    static let targetCenterX: CGFloat = 259.12          // « Coucher du soleil » centré (texte centré dans la maquette)
-    static let starsFromRight: CGFloat = 8.0, starsTop: CGFloat = 76.67, starsSize = CGSize(width: 48.333, height: 33.333)
-    // Route (groupe ROUTE de la maquette), boîte de 92 x 45 pt dont l'origine est à (128, 73)
-    static let routeOrigin = CGPoint(x: 128, y: 73), routeSize = CGSize(width: 92, height: 45)
+    static let cloudIconSize: CGFloat = 24.15, cloudIconBaseline: CGFloat = 19.1, cloudIconGapBefore: CGFloat = 5.5, cloudIconGapAfter: CGFloat = -0.65
+    static let sunIconSize: CGFloat = 24.0, sunIconBaseline: CGFloat = 17.4, sunIconGapBefore: CGFloat = 6.0, sunIconGapAfter: CGFloat = -2.75
+    static let bigIconSize: CGFloat = 21, bigIconFromRight: CGFloat = 10, bigIconTop: CGFloat = 53.5
+    // Rangée 2: anneau, compte à rebours, route, événement visé, étoiles
+    static let ringCenter = CGPoint(x: 42.8, y: 112.7), ringDiameter: CGFloat = 24.4
+    static let row2LabelX: CGFloat = 60.1, row2LabelBaseline: CGFloat = 107, row2ValueBaseline: CGFloat = 126
+    static let targetCenterX: CGFloat = 268       // « Coucher du soleil » centré (259,12 dans la maquette)
+    static let starsFromRight: CGFloat = 8.0, starsTop: CGFloat = 96, starsSize = CGSize(width: 48.333, height: 33.333)
+    // Route (groupe ROUTE de la maquette, cotes de la maquette x 0,9 faute de place): boîte posée à (140, 93)
+    static let routeScale: CGFloat = 0.9
+    static let routeBox = CGRect(x: 140, y: 93, width: 92 * routeScale, height: 45 * routeScale)
+    static let routeOrigin = CGPoint(x: 128, y: 73)   // origine de la boîte dans la maquette
     static let routeStart = CGPoint(x: 136.67, y: 96.33), routeC1 = CGPoint(x: 156.6, y: 115.83)
     static let routeC2 = CGPoint(x: 190.47, y: 79.07), routeEnd = CGPoint(x: 212.33, y: 96.0)
     static let routeLeftDot = CGPoint(x: 132.33, y: 92.33), routeRightDot = CGPoint(x: 215.33, y: 97.0)
     static let routeEtaDot = CGPoint(x: 176.73, y: 94.93), routeEtaRadius: CGFloat = 4.73
+    static let kmCenterX: CGFloat = routeBox.minX + (routeEtaDot.x - routeOrigin.x) * routeScale, kmBaseline: CGFloat = 105
 }
 
 // Texte posé par sa ligne de base: (x, baseline) depuis le coin haut gauche du conteneur (overlay topLeading).
@@ -168,8 +175,8 @@ extension View {
     func baseline(x: CGFloat, y: CGFloat) -> some View { modifier(Baseline(x: x, y: y)) }
 }
 
-// Compte à rebours animé par iOS: heures et minutes (« 1:45 », deux champs au plus; sous une heure, minutes et secondes);
-// iOS 17 montre toujours les secondes.
+// Compte à rebours animé par iOS, en chiffres seulement: « 1:44 » (heures et minutes, deux champs) sur iOS 18 et plus,
+// « 1:44:59 » (minuterie) avant. Le format « 1 heure et 44 minutes » en mots a été refusé par Stéphane le 21 octobre 2026.
 struct MinuteCountdown: View {
     let to: Date?
     var body: some View {
@@ -180,7 +187,7 @@ struct MinuteCountdown: View {
                 Text(timerInterval: Date()...to, countsDown: true, showsHours: true)
             }
         } else {
-            Text("00:00")
+            Text("0:00")
         }
     }
 }
@@ -193,7 +200,7 @@ struct TimerRing: View {
     var body: some View {
         Canvas { ctx, size in
             let c = CGPoint(x: size.width / 2, y: size.height / 2)
-            let stroke: CGFloat = 2.667
+            let stroke: CGFloat = Live.k * 2.667
             let r = size.width / 2 - stroke / 2
             let start = Angle.degrees(-90), head = Angle.degrees(-90 + 360 * progress)
             var track = Path(); track.addArc(center: c, radius: r, startAngle: head, endAngle: start + .degrees(360), clockwise: false)
@@ -205,7 +212,7 @@ struct TimerRing: View {
             let dir = CGPoint(x: cos(head.radians), y: sin(head.radians))
             hand.move(to: CGPoint(x: c.x + dir.x * r * 0.3, y: c.y + dir.y * r * 0.3))
             hand.addLine(to: CGPoint(x: c.x + dir.x * r * 0.62, y: c.y + dir.y * r * 0.62))
-            ctx.stroke(hand, with: .color(.white.opacity(0.78)), style: StrokeStyle(lineWidth: 2.333, lineCap: .round))
+            ctx.stroke(hand, with: .color(.white.opacity(0.78)), style: StrokeStyle(lineWidth: Live.k * 2.333, lineCap: .round))
         }
     }
 }
@@ -215,26 +222,27 @@ struct RouteView: View {
     var body: some View {
         let o = Live.routeOrigin
         Canvas { ctx, _ in
-            func p(_ pt: CGPoint) -> CGPoint { CGPoint(x: pt.x - o.x, y: pt.y - o.y) }
+            let r0 = Live.routeScale
+            func p(_ pt: CGPoint) -> CGPoint { CGPoint(x: (pt.x - o.x) * r0, y: (pt.y - o.y) * r0) }
             // Tracé pointillé: 5 px de trait, tirets 4 x et espaces 2 x le trait, bouts ronds.
             var path = Path()
             path.move(to: p(Live.routeStart))
             path.addCurve(to: p(Live.routeEnd), control1: p(Live.routeC1), control2: p(Live.routeC2))
-            ctx.stroke(path, with: .color(.white), style: StrokeStyle(lineWidth: 1.667, lineCap: .round, dash: [6.667, 3.333]))
+            ctx.stroke(path, with: .color(.white), style: StrokeStyle(lineWidth: 1.667 * r0, lineCap: .round, dash: [6.667 * r0, 3.333 * r0]))
             // Cercles des extrémités: rayon 3 pt, trait 1 pt, blanc à 48 % et 47 %.
             for (c, a) in [(Live.routeLeftDot, 0.478), (Live.routeRightDot, 0.471)] {
-                let r = CGRect(x: p(c).x - 3, y: p(c).y - 3, width: 6, height: 6)
-                ctx.stroke(Path(ellipseIn: r), with: .color(.white.opacity(a)), lineWidth: 1)
+                let r = CGRect(x: p(c).x - 3 * r0, y: p(c).y - 3 * r0, width: 6 * r0, height: 6 * r0)
+                ctx.stroke(Path(ellipseIn: r), with: .color(.white.opacity(a)), lineWidth: r0)
             }
             // Halo doux puis point d'étape plein.
             let e = p(Live.routeEtaDot)
-            let haloR: CGFloat = 16
+            let haloR: CGFloat = 16 * r0
             ctx.fill(Path(ellipseIn: CGRect(x: e.x - haloR, y: e.y - haloR, width: haloR * 2, height: haloR * 2)),
                      with: .radialGradient(Gradient(colors: [.white.opacity(0.26), .white.opacity(0)]), center: e, startRadius: 0, endRadius: haloR))
-            let r = Live.routeEtaRadius
+            let r = Live.routeEtaRadius * r0
             ctx.fill(Path(ellipseIn: CGRect(x: e.x - r, y: e.y - r, width: r * 2, height: r * 2)), with: .color(.white))
         }
-        .frame(width: Live.routeSize.width, height: Live.routeSize.height)
+        .frame(width: Live.routeBox.width, height: Live.routeBox.height)
     }
 }
 
@@ -250,7 +258,8 @@ struct LockScreenCard: View {
             .background { (Look.image("live-gradient") ?? Image(uiImage: UIImage())).resizable() }
             // Titre
             .overlay(alignment: .topLeading) {
-                Text(state.name).font(Live.titleFont).tracking(Live.titleTracking).foregroundStyle(.white).lineLimit(1)
+                Text(state.name).font(Live.titleFont).tracking(Live.titleTracking).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.7)
+                    .frame(maxWidth: Live.cardWidth - Live.titleX - 14, alignment: .leading)
                     .baseline(x: Live.titleX, y: Live.titleBaseline)
             }
             // Rangée 1, gauche: heure du départ, arrivée
@@ -281,12 +290,12 @@ struct LockScreenCard: View {
                     Text(state.tempText ?? "--°")
                     (Look.image("small-cloud") ?? Image(uiImage: UIImage())).resizable().opacity(Live.smallIconOpacity)
                         .frame(width: Live.cloudIconSize, height: Live.cloudIconSize)
-                        .alignmentGuide(.firstTextBaseline) { _ in Live.weatherValuesBaseline - Live.cloudIconTop }
+                        .alignmentGuide(.firstTextBaseline) { _ in Live.cloudIconBaseline }
                         .padding(.leading, Live.cloudIconGapBefore).padding(.trailing, Live.cloudIconGapAfter)
                     Text(state.cloudText)
                     (Look.image("small-sun") ?? Image(uiImage: UIImage())).resizable().opacity(Live.smallIconOpacity)
                         .frame(width: Live.sunIconSize, height: Live.sunIconSize)
-                        .alignmentGuide(.firstTextBaseline) { _ in Live.weatherValuesBaseline - Live.sunIconTop }
+                        .alignmentGuide(.firstTextBaseline) { _ in Live.sunIconBaseline }
                         .padding(.leading, Live.sunIconGapBefore).padding(.trailing, Live.sunIconGapAfter)
                     Text(state.sunText ?? "--")
                 }
@@ -312,11 +321,11 @@ struct LockScreenCard: View {
                     .baseline(x: Live.row2LabelX, y: Live.row2ValueBaseline)
             }
             .overlay(alignment: .top) {
-                RouteView().offset(x: Live.routeOrigin.x + Live.routeSize.width / 2 - Live.centerX, y: Live.routeOrigin.y)
+                RouteView().offset(x: Live.routeBox.midX - Live.centerX, y: Live.routeBox.minY)
             }
             .overlay(alignment: .top) {
                 Text(state.kmText ?? "").font(Live.labelFont).tracking(Live.labelTracking).foregroundStyle(.white).fixedSize()
-                    .baseline(x: Live.routeEtaDot.x - Live.centerX, y: Live.kmBaseline)
+                    .baseline(x: Live.kmCenterX - Live.centerX, y: Live.kmBaseline)
             }
             .overlay(alignment: .top) {
                 Text("\(sunWordCap) du soleil").font(Live.labelFont).tracking(Live.labelTracking).foregroundStyle(.white).fixedSize()
@@ -342,7 +351,7 @@ struct ShootLiveActivity: Widget {
         ActivityConfiguration(for: ShootActivityAttributes.self) { context in
             // Toucher la carte ouvre l'app sur la fiche du projet (lien lu par App.jsx).
             LockScreenCard(state: context.state)
-                .activityBackgroundTint(nil)
+                .activityBackgroundTint(Color.clear)
                 .activitySystemActionForegroundColor(.white)
                 .widgetURL(projectURL(context.attributes.projectId))
         } dynamicIsland: { context in

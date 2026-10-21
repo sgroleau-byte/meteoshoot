@@ -116,7 +116,8 @@ public class ShootActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     // Banc d'essai de la carte au simulateur, sans compte ni projet: l'état de la maquette Live.psd.
     // SIMCTL_CHILD_MS_LIVE_SAMPLE=1 xcrun simctl launch booted com.meteoshoot.app   (appelé au lancement par AppDelegate)
     static func startSampleIfAsked() {
-        guard ProcessInfo.processInfo.environment["MS_LIVE_SAMPLE"] != nil, #available(iOS 16.2, *) else { return }
+        guard let mode = ProcessInfo.processInfo.environment["MS_LIVE_SAMPLE"], #available(iOS 16.2, *) else { return }
+        if mode == "end" { Task { await endAll() }; return }   // MS_LIVE_SAMPLE=end: termine tout (capture sans carte)
         let now = Date()
         let target = now.addingTimeInterval(105 * 60)
         let state = ShootActivityAttributes.ContentState(
