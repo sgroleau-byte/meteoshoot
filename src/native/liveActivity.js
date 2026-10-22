@@ -20,6 +20,12 @@ export const announceSunEvent = (targetDate, isSunrise, enabled) => {
   ShootActivity.announce({ targetDate: Math.round(new Date(targetDate).getTime() / 1000), isSunrise: !!isSunrise, enabled: enabled !== false }).catch(() => {});
 };
 
+// Essai des annonces (Préférences): six annonces, une toutes les 30 secondes.
+export const testAnnouncements = () => {
+  if (!announceAvailable) return;
+  ShootActivity.announceTest().catch(() => {});
+};
+
 export const endShootActivity = () => {
   if (!liveActivityAvailable) return;
   ShootActivity.end().catch(() => {});

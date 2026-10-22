@@ -19,6 +19,7 @@ public class ShootActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "end", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "sweep", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "announce", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "announceTest", returnType: CAPPluginReturnPromise),
     ]
 
     static let finTaskIdentifier = "com.meteoshoot.app.fin-shooting"
@@ -71,6 +72,8 @@ public class ShootActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         ShootAnnouncer.schedule(target: Date(timeIntervalSince1970: seconds), isSunrise: call.getBool("isSunrise") ?? false, enabled: call.getBool("enabled") ?? true)
         call.resolve()
     }
+
+    @objc func announceTest(_ call: CAPPluginCall) { ShootAnnouncer.test(); call.resolve() }
 
     @objc func end(_ call: CAPPluginCall) {
         guard #available(iOS 16.2, *) else { call.resolve(); return }

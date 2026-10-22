@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { announceAvailable } from '../native/liveActivity.js';
+import { announceAvailable, testAnnouncements } from '../native/liveActivity.js';
 import { useAuth } from '../auth/AuthProvider.jsx';
 import { useIsMobile } from '../hooks/useIsMobile.js';
 import { useLang } from '../i18n/LangProvider.jsx';
@@ -50,6 +50,7 @@ export const PreferencesView = () => {
   const isMobile = useIsMobile();
   const [showUpgradePref, setShowUpgradePref] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [announceTested, setAnnounceTested] = useState(false);
   const homeInputRef = React.useRef(null);
   const autocompleteRef = React.useRef(null);
   const typedDetach = React.useRef(null);
@@ -143,6 +144,8 @@ export const PreferencesView = () => {
               <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>{t('liveSection')}</label>
               <div style={{ marginTop: '10px', maxWidth: '600px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <EditPrefToggle label={t('liveAnnounceLabel')} value={prefs.liveAnnounce !== false} onChange={v => setPrefs({ liveAnnounce: v })}/>
+                <span className="font-bebas-regular" style={{ fontSize: '16px', letterSpacing: '0.04em', cursor: 'pointer', color: announceTested ? 'rgba(255,255,255,0.3)' : '#ffffff' }}
+                  onClick={() => { testAnnouncements(); setAnnounceTested(true); }}>{announceTested ? t('liveAnnounceTestDone') : t('liveAnnounceTest')}</span>
               </div>
             </div>
           )}
@@ -270,7 +273,7 @@ export const PreferencesView = () => {
 
           <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
             <div style={{ textAlign: 'center' }}>
-              <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.232</div>
+              <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.233</div>
               <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
             </div>
           </div>

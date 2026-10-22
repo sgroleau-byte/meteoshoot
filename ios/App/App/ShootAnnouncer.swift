@@ -35,6 +35,25 @@ enum ShootAnnouncer {
         }
     }
 
+    // Essai depuis les Préférences: les six annonces du coucher, une toutes les 30 secondes à partir de 30 s (le temps
+    // de verrouiller le téléphone); sans toucher aux annonces du shooting en cours (identifiants distincts).
+    static func test() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: offsets.map { prefix + "test.\($0)" })
+        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            guard granted else { return }
+            for (i, minutes) in offsets.enumerated() {
+                let content = UNMutableNotificationContent()
+                content.title = "MeteoShoot (essai)"
+                content.body = minutes == 0 ? "Coucher du soleil maintenant" : "Coucher du soleil dans \(minutes) minutes"
+                content.sound = UNNotificationSound(named: UNNotificationSoundName("annonce-coucher-\(minutes).caf"))
+                content.interruptionLevel = .timeSensitive
+                let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 30 * Double(i + 1), repeats: false)
+                center.add(UNNotificationRequest(identifier: prefix + "test.\(minutes)", content: content, trigger: trigger))
+            }
+        }
+    }
+
     static func cancel() {
         let ids = offsets.map { prefix + "\($0)" }
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
