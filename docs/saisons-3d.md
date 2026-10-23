@@ -53,3 +53,24 @@ forcé (le LiDAR coûte cher); les essences apparaissent sur les scènes recalcu
 Banc: `tools/sky/shoot.mjs` avec `harness.html?lat=&lng=` et une liste de dates (ciel peu nuageux, 13 h). Planche
 du 23 octobre 2026: Stoneham, Québec, Montréal, Toronto et Burlington les 25 septembre, 10 et 25 octobre; Québec du
 15 juillet au 10 novembre.
+
+## Étape 2: chute des feuilles et arbres nus (v633.235, 23 octobre 2026)
+
+- La part de feuilles de chaque arbre (`cover` de season.js, 0 nu à 1 plein) passe au moteur par un attribut
+  d'instance (`aCover`, géométrie clonée par lot). Dans le shader des couronnes, les feuilles s'effacent dans le motif
+  du masque (canal rouge, rang des pixels du bord des trous au coeur des taches, le même que l'effacement près de
+  l'objectif): les trous s'agrandissent jusqu'à ce que la couronne disparaisse.
+- Un lacis de branches (`twigTex`: crêtes d'un bruit sur trois échelles, un cinquième de la surface, rang des rameaux
+  fins aux grosses branches) est dessiné sur la même géométrie que la couronne, teinte gris brun sombre par arbre
+  (`season.bare`), et apparaît dans l'ordre inverse (les grosses branches percent d'abord entre les dernières
+  feuilles). Plus dense au coeur de la cime (face à l'objectif) qu'en silhouette. De loin, le masque minifié
+  tomberait sous le seuil et la cime disparaîtrait: le seuil baisse avec la distance et la cime lointaine redevient
+  une masse gris brun (versant de novembre). Le lot de branches ne se dessine pas l'été (count 0).
+- Cinq grosses branches (`limbs`, cônes effilés depuis le haut du tronc, toute l'année) pour les arbres à moins de
+  250 m.
+- Ombres: matériaux de profondeur dédiés (couronnes, conifères, branches) avec la même part de feuilles: l'ombre d'un
+  arbre nu est celle de ses branches, fine.
+- Chute resserrée entre arbres (écart réduit à 55 % de celui du pic), jamais en moins de deux semaines, finie cinq
+  jours avant la dormance satellite. Limite connue: à Tremblant, quelques arbres gardent des feuilles le 23 octobre
+  alors que la webcam montre tout nu; le calendrier satellite y est quelques jours en retard.
+- Mélèzes: mêmes règles que les feuillus sur le masque des conifères (aiguilles qui tombent), sans lacis.

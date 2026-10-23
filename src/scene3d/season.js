@@ -12,8 +12,9 @@
 // Essences (api/trees.js, code k de chaque arbre): 0 feuillu quelconque, 1 conifère, 2 érable (rouge et orangé, tôt),
 // 3 feuillu jaune (orme, tilleul, frêne, bouleau, peuplier, érable de Norvège), 4 chêne et hêtre (brun roux, tard, garde
 // ses feuilles), 5 mélèze (conifère qui jaunit tard puis se dénude), 6 érable pourpre (pourpre tout l'été).
-// Ce module ne touche qu'à la couleur: positions, cimes et formes LiDAR restent telles quelles. La part de feuilles
-// (cover) est calculée pour la suite (arbres nus, étape 2) mais pas encore dessinée.
+// Ce module ne touche qu'à la couleur et à la part de feuilles (cover, 0 nu à 1 plein): positions, cimes et formes
+// LiDAR restent telles quelles. Étape 2 (23 octobre 2026): le moteur efface les feuilles dans le motif des couronnes
+// à mesure que cover baisse et fait apparaître un lacis de branches (voir twigTex et coverShader dans engine.js).
 import { PHENO } from './phenology.js';
 
 export const ESS = { FEUILLU: 0, CONIFERE: 1, ERABLE: 2, JAUNE: 3, CHENE: 4, MELEZE: 5, POURPRE: 6 };
@@ -56,7 +57,7 @@ const PEAK = {
   [ESS.POURPRE]: ['#7a3a2c', '#853f2e'],
 };
 const PURPLE = ['#4a2a34', '#553040', '#46283a'];
-const BARE = ['#6b5c4e', '#746656', '#5f5347', '#6e6052'];
+const BARE = ['#3e3630', '#463d36', '#39322c', '#4a413a', '#423932']; // branches: aussi sombres que les troncs (le moteur éclaircit beaucoup au soleil)
 const CONIFER = ['#2f4a33', '#3a5638', '#33503a', '#445e3c']; // sapins, épinettes, pins: vert foncé toute l'année
 
 const hex = (h) => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
@@ -80,9 +81,9 @@ export function seasonState(lat, lng, elev, ms) {
   const clim = climatology(lat, lng, elev), doy = dayOfYear(ms);
   const phase = (k, c) => {
     const o = OFF[k] || OFF[ESS.FEUILLU], j = (c - 0.5) * 18;
-    const peak = clim.peak + o.peak + j, dor = clim.dor + o.dor + j;
+    const peak = clim.peak + o.peak + j, dor = clim.dor + o.dor + j * 0.55; // la chute resserre l'écart entre arbres (Tremblant tout nu d'un coup)
     const turn = sm(peak - 20, peak, doy); // montée de la couleur sur trois semaines
-    const fall = sm(peak + 3, Math.max(dor - 5, peak + 18), doy); // chute, du pic aux feuilles tombées: un peu avant la dormance du satellite (Tremblant nu le 23 octobre 2026), jamais en moins de deux semaines et demie
+    const fall = sm(peak + 3, Math.max(dor - 5, peak + 14), doy); // chute, du pic aux feuilles tombées: un peu avant la dormance du satellite (Tremblant nu le 23 octobre 2026), jamais en moins de deux semaines
     const leaf = sm(clim.gup + j * 0.5, clim.mgu + 6 + j * 0.5, doy); // feuillaison du printemps
     const mature = sm(clim.mgu + 6, clim.mgu + 26, doy); // vert tendre vers vert d'été
     return { turn, fall, leaf, mature, spring: doy < clim.mgd - 40 };
@@ -90,6 +91,7 @@ export function seasonState(lat, lng, elev, ms) {
   return {
     doy, clim,
     cover(k, c) { if (k === ESS.CONIFERE) return 1; const p = phase(k, c); return p.spring ? p.leaf : 1 - p.fall; },
+    bare(c) { return pick(BARE, c); },
     color(k, c) {
       if (k === ESS.CONIFERE) return pick(CONIFER, c);
       const p = phase(k, c), bare = pick(BARE, c);
