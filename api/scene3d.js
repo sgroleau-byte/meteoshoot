@@ -15,7 +15,7 @@
 //   du relevé (remplace le carré d'Overture, ou bâtiment ajouté), lidarFp en compte; entrées en gravier d'après l'imagerie
 //   (gravel, même forme que paved) recalée sur le LiDAR (imgShift, mètres est et nord).
 // v6 (8 octobre 2026): arbres mesurés par LiDAR jusqu'à 350 m (api/trees.js): trees[i] = [x, n, h, r, k] (hauteur,
-//   rayon de couronne, k 1 conifère ou 0 feuillu; près d'un bâtiment, plus dx, dn: centre mesuré de la couronne, et
+//   rayon de couronne, k code d'essence (0 feuillu, 1 conifère; depuis le 23 octobre 2026 aussi 2 à 6, voir api/trees.js); près d'un bâtiment, plus dx, dn: centre mesuré de la couronne, et
 //   o: 1 si le relevé montre du feuillage au-dessus du toit voisin); treesSrc { date, res, essences }. Restent au format [x, n] (taille
 //   tirée au sort par le client) les arbres d'Overture là où le LiDAR ne voit pas, et les boisés au-delà de 350 m.
 //   canopy: hauteur de la canopée des boisés en grille de 3 m (sous-bois dessiné sous les cimes), voir api/trees.js.
@@ -357,7 +357,7 @@ if (process.argv.includes('--test')) {
   const lat = parseFloat(process.argv[i + 1] || '46.8367'), lng = parseFloat(process.argv[i + 2] || '-71.2336');
   buildScene(lat, lng).then((s) => {
     const j = JSON.stringify(s);
-    console.log({ bld: s.bld.length, lidarFp: s.lidarFp, roofs: s.roofs, appleShift: s.appleShift, roads: s.roads.length, trees: s.trees.length, lidarTrees: s.treesSrc && s.treesSrc.n, conifers: s.trees.filter(t => t[4] === 1).length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, gravel: s.gravel.length, imgShift: s.imgShift, bytes: j.length, ms: s.ms });
+    console.log({ bld: s.bld.length, lidarFp: s.lidarFp, roofs: s.roofs, appleShift: s.appleShift, roads: s.roads.length, trees: s.trees.length, lidarTrees: s.treesSrc && s.treesSrc.n, conifers: s.trees.filter(t => t[4] === 1 || t[4] === 5).length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, gravel: s.gravel.length, imgShift: s.imgShift, bytes: j.length, ms: s.ms });
     if (process.argv.includes('--out')) { import('fs').then(fs => fs.writeFileSync(process.argv[process.argv.indexOf('--out') + 1], j)); }
   }).catch((e) => { console.error(e); process.exit(1); });
 }

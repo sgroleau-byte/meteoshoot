@@ -22,6 +22,7 @@ import { horizonProfile, curvDrop } from './horizon.js';
 import { prisms, fitTree, reachOf, sheetCellBlocked, sheetTriTooClose, LOBE_PARTS, CON_TIERS, CON_TIERS_LOW } from './clearance.js';
 import { segDist, dpClosed, regularizeRing } from './ring.js';
 import { roofFaces, roofTop } from './roof.js';
+import { seasonState, isConifer, ESS } from './season.js';
 import { makeNoiseTextures, CLOUD_GLSL, CLOUD_PASS_FRAG, sunAtAltitude, classifyClouds } from './sky.js';
 
 // Ombres PCSS (percentage-closer soft shadows) greffées sur le mode d'ombre « de base » de three (carte de profondeur en
@@ -325,8 +326,8 @@ c+=texture2D(tBloom,vUv).rgb*uBloom;c+=flare();c=aces(c);gl_FragColor=vec4(rain(
 
 const PAL_RES = ['#8f4e3a', '#a0624c', '#7a4a3a', '#b07d5e', '#9c7a62', '#6e5a50', '#b8957a', '#d2c2a4', '#8c6b58'];
 const ROOF = ['#57524d', '#5d5a55', '#514e4a', '#625e58'];
-const TREE_PAL = ['#c4652b', '#d08a2e', '#b8973a', '#8e8f3e', '#6f8540', '#5b7a3a', '#a9552b', '#d9a441', '#7d8c3c'];
-const CONIFER_PAL = ['#2f4a33', '#3a5638', '#33503a', '#445e3c']; // sapins, épinettes, pins: vert foncé toute l'année
+// Couleur des arbres: src/scene3d/season.js (depuis le 23 octobre 2026, selon la date, le lieu et l'essence; auparavant
+// une palette d'automne fixe toute l'année).
 const GC = { park: '#66784d', pitch: '#5d8a47', play: '#b8a88e', grass: '#6f8552' };
 // ---- géométrie 2D (x est, n nord); signedArea, centroid et les lettres des volumes viennent de footprint.js
 function pointInRing(p, r) { let inside = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const a = r[i], b = r[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside; } return inside; }
@@ -617,7 +618,12 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   // désaturée; dans le shader, variation douce de 60 à 700 m (massifs de conifères et de feuillus) et moutonnement des cimes
   // (6 à 15 m, effacé quand il devient plus petit qu'un pixel), sinon une montagne au soleil ressemblait à une dune de sable.
   // Ville: gris brun.
-  const FOREST_LIN = (() => { const avg = (pal) => { const t = [0, 0, 0]; pal.forEach(h => { const c = L(h); t[0] += c.r; t[1] += c.g; t[2] += c.b; }); return t.map(v => v / pal.length); }; const d = avg(TREE_PAL), c = avg(CONIFER_PAL); const m = d.map((v, i) => (0.45 * v + 0.55 * c[i]) * 0.45), l = LUM(m); return m.map(v => v + (l - v) * 0.15); })();
+  // Suit la saison (season.js): recalculée avec les couronnes par recolorTrees.
+  let FOREST_LIN = [0.03, 0.04, 0.02];
+  const forestTint = (st) => { const avg = (k) => { const t = [0, 0, 0]; for (let i = 0; i < 9; i++) { const c = seasonColor(st, k, (i + 0.5) / 9); t[0] += c.r; t[1] += c.g; t[2] += c.b; } return t.map(v => v / 9); }; const d = avg(ESS.FEUILLU), c = avg(ESS.CONIFERE); const m = d.map((v, i) => (0.45 * v + 0.55 * c[i]) * 0.45), l = LUM(m); return m.map(v => v + (l - v) * 0.15); };
+  const seasonCol = new THREE.Color();
+  const seasonColor = (st, k, c) => { const v = st.color(k, c); return seasonCol.setRGB(v[0], v[1], v[2], THREE.SRGBColorSpace); };
+  const seasonNow = () => seasonState(lat, lng, terrain.hTri(0, 0), dateMs);
   const CITY_LIN = [0.085, 0.08, 0.075];
   // Feuillage et troncs tout près de l'objectif (8 octobre 2026, « les arbres foncent dans la caméra »): effacés en douceur
   // par les trous du feuillage de 10 m à 3 m de la caméra (troncs de 4 m à 1 m, en trame). La carte d'ombre ne voit pas ce
@@ -732,6 +738,15 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   let brkR = BRK_R, brkKey = '', brkHide = new Set(), gapS = 0;
   let treeEnv = []; // arbres dessinés (voir trees()): enveloppes pour le flare près de l'objectif
   let statics = [], treesI = null, dirty = true, running = true, envKey = '', envAt = 0, drag = null, lastInfo = '', weatherRow = null;
+  let seasonDay = null; // jour (depuis 1970) des couleurs d'arbres dessinées; recolorTrees quand la date affichée change de jour
+  function recolorTrees() {
+    const day = Math.floor(dateMs / 86400000);
+    if (day === seasonDay || !treesI) return;
+    seasonDay = day;
+    const st = seasonNow(); FOREST_LIN = forestTint(st);
+    treesI.forEach(m => { const s = m.userData.season; if (!s) return; for (let i = 0; i < s.ess.length; i++) m.setColorAt(i, seasonColor(st, s.ess[i], s.c[i])); m.instanceColor.needsUpdate = true; });
+    dirty = true;
+  }
   let projInfo = []; // côtés des formes du projet avec hauteur et source (légende)
   // Modèle d'architecte importé (GLB allégé, voir modelImport.js). Placement: x, n (mètres autour de l'origine), rot (degrés,
   // sens horaire depuis le nord), dy (mètres au-dessus de la pose au sol). Pose au sol: le bas du modèle au point le plus bas
@@ -1011,7 +1026,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
     lampU.uLampMap.value = tex;
   }
-  // Arbres: mesurés par LiDAR ([x, n, h, r, k]: hauteur, rayon de couronne, k 1 conifère; près d'un bâtiment, plus
+  // Arbres: mesurés par LiDAR ([x, n, h, r, k]: hauteur, rayon de couronne, k code d'essence (api/trees.js; 1 et 5 conifères); près d'un bâtiment, plus
   // dx, dn (centre réel de la couronne) et o (feuillage mesuré au-dessus du toit)) ou, à défaut, points d'Overture
   // ([x, n], taille tirée au sort comme avant). Trois anneaux de détail autour du projet. Les feuillus proches portent
   // leur ombre par une doublure simplifiée qui n'écrit rien à l'image (shadowMat), avec le même masque: la lumière reste
@@ -1053,10 +1068,11 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     if (!list.length) return [];
     let all = list.map(t => {
       const [x, n] = t; let h, r, con = false, dx = 0, dn = 0, over;
-      if (t.length >= 5) { h = t[2]; r = t[3]; con = t[4] === 1; if (t.length >= 8) { over = t[7]; if (!con) { dx = t[5]; dn = t[6]; } } } // rayon d'après la surface de la couronne mesurée (voir treeShape)
+      let ess = ESS.FEUILLU;
+      if (t.length >= 5) { h = t[2]; r = t[3]; ess = t[4] || 0; con = isConifer(ess); if (t.length >= 8) { over = t[7]; if (!con) { dx = t[5]; dn = t[6]; } } } // rayon d'après la surface de la couronne mesurée (voir treeShape)
       else { const cr = 2.1 + 1.5 * hsh(x, n, 2); h = Math.max(2.5, 7 + 6 * hsh(x, n, 1) - cr * 1.4) + 2.08 * cr; r = 1.2 * cr; } // mêmes arbres qu'avant le LiDAR
       const d = Math.hypot(x, n);
-      return { x, n, h: Math.max(2.5, h), r: Math.max(0.8, r), con, d, ring: d < 150 ? 0 : d < 250 ? 1 : 2, y: terrain.hTri(x, n), rot: hsh(x, n, 3) * 6.28, c: hsh(x, n, 4), dx, dn, over, lidar: t.length >= 5, stand: t.length >= 5 && !!cg && cg.at(x, n) > 0 };
+      return { x, n, h: Math.max(2.5, h), r: Math.max(0.8, r), con, ess, d, ring: d < 150 ? 0 : d < 250 ? 1 : 2, y: terrain.hTri(x, n), rot: hsh(x, n, 3) * 6.28, c: hsh(x, n, 4), dx, dn, over, lidar: t.length >= 5, stand: t.length >= 5 && !!cg && cg.at(x, n) > 0 };
     });
     const pr = t => (t.d < 150 ? 2 : 0) + (t.h >= 15 ? 1 : 0) + t.h / 100;
     const cap = (arr, m) => { if (arr.length <= m) return arr; arr.sort((a, b) => pr(b) - pr(a)); return arr.slice(0, m); };
@@ -1067,10 +1083,13 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     const o3 = new THREE.Object3D(), rings = [[], [], []];
     all.forEach(t => rings[t.ring].push(t));
     treesI = [];
+    const st = seasonNow(); FOREST_LIN = forestTint(st); seasonDay = Math.floor(dateMs / 86400000);
     const inst = (geo, mat, lot, place, cast) => {
       if (!lot.length) return;
       const m = new THREE.InstancedMesh(geo, mat, lot.length);
-      lot.forEach((t, i) => { place(t); o3.updateMatrix(); m.setMatrixAt(i, o3.matrix); if (mat !== trunkMat && mat !== shadowMat) m.setColorAt(i, L(t.con ? CONIFER_PAL[Math.floor(t.c * CONIFER_PAL.length)] : TREE_PAL[Math.floor(t.c * TREE_PAL.length)])); });
+      const leaf = mat !== trunkMat && mat !== shadowMat;
+      lot.forEach((t, i) => { place(t); o3.updateMatrix(); m.setMatrixAt(i, o3.matrix); if (leaf) m.setColorAt(i, seasonColor(st, t.ess, t.c)); });
+      if (leaf) m.userData.season = { ess: Uint8Array.from(lot, t => t.ess), c: Float32Array.from(lot, t => t.c) }; // pour recolorTrees
       m.castShadow = cast; m.receiveShadow = mat !== shadowMat; m.userData.sharedGeo = true;
       // Pousse: matrices finales, pied de l'arbre (le point fixe du grossissement) et départ (vague du sujet vers l'extérieur, troncs un peu avant).
       { const gp = new Float32Array(lot.length * 3), gt = new Float32Array(lot.length); lot.forEach((t, i) => { gp[3 * i] = t.x; gp[3 * i + 1] = t.y; gp[3 * i + 2] = -t.n; gt[i] = 0.35 + 0.9 * Math.min(1, t.d / 400) + 0.25 * hsh(t.x, t.n, 7) + (mat === trunkMat ? -0.15 : 0); }); m.userData.grow = { final: Float32Array.from(m.instanceMatrix.array), gp, gt }; }
@@ -1900,7 +1919,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     // terrain » jusqu'à midi en octobre. null sans relief réel.
     horizonProfile() { return !terrain || terrain.flat ? null : horizonProfile(terrain.hTri); },
     setTerrain(t) { terrain = makeTerrain(t); terrainIn = true; rebuild(); },
-    setTime(ms) { if (ms !== dateMs) { dateMs = ms; dirty = true; } },
+    setTime(ms) { if (ms !== dateMs) { dateMs = ms; dirty = true; recolorTrees(); } },
     // Fumée de feux au sol à l'heure affichée (FireWork, microgrammes par mètre cube), ou null. Dessinée à partir de
     // 20 seulement (prudence: la couche mêle le fond urbain, 5 à 15 en ville), entière vers 150.
     setSmoke(ug) {

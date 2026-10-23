@@ -13,6 +13,11 @@
 //    mélangés ou feuillus, qui couvre aussi les boisés résidentiels;
 // 3) la forme de la cime (pointue et étroite pour un sapin ou une épinette, en dôme pour un érable), qui affine.
 // Ailleurs au Canada: la forme seule.
+//
+// Code k de chaque arbre (23 octobre 2026, couleurs d'automne de la vue 3D, src/scene3d/season.js): 0 feuillu
+// quelconque, 1 conifère, 2 érable (rouge et orangé), 3 feuillu jaune (orme, tilleul, frêne, bouleau, peuplier, érable
+// de Norvège), 4 chêne et hêtre (brun roux, tard), 5 mélèze (conifère qui jaunit), 6 érable pourpre. Le moteur traite
+// tout code autre que 1 et 5 comme un feuillu: les scènes en cache (k 0 ou 1) restent valables.
 import { toLCC } from './terrain.js';
 import { items, window1m } from './heights.js';
 
@@ -306,8 +311,37 @@ async function vdqTrees(bbox) {
   if (!r.ok) throw new Error(`inventaire Ville de Québec ${r.status}`);
   const j = await r.json();
   if (!j.success) throw new Error('inventaire Ville de Québec: réponse invalide');
-  return j.result.records.map((o) => ({ lat: Number(o.LATITUDE), lng: Number(o.LONGITUDE), con: o.TYPE_ARBRE === 'Conifère', name: o.NOM_FRANCAIS || '' })).filter((o) => o.lat === o.lat && o.lng === o.lng);
+  return j.result.records.map((o) => { const con = o.TYPE_ARBRE === 'Conifère', name = o.NOM_FRANCAIS || ''; return { lat: Number(o.LATITUDE), lng: Number(o.LONGITUDE), con, name, k: essenceOf(name, con) }; }).filter((o) => o.lat === o.lat && o.lng === o.lng);
 }
+// Code d'essence (voir l'en-tête) d'après le nom français de l'inventaire. Les érables de Norvège et argentés jaunissent;
+// amélanchiers, sorbiers et cerisiers rougissent comme les érables.
+function essenceOf(name, con) {
+  const n = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (/meleze/.test(n)) return 5;
+  if (con) return 1;
+  if (/crimson king|royal red|pourpre|purpurea|schwedler|crimson sentry/.test(n)) return 6;
+  if (/erable de norvege|erable argente|erable a giguere|erable negundo/.test(n)) return 3;
+  if (/erable|amelanchier|sorbier|cerisier/.test(n)) return 2;
+  if (/chene|hetre/.test(n)) return 4;
+  if (/orme|tilleul|frene|bouleau|peuplier|fevier|chicot|quarante ecus|ginkgo|micocoulier|caryer|noyer|phellodendron|saule|catalpa|marronnier|aubepine|pommetier|pommier|lilas|magnolia|robinier|ostryer|charme/.test(n)) return 3;
+  return 0;
+}
+// Essence d'un feuillu tiré dans un peuplement de la carte écoforestière: gr_ess liste les groupes d'essences par ordre
+// de dominance (codes de deux lettres, résineux compris); le premier groupe feuillu donne la répartition.
+// r: aléa fixe de l'arbre (0..1). Hors peuplement connu: feuillu quelconque.
+function decidOf(s, r) {
+  if (!s) return 0;
+  const groups = (s.ess.match(/.{2}/g) || []).filter((g) => !RESIN.has(g)), g = groups[0] || '';
+  let w; // parts [érable, jaune, chêne], le reste quelconque
+  if (/^(ER|ES|EO|EA|EU)/.test(g)) w = [0.6, 0.25, 0.05];
+  else if (/^(BB|BJ|PE|PT|PB|FI|BP)/.test(g)) w = [0.1, 0.75, 0];
+  else if (/^(CH|CR|CB|HG)/.test(g)) w = [0.15, 0.15, 0.6];
+  else if (/^(FT|FH|FN|FX|FZ)/.test(g)) w = [0.4, 0.35, 0.1];
+  else w = [0.25, 0.4, 0.05];
+  return r < w[0] ? 2 : r < w[0] + w[1] ? 3 : r < w[0] + w[1] + w[2] ? 4 : 0;
+}
+// Conifère tiré dans un peuplement: mélèze si le premier groupe résineux en est un (ME, MH), sinon conifère vert.
+const conOf = (s) => (s && /^(ME|MH)/.test((s.ess.match(/.{2}/g) || []).find((g) => RESIN.has(g)) || '') ? 5 : 1);
 
 // Groupes d'essences résineuses de la carte écoforestière (codes en tête de gr_ess, par ordre de dominance).
 const RESIN = new Set(['SB', 'SE', 'EP', 'EN', 'EB', 'RX', 'RZ', 'RS', 'PG', 'PB', 'PR', 'PI', 'TO', 'PU', 'ME', 'MH']);
@@ -343,7 +377,7 @@ function standPrior(s) {
 const inRing = (x, y, r) => { let ins = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const a = r[i], b = r[j]; if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) ins = !ins; } return ins; };
 const hsh = (x, n, k) => { const s = Math.sin(x * 12.9898 + n * 78.233 + k * 37.719) * 43758.5453; return s - Math.floor(s); };
 
-// Arbres autour de (lat, lng): { trees: [[x, n, h, r, k]] (k 1 conifère, 0 feuillu; près d'un bâtiment, plus dx, dn, o), covered(x, n) (le LiDAR voit-il ce
+// Arbres autour de (lat, lng): { trees: [[x, n, h, r, k]] (k: code d'essence, voir l'en-tête; près d'un bâtiment, plus dx, dn, o), covered(x, n) (le LiDAR voit-il ce
 // point), canopy (boisés, voir canopyGrid), date, essences (sources utilisées), failed }. trees null: pas de LiDAR ici (repli sur Overture).
 // Fenêtre LiDAR de la hauteur de canopée (surface moins sol nu) sur ±350 m: { raw, seen, W, H, res, fr, date, dsm, dtm }
 // ou null sans relevé ici (dsm, dtm: surface et sol nu en mètres d'altitude, pour les pentes des toits, api/roofs.js).
@@ -420,7 +454,7 @@ export async function lidarTrees(lat, lng, bld, log = () => {}, win = undefined)
     });
     pairs.sort((p, q) => p[0] - q[0]);
     const vUsed = new Set();
-    for (const [, vi, ti] of pairs) { if (vUsed.has(vi) || tops[ti].src) continue; vUsed.add(vi); tops[ti].src = 'vdq'; tops[ti].k = vdq[vi].con ? 1 : 0; }
+    for (const [, vi, ti] of pairs) { if (vUsed.has(vi) || tops[ti].src) continue; vUsed.add(vi); tops[ti].src = 'vdq'; tops[ti].k = vdq[vi].k; }
     used.push('l’inventaire des arbres de la Ville de Québec');
   }
   const stands = (eco || []).map((s) => ({ ...s, ring: s.ring.map(([ln, la]) => loc(ln, la)), prior: standPrior(s) })).filter((s) => s.prior != null);
@@ -434,7 +468,7 @@ export async function lidarTrees(lat, lng, bld, log = () => {}, win = undefined)
     if (s) inStands++;
     const o = p / (1 - p) * shapeOdds(t, res);
     p = o / (1 + o);
-    t.k = hsh(t.x, t.n, 9) < p ? 1 : 0; // tirage fixe pour une même cime
+    t.k = hsh(t.x, t.n, 9) < p ? conOf(s) : decidOf(s, hsh(t.x, t.n, 10)); // tirages fixes pour une même cime
   }
   // Plafond: tous les arbres à moins de 150 m, puis les grands (ligne d'horizon, longues ombres), puis les autres.
   if (tops.length > MAX_TREES) {
@@ -454,7 +488,7 @@ export async function lidarTrees(lat, lng, bld, log = () => {}, win = undefined)
     return a.concat([r1(dx), r1(dn), t.over]);
   });
   const covered = (x, n) => { const [i, j] = fr.toPx(x, n), u = Math.round(i), v = Math.round(j); return u >= 0 && v >= 0 && u < W && v < H && seen[v * W + u] === 1; };
-  const nCon = trees.filter((t) => t[4]).length;
-  log(`arbres LiDAR: ${trees.length} (${nCon} conifères, ${tops.filter((t) => t.src === 'vdq').length} de l'inventaire, ${inStands} dans un peuplement), relevé ${it.date || '?'}, ${res} m`);
+  const nCon = trees.filter((t) => t[4] === 1 || t[4] === 5).length, nEss = trees.filter((t) => t[4] >= 2).length;
+  log(`arbres LiDAR: ${trees.length} (${nCon} conifères, ${nEss} feuillus d'essence connue, ${tops.filter((t) => t.src === 'vdq').length} de l'inventaire, ${inStands} dans un peuplement), relevé ${it.date || '?'}, ${res} m`);
   return { trees, covered, canopy, date: it.date, res, essences: used, failed };
 }
