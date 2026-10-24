@@ -1,11 +1,12 @@
 // Fonction serveur (Vercel): le relief autour d'un lieu pour la vue 3D de la fiche projet.
 // Sources gratuites, de la plus fine à la plus grossière, fondues l'une dans l'autre:
 //   - LiDAR de Ressources naturelles Canada (modèle numérique de terrain haute résolution, mosaïques à 1 m et 2 m,
-//     GeoTIFF optimisés pour le nuage sur S3, lus par tuiles avec api/cog.js): 2 m jusqu'à 640 m du lieu, 4 m jusqu'à
+//     GeoTIFF optimisés pour le nuage sur S3, lus par tuiles avec api/cog.js): 1 m jusqu'à 200 m du lieu (depuis la
+//     v633.237, TERRAIN_V 3: bordures, fossés, murets et talus autour du bâtiment), 2 m jusqu'à 640 m, 4 m jusqu'à
 //     1,3 km, 32 m jusqu'à 6 km;
 //   - modèle numérique d'élévation du Canada (20 m) par les tuiles Terrain Tiles d'AWS (format terrarium): 13 m par
 //     pixel jusqu'à 5 km, 100 m par pixel jusqu'à 20 km, et partout où le LiDAR manque.
-// Résultat: une grille non uniforme (même axe en x et en n: 2 m au centre, pas croissant de 12 % jusqu'à 500 m,
+// Résultat: une grille non uniforme (même axe en x et en n: 1 m jusqu'à 128 m, 2 m jusqu'à 256 m, pas croissant de 12 % jusqu'à 500 m,
 // 20 km de rayon), hauteurs en décimètres au-dessus du point le plus bas, encodées en base64 (Int16). Le client
 // (src/scene3d/terrain.js) la garde dans le cache partagé Supabase, donc chaque lieu n'est calculé qu'une fois.
 // Depuis la v633.194 (TERRAIN_V 2), s'y ajoute le relief lointain précis (far): une grille polaire centrée sur le lieu,
@@ -23,13 +24,14 @@ import { openCog, readWindow } from './cog.js';
 import { gridSampler } from '../src/scene3d/horizon.js';
 
 export const maxDuration = 60;
-export const TERRAIN_V = 2; // 2: relief lointain polaire (far)
+export const TERRAIN_V = 3; // 2: relief lointain polaire (far); 3: 1 m autour du bâtiment
 const UA = 'MeteoShoot (www.meteoshoot.com)';
 
 // ---------- grille locale: positions des noeuds le long d'un axe (mètres), symétrique autour de 0
-export const FINE = 2, FINE_HALF = 256, GROW = 1.12, STEP_MAX = 500, EXTENT = 20000;
+export const FINE1 = 1, FINE1_HALF = 128, FINE = 2, FINE_HALF = 256, GROW = 1.12, STEP_MAX = 500, EXTENT = 20000;
 export function buildAxis() {
   const pos = []; let v = 0, s = FINE;
+  while (v < FINE1_HALF - 1e-9) { v += FINE1; pos.push(v); } // 1 m autour du bâtiment (le LiDAR brut)
   while (v < FINE_HALF - 1e-9) { v += FINE; pos.push(v); }
   while (v < EXTENT - 1e-9) { s = Math.min(STEP_MAX, s * GROW); v = v + s * 1.5 >= EXTENT ? EXTENT : v + s; pos.push(Math.round(v * 100) / 100); }
   return [...pos.map(p => -p).reverse(), 0, ...pos];
@@ -180,19 +182,20 @@ export async function buildTerrain(lat, lng, log = () => {}) {
   const lidarUrls = [...urls1, ...urls2.filter(u => !urls1.includes(u))];
   // Couches de la plus grossière à la plus fine; chacune recouvre la précédente là où elle a des données, avec un
   // fondu sur ses bords (15 % du demi-côté) et à ses trous. Lointain: fenêtres rondes, résolution proche du pas local.
-  const [t10, t13, l32, l4, l2, t11, f64, f32, f16, f8] = await Promise.all([
+  const [t10, t13, l32, l4, l2, l1, t11, f64, f32, f16, f8] = await Promise.all([
     terrariumLayer(lat, lng, 10, EXTENT * 1.03, mLat, mLng, logE),
     terrariumLayer(lat, lng, 13, 5000, mLat, mLng, logE),
     hrdemLayers(lidarUrls, 32, lat, lng, 6000, mLat, mLng, logE),
     hrdemLayers(lidarUrls, 4, lat, lng, 1300, mLat, mLng, logE),
     hrdemLayers(lidarUrls, 2, lat, lng, 640, mLat, mLng, logE),
+    hrdemLayers(lidarUrls, 1, lat, lng, 200, mLat, mLng, logE),
     terrariumLayer(lat, lng, 11, 21000, mLat, mLng, logE),
     hrdemLayers(lidarUrls, 64, lat, lng, 23500, mLat, mLng, logE, true),
     hrdemLayers(lidarUrls, 32, lat, lng, 12800, mLat, mLng, logE, true),
     hrdemLayers(lidarUrls, 16, lat, lng, 4500, mLat, mLng, logE, true),
     hrdemLayers(lidarUrls, 8, lat, lng, 2300, mLat, mLng, logE, true),
   ]);
-  const layers = [t10, t13, ...l32, ...l4, ...l2].filter(Boolean);
+  const layers = [t10, t13, ...l32, ...l4, ...l2, ...l1].filter(Boolean);
   if (!layers.length) throw new Error('aucune source de relief');
   const tFetch = Date.now() - t0;
   const h = new Float32Array(N * N).fill(NaN);

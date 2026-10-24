@@ -10,7 +10,7 @@ import { HORIZON_V, farSampler } from './horizon.js';
 
 const mem = new Map();
 const TBL = 'scene3d_cache'; // même table que les environs, clés préfixées
-export const TERRAIN_V = 2; // 2: relief lointain polaire (far), voir api/terrain.js
+export const TERRAIN_V = 3; // 2: relief lointain polaire (far); 3: 1 m autour du bâtiment, voir api/terrain.js
 const API_BASE = (typeof __MS_TARGET__ !== 'undefined' && __MS_TARGET__ === 'native') ? 'https://www.meteoshoot.com' : '';
 export const TEX_PERIOD = 9.0909; // période de la texture du sol en mètres (6600 répétitions sur 60 km, comme avant)
 
