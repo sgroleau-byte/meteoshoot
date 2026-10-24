@@ -789,6 +789,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   const fxMat = new THREE.ShaderMaterial({ uniforms: THREE.UniformsUtils.clone(FXAAShader.uniforms), vertexShader: FXAAShader.vertexShader, fragmentShader: FXAAShader.fragmentShader });
 
   // ---- état: lieu, heure, météo, caméra
+  let drawnSh = null; // dernier recalage des formes dessinées sur le LiDAR ([est, nord] en m), null sans forme de bâtiment, [0, 0] sans empreinte qui réponde
   let lat = 46.8, lng = -71.2, origin = null, projLocal = [], orientation = [], style = null, data = null, dateMs = Date.now();
   const tg = { cum: 0, mid: 0, high: 0, iv: 1, rain: 0, wet: 0, pud: 0, rv: 0, cbs: 0, cbb: 600, fogK: 0, fogTh: 600, smk: 0, storm: 0, brk: 0, pSun: 0, l0b: 800, l0t: 1600, l0c: 0, l0k: 1, l0w: 0, l0s: 0, l0d: 0, l0n: 1, m1b: 3200, m1t: 4300, m1c: 0, m1k: 1, hc: 0, hk: 1, ha: 9000, ht: 1, shaft: 0 }, cur = { ...tg };
   let cloudNames = []; // mots de la légende (classifyClouds)
@@ -1466,7 +1467,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     // est comparée à l'empreinte LiDAR la plus proche (centre à moins de 15 m, aire du simple au double): la moyenne des
     // écarts de centre est le décalage local de l'image, retranché à toutes les formes dessinées (bâtiments et
     // stationnements). Sans forme de bâtiment ou sans empreinte LiDAR qui lui réponde: rien ne bouge.
-    const gsh = drawnShift(drawn);
+    const gsh = drawnShift(drawn); drawnSh = drawn.some(d => d.kind !== 'ground') ? gsh : null;
     if (gsh[0] || gsh[1]) drawn.forEach(d => { d.p = d.p.map(([x, n]) => [x + gsh[0], n + gsh[1]]); });
     // Hauteur: valeur réglée dans la pastille FORME, sinon hauteur mesurée Overture du même édifice (30 m est le défaut du
     // dessin, jamais une vraie hauteur: Stéphane ne la connaît pas), sinon 9 m. Couleur des murs: choisie dans la pastille,
@@ -2007,7 +2008,9 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     const pavedLine = nPav && nGrav ? `Surfaces pavées d’après l’imagerie satellite (${data.pavedSrc || 'Esri'}) et entrées en gravier d’après ${gravSrc}, approximatives` : nGrav ? `Entrées en gravier d’après ${gravSrc}${nDitch && nGrav === nDitch ? ' (Ressources naturelles Canada)' : ` (${data.pavedSrc || 'Esri'})`}, approximatives` : nPav ? `Surfaces pavées d’après l’imagerie satellite (${data.pavedSrc || 'Esri'}), approximatives` : '';
     const ts = data && data.treesSrc, treeLine = ts && ts.n ? `Arbres LiDAR, conifères estimés d’après ${ts.essences && ts.essences.length ? ts.essences.join(' et ') : 'la forme des cimes'}` : '';
     const satNote = sat && sat.shift ? (sat.shift[0] || sat.shift[1] ? ` (recalée de ${Math.abs(sat.shift[0])} m ${sat.shift[0] >= 0 ? 'est' : 'ouest'} et ${Math.abs(sat.shift[1])} m ${sat.shift[1] >= 0 ? 'nord' : 'sud'})` : ' (non recalée)') : '';
-    const srcLine = [relief, treeLine, pavedLine, sat ? SAT_CREDIT + satNote : ''].filter(Boolean).join(' · ');
+    // Formes dessinées sur la carte: recalées sur l'empreinte LiDAR (v633.241), ou non (diagnostic visible, comme pour l'image au sol)
+    const drawnNote = !drawnSh ? '' : (drawnSh[0] || drawnSh[1]) ? `Formes dessinées recalées de ${Math.abs(drawnSh[0]).toFixed(1)} m ${drawnSh[0] >= 0 ? 'est' : 'ouest'} et ${Math.abs(drawnSh[1]).toFixed(1)} m ${drawnSh[1] >= 0 ? 'nord' : 'sud'} sur le LiDAR` : 'Formes dessinées non recalées (aucune empreinte LiDAR ne leur répond)';
+    const srcLine = [relief, treeLine, pavedLine, drawnNote, sat ? SAT_CREDIT + satNote : ''].filter(Boolean).join(' · ');
     // Ciel observé (satellite, aéroport) qui a corrigé cette heure (src/weather/nowcast.js)
     const obsLine = w.obsInfo || '';
     const info = cond + '|' + parts + '|' + obsLine + '|' + where + '|' + height + '|' + srcLine + '|' + (est > 0.55 ? 'dark' : 'light');
