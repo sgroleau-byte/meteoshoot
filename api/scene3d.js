@@ -13,7 +13,8 @@
 //   et les étages viennent de la mesure (surface moins sol nu), lidarBld donne le nombre de bâtiments mesurés.
 // v7 (9 octobre 2026): empreintes réelles des bâtiments par LiDAR (api/footprints.js): bld[i][5] vaut 1 quand la forme vient
 //   du relevé (remplace le carré d'Overture, ou bâtiment ajouté), lidarFp en compte; entrées en gravier d'après l'imagerie
-//   (gravel, même forme que paved) recalée sur le LiDAR (imgShift, mètres est et nord).
+//   (gravel, même forme que paved) recalée sur le LiDAR (imgShift, mètres est et nord); gravelDitch: nombre d'entrées lues
+//   dans le fossé LiDAR (api/driveways.js, v633.238), le reste vient de la couleur de l'image.
 // v6 (8 octobre 2026): arbres mesurés par LiDAR jusqu'à 350 m (api/trees.js): trees[i] = [x, n, h, r, k] (hauteur,
 //   rayon de couronne, k code d'essence (0 feuillu, 1 conifère; depuis le 23 octobre 2026 aussi 2 à 6, voir api/trees.js); près d'un bâtiment, plus dx, dn: centre mesuré de la couronne, et
 //   o: 1 si le relevé montre du feuillage au-dessus du toit voisin); treesSrc { date, res, essences }. Restent au format [x, n] (taille
@@ -295,7 +296,7 @@ export async function buildScene(lat, lng) {
   // qui n'utilise que les empreintes).
   // lidarErr: lecture LiDAR échouée (catalogue ou mosaïque indisponible): la scène sert quand même, mais n'est gardée
   // ni par le réseau de Vercel ni dans le cache partagé, pour être recalculée au prochain affichage.
-  let paved = [], gravel = [], imgShift = [0, 0], pavedSrc = null, lidarBld = 0, lidarErr = false, lt = null, lidarFp = 0, apple = null;
+  let paved = [], gravel = [], gravelDitch = 0, imgShift = [0, 0], pavedSrc = null, lidarBld = 0, lidarErr = false, lt = null, lidarFp = 0, apple = null;
   const log = (m) => console.log('[scene3d]', m);
   // Délai global des lectures LiDAR: un serveur de Ressources naturelles Canada bloqué ne doit pas faire échouer toute la
   // scène (60 s pour la fonction, dont 15 à 20 s pour Overture): après 50 s depuis le début, on sert sans ces mesures.
@@ -309,7 +310,7 @@ export async function buildScene(lat, lng) {
   let roofs = 0;
   if (win) { try { roofs = lidarRoofs(win, bld, log).n; } catch (e) { console.warn('[scene3d] toits LiDAR:', e && e.message); } }
   await Promise.all([
-    pavedFromImagery(lat, lng, bld, roads, log).then((r) => { paved = r.paved; gravel = r.gravel || []; imgShift = r.shift || [0, 0]; pavedSrc = r.dense ? null : PAVED_ATTRIBUTION; }).catch((e) => console.warn('[scene3d] surfaces pavées indisponibles:', e && e.message)),
+    pavedFromImagery(lat, lng, bld, roads, log, { win, water }).then((r) => { paved = r.paved; gravel = r.gravel || []; gravelDitch = r.ditch || 0; imgShift = r.shift || [0, 0]; pavedSrc = r.dense ? null : PAVED_ATTRIBUTION; }).catch((e) => console.warn('[scene3d] surfaces pavées indisponibles:', e && e.message)),
     // Calage de l'image Plans d'Apple sur les empreintes (v633.183): appleShift dans la scène, appliqué tel quel par le navigateur.
     inTime(appleShift(lat, lng, bld, log), 'calage Plans').then((r) => { apple = r; }).catch((e) => console.warn('[scene3d] calage Plans d\'Apple indisponible:', e && e.message)),
     inTime(lidarHeights(lat, lng, bld, log), 'hauteurs').then((r) => { lidarBld = r.measured; if (r.failed) lidarErr = true; }).catch((e) => { lidarErr = true; console.warn('[scene3d] hauteurs LiDAR indisponibles:', e && e.message); }),
@@ -328,7 +329,7 @@ export async function buildScene(lat, lng) {
     treesSrc = { date: lt.date, res: lt.res, essences: lt.essences, n: lt.trees.length };
     canopy = lt.canopy;
   }
-  const scene = { v: 11, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, imgShift, appleShift: apple, pavedSrc, lidarBld, lidarFp, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
+  const scene = { v: 12, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, pavedSrc, lidarBld, lidarFp, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
   if (lidarErr) scene.lidarErr = true;
   return scene;
 }

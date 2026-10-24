@@ -15,7 +15,16 @@
 // Calage: l'imagerie Esri est décalée de quelques mètres par rapport au LiDAR et à Overture (9 m à Stoneham); le
 // décalage est mesuré en superposant les pixels sombres (toits) aux empreintes des bâtiments, puis appliqué aux
 // polygones tirés de l'image (pavé et gravier).
+//
+// Relief LiDAR croisé avec la couleur (24 octobre 2026, Stéphane: « augmenter la précision des entrées »): une entrée
+// est du sol nu (surface et terrain confondus, sous BARE_H) et régulier (écart au plan local sous SMOOTH_M). Là où le
+// relevé voit, un pixel n'est candidat que s'il est nu et lisse (fini les toits clairs, arbustes et affleurements pris
+// pour du gravier), et la clarté exigée descend (40e centile au lieu du 70e): l'ombre d'un arbre ne coupe plus
+// l'entrée en deux. Les petits volumes (voitures, bacs, haies: sous SMALL_A, moins de 3 m) comptent comme du sol, la
+// couleur décide. Les plans d'eau (Overture) sont retirés: un lac est sombre, peu saturé et plat. Hors du relevé, la
+// règle de couleur seule reste.
 import jpeg from 'jpeg-js';
+import { ditchEntries } from './driveways.js';
 
 const Z = 19, HALF_M = 320, TILE = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile';
 export const PAVED_ATTRIBUTION = 'Esri, Maxar, Earthstar Geographics';
@@ -26,6 +35,39 @@ async function fetchTile(tx, ty) {
   const r = await fetch(`${TILE}/${Z}/${ty}/${tx}`, { headers: { 'User-Agent': 'MeteoShoot (www.meteoshoot.com)' } });
   if (!r.ok) throw new Error('tuile ' + r.status);
   return jpeg.decode(Buffer.from(await r.arrayBuffer()), { useTArray: true, formatAsRGBA: true });
+}
+
+const BARE_H = 0.4, SMOOTH_M = 0.12, SMALL_A = 25, SMALL_H = 3; // sol nu et lisse d'après le LiDAR (voir l'en-tête)
+
+// Classe LiDAR de chaque pixel de la fenêtre: 0 inconnu, 1 sol nu et lisse, 2 volume bas ou terrain irrégulier,
+// 3 sous la canopée (CANOPY_H et plus: le sol n'est pas vu, la couleur de l'image décide seule, comme avant).
+const CANOPY_H = 3;
+export function bareMask(win) {
+  const { raw, seen, W, H, res, dtm } = win, out = new Uint8Array(W * H), vol = new Uint8Array(W * H);
+  for (let k = 0; k < out.length; k++) if (seen[k] && raw[k] >= BARE_H) vol[k] = 1;
+  // Petits volumes ramenés au sol: composantes de moins de SMALL_A m² dont le sommet reste sous SMALL_H.
+  const lab = new Uint8Array(W * H), maxN = SMALL_A / (res * res);
+  for (let s0 = 0; s0 < vol.length; s0++) {
+    if (!vol[s0] || lab[s0]) continue;
+    const stack = [s0], comp = []; lab[s0] = 1; let hmax = 0, big = false;
+    while (stack.length) { const j = stack.pop(); comp.push(j); if (raw[j] > hmax) hmax = raw[j]; if (comp.length > maxN) big = true; const x = j % W, y = (j - x) / W; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue; const n = ny * W + nx; if (vol[n] && !lab[n]) { lab[n] = 1; stack.push(n); } } }
+    if (!big && hmax < SMALL_H) for (const j of comp) vol[j] = 0;
+  }
+  // Régularité du terrain: écart quadratique au plan des moindres carrés sur 3 × 3 (1 m) ou 3 × 3 (2 m).
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    const k = y * W + x; if (!seen[k]) continue; if (vol[k]) { out[k] = raw[k] >= CANOPY_H ? 3 : 2; continue; }
+    let n = 0, sx = 0, sy = 0, sz = 0, sxx = 0, syy = 0, sxy = 0, sxz = 0, syz = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const z = dtm[k + dy * W + dx]; if (z !== z) continue; n++; sx += dx; sy += dy; sz += z; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; sxz += dx * z; syz += dy * z; }
+    if (n < 6) continue;
+    // plan z = a dx + b dy + c (moindres carrés, 3 inconnues)
+    const mx = sx / n, my = sy / n, mz = sz / n, cxx = sxx - n * mx * mx, cyy = syy - n * my * my, cxy = sxy - n * mx * my, cxz = sxz - n * mx * mz, cyz = syz - n * my * mz, det = cxx * cyy - cxy * cxy;
+    if (Math.abs(det) < 1e-9) continue;
+    const a = (cxz * cyy - cyz * cxy) / det, b = (cyz * cxx - cxz * cxy) / det, c = mz - a * mx - b * my;
+    let ss = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const z = dtm[k + dy * W + dx]; if (z !== z) continue; const e = z - (a * dx + b * dy + c); ss += e * e; }
+    out[k] = Math.sqrt(ss / n) < SMOOTH_M ? 1 : 2; // écart en mètres (la pente est absorbée par le plan)
+  }
+  return out;
 }
 
 // Pavé selon la couleur d'un pixel (RVB 0..255): béton clair, asphalte neutre, asphalte bleuté.
@@ -116,25 +158,32 @@ function driveBands(comp, id, glab, nearRoad, nearBld, inBld, W2, H2, mp2, toM) 
   }
   widths.sort((p, q) => p - q);
   const wPx = Math.max(2.5 / mp2, Math.min(7 / mp2, widths.length ? widths[widths.length >> 1] : comp.length / len));
-  // Bande: prolongée de 3 m au bout côté bâtiment (le chemin s'arrête à 3 m du mur) et de 1 m côté rue.
+  const out = [bandPoly(pl, wPx, mp2, toM)], fr = farRect(comp, pl, wPx, inBld, W2, H2, mp2);
+  if (fr) out.push(toM(fr));
+  return out;
+}
+// Bande droite autour d'une polyligne (pixels), largeur wPx: prolongée de 3 m au bout côté bâtiment (le chemin
+// s'arrête à 3 m du mur) et de 1 m côté rue.
+function bandPoly(pl, wPx, mp2, toM, extEnd = 3, extStart = 1) {
   const ext = (a, b, d) => { const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [b[0] + (b[0] - a[0]) / l * d, b[1] + (b[1] - a[1]) / l * d]; };
-  const P = pl.slice(); P[P.length - 1] = ext(P[P.length - 2], P[P.length - 1], 3 / mp2); P[0] = ext(P[1], P[0], 1 / mp2);
+  const P = pl.slice(); P[P.length - 1] = ext(P[P.length - 2], P[P.length - 1], extEnd / mp2); P[0] = ext(P[1], P[0], extStart / mp2);
   const left = [], right = [];
   for (let i = 0; i < P.length; i++) {
     const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
     left.push([P[i][0] + nx * wPx / 2, P[i][1] + ny * wPx / 2]); right.push([P[i][0] - nx * wPx / 2, P[i][1] - ny * wPx / 2]);
   }
-  const band = left.concat(right.reverse()), out = [toM(band)];
-  // Reste hors de la bande (plus de 25 m²): rectangle englobant minimal de ces pixels.
+  return toM(left.concat(right.reverse()));
+}
+// Reste de la tache hors de la bande (plus de 25 m²): rectangle englobant minimal de ces pixels, au moins à moitié
+// plein (sinon une traînée), hors des bâtiments. Pixels, ou null.
+function farRect(comp, pl, wPx, inBld, W2, H2, mp2) {
   const far = comp.filter(j => { const x = j % W2, y = (j - x) / W2; let dmin = Infinity; for (let i = 0; i + 1 < pl.length; i++) { const a = pl[i], b = pl[i + 1], ex = b[0] - a[0], ey = b[1] - a[1], l2 = ex * ex + ey * ey || 1, t = Math.max(0, Math.min(1, ((x - a[0]) * ex + (y - a[1]) * ey) / l2)); dmin = Math.min(dmin, Math.hypot(x - a[0] - t * ex, y - a[1] - t * ey)); } return dmin > wPx / 2 + 1 / mp2; });
-  if (far.length * mp2 * mp2 >= 25) {
-    const pts = far.map(j => [j % W2, (j - j % W2) / W2]);
-    let best = null;
-    for (let k = 0; k < 18; k++) { const th = k * Math.PI / 18, cs = Math.cos(th), sn = Math.sin(th); let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity; for (const [x, y] of pts) { const u = x * cs + y * sn, v = -x * sn + y * cs; u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); } const area = (u1 - u0 + 1) * (v1 - v0 + 1); if (!best || area < best.area) best = { area, ring: [[u0, v0], [u1 + 1, v0], [u1 + 1, v1 + 1], [u0, v1 + 1]].map(([u, v]) => [u * cs - v * sn, u * sn + v * cs]) }; }
-    const hitsBld = (r) => [...r, [r.reduce((t, p) => t + p[0] / 4, 0), r.reduce((t, p) => t + p[1] / 4, 0)]].some(([x, y]) => { const i = Math.round(x), j = Math.round(y); return i >= 0 && j >= 0 && i < W2 && j < H2 && inBld[j * W2 + i]; });
-    if (best && far.length / best.area >= 0.45 && !hitsBld(best.ring)) out.push(toM(best.ring)); // au moins à moitié plein (sinon une traînée), hors des bâtiments
-  }
-  return out;
+  if (far.length * mp2 * mp2 < 25) return null;
+  const pts = far.map(j => [j % W2, (j - j % W2) / W2]);
+  let best = null;
+  for (let k = 0; k < 18; k++) { const th = k * Math.PI / 18, cs = Math.cos(th), sn = Math.sin(th); let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity; for (const [x, y] of pts) { const u = x * cs + y * sn, v = -x * sn + y * cs; u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); } const area = (u1 - u0 + 1) * (v1 - v0 + 1); if (!best || area < best.area) best = { area, ring: [[u0, v0], [u1 + 1, v0], [u1 + 1, v1 + 1], [u0, v1 + 1]].map(([u, v]) => [u * cs - v * sn, u * sn + v * cs]) }; }
+  const hitsBld = (r) => [...r, [r.reduce((t, p) => t + p[0] / 4, 0), r.reduce((t, p) => t + p[1] / 4, 0)]].some(([x, y]) => { const i = Math.round(x), j = Math.round(y); return i >= 0 && j >= 0 && i < W2 && j < H2 && inBld[j * W2 + i]; });
+  return best && far.length / best.area >= 0.45 && !hitsBld(best.ring) ? best.ring : null;
 }
 function contourOf(comp, W2, H2, mp2, toM) {
   const cm = new Uint8Array(W2 * H2); let sx = -1, sy = -1;
@@ -143,7 +192,9 @@ function contourOf(comp, W2, H2, mp2, toM) {
 }
 
 // Surfaces pavées en mètres locaux autour de (lat, lng); bld = [[ring, h, fl, kind]], roads = [{w, k, p}] (mètres locaux).
-export async function pavedFromImagery(lat, lng, bld, roads, log = () => {}) {
+// opts: win (fenêtre LiDAR de readCanopy, facultative), water (plans d'eau [{o, h}], facultatifs), dbg (objet rempli pour le banc).
+export async function pavedFromImagery(lat, lng, bld, roads, log = () => {}, opts = {}) {
+  const { win = null, water = [], dbg = null } = opts;
   const mLat = 111320, mLng = 111320 * Math.cos(lat * Math.PI / 180);
   const area = (r) => Math.abs(r.reduce((s, p, i) => { const q = r[(i + 1) % r.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2;
   const built = bld.filter(b => Math.hypot(...b[0].reduce((c, p) => [c[0] + p[0] / b[0].length, c[1] + p[1] / b[0].length], [0, 0])) < 300).reduce((s, b) => s + area(b[0]), 0);
@@ -154,7 +205,8 @@ export async function pavedFromImagery(lat, lng, bld, roads, log = () => {}) {
   const mask = new Uint8Array(W * H);
   const jobs = []; for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) jobs.push([tx, ty]);
   const sat = new Uint8Array(W * H), val = new Uint8Array(W * H); // saturation et clarté (0 à 255) de chaque pixel, pour le gravier
-  let k = 0; const worker = async () => { while (k < jobs.length) { const [tx, ty] = jobs[k++]; let im; try { im = await fetchTile(tx, ty); } catch (e) { continue; } const d = im.data; for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) { const i = (y * 256 + x) * 4, j = (ty - y0) * 256 * W + (tx - x0) * 256 + y * W + x; const r = d[i], g = d[i + 1], b = d[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b); sat[j] = mx ? Math.round(255 * (mx - mn) / mx) : 0; val[j] = mx; if (isPaved(r, g, b)) mask[j] = 1; } } };
+  const rgb = dbg ? new Uint8Array(W * H * 3) : null;
+  let k = 0; const worker = async () => { while (k < jobs.length) { const [tx, ty] = jobs[k++]; let im; try { im = await fetchTile(tx, ty); } catch (e) { continue; } const d = im.data; for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) { const i = (y * 256 + x) * 4, j = (ty - y0) * 256 * W + (tx - x0) * 256 + y * W + x; const r = d[i], g = d[i + 1], b = d[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b); sat[j] = mx ? Math.round(255 * (mx - mn) / mx) : 0; val[j] = mx; if (rgb) { rgb[j * 3] = r; rgb[j * 3 + 1] = g; rgb[j * 3 + 2] = b; } if (isPaved(r, g, b)) mask[j] = 1; } } };
   await Promise.all(Array.from({ length: 12 }, worker));
   // Calage de l'image sur les empreintes (LiDAR, Overture): pixels sombres (clarté sous le 25e centile) contre bâtiments,
   // sur une grille au mètre, décalage de ±12 m qui les superpose le mieux. Les polygones tirés de l'image sont ramenés
@@ -207,28 +259,100 @@ export async function pavedFromImagery(lat, lng, bld, roads, log = () => {}) {
   // Entrées en gravier: seuils relatifs à l'image, demi-résolution, moins bâtiments (dilatés de 1 m) et rues (largeur + 1 m).
   // Hors ville seulement: sol bâti sous 10 % dans 300 m et image peu grise (15e centile de saturation à 0,2 au moins), sinon
   // trottoirs, toits clairs et stationnements passeraient pour du gravier.
-  const gravel = [];
+  const gravel = []; let ditch = 0;
   try {
     const q = (arr, f) => { const hist = new Uint32Array(256); for (let i = 0; i < arr.length; i += 3) hist[arr[i]]++; const tot = hist.reduce((a, b) => a + b, 0); let acc = 0; for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc >= tot * f) return i; } return 255; };
     const sTh = q(sat, 0.15), vTh = q(val, 0.70);
-    if (built / (Math.PI * 300 * 300) > 0.10 || sTh < 0.2 * 255) { log(`entrées en gravier: zone urbaine ou image grise (bâti ${(100 * built / (Math.PI * 300 * 300)).toFixed(0)} %, saturation ${sTh}), non détectées`); return { paved: polys, gravel, dense: false, shift: [Math.round(ox * mpp * 10) / 10, Math.round(-oy * mpp * 10) / 10] }; }
-    const g2 = new Uint8Array(W2 * H2);
-    for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) { const i = (2 * y) * W + 2 * x; let n = 0; for (const j of [i, i + 1, i + W, i + W + 1]) if (sat[j] < sTh && val[j] > vTh) n++; g2[y * W2 + x] = n >= 2 ? 1 : 0; }
+    // Couleur seule hors ville et image colorée; sinon (trottoirs, toits clairs, stationnements, image en noir et blanc) la
+    // couleur ne sert pas, mais les entrées par le fossé LiDAR restent possibles (elles ne lisent que le relief).
+    const colourOK = !(built / (Math.PI * 300 * 300) > 0.10 || sTh < 0.2 * 255);
+    if (!colourOK) log(`entrées en gravier: zone urbaine ou image grise (bâti ${(100 * built / (Math.PI * 300 * 300)).toFixed(0)} %, saturation ${sTh}), couleur non utilisée${win ? ', fossé LiDAR seulement' : ''}`);
+    if (!colourOK && !win) return { paved: polys, gravel, dense: false, shift: [Math.round(ox * mpp * 10) / 10, Math.round(-oy * mpp * 10) / 10] };
+    // Classe LiDAR de chaque pixel de demi-résolution (0 inconnu, 1 nu et lisse, 2 autre), par le repère local.
+    const cls = new Uint8Array(W2 * H2);
+    if (win && win.fr) {
+      const bm0 = bareMask(win);
+      for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) { const [u, v] = win.fr.toPx((x * 2 + 1 + ox - cxp) * mpp, (cyp - y * 2 - 1 - oy) * mpp); const i = Math.round(u), j = Math.round(v); if (i < 0 || j < 0 || i >= win.W || j >= win.H) continue; cls[y * W2 + x] = bm0[j * win.W + i]; }
+    }
+    const vTh2 = q(val, 0.40); // clarté moins exigée sur le sol nu (ombres)
+    const g2 = new Uint8Array(W2 * H2), g2old = dbg ? new Uint8Array(W2 * H2) : null;
+    if (colourOK) for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) {
+      const i = (2 * y) * W + 2 * x, c = cls[y * W2 + x], th = c === 1 ? vTh2 : vTh; let n = 0, n0 = 0;
+      for (const j of [i, i + 1, i + W, i + W + 1]) { if (sat[j] < sTh && val[j] > th) n++; if (g2old && sat[j] < sTh && val[j] > vTh) n0++; }
+      g2[y * W2 + x] = c !== 2 && n >= 2 ? 1 : 0; if (g2old) g2old[y * W2 + x] = n0 >= 2 ? 1 : 0;
+    }
     const bm = new Uint8Array(W2 * H2); bld.forEach(b => fillPoly(bm, W2, H2, b[0].map(p => { const [u, v] = toPx(p); return [u / 2, v / 2]; }), 1));
+    for (const w of water) { fillPoly(g2, W2, H2, w.o.map(p => { const [u, v] = toPx(p); return [u / 2, v / 2]; }), 0); if (g2old) fillPoly(g2old, W2, H2, w.o.map(p => { const [u, v] = toPx(p); return [u / 2, v / 2]; }), 0); }
+
     const bmd = dilate(bm, W2, H2, Math.round(1 / mp2));
     const rd = new Uint8Array(W2 * H2); roads.forEach(r => { const pts = r.p.map(p => { const [u, v] = toPx(p); return [u / 2, v / 2]; }); for (let i = 0; i + 1 < pts.length; i++) thickLine(rd, W2, H2, pts[i], pts[i + 1], Math.round((r.w / 2 + 1) / mp2), 1); });
     for (let i = 0; i < g2.length; i++) if (bmd[i] || rd[i]) g2[i] = 0;
     let gm = close(g2, W2, H2, Math.round(1.2 / mp2)); gm = open(gm, W2, H2, Math.round(1.0 / mp2));
+    if (dbg) Object.assign(dbg, { W, H, W2, H2, cxp, cyp, mpp, ox, oy, rgb, sat, val, cls, g2: g2.slice(), g2old, gm: gm.slice(), rd, bmd, sTh, vTh, vTh2 });
     const nearRoad = dilate(rd, W2, H2, Math.round(2.5 / mp2)), nearBld = dilate(bm, W2, H2, Math.round(3 / mp2));
-    const glab = new Int32Array(W2 * H2), minG = 12 / (mp2 * mp2), maxG = 1500 / (mp2 * mp2);
+    // Composantes de la tache (4-connexité), étiquetées 1..n
+    const glab = new Int32Array(W2 * H2), comps = [], minG = 12 / (mp2 * mp2), maxG = 1500 / (mp2 * mp2);
     for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) {
       const i = y * W2 + x; if (!gm[i] || glab[i]) continue;
-      const id = gravel.length + 1, stack = [i], comp = []; glab[i] = id; let tr = false, tb = false;
+      const id = comps.length + 1, stack = [i], comp = []; glab[i] = id; let tr = false, tb = false;
       while (stack.length) { const j = stack.pop(); comp.push(j); if (nearRoad[j]) tr = true; if (nearBld[j]) tb = true; const jx = j % W2, jy = (j - jx) / W2; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = jx + dx, ny = jy + dy; if (nx < 0 || ny < 0 || nx >= W2 || ny >= H2) continue; const q2 = ny * W2 + nx; if (gm[q2] && !glab[q2]) { glab[q2] = id; stack.push(q2); } } }
-      if (comp.length < minG || comp.length > maxG || !tr || !tb) continue;
-      for (const o of driveBands(comp, id, glab, nearRoad, nearBld, bmd, W2, H2, mp2, toM)) gravel.push({ o, h: [] }); // bandes droites (v633.179)
+      comps.push({ comp, tr, tb });
     }
-    log(`entrées en gravier: ${gravel.length} (seuils saturation < ${sTh}, clarté > ${vTh})`);
+    // Entrées par le fossé LiDAR (api/driveways.js): du point d'entrée sur le bord de la rue, bande droite jusqu'au
+    // point le plus proche du bâtiment le plus proche devant (dans 70 m, pas une remise de moins de 30 m² s'il y a
+    // mieux, segment qui ne traverse aucun autre bâtiment ni la rue); largeur d'après l'interruption du fossé (0,6 fois,
+    // 3 à 7 m). Le reste de la tache de couleur touchée au bout devient le rectangle du stationnement. À moins de 20 m
+    // d'une entrée du fossé, les entrées tirées de la couleur seule sont abandonnées (celles du fossé sont plus sûres);
+    // ailleurs (courbes, culs-de-sac, rues sans fossé) la couleur reste la seule source, comme avant.
+    const toH = (p) => { const [u, v] = toPx(p); return [u / 2, v / 2]; };
+    let ditchMask = null, nDitch = 0, nLost = 0;
+    if (win) {
+      const { entries, ditched } = ditchEntries(win, roads);
+      ditchMask = new Uint8Array(W2 * H2); // zone de 20 m autour de chaque entrée du fossé: la couleur seule n'y ajoute rien
+      for (const e of entries) { const [u, v] = toH([e.x, e.n]); const r = Math.round(20 / mp2); for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { if (dx * dx + dy * dy > r * r) continue; const i = Math.round(u) + dx, j = Math.round(v) + dy; if (i >= 0 && j >= 0 && i < W2 && j < H2) ditchMask[j * W2 + i] = 1; } }
+      if (dbg) dbg.entries = entries;
+      const area = (r) => Math.abs(r.reduce((t, p, i) => { const q = r[(i + 1) % r.length]; return t + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2;
+      const segD = (p, a, b) => { const dx = b[0] - a[0], dn = b[1] - a[1], l2 = dx * dx + dn * dn || 1e-9, t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dn) / l2)); return [Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dn), [a[0] + t * dx, a[1] + t * dn]]; };
+      const bk = new Int32Array(W2 * H2); bld.forEach((b, k) => fillPoly(bk, W2, H2, b[0].map(toH), k + 1)); // quel bâtiment (dilaté de 1 m ci-dessous)
+      { const t = bk.slice(); for (let y = 1; y < H2 - 1; y++) for (let x = 1; x < W2 - 1; x++) { const i = y * W2 + x; if (t[i]) continue; const r = 1 / mp2; for (let dy = -Math.ceil(r); dy <= Math.ceil(r) && !bk[i]; dy++) for (let dx = -Math.ceil(r); dx <= Math.ceil(r); dx++) { const q = t[(y + dy) * W2 + x + dx]; if (q) { bk[i] = q; break; } } } }
+      const taken = [];
+      for (const e of entries) {
+        let best = null;
+        bld.forEach((b, k) => {
+          const r = b[0]; let dm = Infinity, pm = null;
+          for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const [d, p] = segD([e.x, e.n], r[j], r[i]); if (d < dm) { dm = d; pm = p; } }
+          const fwd = ((pm[0] - e.x) * e.nx + (pm[1] - e.n) * e.nn) / (dm || 1);
+          if (dm > 70 || fwd < 0.5) return; // devant seulement, à moins de 60° de la perpendiculaire
+          // Soutien de la tache de couleur le long du segment (part des points tous les mètres sur la tache)
+          let hit = 0, tot = 0; for (let t = 2; t < dm; t += 1) { const [u, v] = toH([e.x + (pm[0] - e.x) * t / dm, e.n + (pm[1] - e.n) * t / dm]); const i = Math.round(u), j = Math.round(v); tot++; if (i >= 0 && j >= 0 && i < W2 && j < H2 && gm[j * W2 + i]) hit++; }
+          const A = area(r), cover = tot ? hit / tot : 0, score = (dm + (A < 30 ? 40 : 0)) * (1 + 20 / Math.max(5, A)) * (1.6 - fwd) * (1.5 - cover); // la maison plutôt que la remise
+          if (!best || score < best.score) best = { score, dm, pm, k };
+        });
+        if (!best) { nLost++; continue; }
+        // La bande ne traverse ni rue ni autre bâtiment; elle s'arrête au mur (bk = ce bâtiment, dilaté de 1 m)
+        const bkAt = (p) => { const [u, v] = toH(p); const i = Math.round(u), j = Math.round(v); return i >= 0 && j >= 0 && i < W2 && j < H2 ? bk[j * W2 + i] : 0; };
+        const crossesOther = (() => { const a = [e.x, e.n], b = best.pm, L = Math.hypot(b[0] - a[0], b[1] - a[1]); for (let t = 2; t < L - 2; t += 1) { const p = [a[0] + (b[0] - a[0]) * t / L, a[1] + (b[1] - a[1]) * t / L], [u, v] = toH(p), i = Math.round(u), j = Math.round(v); if (i < 0 || j < 0 || i >= W2 || j >= H2) return true; const q = j * W2 + i; if (rd[q]) return true; if (bmd[q] && bk[q] !== best.k + 1) return true; } return false; })();
+        if (crossesOther) { nLost++; continue; }
+        if (taken.some(t => t.k === best.k && Math.hypot(t.p[0] - best.pm[0], t.p[1] - best.pm[1]) < 8)) continue; // doublon (même mur, à moins de 8 m)
+        taken.push({ k: best.k, p: best.pm });
+        const pl = [toH([e.x, e.n]), toH(best.pm)], wPx = Math.max(3 / mp2, Math.min(7 / mp2, e.gap * 0.6 / mp2));
+        gravel.push({ o: bandPoly(pl, wPx, mp2, toM, 0, 1), h: [] }); nDitch++; ditch++;
+        // Stationnement: composante de couleur touchée par le dernier tiers de la bande (hors bâtiment)
+        let cid = 0; const [p0, p1] = pl;
+        for (let t = 0.66; t <= 1 && !cid; t += 0.05) { const x = Math.round(p0[0] + (p1[0] - p0[0]) * t), y = Math.round(p0[1] + (p1[1] - p0[1]) * t); for (let dy = -2; dy <= 2 && !cid; dy++) for (let dx = -2; dx <= 2 && !cid; dx++) { const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= W2 || ny >= H2) continue; cid = glab[ny * W2 + nx]; } }
+        if (cid) { const c = comps[cid - 1]; if (c && !c.used && c.comp.length <= maxG) { c.used = true; const fr = farRect(c.comp, pl, wPx, bmd, W2, H2, mp2); if (fr) gravel.push({ o: toM(fr), h: [] }); } }
+      }
+    }
+    // Entrées par la couleur seule: tache qui touche une rue et un bâtiment, loin des entrées du fossé
+    let nColor = 0;
+    for (let id = 1; id <= comps.length; id++) {
+      const { comp, tr, tb, used } = comps[id - 1];
+      if (used || comp.length < minG || comp.length > maxG || !tr || !tb) continue;
+      if (ditchMask && comp.some(j => nearRoad[j] && ditchMask[j])) continue;
+      for (const o of driveBands(comp, id, glab, nearRoad, nearBld, bmd, W2, H2, mp2, toM)) gravel.push({ o, h: [] }); // bandes droites (v633.179)
+      nColor++;
+    }
+    log(`entrées en gravier: ${gravel.length} (${nDitch} par le fossé LiDAR, ${nLost} sans bâtiment à 70 m, ${nColor} par la couleur; seuils saturation < ${sTh}, clarté > ${vTh}, ${vTh2} sur sol nu${win ? '' : '; sans relevé'})`);
   } catch (e) { log(`entrées en gravier: ${e && e.message}`); }
-  return { paved: polys, gravel, dense: false, shift: [Math.round(ox * mpp * 10) / 10, Math.round(-oy * mpp * 10) / 10] }; // [{ o: contour, h: [trous] }] en mètres locaux
+  return { paved: polys, gravel, ditch, dense: false, shift: [Math.round(ox * mpp * 10) / 10, Math.round(-oy * mpp * 10) / 10] }; // [{ o: contour, h: [trous] }] en mètres locaux; ditch: entrées par le fossé LiDAR
 }

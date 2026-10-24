@@ -1480,7 +1480,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       addFlat(data.asphalt.map(p => ({ o: p })), flatMats.asphalt, 0.05, 2);
       // Surfaces pavées vues sur l'imagerie satellite (stationnements, aires, cours): même gris que l'asphalte, un cran dessous.
       addFlat((data.paved || []).map(p => { const v = p.o ? p : { o: p, h: [] }; return { o: regularizeRing(v.o), h: (v.h || []).map(h => regularizeRing(h)) }; }), flatMats.asphalt, 0.045, 3);
-      // Entrées et cours en gravier vues sur l'imagerie satellite (v633.178): mêmes contours mis au net, un cran sous le pavé.
+      // Entrées et cours en gravier (v633.178 par l'imagerie satellite, v633.238 bandes droites lues dans le fossé LiDAR): mêmes contours mis au net, un cran sous le pavé.
       addFlat((data.gravel || []).map(v => ({ o: regularizeRing(v.o, 1.0, 15), h: (v.h || []).map(h => regularizeRing(h, 1.0, 15)) })), flatMats.gravel, 0.042, 3);
       addFlat(data.water.map(w => ({ o: w.o, h: w.h, hFn: terrain.waterSurface(w), nFn: terrain.upNormal })), waterMat, 0.05); // surface lisse calée sur les rives
       ribbons(data.roads.filter(r => r.k === 2), 0.1, flatMats.rail, 4); ribbons(data.roads.filter(r => r.k === 0), 0.08, flatMats.road, 5); ribbons(data.roads.filter(r => r.k === 1), 0.12, flatMats.walk, 6);
@@ -1965,7 +1965,9 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     const hLidar = !!(data && data.lidarBld > 0), fpLidar = !!(data && data.lidarFp > 0), hWhat = fpLidar ? (data.roofs > 0 ? 'formes, toits et hauteurs des bâtiments LiDAR' : 'formes et hauteurs des bâtiments LiDAR') : 'hauteurs des bâtiments LiDAR', hLine = hWhat[0].toUpperCase() + hWhat.slice(1) + ' (Ressources naturelles Canada)';
     const relief = terrain.flat ? (hLidar ? hLine : '') : terrain.src.lidar >= 0.5 ? `Relief LiDAR ${terrain.src.lidarRes || 2} m${hLidar ? ' et ' + hWhat : ''} (Ressources naturelles Canada)` : 'Relief du modèle d’élévation du Canada (20 m)' + (hLidar ? ' · ' + hLine : '');
     const nPav = data && data.paved ? data.paved.length : 0, nGrav = data && data.gravel ? data.gravel.length : 0;
-    const pavedLine = nPav || nGrav ? `${nPav && nGrav ? 'Surfaces pavées et entrées en gravier' : nGrav ? 'Entrées en gravier' : 'Surfaces pavées'} d’après l’imagerie satellite (${data.pavedSrc || 'Esri'}), approximatives` : '';
+    // Entrées en gravier: par le fossé LiDAR (v633.238) et/ou la couleur de l'imagerie satellite
+    const nDitch = data && data.gravelDitch ? data.gravelDitch : 0, gravSrc = nDitch ? (nGrav > nDitch ? 'le fossé LiDAR et l’imagerie satellite' : 'le fossé LiDAR') : 'l’imagerie satellite';
+    const pavedLine = nPav && nGrav ? `Surfaces pavées d’après l’imagerie satellite (${data.pavedSrc || 'Esri'}) et entrées en gravier d’après ${gravSrc}, approximatives` : nGrav ? `Entrées en gravier d’après ${gravSrc}${nDitch && nGrav === nDitch ? ' (Ressources naturelles Canada)' : ` (${data.pavedSrc || 'Esri'})`}, approximatives` : nPav ? `Surfaces pavées d’après l’imagerie satellite (${data.pavedSrc || 'Esri'}), approximatives` : '';
     const ts = data && data.treesSrc, treeLine = ts && ts.n ? `Arbres LiDAR, conifères estimés d’après ${ts.essences && ts.essences.length ? ts.essences.join(' et ') : 'la forme des cimes'}` : '';
     const satNote = sat && sat.shift ? (sat.shift[0] || sat.shift[1] ? ` (recalée de ${Math.abs(sat.shift[0])} m ${sat.shift[0] >= 0 ? 'est' : 'ouest'} et ${Math.abs(sat.shift[1])} m ${sat.shift[1] >= 0 ? 'nord' : 'sud'})` : ' (non recalée)') : '';
     const srcLine = [relief, treeLine, pavedLine, sat ? SAT_CREDIT + satNote : ''].filter(Boolean).join(' · ');
