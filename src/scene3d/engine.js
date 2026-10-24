@@ -1370,7 +1370,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   // forme: la géolocalisation du fichier si elle tombe à moins de 2 km du projet, sinon le point du projet. Toujours au sol.
   function defaultPlacement() {
     const drawn = origin ? localRings(projLocal, origin) : [];
-    let target = drawn.length ? drawn[0].p : null;
+    const solid = drawn.filter(d => d.kind !== 'ground'); let target = solid.length ? solid[0].p : null;
     if (!target && data) { const under = data.bld.filter(b => b[3] !== 2).find(([q]) => pointInRing([0, 0], q)); if (under) target = under[0]; }
     if (target) {
       const tc = areaCenter(target), ta = mainAxis(target), ma = mainAxis(model.hull);
@@ -1441,8 +1441,9 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     // Hauteur: valeur réglée dans la pastille FORME, sinon hauteur mesurée Overture du même édifice (30 m est le défaut du
     // dessin, jamais une vraie hauteur: Stéphane ne la connaît pas), sinon 9 m. Couleur des murs: choisie dans la pastille,
     // sinon brique. Fenêtres sobres: une rangée par étage de 3,6 m, une travée par 8 m.
-    const list = []; projInfo = [];
+    const list = [], groundRings = []; projInfo = [];
     drawn.forEach((d, i) => {
+      if (d.kind === 'ground') { d.hEff = 0; groundRings.push(d.p); return; } // stationnement dessiné (24 octobre 2026): surface grise au sol, aucun volume ni ombre
       if (underModel(d.p)) return;
       const hits = data ? data.bld.filter(([p, , , k]) => k !== 2 && ringsOverlap(d.p, p)) : [];
       const top = hits.length ? hits.reduce((a, b) => (b[1] > a[1] ? b : a)) : null; // le plus haut des bâtiments recouverts
@@ -1484,6 +1485,10 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       // Une bande droite ou un rectangle (6 points au plus) reste tel quel: le lissage à 15 m rognait les deux bouts (la bande
       // n'atteignait ni la rue ni la maison, retour de Stéphane du 24 octobre 2026).
       addFlat((data.gravel || []).map(v => ({ o: v.o.length <= 6 ? v.o : regularizeRing(v.o, 1.0, 15), h: (v.h || []).map(h => regularizeRing(h, 1.0, 15)) })), flatMats.gravel, 0.042, 3);
+    }
+    // Stationnements dessinés dans le projet (outil de la carte): même gris que le gravier, par-dessus tout le reste au sol.
+    if (groundRings.length) addFlat(groundRings.map(p => ({ o: p, h: [] })), flatMats.gravel, 0.05, 4);
+    if (data) {
       addFlat(data.water.map(w => ({ o: w.o, h: w.h, hFn: terrain.waterSurface(w), nFn: terrain.upNormal })), waterMat, 0.05); // surface lisse calée sur les rives
       ribbons(data.roads.filter(r => r.k === 2), 0.1, flatMats.rail, 4); ribbons(data.roads.filter(r => r.k === 0), 0.08, flatMats.road, 5); ribbons(data.roads.filter(r => r.k === 1), 0.12, flatMats.walk, 6);
       // Formes du projet et voisins, tels que blocks() les dessine, plus la maison importée (prisme de son enveloppe, de sa

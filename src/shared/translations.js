@@ -103,6 +103,7 @@ export const TRANSLATIONS = {
     cancelEditing: 'ANNULER ÉDITION',
     cancelEditingConfirm: 'ANNULER ÉDITION ?',
     shape: 'FORME',
+    parking: 'STAT.',
     projectDetailsTitle: 'DÉTAILS PROJET',
     projectsCount: 'PROJETS',
 
@@ -312,6 +313,7 @@ export const TRANSLATIONS = {
     cancelEditing: 'CANCEL EDITING',
     cancelEditingConfirm: 'CANCEL EDITING?',
     shape: 'SHAPE',
+    parking: 'PARKING',
     projectDetailsTitle: 'PROJECT DETAILS',
     projectsCount: 'PROJECTS',
 

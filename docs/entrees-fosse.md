@@ -49,3 +49,18 @@ Planche de contrôle: `planche_entrees_fosse_stoneham.png` (220 m autour de la m
 - Le tracé est droit: une entrée courbe ou en L n'est rendue que par sa corde.
 - Le calage de l'imagerie Esri bute parfois sur sa limite de 12 m (Valcartier): la couleur y est décalée, les
   entrées par le fossé ne le sont pas (elles ne lisent que le LiDAR).
+
+## v633.239 et v633.240 (24 octobre 2026)
+
+- **v633.239**, retour de Stéphane sur sa maison (« pas beaucoup mieux »): en 3D, le lissage à 15 m rognait les deux
+  bouts de la bande (ni la rue ni la maison atteintes, coins en biseau); les polygones de 6 points au plus ne sont
+  plus lissés. Largeur 0,45 fois l'interruption (3 à 6 m; mesuré 4 m pour 10 m d'interruption chez lui). La cible est
+  échantillonnée le long du contour du bâtiment (distance, angle, soutien de la couleur), plus seulement le point le
+  plus proche. En prod et TestFlight (build 633239).
+- **v633.240, outil de stationnement** (« ajoute un outil de dessin de stationnement qui change la couleur du terrain
+  en gris », « le plus simple »): dans le menu de la carte, à côté du crayon, un bouton (icône P de Lucide) dessine
+  une forme de sorte `ground` dans `project.buildings` (même stockage que les bâtiments, pas de migration). Sur la
+  carte: surface grise pleine, sans halo ni ombre, pastille « STAT. N » (gris, sans hauteur ni couleur de murs,
+  sommets déplaçables quand elle est sélectionnée). En 3D (`engine.js`): drapée au sol avec le gris du gravier, sans
+  volume, ignorée pour le cadrage et la pose du modèle; les arbres dedans sont retirés. Au plus 5 stationnements par
+  projet, en plus des 5 bâtiments. `localRings` renvoie `kind`.

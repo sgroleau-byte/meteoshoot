@@ -12,7 +12,7 @@ export function localRings(buildings, origin) {
   return (buildings || []).map((b, i) => {
     let r = (b.polygon || []).map(q => [(q.lng - origin[1]) * mLng, (q.lat - origin[0]) * mLat]);
     if (signedArea(r) < 0) r = r.reverse();
-    return { p: r, h: Math.max(2, b.height || 10), def: b.height === 30 || b.height == null, i };
+    return { p: r, h: Math.max(2, b.height || 10), def: b.height === 30 || b.height == null, i, kind: b.kind === 'ground' ? 'ground' : 'bld' }; // ground: stationnement dessiné (surface grise au sol, sans volume)
   }).filter(b => b.p.length >= 3);
 }
 

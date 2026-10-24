@@ -402,6 +402,13 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   // === Buildings & Shadow Simulation ===
   const [buildings, setBuildings] = useState(() => project?.buildings || []);
   const [drawingMode, setDrawingMode] = useState(false);
+  // Sorte de forme en cours de dessin: 'bld' (bâtiment, volume) ou 'ground' (stationnement: surface grise au sol, sans
+  // hauteur ni ombre, rendue en gravier dans la 3D). Demande de Stéphane, 24 octobre 2026.
+  const [drawingKind, setDrawingKind] = useState('bld');
+  const drawingKindRef = React.useRef('bld'); drawingKindRef.current = drawingKind;
+  const GROUND_COLOR = '#8e8b85';
+  const isGround = (b) => !!b && b.kind === 'ground';
+  const numOf = (i) => buildings.slice(0, i + 1).filter(x => isGround(x) === isGround(buildings[i])).length; // numéro parmi les formes de la même sorte
   const [drawingVertices, setDrawingVertices] = useState([]);
   const drawingVerticesRef = React.useRef([]);
   const [editingBuilding, setEditingBuilding] = useState(null); // index of building being edited
@@ -537,7 +544,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     drawingMarkersRef.current.forEach(m => m.setMap(null));
     drawingMarkersRef.current = [];
     if (drawingVertices.length >= 2) {
-      const nextColor = BUILDING_COLORS[buildings.length % BUILDING_COLORS.length];
+      const nextColor = drawingKind === 'ground' ? GROUND_COLOR : BUILDING_COLORS[buildings.length % BUILDING_COLORS.length];
       // Glow polygon (behind)
       const glow = new (gm().Polygon)({
         paths: drawingVertices,
@@ -559,7 +566,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     }
     drawingVertices.forEach((v, i) => {
       const isFirst = i === 0;
-      const nextColor = BUILDING_COLORS[buildings.length % BUILDING_COLORS.length];
+      const nextColor = drawingKind === 'ground' ? GROUND_COLOR : BUILDING_COLORS[buildings.length % BUILDING_COLORS.length];
       const canClose = isFirst && drawingVertices.length >= 3;
       // White circle border behind checkmark when closeable
       if (canClose) {
@@ -614,15 +621,16 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     } else {
       setDrawPanelPos(null);
     }
-  }, [drawingVertices, buildings.length, mapEpoch, overlayTick]);
+  }, [drawingVertices, buildings.length, mapEpoch, overlayTick, drawingKind]);
 
   const finishDrawingFromRef = () => {
     const verts = drawingVerticesRef.current;
     if (verts.length < 3) return;
-    if (buildings.length >= 5) { setDrawingMode(false); setDrawingVertices([]); drawingVerticesRef.current = []; return; }
-    const newBuilding = { polygon: [...verts], height: 30, name: '', wallColor: '#e8e4dc' }; // enduit blanc par défaut (demande du 6 octobre 2026)
+    const ground = drawingKindRef.current === 'ground';
+    if (buildings.filter(b => isGround(b) === ground).length >= 5) { setDrawingMode(false); setDrawingVertices([]); drawingVerticesRef.current = []; return; }
+    const newBuilding = ground ? { polygon: [...verts], kind: 'ground', name: '' } : { polygon: [...verts], height: 30, name: '', wallColor: '#e8e4dc' }; // enduit blanc par défaut (demande du 6 octobre 2026)
     setBuildings(prev => {
-      newBuilding.name = `Bâtiment ${prev.length + 1}`;
+      newBuilding.name = `${ground ? 'Stationnement' : 'Bâtiment'} ${prev.filter(b => isGround(b) === ground).length + 1}`;
       setEditingBuilding(prev.length);
       return [...prev, newBuilding];
     });
@@ -638,8 +646,9 @@ export const ProjectDetail = ({ projectId, onClose }) => {
 
   const finishDrawing = () => {
     if (drawingVertices.length < 3) return;
-    if (buildings.length >= 5) { setDrawingMode(false); setDrawingVertices([]); return; }
-    const newBuilding = { polygon: [...drawingVertices], height: 30, name: `Bâtiment ${buildings.length + 1}`, wallColor: '#e8e4dc' }; // enduit blanc par défaut
+    const ground = drawingKind === 'ground', same = buildings.filter(b => isGround(b) === ground).length;
+    if (same >= 5) { setDrawingMode(false); setDrawingVertices([]); return; }
+    const newBuilding = ground ? { polygon: [...drawingVertices], kind: 'ground', name: `Stationnement ${same + 1}` } : { polygon: [...drawingVertices], height: 30, name: `Bâtiment ${same + 1}`, wallColor: '#e8e4dc' }; // enduit blanc par défaut
     setBuildings(prev => [...prev, newBuilding]);
     setEditingBuilding(buildings.length);
     setBuildingHeight('30');
@@ -686,7 +695,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     // We render shadows on a canvas using composite-out so the building
     // footprints carve holes out of the shadow layer (inverted mask).
     const shadowsData = [];
-    const buildingsData = buildings.filter(b => b.polygon.length >= 3).map(b => b.polygon);
+    const buildingsData = buildings.filter(b => b.polygon.length >= 3 && !isGround(b)).map(b => b.polygon); // les stationnements n'ont ni ombre ni volume
 
     if (sunAlt > -0.05) {
       const altDeg = sunAlt * 180 / Math.PI;
@@ -694,7 +703,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       if (shadowOpacity > 0) {
         buildings.forEach((bldg) => {
           const n = bldg.polygon.length;
-          if (n < 3) return;
+          if (n < 3 || isGround(bldg)) return;
           const shadowLen = Math.min(bldg.height / Math.tan(Math.max(sunAlt, 0.01)), 2000);
           const sunBearingFromNorth = (sunAz * 180 / Math.PI + 180) % 360;
           const shadowBearing = (sunBearingFromNorth + 180) % 360;
@@ -801,22 +810,21 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       const n = bldg.polygon.length;
       if (n < 3) return;
 
-      // Draw building footprint: per-shape color
-      const shapeColor = BUILDING_COLORS[idx % BUILDING_COLORS.length];
+      // Draw building footprint: per-shape color; stationnement: surface grise pleine, sans halo
+      const ground = isGround(bldg), shapeColor = ground ? GROUND_COLOR : BUILDING_COLORS[idx % BUILDING_COLORS.length];
       // Glow behind
-      const glowPoly = new (gm().Polygon)({
+      if (!ground) buildingPolygonsRef.current.push(new (gm().Polygon)({
         paths: bldg.polygon,
         strokeColor: shapeColor, strokeOpacity: 0.4, strokeWeight: isSelected ? 10 : 6,
         fillColor: 'transparent', fillOpacity: 0, map, zIndex: 24,
-      });
-      buildingPolygonsRef.current.push(glowPoly);
+      }));
       
       const poly = new (gm().Polygon)({
         paths: bldg.polygon,
-        strokeColor: shapeColor,
-        strokeOpacity: isSelected ? 1 : 0.85, strokeWeight: isSelected ? 2.5 : 1.5,
+        strokeColor: ground ? '#ffffff' : shapeColor,
+        strokeOpacity: isSelected ? 1 : ground ? 0.7 : 0.85, strokeWeight: isSelected ? 2.5 : 1.5,
         fillColor: shapeColor,
-        fillOpacity: 0.12, map, zIndex: 25,
+        fillOpacity: ground ? 0.62 : 0.12, map, zIndex: 25,
         clickable: true
       });
       poly.addListener('click', () => {
@@ -2769,7 +2777,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                   <div style={{ position: 'absolute', top: `${Math.round(88 * 0.75) + 14}px`, left: '12px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     {buildings.map((b, i) => (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span className="font-bebas-book" style={{ fontSize: '12px', color: '#fff', letterSpacing: '0.1em', lineHeight: '1' }}>{t('shape')} {i + 1}</span>
+                        <span className="font-bebas-book" style={{ fontSize: '12px', color: '#fff', letterSpacing: '0.1em', lineHeight: '1' }}>{isGround(b) ? t('parking') : t('shape')} {numOf(i)}</span>
                         <button onClick={(e) => { e.stopPropagation(); deleteBuilding(i); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0', display: 'flex', alignItems: 'center' }}>
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                         </button>
@@ -2780,7 +2788,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                   /* Desktop: original pill labels top-right */
                   <div style={{ position: 'absolute', top: '145px', right: '-2px', zIndex: 13, display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
                     {buildings.map((b, i) => {
-                      const color = BUILDING_COLORS[i % BUILDING_COLORS.length];
+                      const color = isGround(b) ? GROUND_COLOR : BUILDING_COLORS[i % BUILDING_COLORS.length];
                       const displayH = draggingHeight && draggingHeight.idx === i ? draggingHeight.currentH : b.height;
                       const pillOffsetY = draggingHeight && draggingHeight.idx === i ? draggingHeight.offsetY : 0;
                       const isDragging = draggingHeight && draggingHeight.idx === i;
@@ -2797,14 +2805,14 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                         }}>
                           <div onClick={() => { setEditingBuilding(i); setBuildingHeight(String(b.height)); setBuildingName(b.name); }} style={{ display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer', padding: '2px 6px 2px 0' }}>
                             <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: color, flexShrink: 0 }}/>
-                            <span className="font-bebas-bold" style={{ letterSpacing: '0.06em', fontSize: '17px', color: '#fff', lineHeight: '1', padding: '3px 0 0 0' }}>{t('shape')} {i + 1}</span>
+                            <span className="font-bebas-bold" style={{ letterSpacing: '0.06em', fontSize: '17px', color: '#fff', lineHeight: '1', padding: '3px 0 0 0' }}>{isGround(b) ? t('parking') : t('shape')} {numOf(i)}</span>
                           </div>
                           {/* Couleur des murs (vue 3D): pastille cliquable, palette sobre en dessous */}
-                          {view3d && <div onClick={(e) => { e.stopPropagation(); setWallPickFor(wallPickFor === i ? null : i); }} title={(WALL_COLORS.find(c => c[0] === (b.wallColor || '#7a3f33')) || [])[1]} style={{ width: '14px', height: '14px', borderRadius: '50%', background: b.wallColor || '#7a3f33', border: '1px solid rgba(255,255,255,0.7)', marginRight: '8px', cursor: 'pointer', flexShrink: 0 }}/>}
-                          {view3d && wallPickFor === i && <div style={{ position: 'absolute', top: '100%', right: '0', marginTop: '6px', display: 'flex', gap: '6px', padding: '6px 8px', borderRadius: '14px', background: 'rgba(20,24,26,0.75)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', boxShadow: '0 2px 12px rgba(0,0,0,0.4)', zIndex: 30 }}>
+                          {view3d && !isGround(b) && <div onClick={(e) => { e.stopPropagation(); setWallPickFor(wallPickFor === i ? null : i); }} title={(WALL_COLORS.find(c => c[0] === (b.wallColor || '#7a3f33')) || [])[1]} style={{ width: '14px', height: '14px', borderRadius: '50%', background: b.wallColor || '#7a3f33', border: '1px solid rgba(255,255,255,0.7)', marginRight: '8px', cursor: 'pointer', flexShrink: 0 }}/>}
+                          {view3d && !isGround(b) && wallPickFor === i && <div style={{ position: 'absolute', top: '100%', right: '0', marginTop: '6px', display: 'flex', gap: '6px', padding: '6px 8px', borderRadius: '14px', background: 'rgba(20,24,26,0.75)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', boxShadow: '0 2px 12px rgba(0,0,0,0.4)', zIndex: 30 }}>
                             {WALL_COLORS.map(([hex, name]) => <div key={hex} title={name} onClick={(e) => { e.stopPropagation(); setWallColor(i, hex); }} style={{ width: '16px', height: '16px', borderRadius: '50%', background: hex, border: (b.wallColor || '#7a3f33') === hex ? '2px solid #fff' : '1px solid rgba(255,255,255,0.35)', cursor: 'pointer', boxSizing: 'border-box' }}/>)}
                           </div>}
-                          <div style={{ position: 'relative' }}>
+                          {!isGround(b) && <div style={{ position: 'relative' }}>
                             {(hoveredBuilding === i || isDragging) && (<>
                               <div style={{ position: 'absolute', left: '50%', transform: `translateX(-50%) translateY(${pillOffsetY}px)`, top: '-13px', pointerEvents: 'none', opacity: isDragging ? 0.8 : 0.5, transition: isDragging ? 'none' : 'opacity 0.2s' }}>
                                 <svg width="10" height="7" viewBox="0 0 10 7" fill="none"><path d="M2 7L5 1L8 7" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
@@ -2818,7 +2826,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                               onTouchStart={e => { e.stopPropagation(); const t = e.touches[0]; setDraggingHeight({ idx: i, startY: t.clientY, startH: b.height, currentH: b.height, offsetY: 0 }); }}>
                               <span className="font-bebas-bold" style={{ fontSize: '17px', color: '#000', letterSpacing: '0.04em', lineHeight: '1' }}>{displayH} M</span>
                             </div>
-                          </div>
+                          </div>}
                         </div>
                         <button onClick={(e) => { e.stopPropagation(); deleteBuilding(i); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', marginLeft: '4px', opacity: hoveredBuilding === i ? 1 : 0, transition: 'opacity 0.2s ease', pointerEvents: hoveredBuilding === i ? 'auto' : 'none' }}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,100,100,0.8)" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -2853,8 +2861,11 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                       <button onClick={() => { setMapType('hybrid'); setView3d(false); setMapMenuOpen(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '13px', padding: '4px 8px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'hybrid' && !view3d ? '0 0 10px rgba(255,255,255,0.7)' : 'none' }}>SAT</button>
                       {AppleSat.appleSatAvailable() && <button onClick={() => { setMapType('sat2'); setView3d(false); setMapMenuOpen(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '13px', padding: '4px 8px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'sat2' && !view3d ? '0 0 10px rgba(255,255,255,0.7)' : 'none' }}>SAT2</button>}
                       <button onClick={() => { setView3d(true); setMapMenuOpen(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '13px', padding: '4px 8px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: view3d ? '0 0 10px rgba(255,255,255,0.7)' : 'none' }}>3D</button>
-                      <button onClick={() => { setView3d(false); if (drawingMode) { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(false); } else { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(true); setEditingBuilding(null); } setMapMenuOpen(false); }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '5px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: drawingMode ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none' }}>
+                      <button onClick={() => { setView3d(false); if (drawingMode && drawingKind === 'bld') { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(false); } else { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(true); setDrawingKind('bld'); setEditingBuilding(null); } setMapMenuOpen(false); }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '5px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: drawingMode && drawingKind === 'bld' ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none' }}>
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                      </button>
+                      <button onClick={() => { setView3d(false); if (drawingMode && drawingKind === 'ground') { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(false); } else { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(true); setDrawingKind('ground'); setEditingBuilding(null); } setMapMenuOpen(false); }} title="Dessiner un stationnement (surface grise au sol)" className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '5px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: drawingMode && drawingKind === 'ground' ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none' }}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
                       </button>
                       <button onClick={() => { setShowSunLines(v => !v); setMapMenuOpen(false); }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '5px', color: showSunLines ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: showSunLines ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none' }}>
                         {showSunLines ? (
@@ -2885,8 +2896,11 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                     <button onClick={() => { setMapType('hybrid'); setView3d(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '17px', padding: '6px 12px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'hybrid' && !view3d ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none', transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>SAT</button>
                     {AppleSat.appleSatAvailable() && <button onClick={() => { setMapType('sat2'); setView3d(false); }} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '17px', padding: '6px 12px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: mapType === 'sat2' && !view3d ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none', transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>SAT2</button>}
                     <button onClick={() => setView3d(true)} className="font-bebas-bold pill-btn" style={{ letterSpacing: '0.04em', fontSize: '17px', padding: '6px 12px', lineHeight: '1.2', background: 'transparent', color: 'rgba(255,255,255,0.9)', border: 'none', cursor: 'pointer', textShadow: view3d ? '0 0 10px rgba(255,255,255,0.7), 0 0 20px rgba(255,255,255,0.3)' : 'none', transition: 'text-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>3D</button>
-                    <button onClick={() => { setView3d(false); if (drawingMode) { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(false); } else { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(true); setEditingBuilding(null); } }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '8px', marginTop: '2px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: drawingMode ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none', transition: 'filter 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
+                    <button onClick={() => { setView3d(false); if (drawingMode && drawingKind === 'bld') { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(false); } else { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(true); setDrawingKind('bld'); setEditingBuilding(null); } }} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '8px', marginTop: '2px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: drawingMode && drawingKind === 'bld' ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none', transition: 'filter 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                    </button>
+                    <button onClick={() => { setView3d(false); if (drawingMode && drawingKind === 'ground') { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(false); } else { drawingVerticesRef.current = []; setDrawingVertices([]); setDrawingMode(true); setDrawingKind('ground'); setEditingBuilding(null); } }} title="Dessiner un stationnement (surface grise au sol)" className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '8px', marginTop: '2px', color: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: drawingMode && drawingKind === 'ground' ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none', transition: 'filter 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
                     </button>
                     <button onClick={() => setShowSunLines(v => !v)} className="pill-btn" style={{ background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', padding: '8px', color: showSunLines ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: showSunLines ? 'drop-shadow(0 0 6px rgba(255,255,255,0.6))' : 'none', transition: 'filter 0.3s ease, color 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
                       {showSunLines ? (
@@ -2960,7 +2974,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                     display: 'flex', alignItems: 'center', gap: '10px'
                   }}>
                     <span className="font-bebas-bold" style={{ fontSize: '14px', color: '#7dd3c6', letterSpacing: '0.04em' }}>
-                      {drawingVertices.length === 0 ? 'CLIQUER POUR PLACER LE PREMIER POINT' : 
+                      {drawingVertices.length === 0 ? (drawingKind === 'ground' ? 'STATIONNEMENT : CLIQUER POUR PLACER LE PREMIER POINT' : 'CLIQUER POUR PLACER LE PREMIER POINT') : 
                        drawingVertices.length < 3 ? `${drawingVertices.length} POINT${drawingVertices.length > 1 ? 'S' : ''} | CONTINUEZ` :
                        `${drawingVertices.length} POINTS`}
                     </span>
