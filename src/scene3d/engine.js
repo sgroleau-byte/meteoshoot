@@ -1481,7 +1481,9 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       // Surfaces pavées vues sur l'imagerie satellite (stationnements, aires, cours): même gris que l'asphalte, un cran dessous.
       addFlat((data.paved || []).map(p => { const v = p.o ? p : { o: p, h: [] }; return { o: regularizeRing(v.o), h: (v.h || []).map(h => regularizeRing(h)) }; }), flatMats.asphalt, 0.045, 3);
       // Entrées et cours en gravier (v633.178 par l'imagerie satellite, v633.238 bandes droites lues dans le fossé LiDAR): mêmes contours mis au net, un cran sous le pavé.
-      addFlat((data.gravel || []).map(v => ({ o: regularizeRing(v.o, 1.0, 15), h: (v.h || []).map(h => regularizeRing(h, 1.0, 15)) })), flatMats.gravel, 0.042, 3);
+      // Une bande droite ou un rectangle (6 points au plus) reste tel quel: le lissage à 15 m rognait les deux bouts (la bande
+      // n'atteignait ni la rue ni la maison, retour de Stéphane du 24 octobre 2026).
+      addFlat((data.gravel || []).map(v => ({ o: v.o.length <= 6 ? v.o : regularizeRing(v.o, 1.0, 15), h: (v.h || []).map(h => regularizeRing(h, 1.0, 15)) })), flatMats.gravel, 0.042, 3);
       addFlat(data.water.map(w => ({ o: w.o, h: w.h, hFn: terrain.waterSurface(w), nFn: terrain.upNormal })), waterMat, 0.05); // surface lisse calée sur les rives
       ribbons(data.roads.filter(r => r.k === 2), 0.1, flatMats.rail, 4); ribbons(data.roads.filter(r => r.k === 0), 0.08, flatMats.road, 5); ribbons(data.roads.filter(r => r.k === 1), 0.12, flatMats.walk, 6);
       // Formes du projet et voisins, tels que blocks() les dessine, plus la maison importée (prisme de son enveloppe, de sa

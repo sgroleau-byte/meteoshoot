@@ -317,25 +317,36 @@ export async function pavedFromImagery(lat, lng, bld, roads, log = () => {}, opt
       { const t = bk.slice(); for (let y = 1; y < H2 - 1; y++) for (let x = 1; x < W2 - 1; x++) { const i = y * W2 + x; if (t[i]) continue; const r = 1 / mp2; for (let dy = -Math.ceil(r); dy <= Math.ceil(r) && !bk[i]; dy++) for (let dx = -Math.ceil(r); dx <= Math.ceil(r); dx++) { const q = t[(y + dy) * W2 + x + dx]; if (q) { bk[i] = q; break; } } } }
       const taken = [];
       for (const e of entries) {
+        // Cible: un point du contour du bâtiment, échantillonné tous les mètres (pas seulement le plus proche: l'entrée
+        // mène à la porte du garage, pas au coin), jugé par la distance, l'angle à la perpendiculaire et le soutien de
+        // la tache de couleur le long du segment.
         let best = null;
         bld.forEach((b, k) => {
-          const r = b[0]; let dm = Infinity, pm = null;
-          for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const [d, p] = segD([e.x, e.n], r[j], r[i]); if (d < dm) { dm = d; pm = p; } }
-          const fwd = ((pm[0] - e.x) * e.nx + (pm[1] - e.n) * e.nn) / (dm || 1);
-          if (dm > 70 || fwd < 0.5) return; // devant seulement, à moins de 60° de la perpendiculaire
-          // Soutien de la tache de couleur le long du segment (part des points tous les mètres sur la tache)
-          let hit = 0, tot = 0; for (let t = 2; t < dm; t += 1) { const [u, v] = toH([e.x + (pm[0] - e.x) * t / dm, e.n + (pm[1] - e.n) * t / dm]); const i = Math.round(u), j = Math.round(v); tot++; if (i >= 0 && j >= 0 && i < W2 && j < H2 && gm[j * W2 + i]) hit++; }
-          const A = area(r), cover = tot ? hit / tot : 0, score = (dm + (A < 30 ? 40 : 0)) * (1 + 20 / Math.max(5, A)) * (1.6 - fwd) * (1.5 - cover); // la maison plutôt que la remise
-          if (!best || score < best.score) best = { score, dm, pm, k };
+          const r = b[0]; let dmin = Infinity;
+          for (let i = 0, j = r.length - 1; i < r.length; j = i++) dmin = Math.min(dmin, segD([e.x, e.n], r[j], r[i])[0]);
+          if (dmin > 70) return;
+          const A = area(r), kA = (A < 30 ? 1.8 : 1) * (1 + 20 / Math.max(5, A)); // la maison plutôt que la remise
+          for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+            const a = r[j], c = r[i], L = Math.hypot(c[0] - a[0], c[1] - a[1]), nS = Math.max(1, Math.round(L));
+            for (let si = 0; si <= nS; si++) {
+              const pm = [a[0] + (c[0] - a[0]) * si / nS, a[1] + (c[1] - a[1]) * si / nS], dm = Math.hypot(pm[0] - e.x, pm[1] - e.n);
+              if (dm > 70 || dm < 3) continue;
+              const fwd = ((pm[0] - e.x) * e.nx + (pm[1] - e.n) * e.nn) / dm;
+              if (fwd < 0.5) continue; // devant seulement, à moins de 60° de la perpendiculaire
+              let hit = 0, tot = 0; for (let t = 2; t < dm; t += 1) { const [u, v] = toH([e.x + (pm[0] - e.x) * t / dm, e.n + (pm[1] - e.n) * t / dm]); const ui = Math.round(u), vj = Math.round(v); tot++; if (ui >= 0 && vj >= 0 && ui < W2 && vj < H2 && gm[vj * W2 + ui]) hit++; }
+              const cover = tot ? hit / tot : 0, score = dm * kA * (1.6 - fwd) * (1.5 - cover);
+              if (!best || score < best.score) best = { score, dm, pm, k };
+            }
+          }
         });
-        if (!best) { nLost++; continue; }
+        if (!best) { nLost++; if (dbg) (dbg.lost = dbg.lost || []).push({ e: [e.x, e.n], gap: e.gap, why: 'aucun bâtiment devant' }); continue; }
         // La bande ne traverse ni rue ni autre bâtiment; elle s'arrête au mur (bk = ce bâtiment, dilaté de 1 m)
         const bkAt = (p) => { const [u, v] = toH(p); const i = Math.round(u), j = Math.round(v); return i >= 0 && j >= 0 && i < W2 && j < H2 ? bk[j * W2 + i] : 0; };
         const crossesOther = (() => { const a = [e.x, e.n], b = best.pm, L = Math.hypot(b[0] - a[0], b[1] - a[1]); for (let t = 2; t < L - 2; t += 1) { const p = [a[0] + (b[0] - a[0]) * t / L, a[1] + (b[1] - a[1]) * t / L], [u, v] = toH(p), i = Math.round(u), j = Math.round(v); if (i < 0 || j < 0 || i >= W2 || j >= H2) return true; const q = j * W2 + i; if (rd[q]) return true; if (bmd[q] && bk[q] !== best.k + 1) return true; } return false; })();
-        if (crossesOther) { nLost++; continue; }
+        if (crossesOther) { nLost++; if (dbg) (dbg.lost = dbg.lost || []).push({ e: [e.x, e.n], gap: e.gap, k: best.k, why: 'traverse une rue ou un bâtiment' }); continue; }
         if (taken.some(t => t.k === best.k && Math.hypot(t.p[0] - best.pm[0], t.p[1] - best.pm[1]) < 8)) continue; // doublon (même mur, à moins de 8 m)
-        taken.push({ k: best.k, p: best.pm });
-        const pl = [toH([e.x, e.n]), toH(best.pm)], wPx = Math.max(3 / mp2, Math.min(7 / mp2, e.gap * 0.6 / mp2));
+        taken.push({ k: best.k, p: best.pm }); if (dbg) (dbg.bands = dbg.bands || []).push({ e: [e.x, e.n], gap: e.gap, k: best.k, dm: best.dm, pm: best.pm, area: area(bld[best.k][0]) });
+        const pl = [toH([e.x, e.n]), toH(best.pm)], wPx = Math.max(3 / mp2, Math.min(6 / mp2, e.gap * 0.45 / mp2)); // l'apron au bord est bien plus large que l'entrée (mesuré: 4 m pour 10 m d'interruption)
         gravel.push({ o: bandPoly(pl, wPx, mp2, toM, 0, 1), h: [] }); nDitch++; ditch++;
         // Stationnement: composante de couleur touchée par le dernier tiers de la bande (hors bâtiment)
         let cid = 0; const [p0, p1] = pl;
