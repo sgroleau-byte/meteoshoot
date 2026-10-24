@@ -64,3 +64,11 @@ Planche de contrôle: `planche_entrees_fosse_stoneham.png` (220 m autour de la m
   sommets déplaçables quand elle est sélectionnée). En 3D (`engine.js`): drapée au sol avec le gris du gravier, sans
   volume, ignorée pour le cadrage et la pose du modèle; les arbres dedans sont retirés. Au plus 5 stationnements par
   projet, en plus des 5 bâtiments. `localRings` renvoie `kind`.
+- **v633.241, formes dessinées recalées sur le LiDAR** (« pourquoi un si gros décalage? »): l'image satellite Google
+  de la carte SAT est mal calée de quelques mètres en terrain accidenté (environ 7 m vers le nord-ouest chez Stéphane,
+  vérifié en superposant empreintes LiDAR et axes OpenStreetMap sur les tuiles Google), alors que la 3D est en vraies
+  coordonnées. `drawnShift` (`engine.js`): chaque forme de bâtiment dessinée est comparée à l'empreinte LiDAR la plus
+  proche (centre à moins de 15 m, aire du simple au double); la moyenne des écarts de centre est retranchée à toutes
+  les formes dessinées (bâtiments et stationnements), dans `rebuild` et dans le placement par défaut du modèle. Sans
+  forme de bâtiment ou sans empreinte LiDAR correspondante, rien ne bouge. Trace console « formes dessinées recalées
+  sur le LiDAR: X m est, Y m nord ». La maison importée n'est pas touchée (placée à la main sur l'image Apple recalée).

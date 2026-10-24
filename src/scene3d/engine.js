@@ -1370,6 +1370,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   // forme: la géolocalisation du fichier si elle tombe à moins de 2 km du projet, sinon le point du projet. Toujours au sol.
   function defaultPlacement() {
     const drawn = origin ? localRings(projLocal, origin) : [];
+    const gsh = drawnShift(drawn); if (gsh[0] || gsh[1]) drawn.forEach(d => { d.p = d.p.map(([x, n]) => [x + gsh[0], n + gsh[1]]); }); // même recalage que dans rebuild
     const solid = drawn.filter(d => d.kind !== 'ground'); let target = solid.length ? solid[0].p : null;
     if (!target && data) { const under = data.bld.filter(b => b[3] !== 2).find(([q]) => pointInRing([0, 0], q)); if (under) target = under[0]; }
     if (target) {
@@ -1428,6 +1429,27 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   function modelChanged() { clearTimeout(modelTimer); modelTimer = setTimeout(() => { if (running) rebuild(true, true); }, 350); }
 
   // modelOnly: seul le modèle a changé (place, rotation, hauteur, ajout, retrait): relief et eau gardés tels quels.
+  // Décalage moyen entre les formes de bâtiment dessinées et leurs empreintes LiDAR (voir rebuild), en mètres (est, nord).
+  function drawnShift(drawn) {
+    if (!data || !data.bld) return [0, 0];
+    const deltas = [];
+    for (const d of drawn) {
+      if (d.kind === 'ground') continue;
+      const c = centroid(d.p), A = Math.abs(signedArea(d.p)); if (!(A > 4)) continue;
+      let best = null;
+      for (const b of data.bld) {
+        if (b[5] !== 1 || b[3] === 2) continue; // empreintes LiDAR seulement (celles d'Overture sont elles-mêmes décalées)
+        const bc = centroid(b[0]), dist = Math.hypot(bc[0] - c[0], bc[1] - c[1]); if (dist > 15) continue;
+        const r = Math.abs(signedArea(b[0])) / A; if (r < 0.5 || r > 2) continue;
+        if (!best || dist < best.dist) best = { dist, dx: bc[0] - c[0], dn: bc[1] - c[1] };
+      }
+      if (best) deltas.push(best);
+    }
+    if (!deltas.length) return [0, 0];
+    const sh = [deltas.reduce((t, d) => t + d.dx, 0) / deltas.length, deltas.reduce((t, d) => t + d.dn, 0) / deltas.length];
+    console.log(`[scene3d] formes dessinées recalées sur le LiDAR: ${sh[0].toFixed(1)} m est, ${sh[1].toFixed(1)} m nord (${deltas.length} forme${deltas.length > 1 ? 's' : ''})`);
+    return sh;
+  }
   function rebuild(keepView, modelOnly) {
     clearStatics();
     if (!modelOnly) { terrain.carveWater(data ? data.water : []); buildGround(); } // le relief est creusé sous les plans d'eau connus
@@ -1438,6 +1460,14 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     const treeFree = ([x, n]) => !mRing || (!pointInRing([x, n], mRing) && !mRing.some((q, i) => segDist([x, n], q, mRing[(i + 1) % mRing.length]) < 2));
     // Formes dessinées (Forme 1, Forme 2... dans l'ordre du projet), en mètres autour de l'origine.
     const drawn = localRings(projLocal, origin);
+    // Décalage de l'image Google (24 octobre 2026, Stéphane: « pourquoi un si gros décalage? »): les formes dessinées sur la
+    // carte SAT suivent l'image satellite Google, mal calée de quelques mètres en terrain accidenté (7 m vers le nord-ouest à
+    // Stoneham), alors que la 3D est en vraies coordonnées (LiDAR, image Apple recalée). Chaque forme de bâtiment dessinée
+    // est comparée à l'empreinte LiDAR la plus proche (centre à moins de 15 m, aire du simple au double): la moyenne des
+    // écarts de centre est le décalage local de l'image, retranché à toutes les formes dessinées (bâtiments et
+    // stationnements). Sans forme de bâtiment ou sans empreinte LiDAR qui lui réponde: rien ne bouge.
+    const gsh = drawnShift(drawn);
+    if (gsh[0] || gsh[1]) drawn.forEach(d => { d.p = d.p.map(([x, n]) => [x + gsh[0], n + gsh[1]]); });
     // Hauteur: valeur réglée dans la pastille FORME, sinon hauteur mesurée Overture du même édifice (30 m est le défaut du
     // dessin, jamais une vraie hauteur: Stéphane ne la connaît pas), sinon 9 m. Couleur des murs: choisie dans la pastille,
     // sinon brique. Fenêtres sobres: une rangée par étage de 3,6 m, une travée par 8 m.
