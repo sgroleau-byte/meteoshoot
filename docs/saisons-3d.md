@@ -74,3 +74,15 @@ du 23 octobre 2026: Stoneham, Québec, Montréal, Toronto et Burlington les 25 s
   jours avant la dormance satellite. Limite connue: à Tremblant, quelques arbres gardent des feuilles le 23 octobre
   alors que la webcam montre tout nu; le calendrier satellite y est quelques jours en retard.
 - Mélèzes: mêmes règles que les feuillus sur le masque des conifères (aiguilles qui tombent), sans lacis.
+
+### Retouche (v633.236, même jour)
+
+Retour de Stéphane: « on dirait plus une forêt brûlée qu'une saison d'automne avancée [...] ça vire jamais brun à
+100 % ». Corrigé:
+- les feuilles qui restent gardent leur couleur (à peine ternies vers le cuivre, `DULL`), le brun n'arrive qu'avec les
+  branches; chênes et hêtres gardent plus de la moitié de leurs feuilles cuivrées, et un arbre sur cinq garde un tiers
+  de ses feuilles colorées trois semaines après la chute, puis tout s'efface sur trois semaines (`keep`);
+- tapis de feuilles au pied des arbres à moins de 250 m (`litterMat`, disque troué par le masque des feuilles, couleur
+  du pic assombrie), qui s'étale avec la chute et disparaît sur un mois;
+- lacis gris brun chaud plus clair que les troncs, un sixième de la surface au lieu d'un cinquième; grosses branches
+  plus courtes; la palette du pic perd ses deux verts (la montée part déjà du vert d'été).

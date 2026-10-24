@@ -385,7 +385,7 @@ function limbs() {
   const geos = [];
   for (let i = 0; i < 5; i++) {
     const g = new THREE.CylinderGeometry(0.02, 0.065, 1, 5, 1, true); g.translate(0, 0.5, 0);
-    const tilt = (38 + 22 * hsh(i, 1, 31)) * Math.PI / 180, az = i * 1.2566 + (hsh(i, 2, 32) - 0.5) * 0.6, len = 0.85 + 0.3 * hsh(i, 3, 33);
+    const tilt = (42 + 24 * hsh(i, 1, 31)) * Math.PI / 180, az = i * 1.2566 + (hsh(i, 2, 32) - 0.5) * 0.6, len = 0.55 + 0.25 * hsh(i, 3, 33); // courtes: elles restent dans le lacis
     g.scale(1, len, 1); g.rotateX(tilt); g.rotateY(az); g.translate(0, -0.1, 0);
     geos.push(g);
   }
@@ -429,7 +429,7 @@ function twigTex() {
   const grid = (gx, gy, gs, k) => { const i0 = Math.floor(gx), j0 = Math.floor(gy), fx = gx - i0, fy = gy - j0, sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy); const v = (i, j) => hsh(((i % gs) + gs) % gs, ((j % gs) + gs) % gs, k); return (v(i0, j0) * (1 - sx) + v(i0 + 1, j0) * sx) * (1 - sy) + (v(i0, j0 + 1) * (1 - sx) + v(i0 + 1, j0 + 1) * sx) * sy; };
   const f = new Float32Array(N * N);
   for (let i = 0; i < N * N; i++) { const px = i & 255, py = i >> 8; const g1 = grid(px / 13, py / 13, 20, 21), g2 = grid(px / 4.5, py / 4.5, 57, 22), g3 = grid(px / 2.2, py / 2.2, 117, 23); f[i] = Math.max(Math.pow(1 - Math.abs(2 * g1 - 1), 4) * 1.2, Math.pow(1 - Math.abs(2 * g2 - 1), 6), Math.pow(1 - Math.abs(2 * g3 - 1), 9) * 0.8); }
-  const order = Array.from(f.keys()).sort((a, b) => f[a] - f[b]), n0 = Math.floor(N * N * 0.79); // un cinquième de la surface en branches
+  const order = Array.from(f.keys()).sort((a, b) => f[a] - f[b]), n0 = Math.floor(N * N * 0.84); // un sixième de la surface en branches
   const rank = new Uint8Array(N * N); for (let k = n0; k < order.length; k++) rank[order[k]] = Math.max(1, Math.round(255 * (k - n0 + 1) / (order.length - n0)));
   for (let i = 0; i < N * N; i++) { const v = rank[i] ? 255 : 0; d[i * 4] = rank[i]; d[i * 4 + 1] = v; d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }
   x.putImageData(im, 0, 0); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
@@ -528,6 +528,10 @@ export function createScene3D(container, opts = {}) {
   // la couronne deviendrait invisible: le seuil baisse avec la distance (de 0,5 à 60 m à 0,08 à 220 m), et la cime
   // lointaine redevient une masse gris brun, comme un versant de novembre vu de loin.
   const twigMask = twigTex(), twigMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, envMapIntensity: 0.6, alphaMap: twigMask, alphaTest: 0.001, side: THREE.DoubleSide });
+  // Tapis de feuilles au pied des feuillus (23 octobre 2026): disque plat sur le sol, troué par le masque des feuilles
+  // (part = litter de season.js), couleur du pic assombrie; sans ombre portée, pas d'écriture de profondeur.
+  const litterMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, envMapIntensity: 0.5, alphaMap: leafMask, alphaTest: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 });
+  const litterGeo = (() => { const g = new THREE.CircleGeometry(1, 18); g.rotateX(-Math.PI / 2); const u = g.attributes.uv; for (let i = 0; i < u.count; i++) u.setXY(i, u.getX(i) * 2.6, u.getY(i) * 2.6); return g; })();
   // Ombres des feuillus (doublure proche, couronnes moyennes et lointaines, branches): mêmes trous et même part de feuilles.
   const crownDepthMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, alphaMap: leafMask, alphaTest: 0.5, side: THREE.DoubleSide });
   const conDepthMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, alphaMap: conMask, alphaTest: 0.5, side: THREE.DoubleSide });
@@ -541,7 +545,7 @@ export function createScene3D(container, opts = {}) {
       if (prev) prev.call(mat, sh, r);
       sh.vertexShader = 'attribute float aCover;varying float vCover;' + (depth ? 'varying vec3 vCvW;' : '') + '\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\nvCover=aCover;' + (depth ? 'vec4 cvp=vec4(transformed,1.0);\n#ifdef USE_INSTANCING\ncvp=instanceMatrix*cvp;\n#endif\nvCvW=(modelMatrix*cvp).xyz;' : ''));
       const rule = twig
-        ? (depth ? 'if(texture2D(alphaMap,vAlphaMapUv).r<vCover*1.004)discard;' : 'float fcv=abs(dot(normalize(vNormal),normalize(vViewPosition)));if(texture2D(alphaMap,vAlphaMapUv).r<(1.0-(1.0-vCover)*mix(0.3,1.0,fcv))*1.004)discard;if(diffuseColor.a<mix(0.5,0.08,smoothstep(60.0,220.0,distance(vLampW,cameraPosition))))discard;') // branches plus denses au coeur de la cime (face à l'objectif) qu'en silhouette
+        ? (depth ? 'if(texture2D(alphaMap,vAlphaMapUv).r<vCover*1.004)discard;' : 'float fcv=abs(dot(normalize(vNormal),normalize(vViewPosition)));if(texture2D(alphaMap,vAlphaMapUv).r<(1.0-(1.0-vCover)*mix(0.25,1.0,fcv))*1.004)discard;if(diffuseColor.a<mix(0.5,0.08,smoothstep(60.0,220.0,distance(vLampW,cameraPosition))))discard;') // branches plus denses au coeur de la cime (face à l'objectif) qu'en silhouette
         : 'if(texture2D(alphaMap,vAlphaMapUv).r<(1.0-vCover)*1.004)discard;';
       sh.fragmentShader = 'varying float vCover;' + (depth ? 'varying vec3 vCvW;' : '') + '\n' + sh.fragmentShader.replace('#include <alphatest_fragment>', '#include <alphatest_fragment>\n{' + rule + '}');
     };
@@ -679,12 +683,13 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   const seasonColor = (st, k, c) => { const v = st.color(k, c); return seasonCol.setRGB(v[0], v[1], v[2], THREE.SRGBColorSpace); };
   const seasonNow = () => seasonState(lat, lng, terrain.hTri(0, 0), dateMs);
   const seasonBare = (st, c) => { const v = st.bare(c); return seasonCol.setRGB(v[0], v[1], v[2], THREE.SRGBColorSpace); };
+  const seasonLitter = (st, k, c) => { const v = st.litterColor(k, c); return seasonCol.setRGB(v[0], v[1], v[2], THREE.SRGBColorSpace); };
   // Part de feuilles de chaque instance d'un lot (attribut aCover); un lot de branches ne se dessine que s'il a un arbre
   // qui perd ses feuilles (count 0 l'été: aucun coût).
   const seasonCover = (m, st) => {
     const s = m.userData.season, a = m.geometry.getAttribute('aCover'); let any = false;
-    for (let i = 0; i < s.ess.length; i++) { const v = st.cover(s.ess[i], s.c[i]); a.array[i] = v; if (v < 0.999) any = true; }
-    a.needsUpdate = true; if (s.twig) m.count = any ? s.ess.length : 0;
+    for (let i = 0; i < s.ess.length; i++) { const v = s.litter ? st.litter(s.ess[i], s.c[i]) : st.cover(s.ess[i], s.c[i]); a.array[i] = v; if (s.litter ? v > 0.001 : v < 0.999) any = true; }
+    a.needsUpdate = true; if (s.twig || s.litter) m.count = any ? s.ess.length : 0;
   };
   const CITY_LIN = [0.085, 0.08, 0.075];
   // Feuillage et troncs tout près de l'objectif (8 octobre 2026, « les arbres foncent dans la caméra »): effacés en douceur
@@ -702,6 +707,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   };
   nearFade(crownMat, 'couronne', NEAR_LEAF, true); nearFade(conMat, 'conifere', NEAR_LEAF, true); nearFade(edgeMat, 'lisiere', NEAR_LEAF, true); nearFade(trunkMat, 'tronc', NEAR_TRUNK, false);
   lampLit(twigMat, 'feuillage'); nearFade(twigMat, 'branches', NEAR_LEAF, true);
+  lampLit(litterMat, 'feuillage'); coverShader(litterMat, 'lamp-tapis-saison', false, false);
   coverShader(crownMat, 'lamp-couronne-proche-saison', false, false); coverShader(conMat, 'lamp-conifere-proche-saison', false, false); coverShader(twigMat, 'lamp-branches-proche-saison', true, false);
   coverShader(crownDepthMat, 'couronne-profondeur-saison', false, true); coverShader(conDepthMat, 'conifere-profondeur-saison', false, true); coverShader(twigDepthMat, 'branches-profondeur-saison', true, true);
   if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.nearU = nearU; // vérification en développement
@@ -809,7 +815,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     if (day === seasonDay || !treesI) return;
     seasonDay = day;
     const st = seasonNow(); FOREST_LIN = forestTint(st);
-    treesI.forEach(m => { const s = m.userData.season; if (!s) return; if (!s.shadow && !s.twig) { for (let i = 0; i < s.ess.length; i++) m.setColorAt(i, seasonColor(st, s.ess[i], s.c[i])); m.instanceColor.needsUpdate = true; } seasonCover(m, st); });
+    treesI.forEach(m => { const s = m.userData.season; if (!s) return; if (!s.shadow && !s.twig) { for (let i = 0; i < s.ess.length; i++) m.setColorAt(i, s.litter ? seasonLitter(st, s.ess[i], s.c[i]) : seasonColor(st, s.ess[i], s.c[i])); m.instanceColor.needsUpdate = true; } seasonCover(m, st); });
     dirty = true;
   }
   let projInfo = []; // côtés des formes du projet avec hauteur et source (légende)
@@ -1154,8 +1160,9 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       const leaf = mat !== trunkMat; // couronnes, conifères, doublure d'ombre, branches: part de feuilles par instance
       if (leaf) { geo = geo.clone(); geo.setAttribute('aCover', new THREE.InstancedBufferAttribute(new Float32Array(lot.length), 1)); }
       const m = new THREE.InstancedMesh(geo, mat, lot.length);
-      lot.forEach((t, i) => { place(t); o3.updateMatrix(); m.setMatrixAt(i, o3.matrix); if (mat !== shadowMat && mat !== trunkMat) m.setColorAt(i, twig ? seasonBare(st, t.c) : seasonColor(st, t.ess, t.c)); });
-      if (leaf) { m.userData.season = { ess: Uint8Array.from(lot, t => t.ess), c: Float32Array.from(lot, t => t.c), twig, shadow: mat === shadowMat }; seasonCover(m, st); } // pour recolorTrees
+      const litter = mat === litterMat;
+      lot.forEach((t, i) => { place(t); o3.updateMatrix(); m.setMatrixAt(i, o3.matrix); if (mat !== shadowMat && mat !== trunkMat) m.setColorAt(i, twig ? seasonBare(st, t.c) : litter ? seasonLitter(st, t.ess, t.c) : seasonColor(st, t.ess, t.c)); });
+      if (leaf) { m.userData.season = { ess: Uint8Array.from(lot, t => t.ess), c: Float32Array.from(lot, t => t.c), twig, litter, shadow: mat === shadowMat }; seasonCover(m, st); } // pour recolorTrees
       if (leaf && (cast || mat === shadowMat)) m.customDepthMaterial = twig ? twigDepthMat : mat === conMat ? conDepthMat : crownDepthMat;
       m.castShadow = cast; m.receiveShadow = mat !== shadowMat; m.userData.sharedGeo = !leaf;
       // Pousse: matrices finales, pied de l'arbre (le point fixe du grossissement) et départ (vague du sujet vers l'extérieur, troncs un peu avant).
@@ -1163,10 +1170,11 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       // Doublure d'ombre: dessinée dans la carte d'ombre seulement (aucune instance dans la passe principale, où elle
       // n'écrivait rien de toute façon).
       if (mat === shadowMat) { const n = lot.length; m.computeBoundingSphere(); m.onBeforeRender = () => { m.count = 0; }; m.onAfterRender = () => { m.count = n; }; }
-      S.add(m); statics.push(m); treesI.push(m);
+      S.add(m); statics.push(m); treesI.push(m); return m;
     };
     const placeCrown = t => { const s = t.s; o3.position.set(s.cx, t.y + t.h - s.top * s.sy, -s.cn); o3.scale.set(s.sx, s.sy, s.sx); o3.rotation.set(0, t.rot, 0); }; // 6 lobes, 3 lobes ou boule
     const placeCon = t => { const s = t.s; o3.position.set(s.cx, t.y + s.base, -s.cn); o3.scale.set(s.rb, t.h - s.base, s.rb); o3.rotation.set(0, t.rot, 0); };
+    const placeLitter = t => { const s = t.s, r = 1.15 * (s.sx || s.rb || 2); o3.position.set(t.x, t.y + 0.05, -t.n); o3.scale.set(r, 1, r); o3.rotation.set(0, t.rot * 0.7, 0); };
     const placeTrunk = t => { const s = t.s; o3.position.set(t.x, t.y + s.th / 2, -t.n); o3.scale.set(s.k, s.th, s.k); o3.rotation.set(0, 0, 0); };
     rings.forEach((lot, k) => {
       const broad = lot.filter(t => !t.con), con = lot.filter(t => t.con);
@@ -1175,6 +1183,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       else inst(k === 1 ? crownGeoMid : crownGeoFar, crownMat, broad, placeCrown, true);
       inst(k === 0 ? crownGeo : k === 1 ? crownGeoMid : crownGeoFar, twigMat, broad, placeCrown, true, true); // branches, visibles quand les feuilles tombent
       if (k < 2) inst(limbsGeo, trunkMat, broad, placeCrown, true); // grosses branches (toute l'année, cachées par les feuilles)
+      if (k < 2) { const ml = inst(litterGeo, litterMat, broad, placeLitter, false); if (ml) ml.renderOrder = 2; } // tapis de feuilles au pied
       inst(k ? conGeoLow : conGeo, conMat, con, placeCon, true);
     });
     return all.map(t => { const s = t.s; return [s.cx, s.cn, reachOf(s), t.y, s.kind === 'con' ? t.y + s.base : t.y + t.h - (s.top + 1) * s.sy, t.y + t.h, t.x, t.n, s.tr, t.y + s.th, s.kind === 'con' ? 1 : 0]; });
@@ -2111,8 +2120,8 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     dispose() {
       running = false; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); window.removeEventListener('keydown', onKey, true); window.removeEventListener('keyup', onKeyUp, true); clearStatics(); clearTimeout(modelTimer); dropModel(); sat = null; placeSat();
       [sceneRT, aoRT, aoRT2, compRT, reflRT, reflRT2, cubeRT, skyRT, envRT, cloudRT, cloudRTHi, accA, accB].forEach(r => r && r.dispose()); pmrem.dispose(); noiseTex.dispose();
-      [skyMat, skyMatIn, cloudPassMat, accMat, aoMat, blurMat, compMat, reflMat, rblurMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, shadowMat, conMat, fillMat, edgeMat, twigMat, crownDepthMat, conDepthMat, twigDepthMat, waterMat, cloudMat, ...Object.values(flatMats)].forEach(m => m.dispose()); if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
-      [skyGeo, crownGeo, crownGeoMid, crownGeoFar, crownGeoShadow, limbsGeo, conGeo, conGeoLow, trunkGeo, trunkGeoLow, sg, gnd && gnd.geometry, gndPol && gndPol.geometry, gndFar.geometry, quad.geometry].forEach(g => g && g.dispose()); gndMatPol.dispose(); gndDepthMat.dispose(); hzMat.dispose(); hzRT.dispose(); if (hnTex) hnTex.dispose(); if (hfTex) hfTex.dispose(); FT.map.dispose(); FT.rough.dispose(); FT.emis.dispose(); gndTex.dispose(); gndTexNear.dispose(); gndMat.dispose(); gndMatFar.dispose(); leafMask.dispose(); conMask.dispose(); edgeMask.dispose();
+      [skyMat, skyMatIn, cloudPassMat, accMat, aoMat, blurMat, compMat, reflMat, rblurMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, shadowMat, conMat, fillMat, edgeMat, twigMat, litterMat, crownDepthMat, conDepthMat, twigDepthMat, waterMat, cloudMat, ...Object.values(flatMats)].forEach(m => m.dispose()); if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
+      [skyGeo, crownGeo, crownGeoMid, crownGeoFar, crownGeoShadow, limbsGeo, litterGeo, conGeo, conGeoLow, trunkGeo, trunkGeoLow, sg, gnd && gnd.geometry, gndPol && gndPol.geometry, gndFar.geometry, quad.geometry].forEach(g => g && g.dispose()); gndMatPol.dispose(); gndDepthMat.dispose(); hzMat.dispose(); hzRT.dispose(); if (hnTex) hnTex.dispose(); if (hfTex) hfTex.dispose(); FT.map.dispose(); FT.rough.dispose(); FT.emis.dispose(); gndTex.dispose(); gndTexNear.dispose(); gndMat.dispose(); gndMatFar.dispose(); leafMask.dispose(); conMask.dispose(); edgeMask.dispose();
       R.dispose(); R.forceContextLoss(); if (el.parentNode) el.parentNode.removeChild(el);
     },
   };
