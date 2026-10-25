@@ -326,25 +326,75 @@ void marchShaft(vec3 ro, vec3 rd, float jit, inout vec3 col, inout float T) {
     float ext = exp(-d * 0.00035 * dt); col += T * grey * (1.0 - ext); T *= ext; t += dt;
   }
 }
-/* Nuages hauts (cirrus, cirrostratus): voile à l'altitude uHi.z. Cirrus (couverture faible): bancs de fibres étirées;
-   cirrostratus (couverture forte): voile laiteux presque uniforme, variations douces à grande échelle seulement. Bruit
-   Perlin-Worley (canal r, doux) avec déformation du domaine: une version aux cellules de Worley (canaux g et b) faisait un
-   nid d'abeilles de cases de 350 m sur tout le ciel, convergeant en rayons vers l'horizon (Stéphane, 11 octobre 2026:
-   « gros cylindre avec une texture cheap »). Vers l'horizon, le voile se fond dans la brume au lieu de s'effacer (sinon une
-   bande de ciel clair restait sous le voile). */
+/* Bruit de gradient 2D calculé (pas lu dans une texture), valeurs dans [-0,7, 0,7] environ. Pour les fibres des cirrus: lues
+   dans tNoise avec tex3, leur étirement (12 pour 1) agrandissait les paliers de la lecture lissée en dents régulières le long
+   de chaque fibre (Stéphane, 25 octobre 2026: « saccadé »). */
+vec2 h22(vec2 p) { vec3 q = fract(p.xyx * vec3(0.1031, 0.1030, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz) * q.zy) * 2.0 - 1.0; }
+float gn2(vec2 p) {
+  vec2 i = floor(p), f = fract(p), w = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  float a = dot(h22(i), f), b = dot(h22(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0));
+  float c = dot(h22(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0)), d = dot(h22(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0));
+  return mix(mix(a, b, w.x), mix(c, d, w.x), w.y);
+}
+float gPix = 0.0; /* taille angulaire d'un pixel de la passe en cours (rad); 0: celle de l'image pleine résolution (uPixAng) */
+/* Empreinte du pixel sur la couche des cirrus (gFl le long de la visée horizontale gHv, gPa en travers) comparée à un détail
+   d'axe a, de taille La le long de a et Lb en travers: 1 si le détail est résolu, 0 s'il tombe sous le pixel (ramené à sa
+   moyenne). Dans les deux directions: en vue rasante, un pixel couvre des kilomètres dans le sens de la visée, et un détail
+   lissé seulement en travers moutonnait près de l'horizon. */
+float gFl = 0.0, gPa = 0.0; vec2 gHv = vec2(1.0, 0.0);
+float kfp(vec2 a, float La, float Lb) {
+  float ca = dot(gHv, a), cb = gHv.y * a.x - gHv.x * a.y;
+  float fa = sqrt(gFl * gFl * ca * ca + gPa * gPa * cb * cb), fb = sqrt(gFl * gFl * cb * cb + gPa * gPa * ca * ca);
+  return 1.0 - smoothstep(0.3, 0.8, max(fa / La, fb / Lb));
+}
+/* Fibres le long de l'axe a (q: coordonnées le long, en travers): traînées larges (900 m) et stries fines (260 m); k: part résolue */
+void fibres(vec2 q, vec2 a, out float fb, out float ff, out vec2 k) {
+  float kb = kfp(a, 6000.0, 900.0), kb2 = kfp(a, 2500.0, 300.0), k1 = kfp(a, 2600.0, 260.0), k2 = kfp(a, 1100.0, 100.0);
+  fb = 0.5 + 0.55 * kb * gn2(vec2(q.x / 6000.0, q.y / 900.0)) + 0.15 * kb2 * gn2(vec2(q.x / 2500.0 + 3.1, q.y / 300.0 + 7.7));
+  ff = 0.5 + 0.6 * k1 * gn2(vec2(q.x / 2600.0, q.y / 260.0)) + 0.22 * k2 * gn2(vec2(q.x / 1100.0 + 1.7, q.y / 100.0 + 4.1));
+  k = vec2(kb, k1);
+}
+/* Nuages hauts (cirrus, cirrostratus): voile à l'altitude uHi.z. Cirrus (couverture faible), calés sur sa banque de ciels
+   (_PSD/_ciels/CIEL, photos 3, 11, 14, 73, 106, 108) et mesurés contre elle (contraste, finesse, parallélisme des fibres):
+   bancs au coeur en voile diffus, fibres surtout visibles sur les bords effilés; faisceaux de fibres orientés un peu
+   différemment les uns des autres (éventails), dans l'ensemble le long du vent en altitude (même sens que la dérive uOff);
+   une seconde famille croisée à 34 degrés par endroits. Les fibres ondulent sans jamais se replier: l'ancien motif
+   (déformation du domaine forte, fibres tournant avec elle) dessinait des tourbillons et des marbrures (Stéphane, 25 octobre
+   2026: « forme un peu biz »); une première version aux fibres toutes parallèles faisait « coup de peigne ». Couverture: seuil
+   ajusté pour que la part de la couche où le voile dépasse 5 % égale la couverture d'ICON. Pas de grain (« il n'y a jamais
+   de grain dans les vrais nuages »). Cirrostratus (couverture forte): voile laiteux presque uniforme, variations douces à
+   grande échelle seulement. Vers l'horizon, le voile se fond dans la brume au lieu de s'effacer. */
 void cirrus(vec3 ro, vec3 rd, inout vec3 col, inout float T) {
   float cov = uHi.x, typ = uHi.y; if (cov <= 0.002 || T < 0.01) return;
   vec2 s = shell(ro, rd, uHi.z); float t = s.y; if (t <= 0.0 || rd.y < -0.06) return;
-  vec3 p = ro + rd * t + uOff; vec2 pv = p.xz * (1.0 / 14000.0);
-  vec3 w = tex3(tNoise, vec3(pv * 0.35 + 0.17, 0.61), 128.0).rgb - vec3(0.5, 0.35, 0.3); pv += w.xy * 0.9;
-  float n1 = tex3(tNoise, vec3(pv * 0.5 + 0.2, 0.11), 128.0).r;
-  float region = smoothstep(0.64 - 0.56 * cov, 0.8 - 0.45 * cov, n1);
-  vec2 pr = vec2(pv.x * 0.35 + pv.y * 0.25, pv.y * 1.9 - pv.x * 0.5);
-  float n2 = tex3(tNoise, vec3(pr * 1.7 + 0.3, 0.53), 128.0).r;
-  float fib = mix(tex3(tNoise, vec3(pr.x * 14.0, pr.y * 1.2, 0.29), 128.0).r, tex3(tNoise, vec3(pr.x * 9.3 + 0.4, pr.y * 0.8 + 0.2, 0.47), 128.0).r, 0.45);
-  float wisp = smoothstep(0.38, 0.8, n2 * 0.5 + fib * 0.5);
-  float aCir = region * wisp * 0.6;
-  float aStr = 0.66 + 0.12 * smoothstep(0.3, 0.7, n1 * 0.6 + n2 * 0.4); /* cirrostratus: presque uniforme (un motif plus marqué faisait « texture plaquée ») */
+  vec3 p0 = ro + rd * t, p = p0 + uOff;
+  vec3 nU = normalize(p0 - vec3(uCamW.x, uGround - PR, uCamW.z)), hd = rd - nU * dot(rd, nU);
+  gHv = hd.xz / max(length(hd.xz), 1e-5); gPa = max(gPix, uPixAng) * t; gFl = gPa / max(dot(rd, nU), 0.03);
+  const vec2 D = vec2(-0.929, 0.371), P = vec2(-0.371, -0.929), D2 = vec2(-0.5573, 0.8308);
+  float u = dot(p.xz, D), v = dot(p.xz, P);
+  float vv = v + 7000.0 * gn2(vec2(u / 40000.0, v / 60000.0)) + 600.0 * gn2(vec2(u / 11000.0 + 3.7, v / 5000.0 + 1.3)) + 3500.0 * gn2(vec2(u / 20000.0 + 2.9, v / 20000.0 + 8.3));
+  float uu = u + 2000.0 * gn2(vec2(u / 20000.0 + 7.1, v / 9000.0)) + 3500.0 * gn2(vec2(u / 20000.0 + 5.5, v / 20000.0 + 1.9));
+  float rg = 0.5 + 0.62 * gn2(vec2(uu / 42000.0, vv / 20000.0)) + 0.3 * gn2(vec2(uu / 15000.0 + 5.3, vv / 7000.0 + 2.9)) + 0.12 * kfp(D, 6000.0, 2500.0) * gn2(vec2(uu / 6000.0 + 8.1, vv / 2500.0 + 0.7));
+  float region = smoothstep(0.0, 1.0, (rg - (0.6324 - 0.4978 * cov + 0.147 * cov * cov)) / 0.2), aCir = 0.0, aStr = 0.0;
+  if (region > 0.0) {
+    float fb, ff, fb2, ff2; vec2 k, k2;
+    fibres(vec2(uu, vv), D, fb, ff, k);
+    fibres(vec2(uu * 0.8253 - vv * 0.5646 + 777.0, uu * 0.5646 + vv * 0.8253 + 333.0), D2, fb2, ff2, k2);
+    float xs = 0.5 * smoothstep(0.35, 0.75, 0.5 + 1.3 * gn2(vec2(uu / 18000.0 + 6.1, vv / 12000.0 + 2.4)));
+    float sel = smoothstep(0.3, 0.7, 0.5 + 1.2 * gn2(vec2(uu / 25000.0 + 4.4, vv / 8000.0 + 9.9)));
+    float f = mix(mix(fb, ff, sel), mix(fb2, ff2, sel), xs), kf = mix(mix(k.x, k.y, sel), mix(k2.x, k2.y, sel), xs);
+    float st = mix(0.0122 + 0.0387 * region + 0.4283 * region * region, smoothstep(0.62 - 0.3 * region, 0.9 - 0.2 * region, f), kf);
+    float cl = 0.75 + 0.5 * kfp(D, 5000.0, 1500.0) * gn2(vec2(uu / 5000.0 + 2.2, vv / 1500.0 + 5.5));
+    aCir = clamp(region * mix(0.55 + 0.45 * st, 1.0, 0.7 * region * region) * cl, 0.0, 1.0) * 0.46;
+  }
+  if (typ < 0.999) {
+    vec2 pv = p.xz * (1.0 / 14000.0);
+    vec3 w = tex3(tNoise, vec3(pv * 0.35 + 0.17, 0.61), 128.0).rgb - vec3(0.5, 0.35, 0.3); pv += w.xy * 0.9;
+    float n1 = tex3(tNoise, vec3(pv * 0.5 + 0.2, 0.11), 128.0).r;
+    vec2 pr = vec2(pv.x * 0.35 + pv.y * 0.25, pv.y * 1.9 - pv.x * 0.5);
+    float n2 = tex3(tNoise, vec3(pr * 1.7 + 0.3, 0.53), 128.0).r;
+    aStr = 0.66 + 0.12 * smoothstep(0.3, 0.7, n1 * 0.6 + n2 * 0.4); /* cirrostratus: presque uniforme (un motif plus marqué faisait « texture plaquée ») */
+  }
   float a = mix(aCir, aStr, 1.0 - typ) * uHi.w;
   if (a <= 0.002) return;
   /* Perspective atmosphérique: même brume que les couches (épaisseur d'air réellement traversée), couleur du ciel à l'horizon
@@ -378,6 +428,7 @@ void main() {
   /* uSub: décalage sous-pixel et uJit: décalage du tramage, différents à chaque passe de l'accumulation (vue posée) */
   vec4 pv = uProjInv * vec4((vUv + uSub) * 2.0 - 1.0, 1.0, 1.0); vec3 rd = normalize(uV2W * (pv.xyz / pv.w));
   float jit = fract(ignoise(gl_FragCoord.xy) + uJit);
+  vec4 pt = uProjInv * vec4(0.0, 1.0, 1.0, 1.0); gPix = 2.0 * abs(pt.y / pt.z) / uRes.y; /* pixel de cette passe (réduite en mouvement) */
   gl_FragColor = clouds(uCamW, rd, jit, uQual);
 }`;
 

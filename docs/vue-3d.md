@@ -1032,6 +1032,21 @@ importé, lui, est le fichier de l'architecte.
     sur 80 m, une caméra haute n'est jamais noyée elle-même.
   - Banc (tools/sky, harnais): heure sans pluie identique au pixel près à la v633.218; le premier essai (brume de la scène
     poussée vers la bande d'horizon) laissait le lointain sombre et a été abandonné.
+- v633.244 (25 octobre 2026), **cirrus réécrits** (capture de Stéphane à Stoneham, 16 h 59, cirrus 41 %: « pas très
+  réaliste. saccadé et forme un peu biz »; « les ciels sont très importants en photos d'architecture »).
+  - Causes: déformation du domaine trop forte, avec des fibres qui tournaient avec elle (tourbillons, marbrures); fibres
+    étirées 12 pour 1 lues avec `tex3`, dont l'arrondi par texel faisait des dents régulières le long de chaque fibre.
+  - Rendu (`cirrus` dans sky.js): bruit de gradient 2D calculé (`gn2`), fibres le long du vent en altitude (sens de la
+    dérive `uOff`), faisceaux orientés un peu différemment (éventails) sans jamais se replier, seconde famille croisée à
+    34 degrés par endroits, coeur des bancs en voile diffus et fibres sur les bords effilés; chaque détail lissé selon
+    l'empreinte du pixel dans ses deux directions (`kfp`, `gPix`: pixel de la passe réduite en mouvement), d'où ni
+    scintillement ni moutonnement en vue rasante. Couverture calée pour que la part où le voile dépasse 5 % égale celle
+    d'ICON. Cirrostratus inchangé.
+  - Calé et mesuré sur sa banque de ciels (`_PSD/_ciels/CIEL`, cirrus n° 3, 11, 14, 73, 106, 108...): contraste nuage /
+    ciel 0,075 comme ses photos, finesse aux échelles moyennes au niveau des photos. Règle: « il n'y a jamais de grain dans
+    les vrais nuages » (un effilochage fin a été retiré). Coût: environ 0,3 ms par passe réduite sur Mac.
+  - Reste: grain des altocumulus au coucher (déjà dans les versions précédentes), petites mèches dans tous les sens de ses
+    photos, brume de l'horizon plus grise que ses photos.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
