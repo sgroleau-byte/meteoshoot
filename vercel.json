@@ -82,7 +82,7 @@
           "value": "dieu.meteoshoot.com"
         }
       ],
-      "dest": "/introuvable"
+      "status": 404
     },
     {
       "src": "/site/dieu\\.html",
@@ -92,7 +92,7 @@
           "value": "dieu.meteoshoot.com"
         }
       ],
-      "dest": "/introuvable"
+      "status": 404
     }
   ]
 }
