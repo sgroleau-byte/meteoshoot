@@ -174,7 +174,7 @@ dieu.meteoshoot.com.
 - Pages: `signup.html` devient « Accepter l'invitation »; la page de connexion dit « Sur invitation seulement »;
   `dieu.html` réécrit (entrée Face ID, comptes avec filtres, détail et actions, invitations, réglages, journal,
   revenus); entrée ADMIN retirée des préférences de l'application; l'application écrit la dernière visite.
-- Vercel: domaine dieu.meteoshoot.com ajouté au projet, réécritures et en-têtes de sécurité (`vercel.json`).
+- Vercel: domaine dieu.meteoshoot.com ajouté au projet, routes et en-têtes de sécurité (`vercel.json`, format `routes`: les `rewrites` sont ignorées pour les fichiers qui existent). En ligne le 25 octobre 2026 au soir.
 - Relecture avec les avis de sécurité Supabase (skills `supabase` et `supabase-postgres-best-practices` installés):
   fonctions admin réservées au rôle de service (la page dieu passe toujours par `admin-users`), déclencheur
   `handle_new_user` fermé aux rôles clients, `search_path` fixé. Reste un avis: la protection contre les mots de
