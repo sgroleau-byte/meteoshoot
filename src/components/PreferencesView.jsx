@@ -261,19 +261,13 @@ export const PreferencesView = () => {
             </div>
           )}
 
-          {user?.email === 'sgroleau@me.com' && (
-            <div className="py-5 border-b border-adaptive" onClick={() => { window.location.href = '/site/dieu.html'; }} style={{ cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
-              <span className="font-bebas-regular" style={{ fontSize: '22px', letterSpacing: '0.04em', color: 'rgba(224,122,43,0.4)' }}>ADMIN</span>
-            </div>
-          )}
-
           <div className="py-5 border-b border-adaptive" onClick={(e) => { e.preventDefault(); e.stopPropagation(); signOut(); }} style={{ cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
             <span className="font-bebas-regular" style={{ fontSize: '22px', letterSpacing: '0.04em', color: 'rgba(255,255,255,0.4)' }}>{t('disconnect')}</span>
           </div>
 
           <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
             <div style={{ textAlign: 'center' }}>
-              <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.245</div>
+              <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.246</div>
               <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
             </div>
           </div>

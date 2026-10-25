@@ -437,15 +437,7 @@ const LoginScreen = () => {
             </button>
             <span style={{ color: '#546262', fontSize: '12px' }}>|</span>
             <span style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '12px', color: '#546262', whiteSpace: 'nowrap' }}>
-              {t('noAccount')}{' '}
-              <a
-                href="signup.html"
-                style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '12px', color: '#849898', textDecoration: 'none', transition: 'color 0.2s' }}
-                onMouseEnter={e => e.target.style.color = '#b0c4c4'}
-                onMouseLeave={e => e.target.style.color = '#849898'}
-              >
-                {t('signup')}
-              </a>
+              {t('inviteOnly')}
             </span>
           </div>
         </div>

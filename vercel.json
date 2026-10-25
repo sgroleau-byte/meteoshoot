@@ -51,6 +51,77 @@
           "value": "no-cache, no-store, must-revalidate"
         }
       ]
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "dieu.meteoshoot.com"
+        }
+      ],
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow, noarchive"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=()"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "dieu.meteoshoot.com"
+        }
+      ],
+      "destination": "/site/dieu.html"
+    },
+    {
+      "source": "/((?!assets/|fonts/|imgProjet/|site/dieu\\.html$|favicon|icon-|apple-touch-icon|manifest\\.json$).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "dieu.meteoshoot.com"
+        }
+      ],
+      "destination": "/introuvable"
+    },
+    {
+      "source": "/site/dieu.html",
+      "missing": [
+        {
+          "type": "host",
+          "value": "dieu.meteoshoot.com"
+        }
+      ],
+      "destination": "/introuvable"
     }
   ]
 }

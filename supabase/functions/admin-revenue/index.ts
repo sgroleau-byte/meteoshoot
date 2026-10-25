@@ -9,7 +9,6 @@ const LEMON_API_KEY = Deno.env.get("LEMON_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SERVICE_ROLE_KEY")!;
 
-const ADMIN_EMAIL = "sgroleau@me.com";
 const LEMON_API = "https://api.lemonsqueezy.com/v1";
 
 const corsHeaders = {
@@ -55,8 +54,23 @@ serve(async (req: Request) => {
   const token = authHeader.replace("Bearer ", "");
   const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
-  if (authError || !user || user.email !== ADMIN_EMAIL) {
+  if (authError || !user) {
     return new Response("Unauthorized", { status: 403, headers: corsHeaders });
+  }
+  // Même porte que admin-users: table admins, et clé d'accès (Face ID) exigée dès qu'elle est enregistrée.
+  const { data: adminRow } = await supabase.from("admins").select("user_id, passkey_required").eq("user_id", user.id).maybeSingle();
+  if (!adminRow) {
+    return new Response("Unauthorized", { status: 403, headers: corsHeaders });
+  }
+  if (adminRow.passkey_required) {
+    let amr: { method?: string }[] = [];
+    try {
+      const part = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      amr = JSON.parse(atob(part.padEnd(part.length + ((4 - (part.length % 4)) % 4), "="))).amr || [];
+    } catch { amr = []; }
+    if (!amr.some((m) => /passkey|webauthn/i.test(String(m.method ?? "")))) {
+      return new Response("Passkey required", { status: 403, headers: corsHeaders });
+    }
   }
 
   try {

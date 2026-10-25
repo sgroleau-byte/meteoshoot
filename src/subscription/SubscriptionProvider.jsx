@@ -46,6 +46,8 @@ export const SubscriptionProvider = ({ children }) => {
     };
 
     loadProfile();
+    // Dernière visite (lue dans le tableau de bord dieu): au plus une écriture par heure, côté serveur.
+    supabase.rpc('touch_last_seen').then(() => {}, () => {});
 
     // Realtime subscription for profile changes (webhook updates tier)
     const channel = supabase.channel('profile-changes')

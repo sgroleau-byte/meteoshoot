@@ -1,0 +1,35 @@
+<div style="background:#181b1e;padding:48px 20px;">
+  <div style="font-family:-apple-system,BlinkMacSystemFont,'Avenir Next','Segoe UI',Roboto,sans-serif;max-width:480px;margin:0 auto;color:#e6e6e6;">
+    <div style="text-align:center;margin-bottom:36px;">
+      <div style="font-size:22px;font-weight:300;letter-spacing:0.18em;color:#ffffff;">METEOSHOOT</div>
+    </div>
+    <p style="font-size:17px;line-height:1.65;margin:0 0 18px;color:#e6e6e6;">
+      {{ if eq .Data.lang "en" }}Hello{{ if .Data.full_name }} {{ .Data.full_name }}{{ end }},{{ else }}Bonjour{{ if .Data.full_name }} {{ .Data.full_name }}{{ end }},{{ end }}
+    </p>
+    <p style="font-size:16px;line-height:1.65;margin:0 0 18px;color:#c9c9c9;">
+      {{ if eq .Data.lang "en" }}
+      You are among the first photographers invited to MeteoShoot: the weather of your shoots, the sun on your buildings,
+      a realistic 3D preview of the light from the day before. The app is free for you for now.
+      {{ else }}
+      Tu fais partie des premiers photographes invités sur MeteoShoot: la météo de tes tournages, le soleil sur tes
+      bâtiments, un aperçu 3D réaliste de la lumière dès la veille. L'application t'est offerte pour l'instant.
+      {{ end }}
+    </p>
+    <p style="font-size:16px;line-height:1.65;margin:0 0 30px;color:#c9c9c9;">
+      {{ if eq .Data.lang "en" }}Click below to choose your password and open your account.{{ else }}Clique ci-dessous pour choisir ton mot de passe et ouvrir ton compte.{{ end }}
+    </p>
+    <div style="text-align:center;margin:30px 0 36px;">
+      <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#aad7d0;color:#181b1e;padding:14px 34px;text-decoration:none;font-size:14px;letter-spacing:0.12em;font-weight:600;">
+        {{ if eq .Data.lang "en" }}OPEN MY ACCOUNT{{ else }}OUVRIR MON COMPTE{{ end }}
+      </a>
+    </div>
+    <p style="font-size:13px;line-height:1.6;margin:0;color:#7a7f82;">
+      {{ if eq .Data.lang "en" }}
+      This link is valid for 24 hours and works once. If you did not expect this invitation, you can ignore this email.
+      {{ else }}
+      Ce lien est valable 24 heures et ne sert qu'une fois. Si tu n'attendais pas cette invitation, ignore simplement ce courriel.
+      {{ end }}
+    </p>
+    <p style="font-size:13px;line-height:1.6;margin:24px 0 0;color:#7a7f82;">Stéphane Groleau<br>meteoshoot.com</p>
+  </div>
+</div>

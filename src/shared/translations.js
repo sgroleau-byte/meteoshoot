@@ -27,6 +27,14 @@ export const TRANSLATIONS = {
     newPassword: 'Nouveau mot de passe',
     savePassword: 'Enregistrer',
     passwordUpdated: 'Mot de passe modifié. Connexion...',
+    inviteOnly: 'Sur invitation seulement.',
+    inviteWelcome: 'Bienvenue',
+    inviteIntro: "Ton compte MeteoShoot est prêt. Choisis ton mot de passe pour entrer.",
+    inviteEnter: 'entrer',
+    inviteEntering: 'ouverture...',
+    inviteExpired: "Ce lien d'invitation a expiré ou a déjà servi. Écris à Stéphane pour en recevoir un nouveau.",
+    inviteNoSession: "MeteoShoot est offert sur invitation. Si tu as reçu une invitation, ouvre le lien du courriel sur cet appareil.",
+    inviteFounderNote: 'Prix fondateur garanti à vie: 12,99 $ par mois quand la période gratuite se terminera.',
 
     // Subscription tiers
     plan: 'ABONNEMENT',
@@ -237,6 +245,14 @@ export const TRANSLATIONS = {
     newPassword: 'New password',
     savePassword: 'Save',
     passwordUpdated: 'Password updated. Signing in...',
+    inviteOnly: 'By invitation only.',
+    inviteWelcome: 'Welcome',
+    inviteIntro: 'Your MeteoShoot account is ready. Choose your password to get in.',
+    inviteEnter: 'enter',
+    inviteEntering: 'opening...',
+    inviteExpired: 'This invitation link has expired or was already used. Write to Stéphane for a new one.',
+    inviteNoSession: 'MeteoShoot is by invitation only. If you received an invitation, open the link from the email on this device.',
+    inviteFounderNote: 'Founder price locked for life: $12.99 per month once the free period ends.',
 
     // Subscription tiers
     plan: 'SUBSCRIPTION',
