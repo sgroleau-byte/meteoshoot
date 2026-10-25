@@ -17,6 +17,7 @@ import { SAT_CREDIT, satMesh, satShift } from './satDrape.js';
 RectAreaLightUniformsLib.init(); // tables des lumières surfaciques (façades allumées la nuit)
 import SunCalc from 'suncalc';
 import { DIRS, centroid, edgesOf, localRings, signedArea } from './footprint.js';
+import { satKey } from './poseRef.js';
 import { TEX_PERIOD, flatTerrain, makeTerrain } from './terrain.js';
 import { horizonProfile, curvDrop } from './horizon.js';
 import { prisms, fitTree, reachOf, sheetCellBlocked, sheetTriTooClose, LOBE_PARTS, CON_TIERS, CON_TIERS_LOW } from './clearance.js';
@@ -1354,14 +1355,16 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   // ou repère) et doit être enregistrée.
   const satRef = (pl) => { const r = pl && pl.sat; return r && typeof r === 'object' && !Array.isArray(r) && 'x' in r && Math.abs(r.x - pl.x) < 0.01 && Math.abs(r.n - pl.n) < 0.01 ? r : null; };
   const bindSat = (pl, sv) => { pl.sat = { s: Array.isArray(sv) ? sv.slice() : null, x: pl.x, n: pl.n }; };
-  const angGap = (a, b) => { const d = Math.abs((((a - b) % 360) + 540) % 360 - 180); return d; };
-  function isDefaultPose(pl) { // pose par défaut d'une version antérieure (avec ou sans le recalage des formes de la v633.241)
-    return [defaultPlacement(false), defaultPlacement(true)].some(d => Math.hypot(d.x - pl.x, d.n - pl.n) < 1.5 && angGap(d.rot, pl.rot || 0) < 2);
+  // Pose par défaut d'une version antérieure: avec ou sans le recalage des formes (v633.241), ou calculée avant l'arrivée
+  // des environs (sans l'édifice sous le point). Position seule: tourner la maison (pastille des degrés) la fait pivoter
+  // sur place, sur la forme ou l'empreinte, sans la lier à l'image.
+  function isDefaultPose(pl) {
+    return [defaultPlacement(false), defaultPlacement(true), defaultPlacement(true, true)].some(d => Math.hypot(d.x - pl.x, d.n - pl.n) < 1.5);
   }
   function followSat() {
     if (!model || !modelPl || !data || data.lidarErr || data.appleErr || !Array.isArray(data.appleRoof) || !Array.isArray(data.appleShift)) return false;
     const base = modelDrag ? modelDrag.pl0 : modelPl; // glisser en cours: la pose validée est celle d'avant le geste
-    const before = JSON.stringify(base.sat === undefined ? '-' : base.sat), ref = satRef(base);
+    const before = satKey(base.sat), ref = satRef(base);
     const from = ref ? ref.s : (isDefaultPose(base) ? null : data.appleShift);
     let moved = false;
     if (from) {
@@ -1374,7 +1377,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     }
     bindSat(base, from ? data.appleRoof : null);
     if (modelDrag) modelPl.sat = base.sat;
-    return moved || JSON.stringify(base.sat) !== before;
+    return moved || satKey(base.sat) !== before;
   }
   function modelRing(pl = modelPl) { if (!model || !pl) return null; return model.hull.map(([x, n]) => { const q = rotXY(x, n, pl.rot); return [pl.x + q[0], pl.n + q[1]]; }); }
   function modelBase(pl = modelPl) { // sol sous le modèle: point le plus bas du relief sous l'emprise (sommets et grille de 2 m)
@@ -1403,11 +1406,11 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   // Placement par défaut: calé sur la première forme dessinée (sinon l'édifice Overture sous le point du projet): centres
   // superposés, et parmi les quatre rotations qui alignent les axes principaux, celle qui recouvre le mieux la forme. Sans
   // forme: la géolocalisation du fichier si elle tombe à moins de 2 km du projet, sinon le point du projet. Toujours au sol.
-  function defaultPlacement(raw = false) { // raw: sans le recalage des formes (pose par défaut d'avant la v633.241)
+  function defaultPlacement(raw = false, bare = false) { // raw: sans le recalage des formes (pose par défaut d'avant la v633.241); bare: comme sans environs
     const drawn = origin ? localRings(projLocal, origin) : [];
     const gsh = raw ? [0, 0] : drawnShift(drawn); if (gsh[0] || gsh[1]) drawn.forEach(d => { d.p = d.p.map(([x, n]) => [x + gsh[0], n + gsh[1]]); }); // même recalage que dans rebuild
     const solid = drawn.filter(d => d.kind !== 'ground'); let target = solid.length ? solid[0].p : null;
-    if (!target && data) { const under = data.bld.filter(b => b[3] !== 2).find(([q]) => pointInRing([0, 0], q)); if (under) target = under[0]; }
+    if (!target && data && !bare) { const under = data.bld.filter(b => b[3] !== 2).find(([q]) => pointInRing([0, 0], q)); if (under) target = under[0]; }
     if (target) {
       const tc = areaCenter(target), ta = mainAxis(target), ma = mainAxis(model.hull);
       let best = null;

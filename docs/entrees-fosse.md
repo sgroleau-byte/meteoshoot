@@ -100,3 +100,14 @@ toit). C'est l'image Apple du sol (SOL SAT) qui était mal calée, et la maison 
   déplace une fois de la différence (chez Stéphane: 7,5 m vers le nord) et la nouvelle pose est enregistrée, pour
   son projet même si la fiche en montre un autre. Vérifié en local avec le modèle de test et une pose simulée.
 - Version de scène 13: chaque lieu recalcule ses environs une fois.
+- **Deux relectures adverses avant la mise en prod** (agents indépendants, chaque constat contre-vérifié), qui ont
+  confirmé puis fait corriger: pose recalée écrite avec l'heure du moment (elle pouvait écraser une pose plus récente
+  d'un autre appareil: maintenant heure d'origine + 1 ms et écriture conditionnelle `savePlacementIf`); poses par
+  défaut déplacées à tort (reconnues par la position, avec ou sans recalage des formes, avec ou sans environs);
+  anciennes versions de l'app (la scène garde `appleShift` à l'ancien critère pour elles, le calage par les toits est
+  dans `appleRoof`; repère `sat = { s, x, n, o }` lié à la position et à son origine, une pose déplacée par une ancienne
+  version se reconnaît); glisser en cours à l'arrivée des environs; calage Apple manquant (`appleErr`, scène ni gardée
+  ni servie depuis le cache partagé, `lidarErr` posé aussi pour les anciennes versions); comparaison du repère par ses
+  valeurs (la colonne jsonb réordonne les clés: sinon réécriture sans fin entre appareils). Scénarios vérifiés en local
+  avec le modèle de test (pose ancienne recalée une fois, pose par défaut et pose tournée intactes, pose déplacée par une
+  ancienne version reconnue, clés réordonnées sans réécriture, écriture refusée si l'heure a changé).

@@ -11,6 +11,11 @@ const API_BASE = (typeof __MS_TARGET__ !== 'undefined' && __MS_TARGET__ === 'nat
 
 export const sceneKey = (lat, lng) => `${Number(lat).toFixed(5)}_${Number(lng).toFixed(5)}`;
 
+// Scène utilisable telle quelle: version courante, complète (LiDAR et calage Plans d'Apple), avec le calage par les toits
+// (appleRoof, v633.243). Une ligne du cache partagé qui ne l'est pas (écrite par une version antérieure de l'app, ou
+// d'un essai) est recalculée et remplacée.
+const usable = (d) => (d.v || 1) >= SCENE_V && !d.appleErr && !d.lidarErr && Array.isArray(d.appleRoof);
+
 export function loadScene(lat, lng) {
   const key = sceneKey(lat, lng);
   if (mem.has(key)) return mem.get(key);
@@ -19,7 +24,7 @@ export function loadScene(lat, lng) {
     let stale = false;
     try {
       const { data } = await supabase.from(TBL).select('data').eq('key', key).maybeSingle();
-      if (data?.data?.bld) { if ((data.data.v || 1) >= SCENE_V) return data.data; stale = true; }
+      if (data?.data?.bld) { if (usable(data.data)) return data.data; stale = true; }
     } catch (e) { /* cache indisponible: on calcule */ }
     // v dans l'adresse: la réponse est gardée 24 h par le navigateur, une nouvelle version ne doit pas tomber sur l'ancienne.
     const url = `${API_BASE}/api/scene3d?lat=${la}&lng=${ln}&v=${SCENE_V}`;
@@ -27,7 +32,7 @@ export function loadScene(lat, lng) {
     if (!res.ok) throw new Error('scene3d ' + res.status);
     let scene = await res.json();
     // Réponse d'une version antérieure gardée par le navigateur (24 h): on la redemande au serveur une fois.
-    if (scene?.bld && (scene.v || 1) < SCENE_V) { res = await fetch(url, { cache: 'reload' }); if (res.ok) scene = await res.json(); }
+    if (scene?.bld && !usable(scene) && !scene.appleErr && !scene.lidarErr) { res = await fetch(url, { cache: 'reload' }); if (res.ok) scene = await res.json(); }
     if (!scene?.bld) throw new Error('scene3d: réponse invalide');
     delete scene.ms;
     // Hauteurs LiDAR incomplètes (lecture échouée côté serveur): on s'en sert, sans la garder. Le prochain affichage

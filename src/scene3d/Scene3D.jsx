@@ -12,6 +12,7 @@ import { loadModel, loadPlacement, loadRetired, localState, saveModel, replaceMo
 import { cloudLoad, cloudFetchGlb, cloudSave, cloudPlacement, cloudDelete } from './modelCloud.js';
 import { loadSatImage } from './satDrape.js';
 import { useIsMobile } from '../hooks/useIsMobile.js';
+import { satKey } from './poseRef.js';
 
 // Origine du moteur arrondie comme sceneKey (data.js). Un placement gardé porte o: [lat, lng], l'origine du moment:
 // si la position du projet a été corrigée depuis, l'écart est rendu en mètres pour que la maison reste au même endroit
@@ -21,12 +22,17 @@ const r5 = (v) => Number(Number(v).toFixed(5));
 function toLocal(pl, org) {
   if (!pl) return null;
   const p = { ...pl }, o = p.o; delete p.o; delete p.t;
+  const off = (from) => Array.isArray(from) && org ? [(from[1] - org[1]) * 111320 * Math.cos(org[0] * Math.PI / 180), (from[0] - org[0]) * 111320] : [0, 0];
+  // Repère du calage de l'image (sat, v633.243): converti avec sa propre origine (sat.o, sinon celle de la pose). Une
+  // version antérieure recopie sat tel quel en convertissant x et n: avec son origine à lui, il reste juste après une
+  // correction d'adresse. Rendu dans un ordre fixe, sans o.
+  if (p.sat && typeof p.sat === 'object' && !Array.isArray(p.sat) && typeof p.sat.x === 'number') { const [sx, sn] = off(Array.isArray(p.sat.o) ? p.sat.o : o); p.sat = { s: Array.isArray(p.sat.s) ? p.sat.s : null, x: p.sat.x + sx, n: p.sat.n + sn }; }
   if (!Array.isArray(o) || !org) return p;
-  const dx = (o[1] - org[1]) * 111320 * Math.cos(org[0] * Math.PI / 180), dn = (o[0] - org[0]) * 111320, x = (p.x || 0) + dx, n = (p.n || 0) + dn;
-  // Repère du calage de l'image (sat, v633.243): sa position suit la même conversion, sinon il paraîtrait périmé.
-  if (p.sat && typeof p.sat === 'object' && !Array.isArray(p.sat) && typeof p.sat.x === 'number') p.sat = { ...p.sat, x: p.sat.x + dx, n: p.sat.n + dn };
+  const [dx, dn] = off(o), x = (p.x || 0) + dx, n = (p.n || 0) + dn;
   return Math.hypot(x, n) > 1000 ? null : { ...p, x, n };
 }
+// Pose à enregistrer: origine du moment (o), et la même pour le repère (sat.o).
+const stampPose = (pl, org, t) => ({ ...pl, ...(pl.sat && typeof pl.sat === 'object' && !Array.isArray(pl.sat) ? { sat: { s: Array.isArray(pl.sat.s) ? pl.sat.s : null, x: pl.sat.x, n: pl.sat.n, o: org } } : {}), o: org, ...(t != null ? { t } : {}) });
 
 // ===== Copie en ligne du modèle importé (modelCloud.js) =====
 // La copie locale (modelStore.js) s'affiche tout de suite; la ligne en ligne est consultée ensuite et la copie locale
@@ -141,7 +147,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
   const setPrepOf = (pid, p) => setPrep(v => { const w = { ...v }; if (p == null) delete w[pid]; else w[pid] = p; return w; });
   const keep = (pl) => {
     const pid = mdlFor.current; if (!pid || !pl) return;
-    savePlacement(pid, { ...pl, o: org.current, t: Date.now() }).then(() => queuePlacement(pid)).catch(err => console.warn('[scene3d] placement non gardé:', err));
+    savePlacement(pid, stampPose(pl, org.current, Date.now())).then(() => queuePlacement(pid)).catch(err => console.warn('[scene3d] placement non gardé:', err));
   };
   // Pose recalée par le moteur (pas un geste): heure de la pose d'origine + 1 ms, écrite seulement si la pose gardée
   // est toujours celle-là (savePlacementIf). Ainsi elle passe devant la même pose non recalée en ligne, jamais devant
@@ -150,9 +156,9 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
   const keepMigrated = (pid, pl) => {
     if (!pid || !pl || !srcT.current.has(pid)) return;
     const t0 = srcT.current.get(pid);
-    savePlacementIf(pid, t0, { ...pl, o: org.current, t: t0 + 1 }).then(ok => { if (ok) srcT.current.set(pid, t0 + 1); }).catch(err => console.warn('[scene3d] placement recalé non gardé:', err));
+    savePlacementIf(pid, t0, stampPose(pl, org.current, t0 + 1)).then(ok => { if (ok) srcT.current.set(pid, t0 + 1); }).catch(err => console.warn('[scene3d] placement recalé non gardé:', err));
   };
-  const plChanged = (a, b) => !!a && !!b && (Math.abs(a.x - b.x) > 0.01 || Math.abs(a.n - b.n) > 0.01 || JSON.stringify(a.sat === undefined ? '-' : a.sat) !== JSON.stringify(b.sat === undefined ? '-' : b.sat));
+  const plChanged = (a, b) => !!a && !!b && (Math.abs(a.x - b.x) > 0.01 || Math.abs(a.n - b.n) > 0.01 || satKey(a.sat) !== satKey(b.sat));
   // Pose dans le moteur e le modèle gardé du projet, ou rien s'il n'y en a plus. fallback: modèle téléchargé que le
   // stockage local a refusé (navigation privée, quota).
   const showLocal = (e, pid, isOff, fallback) => withModel(async () => {
@@ -279,7 +285,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
         if (!pid) return;
         // Copie locale en attente d'envoi, puis envoi en ligne (pas attendu: la file du moteur reste libre).
         // Échec du stockage local (navigation privée, quota): la maison reste affichée, avec un avertissement.
-        const at = Date.now(), rec = { glb: res.glb, info: res.info, placement: shown ? { ...pl, o: org.current, t: at } : same ? { ...prev.pl, t: at } : null, pending: true, at };
+        const at = Date.now(), rec = { glb: res.glb, info: res.info, placement: shown ? stampPose(pl, org.current, at) : same ? { ...prev.pl, t: at } : null, pending: true, at };
         if (rec.placement) srcT.current.set(pid, at); // repère d'heure pour un recalage qui suivrait l'arrivée des environs
         await saveModel(pid, rec)
           .catch(err => { console.warn('[scene3d] modèle non gardé:', err); if (here()) setMdlErr('Modèle non gardé sur cet appareil (stockage local refusé ou plein)'); });
@@ -310,7 +316,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
   // Retrait: copie locale effacée (une marque reste tant que le serveur n'a pas effacé la sienne), puis copie en ligne.
   const removeModel = () => withModel(async () => {
     const e = eng.current, pid = mdlFor.current, cur = e && e.getModelPlacement();
-    if (pid && cur && mdl) removed.set(pid, { name: mdl.info.name, srcBytes: mdl.info.srcBytes, pl: { ...cur, o: org.current } });
+    if (pid && cur && mdl) removed.set(pid, { name: mdl.info.name, srcBytes: mdl.info.srcBytes, pl: stampPose(cur, org.current) });
     mdlFor.current = null; setMdl(null);
     if (e) await e.setModel(null);
     if (!pid) return;

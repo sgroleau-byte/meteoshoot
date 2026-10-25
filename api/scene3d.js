@@ -334,7 +334,7 @@ export async function buildScene(lat, lng) {
   }
   const scene = { v: 13, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
   if (lidarErr) scene.lidarErr = true;
-  if (appleErr) scene.appleErr = true;
+  if (appleErr) { scene.appleErr = true; scene.lidarErr = true; } // lidarErr aussi: les versions 633.242 et antérieures ne connaissent que lui pour ne pas garder la scène
   return scene;
 }
 
