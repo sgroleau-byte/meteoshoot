@@ -835,7 +835,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       // Image recalée sur les empreintes (satShift, v633.179), refaite quand les environs changent (image allumée avant
       // leur arrivée: sans empreintes, le calage valait zéro et restait en mémoire, v633.182).
       // Depuis la v633.183, le serveur mesure ce calage avec la scène (appleShift): appliqué tel quel; sinon, mesure ici.
-      if (!sat.shift || sat.shiftFor !== data) { sat.shift = data && Array.isArray(data.appleShift) ? data.appleShift.slice() : satShift(sat, data ? data.bld : [], cx, cn); sat.shiftFor = data; }
+      if (!sat.shift || sat.shiftFor !== data) { sat.shift = data && Array.isArray(data.appleRoof) ? data.appleRoof.slice() : satShift(sat, data ? data.bld : [], cx, cn); sat.shiftFor = data; } // v633.243: calage par les toits (appleRoof); sans lui (scène d'une version antérieure), même mesure ici
       if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.satShift = sat.shift; // vérification en développement
       satObj = satMesh(terrain, sat, cx + sat.shift[0], cn + sat.shift[1]); S.add(satObj);
     }
@@ -1342,22 +1342,39 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     };
     mat.customProgramCacheKey = () => key; // programme propre au modèle: le décor garde son biais
   };
-  // La maison posée sur l'image Plans d'Apple suit le calage de cette image (v633.243). modelPl.sat: calage de l'image
-  // ([est, nord]) quand la maison a été glissée avec SOL SAT allumé; null: posée sans l'image (pose par défaut sur la
-  // forme dessinée ou l'empreinte, ou glissée image éteinte), elle reste où elle est; absent: pose d'avant la v633.243,
-  // faite sur l'image calée par l'ancien critère (data.appleShiftOld, 7 à 10 m trop au sud là où il concluait).
-  // Quand le calage de la scène diffère du repère, la maison se déplace d'autant, une fois, et garde le nouveau repère.
-  // Renvoie vrai si elle a bougé.
+  // La maison posée sur l'image Plans d'Apple suit le calage de cette image (v633.243). L'image est dessinée au calage
+  // par les toits (data.appleRoof); data.appleShift garde l'ancien critère (pixels sombres, 7 à 10 m trop au sud là où
+  // il concluait), que les versions antérieures de l'app appliquent toujours. Repère de la pose: modelPl.sat =
+  // { s, x, n }, s le calage de l'image ([est, nord]) quand la maison a été glissée avec SOL SAT allumé, null quand
+  // elle a été posée sans l'image (pose par défaut, ou glissée image éteinte), x et n la position où ce repère a été
+  // pris. Sans repère valable (pose d'avant la v633.243, ou déplacée depuis par une version antérieure qui recopie le
+  // repère sans le mettre à jour): pose faite sur l'image à l'ancien calage, sauf si c'est la pose par défaut. La maison
+  // se déplace alors de la différence, une fois, et prend le nouveau repère. Rien sur une scène incomplète (LiDAR ou
+  // calage manquant): elle n'est pas gardée, la suivante fera le travail. Renvoie vrai si la pose a changé (position
+  // ou repère) et doit être enregistrée.
+  const satRef = (pl) => { const r = pl && pl.sat; return r && typeof r === 'object' && !Array.isArray(r) && 'x' in r && Math.abs(r.x - pl.x) < 0.01 && Math.abs(r.n - pl.n) < 0.01 ? r : null; };
+  const bindSat = (pl, sv) => { pl.sat = { s: Array.isArray(sv) ? sv.slice() : null, x: pl.x, n: pl.n }; };
+  const angGap = (a, b) => { const d = Math.abs((((a - b) % 360) + 540) % 360 - 180); return d; };
+  function isDefaultPose(pl) { // pose par défaut d'une version antérieure (avec ou sans le recalage des formes de la v633.241)
+    return [defaultPlacement(false), defaultPlacement(true)].some(d => Math.hypot(d.x - pl.x, d.n - pl.n) < 1.5 && angGap(d.rot, pl.rot || 0) < 2);
+  }
   function followSat() {
-    if (!model || !modelPl || !data || !Array.isArray(data.appleShift)) return false;
-    const now = data.appleShift, ref = modelPl.sat === undefined ? (Array.isArray(data.appleShiftOld) ? data.appleShiftOld : null) : modelPl.sat;
-    if (!ref) { if (modelPl.sat === undefined) modelPl.sat = null; return false; }
-    const dx = now[0] - ref[0], dn = now[1] - ref[1];
-    modelPl.sat = now.slice();
-    if (Math.hypot(dx, dn) < 0.05) return false;
-    modelPl.x += dx; modelPl.n += dn;
-    console.info(`[scene3d] maison recalée avec l'image Plans d'Apple: ${dx.toFixed(1)} m est, ${dn.toFixed(1)} m nord`);
-    return true;
+    if (!model || !modelPl || !data || data.lidarErr || data.appleErr || !Array.isArray(data.appleRoof) || !Array.isArray(data.appleShift)) return false;
+    const base = modelDrag ? modelDrag.pl0 : modelPl; // glisser en cours: la pose validée est celle d'avant le geste
+    const before = JSON.stringify(base.sat === undefined ? '-' : base.sat), ref = satRef(base);
+    const from = ref ? ref.s : (isDefaultPose(base) ? null : data.appleShift);
+    let moved = false;
+    if (from) {
+      const dx = data.appleRoof[0] - from[0], dn = data.appleRoof[1] - from[1];
+      if (Math.hypot(dx, dn) >= 0.05) {
+        for (const p of modelDrag ? [modelPl, modelDrag.pl0] : [modelPl]) { p.x += dx; p.n += dn; }
+        moved = true;
+        console.info(`[scene3d] maison recalée avec l'image Plans d'Apple: ${dx.toFixed(1)} m est, ${dn.toFixed(1)} m nord`);
+      }
+    }
+    bindSat(base, from ? data.appleRoof : null);
+    if (modelDrag) modelPl.sat = base.sat;
+    return moved || JSON.stringify(base.sat) !== before;
   }
   function modelRing(pl = modelPl) { if (!model || !pl) return null; return model.hull.map(([x, n]) => { const q = rotXY(x, n, pl.rot); return [pl.x + q[0], pl.n + q[1]]; }); }
   function modelBase(pl = modelPl) { // sol sous le modèle: point le plus bas du relief sous l'emprise (sommets et grille de 2 m)
@@ -1386,9 +1403,9 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   // Placement par défaut: calé sur la première forme dessinée (sinon l'édifice Overture sous le point du projet): centres
   // superposés, et parmi les quatre rotations qui alignent les axes principaux, celle qui recouvre le mieux la forme. Sans
   // forme: la géolocalisation du fichier si elle tombe à moins de 2 km du projet, sinon le point du projet. Toujours au sol.
-  function defaultPlacement() {
+  function defaultPlacement(raw = false) { // raw: sans le recalage des formes (pose par défaut d'avant la v633.241)
     const drawn = origin ? localRings(projLocal, origin) : [];
-    const gsh = drawnShift(drawn); if (gsh[0] || gsh[1]) drawn.forEach(d => { d.p = d.p.map(([x, n]) => [x + gsh[0], n + gsh[1]]); }); // même recalage que dans rebuild
+    const gsh = raw ? [0, 0] : drawnShift(drawn); if (gsh[0] || gsh[1]) drawn.forEach(d => { d.p = d.p.map(([x, n]) => [x + gsh[0], n + gsh[1]]); }); // même recalage que dans rebuild
     const solid = drawn.filter(d => d.kind !== 'ground'); let target = solid.length ? solid[0].p : null;
     if (!target && data) { const under = data.bld.filter(b => b[3] !== 2).find(([q]) => pointInRing([0, 0], q)); if (under) target = under[0]; }
     if (target) {
@@ -1637,7 +1654,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   const endPtr = (e, cancel) => {
     if (modelDrag && e.pointerId === modelDrag.id) {
       if (cancel) cancelModelDrag();
-      else { const moved = modelDrag.moved; modelDrag = null; if (moved) { modelPl.sat = sat && sat.shift ? sat.shift.slice() : null; rebuild(true, true); onModel({ ...modelPl }); } } // validé seulement s'il a bougé; repère: l'image si elle est allumée
+      else { const moved = modelDrag.moved; modelDrag = null; if (moved) { bindSat(modelPl, sat && sat.shift ? sat.shift : null); rebuild(true, true); onModel({ ...modelPl }); } } // validé seulement s'il a bougé; repère: l'image si elle est allumée
     }
     ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (drag && e.pointerId === drag.id) drag = null;
     if (ptrs.size === 1 && !drag) { const [[id, p]] = [...ptrs.entries()]; drag = { x: p.x, y: p.y, id }; } // le doigt restant continue à tourner
@@ -2048,7 +2065,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       if (!data) origin = [la, ln];
       rebuild();
     },
-    setData(scene) { data = scene; if (scene && scene.origin) origin = scene.origin; growNext = !!(scene && scene.bld && scene.bld.length); if (followSat()) onModel({ ...modelPl }, modelOwner); rebuild(); },
+    setData(scene) { data = scene; if (scene && scene.origin) origin = scene.origin; growNext = !!(scene && scene.bld && scene.bld.length); if (followSat()) onModel(modelDrag ? { ...modelPl, x: modelDrag.pl0.x, n: modelDrag.pl0.n } : { ...modelPl }, modelOwner, true); rebuild(); }, // pose recalée: enregistrée comme migration (la pose validée, pas celle du geste en cours)
     // Profil d'horizon d'après le relief chargé (LiDAR ou modèle d'élévation, terrain.js), par le calcul partagé de
     // horizon.js (le même que /api/horizon, qui alimente la barre « ombre du terrain » de la fiche projet depuis la
     // v633.186): vers la fiche, où il remplace le profil déjà affiché s'il diffère (relief chargé sans le serveur).
@@ -2167,14 +2184,14 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       if (!running) return null;
       const h = info.size && info.size[2] > 0 ? info.size[2] : 6; // hauteur du modèle (lumières de façade la nuit)
       dropModel(); model = { group, win, h, hull: slimHull(info.hull), geo: info.geo || null, offset: info.offset || [0, 0] }; S.add(group);
-      modelPl = placement ? { x: 0, n: 0, rot: 0, dy: 0, ...placement } : { ...defaultPlacement(), sat: null };
+      if (placement) modelPl = { x: 0, n: 0, rot: 0, dy: 0, ...placement }; else { modelPl = defaultPlacement(); bindSat(modelPl, null); }
       followSat();
       rebuild(false, true);
       return { ...modelPl };
     },
     // Pose venue d'ailleurs (autre appareil) avec x ou n sans repère: pose d'avant la v633.243, recalée comme au chargement.
-    setModelPlacement(p) { if (!model) return null; const moves = !!p && ('x' in p || 'n' in p); modelPl = { ...modelPl, ...p }; if (moves && !('sat' in p)) modelPl.sat = undefined; if (moves) followSat(); placeModel(); modelChanged(); return { ...modelPl }; },
-    autoPlaceModel() { if (!model) return null; modelPl = { ...defaultPlacement(), sat: null }; rebuild(true, true); return { ...modelPl }; },
+    setModelPlacement(p) { if (!model) return null; const moves = !!p && ('x' in p || 'n' in p); modelPl = { ...modelPl, ...p }; if (moves && !('sat' in p)) delete modelPl.sat; if (moves) followSat(); placeModel(); modelChanged(); return { ...modelPl }; },
+    autoPlaceModel() { if (!model) return null; modelPl = defaultPlacement(); bindSat(modelPl, null); rebuild(true, true); return { ...modelPl }; },
     getModelPlacement() { return modelPl ? { ...modelPl } : null; },
     setModelLocked(v) { modelLocked = !!v; if (modelLocked) cancelModelDrag(); if (!ptrs.size) el.style.cursor = 'grab'; }, // fixée: un glisser en cours est annulé
     // Calque satellite: image de loadSatImage (satDrape.js) ou null pour l'éteindre.

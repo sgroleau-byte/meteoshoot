@@ -14,8 +14,9 @@
 // constant de 7 à 10 m vers le sud (Stoneham 10 m au lieu de 3, Limoilou 12 m au lieu de 2, Gaspé 12 m). Le calage se
 // fait maintenant sur les toits eux-mêmes (src/scene3d/roofShift.js); quand les toits ne s'accordent pas (villes,
 // toits pâles ou colorés, peu d'empreintes LiDAR), l'image n'est pas recalée: c'est plus juste que l'ancien critère,
-// qui se trompait de 7 à 10 m partout où il concluait. L'ancien résultat voyage encore (old, appleShiftOld dans la
-// scène) pour déplacer une seule fois les maisons importées qui avaient été posées sur l'image mal calée.
+// qui se trompait de 7 à 10 m partout où il concluait. L'ancien résultat reste appleShift dans la scène (les versions
+// antérieures de l'app l'appliquent telles quelles); le nouveau voyage dans appleRoof, et la maison importée posée sur
+// l'ancienne image le suit une fois (engine.js, followSat).
 import { PNG } from 'pngjs';
 import { snapshotRequest } from './apple-snapshot.js';
 import { roofShift } from '../src/scene3d/roofShift.js';

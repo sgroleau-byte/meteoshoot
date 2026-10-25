@@ -100,3 +100,12 @@ export const savePlacement = (projectId, placement) => run('readwrite', s => {
   const c = s.count(projectId);
   c.onsuccess = () => { if (c.result > 0) s.put(placement, plKey(projectId)); };
 });
+// Pose recalée par la 3D (la maison suit le calage de l'image, v633.243): écrite seulement si la pose gardée ici est
+// toujours celle d'origine (heure t0), jamais par-dessus une pose plus récente venue d'un autre appareil entre-temps.
+// Renvoie (transaction terminée) true si elle a été écrite.
+export const savePlacementIf = (projectId, t0, placement) => run('readwrite', s => {
+  let ok = false;
+  const m = s.get(projectId), p = s.get(plKey(projectId));
+  p.onsuccess = () => { if (m.result && ((p.result || m.result.placement || {}).t || 0) === (t0 || 0)) { s.put(placement, plKey(projectId)); ok = true; } };
+  return () => ok;
+});
