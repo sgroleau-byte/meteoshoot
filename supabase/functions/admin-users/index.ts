@@ -44,6 +44,15 @@ function jwtClaims(token: string): Record<string, unknown> {
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
+  try {
+    return await handle(req, origin);
+  } catch (e) {
+    console.error("admin-users (hors try):", e);
+    return json({ error: (e as Error)?.message || "Erreur interne" }, 500, origin);
+  }
+});
+
+async function handle(req: Request, origin: string | null): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors(origin) });
   if (req.method !== "POST") return json({ error: "Méthode refusée" }, 405, origin);
 
@@ -60,11 +69,11 @@ Deno.serve(async (req) => {
   const claims = jwtClaims(token);
   const amr = Array.isArray(claims.amr) ? (claims.amr as { method?: string }[]) : [];
   const viaPasskey = amr.some((m) => isPasskeyMethod(m.method));
-  if (action === "me") console.log("amr:", JSON.stringify(amr.map((m) => m.method)));
 
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: "Corps invalide" }, 400, origin); }
   const action = String(body.action || "");
+  if (action === "me") console.log("amr:", JSON.stringify(amr.map((m) => m.method)));
 
   const listPasskeys = async () => {
     const { data } = await admin.auth.admin.passkey.listPasskeys({ userId: user.id });
@@ -219,4 +228,4 @@ Deno.serve(async (req) => {
     console.error("admin-users:", e);
     return json({ error: (e as Error)?.message || "Erreur interne" }, 500, origin);
   }
-});
+}
