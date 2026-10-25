@@ -202,13 +202,14 @@ float dMid(vec3 p, float detail, out float hh) {
      uniforme qui lisait comme une texture plaquée (Stéphane, 11 octobre 2026). */
   float covL = covField(q.xz * 1.3, cov, detail) * mix(1.0, 0.55 + 0.55 * smoothstep(-0.3, 0.3, w.z + 0.3), typ);
   if (covL <= 0.002) return 0.0;
+  float grad = smoothstep(0.0, 0.15, h) * (1.0 - smoothstep(0.5, 1.0, h));
+  if (gLod >= 0.999) return covL * grad * 0.5; /* champ moyen (lointain, ombre de la couche): inutile de lire les cellules */
   float L = mix(6000.0, 2600.0, typ) * (0.7 + 0.6 * (w.x + 0.5));
   vec3 qs = vec3(q.x * 1.4, (p.y - base) * 1.5 + 321.0, q.z);
   vec4 n = tex3(tNoise, qs / L, 128.0);
   float fb = n.g * 0.625 + n.b * 0.25 + n.a * 0.125;
   float shape = rmp(n.r, -(1.0 - fb), 1.0);
   shape = mix(0.9, shape, mix(0.3, 1.0, typ));
-  float grad = smoothstep(0.0, 0.15, h) * (1.0 - smoothstep(0.5, 1.0, h));
   float covP = covMap(covL, typ);
   float d = rmp(shape * grad, 1.0 - covP, 1.0) * covP;
   d = mix(d, covL * grad * 0.5, gLod); /* niveau de détail, comme la couche basse */
@@ -219,9 +220,24 @@ float dMid(vec3 p, float detail, out float hh) {
   }
   return d;
 }
-/* Profondeur optique (sans sigma) vers le soleil: 5 pas croissants puis un échantillon lointain */
+/* Profondeur optique (sans sigma) vers le soleil: 5 pas croissants puis un échantillon lointain.
+   Couche moyenne: transmission moyenne d'après la part de trouées de chaque tronçon (champ moyen: part de cellules f, densité
+   0,5 dans les cellules), au lieu de lire le champ cellulaire point par point. Au coucher, soleil rasant, chaque point du
+   calcul franchissait les bords nets des petites cellules et dessinait sa propre série de lignes: des filets brillants
+   superposés, du « papier froissé » granuleux sur tout le ciel (« il n'y a jamais de grain dans les vrais nuages »,
+   Stéphane, 25 octobre 2026). Le champ moyen seul éteignait la lueur du coucher (la lumière qui file entre les cellules);
+   la part de trouées la garde, lissée comme par la diffusion dans un vrai nuage. */
 float tauTo(vec3 p, vec3 sd, float thick, float covK, int layer, float jit) {
   float st = thick * 0.09, t = st * (jit - 0.5), tau = 0.0, hh;
+  if (layer == 1) {
+    float gl0 = gLod, s1 = mix(0.015, 0.03, uLay1.w), lt = 0.0; gLod = 1.0;
+    for (int i = 0; i < 5; i++) {
+      float ds = i < 4 ? st * (float(i) + 1.0) : thick * 0.6; t += i < 4 ? ds : 0.0;
+      float f = clamp(dMid(p + sd * (i < 4 ? max(t, 0.0) : thick * 1.8), 0.0, hh) * 2.0, 0.0, 1.0);
+      lt += log(max(1.0 - f + f * exp(-s1 * 0.5 * ds), 1e-30));
+    }
+    gLod = gl0; return -lt / s1;
+  }
   for (int i = 0; i < 4; i++) { float ds = st * (float(i) + 1.0); t += ds; vec3 q = p + sd * max(t, 0.0); tau += (layer == 0 ? dLow(q, 0.0, covK, hh) : dMid(q, 0.0, hh)) * ds; }
   vec3 q = p + sd * thick * 1.8; tau += (layer == 0 ? dLow(q, 0.0, covK, hh) : dMid(q, 0.0, hh)) * thick * 0.6;
   return tau;

@@ -1047,6 +1047,16 @@ importé, lui, est le fichier de l'architecte.
     les vrais nuages » (un effilochage fin a été retiré). Coût: environ 0,3 ms par passe réduite sur Mac.
   - Reste: grain des altocumulus au coucher (déjà dans les versions précédentes), petites mèches dans tous les sens de ses
     photos, brume de l'horizon plus grise que ses photos.
+- v633.245 (25 octobre 2026), **plus de grain dans les altocumulus au coucher** (« il n'y a jamais de grain dans les vrais
+  nuages »). Opacité lisse, tout le grain était dans l'éclairage: `tauTo` lisait le champ cellulaire point par point le long
+  du soleil rasant, et chaque point franchissait les bords nets des cellules (des filets brillants superposés, « papier
+  froissé »). Ni le tramage, ni l'érosion fine, ni un flou du bruit n'y changeaient rien; le champ moyen enlevait le grain
+  mais éteignait la lueur du coucher, faite de la lumière qui file entre les cellules.
+  - Correction (couche moyenne seulement): transmission moyenne d'après la part de trouées de chaque tronçon du trajet vers
+    le soleil (part de cellules = 2 x champ moyen, densité 0,5 dans les cellules). `dMid` rend directement le champ moyen
+    quand le niveau de détail vaut 1 (passe des nuages 15 à 30 % plus rapide).
+  - Effet visible au lever: altocumulus plus lumineux, cellules plus visibles (leur forme reste à refaire). Banc: 28
+    conditions sans valeur aberrante; nuages bas, cirrus et cas sans nuages moyens inchangés.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
