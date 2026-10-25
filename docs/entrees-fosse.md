@@ -72,3 +72,31 @@ Planche de contrôle: `planche_entrees_fosse_stoneham.png` (220 m autour de la m
   les formes dessinées (bâtiments et stationnements), dans `rebuild` et dans le placement par défaut du modèle. Sans
   forme de bâtiment ou sans empreinte LiDAR correspondante, rien ne bouge. Trace console « formes dessinées recalées
   sur le LiDAR: X m est, Y m nord ». La maison importée n'est pas touchée (placée à la main sur l'image Apple recalée).
+- **v633.242**: la légende 3D dit si les formes dessinées ont été recalées sur le LiDAR et de combien (diagnostic).
+
+## v633.243 (25 octobre 2026): image Plans d'Apple calée sur les toits
+
+Stéphane, stationnement dessiné collé à sa maison sur la carte mais à plusieurs mètres de la maison importée dans la
+3D: « pourquoi un si gros décalage? ». La forme de bâtiment dessinée sur Google tombait à 1 m de l'empreinte LiDAR
+(l'image Google est bonne chez lui; mon premier diagnostic, 7 m pour Google, était faux: j'avais pris l'ombre pour le
+toit). C'est l'image Apple du sol (SOL SAT) qui était mal calée, et la maison importée, posée dessus, avec elle.
+
+- **Cause:** le calage serveur (api/satshift.js, v633.184) cherchait le décalage qui met le plus de pixels sombres dans
+  les empreintes. La masse sombre, c'est le toit plus son ombre portée, toujours du même côté: biais constant de 7 à
+  10 m vers le sud là où ce critère concluait (Stoneham 10 m au lieu de 2,5; Limoilou 12 m au lieu d'environ 2; Gaspé
+  12 m). Planche: `_METEOSHOOT/verification_entrees_fosse/calage/planche_calage_apple_maison.png`.
+- **Nouveau critère** (`src/scene3d/roofShift.js`, partagé serveur et navigateur): pixels de toit gris (saturation
+  sous 0,22, valeur de 0,12 à 0,55), empreinte par empreinte LiDAR (60 m² et plus), part de toit dedans moins
+  l'anneau de 1,5 à 4 m, pic net exigé; médiane pondérée vers le projet, accord d'au moins deux bâtiments et de la
+  moitié du poids. Faux pics écartés: le toit du voisin le long d'une rue régulière. Pas d'accord (villes, toits pâles
+  ou colorés, peu d'empreintes LiDAR): pas de recalage, plus juste que l'ancien critère.
+- **Banc** (`verification_entrees_fosse/calage/bench_calage.mjs`, quatorze lieux): concluent Stoneham (2 E, 2,5 S;
+  5 bâtiments sur 6) et Shannon (2 E, 4 S); ailleurs pas d'accord, donc pas de recalage (Limoilou et Gaspé y gagnent:
+  l'ancien les poussait de 12 m). L'image Esri (api/paved.js) garde l'ancien critère: sa photo de printemps à
+  dominante verte ne se laisse pas mesurer par ce critère des toits (piste ouverte).
+- **La maison importée suit l'image** (`followSat`, engine.js): la pose garde `sat`, le calage de l'image quand elle
+  a été glissée avec SOL SAT allumé (null: posée sans l'image, pose par défaut comprise, elle ne bouge pas). Une pose
+  sans ce champ (d'avant la v633.243) est supposée faite sur l'ancien calage (`appleShiftOld` dans la scène): elle se
+  déplace une fois de la différence (chez Stéphane: 7,5 m vers le nord) et la nouvelle pose est enregistrée, pour
+  son projet même si la fiche en montre un autre. Vérifié en local avec le modèle de test et une pose simulée.
+- Version de scène 13: chaque lieu recalcule ses environs une fois.

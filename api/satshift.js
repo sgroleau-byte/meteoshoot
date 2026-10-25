@@ -9,13 +9,22 @@
 // null sans clé (développement local sans identifiants) ou en cas d'échec: le navigateur garde son propre calage.
 // Critère (v633.184): contraste dedans/dehors (contrastShift), voir plus bas; le compte de pixels sombres seul donnait
 // chez Stéphane 8 m est et 12 m nord (faux pic en bord de fenêtre) au lieu de 2 m est et 10 m sud.
+//
+// v633.243 (25 octobre 2026): ce critère des pixels sombres se calait sur la masse toit + ombre portée, d'où un biais
+// constant de 7 à 10 m vers le sud (Stoneham 10 m au lieu de 3, Limoilou 12 m au lieu de 2, Gaspé 12 m). Le calage se
+// fait maintenant sur les toits eux-mêmes (src/scene3d/roofShift.js); quand les toits ne s'accordent pas (villes,
+// toits pâles ou colorés, peu d'empreintes LiDAR), l'image n'est pas recalée: c'est plus juste que l'ancien critère,
+// qui se trompait de 7 à 10 m partout où il concluait. L'ancien résultat voyage encore (old, appleShiftOld dans la
+// scène) pour déplacer une seule fois les maisons importées qui avaient été posées sur l'image mal calée.
 import { PNG } from 'pngjs';
 import { snapshotRequest } from './apple-snapshot.js';
+import { roofShift } from '../src/scene3d/roofShift.js';
 
 const Z = 18;
 const satSide = (lat) => 640 * 156543.03392 * Math.cos(lat * Math.PI / 180) / 2 ** Z; // comme satDrape.js
 function inRing(x, y, r) { let ins = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const a = r[i], b = r[j]; if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) ins = !ins; } return ins; }
 
+// { shift, old } (mètres est et nord à ajouter à la position de l'image), ou null sans clé ni image.
 export async function appleShift(lat, lng, bld, log = () => {}) {
   const req = snapshotRequest(lat, lng, Z);
   if (!req) { log('calage Plans d\'Apple: pas de clé ici'); return null; }
@@ -43,10 +52,11 @@ export async function appleShift(lat, lng, bld, log = () => {}) {
     for (let j = Math.max(0, Math.floor(j0)); j <= Math.min(N - 1, Math.ceil(j1)); j++) for (let i = Math.max(0, Math.floor(i0)); i <= Math.min(N - 1, Math.ceil(i1)); i++) if (inRing(x0 + i + 0.5, n0 + j + 0.5, ring)) inside[j * N + i] = 1;
   }
   const cs = contrastShift(inside, dark, N);
-  if (!cs) { log('calage Plans d\'Apple: trop peu de bâtiments dans l\'image'); return [0, 0]; }
-  const out = cs.ok ? [-cs.dx, -cs.dy] : [0, 0];
-  log(`calage Plans d'Apple: ${out[0]} m est, ${out[1]} m nord (contraste ${cs.best.toFixed(3)} contre ${cs.second.toFixed(3)} au 2e pic${cs.ok ? '' : ', pas assez net: pas de recalage'})`);
-  return out;
+  const old = cs && cs.ok ? [-cs.dx, -cs.dy] : [0, 0]; // ancien critère (pixels sombres), pour la migration des maisons posées
+  const rs = roofShift(png.data, W, H, side, bld, [0, 0]);
+  const shift = rs ? rs.shift : [0, 0];
+  log(`calage Plans d'Apple par les toits: ${rs ? `${shift[0]} m est, ${shift[1]} m nord (${rs.used} bâtiments en accord sur ${rs.total})` : 'pas assez de toits nets, pas de recalage'}; ancien critère ${old[0]} m est, ${old[1]} m nord`);
+  return { shift, old };
 }
 
 // Décalage (dx, dy en cellules) qui maximise le contraste dedans/dehors; { ok, dx, dy, best, second } ou null sans

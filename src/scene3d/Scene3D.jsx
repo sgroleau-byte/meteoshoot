@@ -149,11 +149,13 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
     if (isOff() || eng.current !== e) return;
     if (!rec) { if (e.getModelPlacement()) await e.setModel(null); if (eng.current === e) { mdlFor.current = null; if (!isOff()) setMdl(null); } return; }
     const p0 = toLocal(rec.placement, org.current);
-    const pl = await e.setModel(rec.glb, rec.info, p0);
+    const pl = await e.setModel(rec.glb, rec.info, p0, pid);
     if (!pl || eng.current !== e) return;
+    // Pose recalée par le moteur (la maison suit le calage de l'image, v633.243) ou repère ajouté: gardée.
+    const moved = !!p0 && (Math.abs(pl.x - p0.x) > 0.01 || Math.abs(pl.n - p0.n) > 0.01 || (p0.sat === undefined && pl.sat !== undefined));
     // Jamais placé (import fini vue fermée ou sur un autre projet, adresse déplacée de plus d'un kilomètre): pose par défaut
     // gardée et maison libre à cette première apparition; fixée aux suivantes.
-    mdlFor.current = pid; if (!p0) keep(pl); if (!isOff()) { setMdl({ info: rec.info, pl }); setLocked(p0 != null); }
+    mdlFor.current = pid; if (!p0 || moved) keep(pl); if (!isOff()) { setMdl({ info: rec.info, pl }); setLocked(p0 != null); }
   });
   const stopDrag = () => { if (endDrag.current) endDrag.current(); };
 
@@ -167,7 +169,12 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
     pScene.catch(() => {}); pTerrain.catch(() => {}); // traitées plus bas; évite l'avertissement si le moteur ne se charge pas
     import('./engine.js').then(m => {
       if (cancelled || !box.current) return;
-      const e = m.createScene3D(box.current, { onInfo: setInfo, onModel: (pl) => { setMdl(v => v && { ...v, pl }); keep(pl); } });
+      // owner: la maison a suivi le nouveau calage de l'image à l'arrivée des environs (engine.js, followSat); gardée pour
+      // son projet même si la fiche en montre déjà un autre.
+      const e = m.createScene3D(box.current, { onInfo: setInfo, onModel: (pl, owner) => {
+        if (owner !== undefined && owner !== mdlFor.current) { if (owner) savePlacement(owner, { ...pl, o: org.current, t: Date.now() }).then(() => queuePlacement(owner)).catch(err => console.warn('[scene3d] placement non gardé:', err)); return; }
+        setMdl(v => v && { ...v, pl }); keep(pl);
+      } });
       eng.current = e; org.current = [r5(lat), r5(lng)]; mdlFor.current = null; if (zoomRef) zoomRef.current = (f) => e.zoom(f);
       if (import.meta.env.DEV) window.__scene3d = e; // inspection en développement seulement
       e.setProject({ lat, lng, buildings, orientation });
@@ -205,6 +212,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
         const p = toLocal(await loadPlacement(pid), org.current);
         if (!p || off || eng.current !== e || mdlFor.current !== pid) return;
         const pl = e.setModelPlacement(p); if (pl) setMdl(v => v && { ...v, pl });
+        if (pl && (Math.abs(pl.x - p.x) > 0.01 || Math.abs(pl.n - p.n) > 0.01 || (p.sat === undefined && pl.sat !== undefined))) keep(pl); // recalée avec l'image (v633.243)
       });
     }).catch(warnCloud('modèle en ligne inaccessible'));
     return () => { off = true; stopDrag(); };
@@ -249,7 +257,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
         const prev = removed.get(pid), same = !!prev && prev.name === res.info.name && prev.srcBytes === res.info.srcBytes;
         if (same) removed.delete(pid);
         const p0 = same && e ? toLocal(prev.pl, org.current) : null;
-        const pl = e ? await e.setModel(res.glb, res.info, p0) : null;
+        const pl = e ? await e.setModel(res.glb, res.info, p0, pid) : null;
         const shown = pl && eng.current === e;
         if (shown) { mdlFor.current = pid; if (here()) { setMdl({ info: res.info, pl }); setLocked(p0 != null); } } // modèle neuf: libre, à placer; même fichier remis en place: fixé
         if (import.meta.env.DEV) console.info('[scene3d] vitrages', res.info.glazing);

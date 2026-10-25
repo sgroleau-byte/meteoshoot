@@ -296,7 +296,7 @@ export async function buildScene(lat, lng) {
   // qui n'utilise que les empreintes).
   // lidarErr: lecture LiDAR échouée (catalogue ou mosaïque indisponible): la scène sert quand même, mais n'est gardée
   // ni par le réseau de Vercel ni dans le cache partagé, pour être recalculée au prochain affichage.
-  let paved = [], gravel = [], gravelDitch = 0, imgShift = [0, 0], pavedSrc = null, lidarBld = 0, lidarErr = false, lt = null, lidarFp = 0, apple = null;
+  let paved = [], gravel = [], gravelDitch = 0, imgShift = [0, 0], pavedSrc = null, lidarBld = 0, lidarErr = false, lt = null, lidarFp = 0, apple = null, appleOld = null;
   const log = (m) => console.log('[scene3d]', m);
   // Délai global des lectures LiDAR: un serveur de Ressources naturelles Canada bloqué ne doit pas faire échouer toute la
   // scène (60 s pour la fonction, dont 15 à 20 s pour Overture): après 50 s depuis le début, on sert sans ces mesures.
@@ -312,7 +312,7 @@ export async function buildScene(lat, lng) {
   await Promise.all([
     pavedFromImagery(lat, lng, bld, roads, log, { win, water }).then((r) => { paved = r.paved; gravel = r.gravel || []; gravelDitch = r.ditch || 0; imgShift = r.shift || [0, 0]; pavedSrc = r.dense ? null : PAVED_ATTRIBUTION; }).catch((e) => console.warn('[scene3d] surfaces pavées indisponibles:', e && e.message)),
     // Calage de l'image Plans d'Apple sur les empreintes (v633.183): appleShift dans la scène, appliqué tel quel par le navigateur.
-    inTime(appleShift(lat, lng, bld, log), 'calage Plans').then((r) => { apple = r; }).catch((e) => console.warn('[scene3d] calage Plans d\'Apple indisponible:', e && e.message)),
+    inTime(appleShift(lat, lng, bld, log), 'calage Plans').then((r) => { apple = r ? r.shift : null; appleOld = r ? r.old : null; }).catch((e) => console.warn('[scene3d] calage Plans d\'Apple indisponible:', e && e.message)),
     inTime(lidarHeights(lat, lng, bld, log), 'hauteurs').then((r) => { lidarBld = r.measured; if (r.failed) lidarErr = true; }).catch((e) => { lidarErr = true; console.warn('[scene3d] hauteurs LiDAR indisponibles:', e && e.message); }),
     // Les empreintes ne changent pas pendant la mesure des hauteurs: le masque des toits peut se faire en même temps.
     inTime(lidarTrees(lat, lng, bld, log, win), 'arbres').then((r) => { lt = r; if (r.failed) lidarErr = true; }).catch((e) => { lidarErr = true; console.warn('[scene3d] arbres LiDAR indisponibles:', e && e.message); }),
@@ -329,7 +329,7 @@ export async function buildScene(lat, lng) {
     treesSrc = { date: lt.date, res: lt.res, essences: lt.essences, n: lt.trees.length };
     canopy = lt.canopy;
   }
-  const scene = { v: 12, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, pavedSrc, lidarBld, lidarFp, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
+  const scene = { v: 13, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleShiftOld: appleOld, pavedSrc, lidarBld, lidarFp, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
   if (lidarErr) scene.lidarErr = true;
   return scene;
 }
