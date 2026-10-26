@@ -7,7 +7,7 @@ import '@fontsource/montserrat/700.css';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_KEY, lemonCheckoutUrl, openLemonCheckout } from '../shared/config.js';
+import { SUPABASE_URL, SUPABASE_KEY, openLemonCheckout } from '../shared/config.js';
 import { TRANSLATIONS, getDefaultLang } from '../shared/translations.js';
 
 
@@ -150,11 +150,19 @@ const SubscriptionStatus = ({ profile }) => {
 
 // --- Pricing Cards ---
 const PricingCards = ({ profile, user, freeLimits }) => {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const tier = effectiveTier(profile);
   const isFull = tier === 'shooter' || tier === 'god';
   const founder = !!profile?.is_founder;
-  const ready = !!lemonCheckoutUrl(user, founder);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const buy = async () => {
+    if (busy || !user) return;
+    setBusy(true); setNotice('');
+    const r = await openLemonCheckout(supabase, lang);
+    if (!r.ok) setNotice(r.code === 'not_ready' ? t('comingSoon') : r.code === 'already' ? t('currentPlan') : t('checkoutError'));
+    setBusy(false);
+  };
   const small = { fontFamily: "'Montserrat', sans-serif", fontWeight: 300, fontSize: '11px', color: 'rgba(255,255,255,0.25)', letterSpacing: '0.02em' };
 
   const freeFeatures = [
@@ -199,9 +207,10 @@ const PricingCards = ({ profile, user, freeLimits }) => {
           {isPaidProfile(profile) ? (
             <div className="current-plan-badge">{t('currentPlan')}</div>
           ) : (
-            <button className="upgrade-btn" disabled={!ready} style={ready ? undefined : { opacity: 0.4, cursor: 'default' }} onClick={() => openLemonCheckout(user, founder)}>
-              {ready ? t('upgradeToShooter') : t('comingSoon')}
-            </button>
+            <div>
+              <button className="upgrade-btn" disabled={busy} onClick={buy}>{busy ? '...' : t('upgradeToShooter')}</button>
+              {notice && <div style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 300, fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginTop: '10px' }}>{notice}</div>}
+            </div>
           )}
         </div>
       </div>

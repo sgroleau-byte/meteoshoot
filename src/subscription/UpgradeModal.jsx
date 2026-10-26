@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { useAuth } from '../auth/AuthProvider.jsx';
 import { useIsMobile } from '../hooks/useIsMobile.js';
 import { useLang } from '../i18n/LangProvider.jsx';
 import { isNative } from '../native/platform.js';
-import { lemonCheckoutUrl, openLemonCheckout } from '../shared/config.js';
+import { openLemonCheckout } from '../shared/config.js';
+import { supabase } from '../lib/supabase.js';
 import { useSubscription } from './SubscriptionProvider.jsx';
 
 // ===== MODAL DES FORFAITS =====
@@ -14,11 +16,18 @@ const fmtDate = (d, t) => d ? `${d.getDate()} ${t('monthAbbrev')[d.getMonth()]} 
 export const UpgradeModal = ({ isOpen, onClose }) => {
   const { user } = useAuth();
   const { tier, freeLimits, inTrial, trialEndsAt, isFounder, isPaid } = useSubscription();
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const isMobile = useIsMobile();
 
-  const checkoutReady = !!lemonCheckoutUrl(user, isFounder);
-  const openCheckout = () => { openLemonCheckout(user, isFounder); };
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const openCheckout = async () => {
+    if (busy || !user) return;
+    setBusy(true); setNotice('');
+    const r = await openLemonCheckout(supabase, lang);
+    if (!r.ok) setNotice(r.code === 'not_ready' ? t('comingSoon') : r.code === 'already' ? t('currentPlan') : t('checkoutError'));
+    setBusy(false);
+  };
 
   if (!isOpen) return null;
 
@@ -76,13 +85,14 @@ export const UpgradeModal = ({ isOpen, onClose }) => {
             ) : isNative ? (
               <div style={{ ...featureStyle, marginBottom: 0 }}>{t('manageOnWeb')}</div>
             ) : (
-              <button onClick={openCheckout} disabled={!checkoutReady} title={checkoutReady ? '' : t('comingSoon')} style={{
-                background: '#E07A2B', color: '#ffffff', border: 'none', opacity: checkoutReady ? 1 : 0.45,
-                padding: '12px 24px', cursor: checkoutReady ? 'pointer' : 'default', width: '100%',
+              <button onClick={openCheckout} disabled={busy} style={{
+                background: '#E07A2B', color: '#ffffff', border: 'none', opacity: busy ? 0.6 : 1,
+                padding: '12px 24px', cursor: 'pointer', width: '100%',
                 fontFamily: "'Bebas Neue', sans-serif", fontWeight: 700, fontSize: '16px',
                 letterSpacing: '0.04em'
-              }}>{t('upgradeToShooter')}</button>
+              }}>{busy ? '...' : t('upgradeToShooter')}</button>
             )}
+            {notice && <div style={{ ...featureStyle, marginTop: '10px', marginBottom: 0, color: 'rgba(255,255,255,0.45)' }}>{notice}</div>}
           </div>
         </div>
 

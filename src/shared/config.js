@@ -11,25 +11,26 @@ export function publicOrigin() {
   return native ? SITE_ORIGIN : window.location.origin;
 }
 
-// Lemon Squeezy (abonnement web). Une seule boutique, en dollars canadiens; deux variantes du produit « MeteoShoot
-// complet »: Fondateur (12,99 $ par mois, prix garanti à vie, par lien direct seulement) et Standard. Les adresses
-// de paiement viennent du tableau de bord Lemon Squeezy (Partager > lien de paiement de la variante); tant qu'elles
-// sont vides, le bouton de paiement est inactif. Le portail client (changer de carte, annuler) passe par la fonction
-// edge billing-portal, qui renvoie l'adresse signée de l'abonnement de l'utilisateur.
-export const LEMON_STORE = 'meteoshoot';
-export const LEMON_CHECKOUT_FOUNDER = '';
-export const LEMON_CHECKOUT_STANDARD = '';
-export const LEMON_CHECKOUT_URL = LEMON_CHECKOUT_STANDARD; // compatibilité
-export function lemonCheckoutUrl(user, isFounder) {
-  const base = isFounder ? (LEMON_CHECKOUT_FOUNDER || LEMON_CHECKOUT_STANDARD) : LEMON_CHECKOUT_STANDARD;
-  if (!base || !user) return '';
-  return base + (base.includes('?') ? '&' : '?') + 'checkout[custom][user_id]=' + encodeURIComponent(user.id) + '&checkout[email]=' + encodeURIComponent(user.email || '');
-}
-export function openLemonCheckout(user, isFounder) {
-  const url = lemonCheckoutUrl(user, isFounder);
-  if (!url) return false;
+// Lemon Squeezy (abonnement web). Boutique Drift&Grain (dollars canadiens), produit « MeteoShoot complet » avec deux
+// variantes: Fondateur (12,99 $ par mois, prix garanti à vie) et Standard. Aucun lien de paiement dans le code: la
+// fonction edge create-checkout crée, pour l'utilisateur connecté, un paiement sur la bonne variante (courriel rempli,
+// compte rattaché), et renvoie l'adresse à ouvrir. Tant que les variantes ne sont pas réglées côté serveur (secrets),
+// elle répond « pas encore ouvert » et le bouton le dit. Le portail client passe par billing-portal.
+export const LEMON_STORE = 'driftandgrain';
+export const LEMON_CHECKOUT_URL = ''; // compatibilité: plus de lien fixe
+export async function openLemonCheckout(supabaseClient, lang) {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) return { ok: false, code: 'no_session' };
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/create-checkout`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lang }),
+  });
+  let data = {};
+  try { data = await res.json(); } catch { /* corps vide */ }
+  if (!res.ok || !data.url) return { ok: false, code: data.code || 'error', error: data.error };
   if (typeof window.createLemonSqueezy === 'function') window.createLemonSqueezy();
-  if (window.LemonSqueezy && window.LemonSqueezy.Url) window.LemonSqueezy.Url.Open(url + '&embed=1');
-  else window.open(url, '_blank');
-  return true;
+  if (window.LemonSqueezy && window.LemonSqueezy.Url) window.LemonSqueezy.Url.Open(data.url);
+  else window.open(data.url, '_blank', 'noopener');
+  return { ok: true, founder: !!data.founder };
 }
