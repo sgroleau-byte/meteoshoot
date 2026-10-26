@@ -2746,8 +2746,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                   <div ref={sunDotHaloRef} style={{ position: 'absolute', borderRadius: '50%', display: 'none' }}/>
                   <div ref={sunDotInnerRef} style={{ position: 'absolute', borderRadius: '50%' }}/>
                 </div>
-                {/* Update address button: visible only when map has been dragged */}
-                {adjustedPos && (
+                {/* Update address button: visible only when map has been dragged (jamais sur un projet exemple, qui ne se modifie pas) */}
+                {adjustedPos && !project.isSample && (
                   <div style={{ position: 'absolute', bottom: `${isMobile ? 40 : 200}px`, left: '50%', transform: 'translateX(-50%)', zIndex: 15 }}>
                     <button onClick={async () => {
                       const pos = adjustedPos;

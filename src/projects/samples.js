@@ -21,19 +21,19 @@ export const SAMPLE_PROJECTS = [
     ...base, id: SAMPLE_PREFIX + 'musee',
     name: { fr: 'Pavillon du musée', en: 'Museum pavilion' },
     address: '179 Grande Allée Ouest, Québec, QC G1R 2H1, Canada',
-    lat: 46.80141, lng: -71.22509, mandates: ['EXT', 'DRONE'], orientation: ['PM'],
+    lat: 46.80087, lng: -71.22536, mandates: ['EXT', 'DRONE'], orientation: ['PM'],
   },
   {
     ...base, id: SAMPLE_PREFIX + 'eglise',
     name: { fr: 'Église de la place', en: 'Church on the square' },
     address: '32 Rue Sous-le-Fort, Québec, QC G1K 4G2, Canada',
-    lat: 46.81222, lng: -71.20233, mandates: ['EXT'], orientation: ['AM'],
+    lat: 46.81287, lng: -71.20272, mandates: ['EXT'], orientation: ['AM'],
   },
   {
     ...base, id: SAMPLE_PREFIX + 'hotel-de-ville',
     name: { fr: 'Hôtel de ville', en: 'City hall' },
     address: '2 Rue des Jardins, Québec, QC G1R 4S9, Canada',
-    lat: 46.81300, lng: -71.20740, mandates: ['INT', 'EXT'], orientation: ['AM', 'PM'],
+    lat: 46.81388, lng: -71.20797, mandates: ['INT', 'EXT'], orientation: ['AM', 'PM'],
   },
 ];
 
