@@ -5,10 +5,10 @@ import { supabase } from '../lib/supabase.js';
 // ===== ABONNEMENT =====
 // Palier effectif (phase 3, 25 octobre 2026): « complet » si l'abonnement est actif OU si la période gratuite court
 // encore (trial_ends_at, posée par dieu à l'invitation); sinon « gratuit », bridé selon les réglages de dieu
-// (app_settings.free_limits: projets actifs, vue 3D, jours de prévision). Tant que le profil n'est pas chargé, rien
+// (app_settings.free_limits: projets actifs, vue 3D; la prévision sur 10 jours est la même pour tout le monde). Tant que le profil n'est pas chargé, rien
 // n'est bridé (pas de clignotement des limites au démarrage).
 export const TBL_USER_PROFILES = isDev ? 'user_profiles_dev' : 'user_profiles';
-const DEFAULT_FREE_LIMITS = { maxProjects: 3, scene3d: false, forecastDays: 3 };
+const DEFAULT_FREE_LIMITS = { maxProjects: 3, scene3d: false };
 const FULL_LIMITS = { maxProjects: Infinity, scene3d: true, forecastDays: 10 };
 const PAID_TIERS = ['shooter', 'god'];
 const PAID_STATUSES = ['active', 'past_due', 'trialing'];
@@ -89,7 +89,7 @@ export const SubscriptionProvider = ({ children }) => {
     // Profil pas encore lu: pas de bridage (on ne ferme rien avant de savoir).
     const limits = (!profile || tier !== 'free')
       ? FULL_LIMITS
-      : { maxProjects: Number.isFinite(freeLimits.maxProjects) ? freeLimits.maxProjects : 3, scene3d: !!freeLimits.scene3d, forecastDays: Math.max(1, Math.min(10, Number(freeLimits.forecastDays) || 3)) };
+      : { maxProjects: Number.isFinite(freeLimits.maxProjects) ? freeLimits.maxProjects : 3, scene3d: !!freeLimits.scene3d, forecastDays: 10 };
     return { isPaid, trialEndsAt, inTrial, trialEnded, trialDaysLeft, tier, freeLimits, limits, isFounder: !!profile?.is_founder };
   }, [profile, freeSettings, now]);
 

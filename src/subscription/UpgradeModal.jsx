@@ -52,7 +52,7 @@ export const UpgradeModal = ({ isOpen, onClose }) => {
             <div style={{ ...titleStyle, fontSize: '44px', color: '#ffffff', margin: '16px 0 4px' }}>0 $</div>
             <div style={{ margin: '16px 0 20px' }}>
               <div style={featureStyle}>{t('freeProjectsN').replace('{n}', freeLimits.maxProjects)}</div>
-              <div style={featureStyle}>{t('forecastDaysN').replace('{n}', freeLimits.forecastDays)}</div>
+              <div style={featureStyle}>{t('forecast10')}</div>
               <div style={featureStyle}>{freeLimits.scene3d ? t('with3d') : t('no3d')}</div>
             </div>
             {!isFull && current}

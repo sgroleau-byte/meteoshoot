@@ -167,7 +167,7 @@ const PricingCards = ({ profile, user, freeLimits }) => {
 
   const freeFeatures = [
     t('freeProjectsN').replace('{n}', freeLimits.maxProjects),
-    t('forecastDaysN').replace('{n}', freeLimits.forecastDays),
+    t('forecast10'),
     freeLimits.scene3d ? t('with3d') : t('no3d'),
   ];
   const fullFeatures = [t('unlimitedProjects'), t('forecast10'), t('with3d'), t('continuousUpdates')];
@@ -319,7 +319,7 @@ const AccountPage = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
-  const [freeLimits, setFreeLimits] = useState({ maxProjects: 3, scene3d: false, forecastDays: 3 });
+  const [freeLimits, setFreeLimits] = useState({ maxProjects: 3, scene3d: false });
 
   // Auth check
   useEffect(() => {

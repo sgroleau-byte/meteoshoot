@@ -477,7 +477,7 @@ const UserDetail = ({ u, st, run, me }) => {
 
 // ----- Réglages -----
 const SettingsView = ({ settings, me, run, onMeChange, notify }) => {
-  const [free, setFree] = useState(settings.free_limits || { maxProjects: 3, scene3d: false, forecastDays: 3 });
+  const [free, setFree] = useState(settings.free_limits || { maxProjects: 3, scene3d: false });
   const [inv, setInv] = useState(settings.invite_defaults || { trialDays: 90, founderSeats: 50, founderPrice: '12,99 $ par mois' });
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (settings.free_limits) setFree(settings.free_limits); if (settings.invite_defaults) setInv(settings.invite_defaults); }, [settings]);
@@ -498,10 +498,9 @@ const SettingsView = ({ settings, me, run, onMeChange, notify }) => {
     <>
       <div className="panel">
         <div className="t-section">CE QUE GARDE UN COMPTE GRATUIT</div>
-        <div className="t-muted" style={{ marginBottom: '16px' }}>Après la période gratuite, sans abonnement. Lu par l'application au démarrage.</div>
+        <div className="t-muted" style={{ marginBottom: '16px' }}>Après la période gratuite, sans abonnement. Lu par l'application au démarrage. La prévision sur 10 jours est la même pour tout le monde.</div>
         <div className="panel-grid">
           <div className="field"><label>PROJETS ACTIFS AU MAXIMUM</label><input className="input" type="number" min="0" value={free.maxProjects ?? 3} onChange={e => setFree({ ...free, maxProjects: Number(e.target.value) })} /></div>
-          <div className="field"><label>JOURS DE PRÉVISION</label><input className="input" type="number" min="1" max="10" value={free.forecastDays ?? 3} onChange={e => setFree({ ...free, forecastDays: Number(e.target.value) })} /></div>
           <div className="field"><label>VUE 3D</label><label className="check"><input type="checkbox" checked={!!free.scene3d} onChange={e => setFree({ ...free, scene3d: e.target.checked })} />Offerte au gratuit</label></div>
         </div>
         <div className="panel-actions"><button className="btn btn-primary" onClick={() => run('setting', { key: 'free_limits', value: free }, 'Réglages du gratuit enregistrés')}>ENREGISTRER</button></div>
