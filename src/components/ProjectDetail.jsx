@@ -396,6 +396,14 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   const markerRef = React.useRef(null);
   const [adjustedPos, setAdjustedPos] = useState(null);
   const effectiveCenterRef = React.useRef(null);
+  // Position effective, une seule source pour tout ce qui se dessine sur la carte (repère fixe au centre, lignes du
+  // lever et du coucher, ombres, halo du soleil, échelle, altitude, 3D): la position ajustée par le glissement de la
+  // carte si elle existe, sinon celle du projet. effectiveCenterRef n'en est qu'un miroir pour les écouteurs de la carte.
+  const effectivePos = React.useMemo(
+    () => adjustedPos || (project?.lat && project?.lng ? { lat: project.lat, lng: project.lng } : null),
+    [adjustedPos, project?.lat, project?.lng]
+  );
+  useEffect(() => { effectiveCenterRef.current = adjustedPos; }, [adjustedPos]);
   
   // === Terrain Elevation Shadow ===
   const [terrainProfile, setTerrainProfile] = useState(null);
@@ -475,7 +483,30 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   const [drawPanelPos, setDrawPanelPos] = useState(null);
   const skipMapRecreateRef = React.useRef(false);
   // Reset adjustedPos when switching projects
-  useEffect(() => { setAdjustedPos(null); effectiveCenterRef.current = null; }, [project?.id]);
+  useEffect(() => { setAdjustedPos(null); }, [project?.id]);
+  // Règle de cohérence: sans position ajustée, la carte est centrée sur le projet. Si ce n'est pas le cas (modification
+  // refusée, état intermédiaire), on recentre: le repère, fixe au centre, et tout ce qui se dessine depuis effectivePos
+  // repartent du même point. En local, un accès de vérification (window.__msDetail) sert au test automatique.
+  useEffect(() => {
+    if (adjustedPos) return;
+    const map = mapInstanceRef.current;
+    const pos = projectPosRef.current;
+    if (!map || !pos || typeof map.getCenter !== 'function') return;
+    const c = map.getCenter();
+    if (!c) return;
+    if (Math.abs(c.lat() - pos.lat) + Math.abs(c.lng() - pos.lng) > 0.00005) map.setCenter(pos);
+  }, [adjustedPos, project?.lat, project?.lng, mapEpoch]);
+  useEffect(() => {
+    if (!window.isDev) return;
+    window.__msDetail = {
+      get map() { return mapInstanceRef.current; },
+      get effectivePos() { return effectivePos; },
+      get adjustedPos() { return adjustedPos; },
+      get projectPos() { return projectPosRef.current; },
+      get sunLines() { return sunLinesRef.current; },
+    };
+    return () => { delete window.__msDetail; };
+  }, [effectivePos, adjustedPos]);
   
   // Load buildings from project
   useEffect(() => { setBuildings(project?.buildings || []); setDrawingMode(false); setDrawingVertices([]); setEditingBuilding(null); }, [project?.id]);
@@ -674,8 +705,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map || !SunCalc) return;
-    const eLat = adjustedPos?.lat ?? project?.lat;
-    const eLng = adjustedPos?.lng ?? project?.lng;
+    const eLat = effectivePos?.lat;
+    const eLng = effectivePos?.lng;
     if (!eLat || !eLng) return;
 
     // Clear previous
@@ -884,7 +915,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       wallPolygonsRef.current.forEach(p => p.setMap(null));
       roofPolygonsRef.current.forEach(p => p.setMap(null));
     };
-  }, [buildings, sunHour, sunDate, adjustedPos, editingBuilding, project?.lat, project?.lng, mapEpoch, overlayTick]);
+  }, [buildings, sunHour, sunDate, effectivePos, editingBuilding, project?.lat, project?.lng, mapEpoch, overlayTick]);
 
   // === Project files ===
   const [projectFiles, setProjectFiles] = useState([]);
@@ -1347,10 +1378,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
       if (dist > 0.00005) {
         const pos = { lat: c.lat(), lng: c.lng() };
         setAdjustedPos(pos);
-        effectiveCenterRef.current = pos;
       } else {
         setAdjustedPos(null);
-        effectiveCenterRef.current = null;
       }
     });
 
@@ -1433,8 +1462,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map || !project?.lat || !project?.lng || !SunCalc) return;
-    const eLat = adjustedPos?.lat ?? project.lat;
-    const eLng = adjustedPos?.lng ?? project.lng;
+    const eLat = effectivePos?.lat;
+    const eLng = effectivePos?.lng;
     
     sunLinesRef.current.forEach(l => l.setMap(null));
     sunLinesRef.current = [];
@@ -1482,7 +1511,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     if (altDegPie > 0) {
       // Shadow wedge drawn on canvas overlay for smooth gradient
     }
-  }, [sunDate, project?.lat, project?.lng, mapZoom, adjustedPos, showSunLines, drawingMode, sunHour, mapEpoch]);
+  }, [sunDate, effectivePos, mapZoom, showSunLines, drawingMode, sunHour, mapEpoch]);
 
   // Hide POI labels in drawing mode or when sun lines hidden
   const savedMapStylesRef = React.useRef(null);
@@ -1533,8 +1562,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   }, [showMapFull]);
 
   // Fetch terrain elevation profile when position changes
-  const elevLat = adjustedPos?.lat ?? project?.lat ?? 0;
-  const elevLng = adjustedPos?.lng ?? project?.lng ?? 0;
+  const elevLat = effectivePos?.lat ?? 0;
+  const elevLng = effectivePos?.lng ?? 0;
   const elevGridLat = parseFloat(elevLat.toFixed(3));
   const elevGridLng = parseFloat(elevLng.toFixed(3));
   React.useEffect(() => {
@@ -1558,8 +1587,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map || !project?.lat || !project?.lng || !SunCalc) return;
-    const eLat = adjustedPos?.lat ?? project.lat;
-    const eLng = adjustedPos?.lng ?? project.lng;
+    const eLat = effectivePos?.lat;
+    const eLng = effectivePos?.lng;
 
     // Hide the sun/moon dot div while we recompute (will re-show below if needed)
     if (sunDotContainerRef.current) sunDotContainerRef.current.style.display = 'none';
@@ -1925,7 +1954,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
         drawLensFlare(sunPx.x, sunPx.y, w, h, sunPos.altitude);
       }
     }
-  }, [sunHour, project?.lat, project?.lng, mapType, mapZoom, sunDate, adjustedPos, showSunLines, drawingMode, mapEpoch, overlayTick]);
+  }, [sunHour, effectivePos, mapType, mapZoom, sunDate, showSunLines, drawingMode, mapEpoch, overlayTick]);
 
   // Night overlay toggle
   useEffect(() => {
@@ -2423,8 +2452,8 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                   const triW = Math.round(12 * S);
                   const triH = Math.round(8 * S);
                   // Compute sun times for glow color and triangles
-                  const eLat = adjustedPos?.lat ?? project?.lat;
-                  const eLng = adjustedPos?.lng ?? project?.lng;
+                  const eLat = effectivePos?.lat;
+                  const eLng = effectivePos?.lng;
                   const st = (eLat && eLng && SunCalc) ? SunCalc.getTimes(sunDate, eLat, eLng) : null;
                   const srTime = st?.sunrise ? st.sunrise.getHours() + st.sunrise.getMinutes()/60 : 6;
                   const ssTime = st?.sunset ? st.sunset.getHours() + st.sunset.getMinutes()/60 : 18;
@@ -2756,12 +2785,10 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                         skipMapRecreateRef.current = true;
                         updateProject(project.id, { lat: pos.lat, lng: pos.lng, address: result.formattedAddress, mapZoom: mapZoom });
                         setAdjustedPos(null);
-                        effectiveCenterRef.current = null;
                       } catch(e) {
                         skipMapRecreateRef.current = true;
                         updateProject(project.id, { lat: pos.lat, lng: pos.lng, address: pos.lat.toFixed(5) + ', ' + pos.lng.toFixed(5), mapZoom: mapZoom });
                         setAdjustedPos(null);
-                        effectiveCenterRef.current = null;
                       }
                     }} style={{
                       display: 'flex', alignItems: 'center', gap: '6px',
@@ -2949,7 +2976,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                 </div>}
                 {/* Échelle de la carte (pas en 3D: la perspective n'a pas d'échelle fixe, et elle chevauchait la boussole) */}
                 {!view3d && (() => {
-                  const lat = adjustedPos?.lat ?? project?.lat ?? 45;
+                  const lat = effectivePos?.lat ?? 45;
                   const mPerPx = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, mapZoom);
                   const targetPx = 100;
                   const targetM = targetPx * mPerPx;
