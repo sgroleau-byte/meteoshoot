@@ -247,3 +247,14 @@ subscription_payment_*, et le même secret que `LEMON_WEBHOOK_SECRET`; puis me d
   « Fondateur » 12,99 $ et « Standard », prix à décider) et le webhook vers `lemon-webhook` (événements
   `subscription_*`, secret = `LEMON_WEBHOOK_SECRET`). Ensuite: lire les identifiants des variantes dans dieu, poser les
   deux secrets, tester un achat en mode test.
+
+## Phase 4, produit en place (26 octobre 2026)
+
+- Produit « MeteoShoot complet » (id 1472971) dans Drift&Grain, retiré de la vitrine: variante Fondateur
+  **2296693** (12,99 $ par mois) et Standard **2296696** (19,99 $ par mois), posées dans les secrets
+  `LEMON_FOUNDER_VARIANT_ID` et `LEMON_STANDARD_VARIANT_ID`. Une troisième variante (2296700, 12,99 $, « en
+  attente ») est un brouillon à supprimer dans Lemon Squeezy. Les variantes s'appellent encore « Default »: à renommer
+  Fondateur et Standard dans Lemon (reçus, dieu).
+- Webhook Lemon posé par Stéphane vers `lemon-webhook`, nouveau secret de signature dans les deux endroits.
+- `create-checkout` vérifié: compte ordinaire → 19,99 $, fondateur → 12,99 $. Reste le test d'un vrai achat
+  (webhook, profil, portail client).
