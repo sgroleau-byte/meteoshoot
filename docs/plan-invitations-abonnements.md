@@ -232,3 +232,18 @@ seulement) et « Standard » (prix à décider); webhook (Settings > Webhooks) p
 `https://mioiieshhjqpakdlsfzw.supabase.co/functions/v1/lemon-webhook` avec les événements subscription_* et
 subscription_payment_*, et le même secret que `LEMON_WEBHOOK_SECRET`; puis me donner les deux liens de paiement
 (« Share » de chaque variante) et l'identifiant de la variante Fondateur.
+
+## Phase 4, suite (v633.250, 26 octobre 2026)
+
+- Nouvelle clé d'API Lemon Squeezy posée par Stéphane dans les secrets Supabase: le catalogue se lit. Une seule
+  boutique sous ce compte: **Drift&Grain** (`driftandgrain`, dollars canadiens, Canada), avec DJI AEB Sorter,
+  PerspectiveDrift et DeployLens Pro. Pas de boutique « meteoshoot »: MeteoShoot va dans Drift&Grain, rien à changer
+  côté devise.
+- Fonction `create-checkout`: crée pour l'utilisateur connecté un paiement Lemon sur la bonne variante (Fondateur si
+  le profil est fondateur, sinon Standard), courriel rempli, `custom.user_id` pour le webhook, retour sur la page
+  compte. Plus aucun lien de paiement dans le code; secrets `LEMON_STORE_ID` (297563, posé), `LEMON_FOUNDER_VARIANT_ID`
+  et `LEMON_STANDARD_VARIANT_ID` (à poser quand le produit existe). D'ici là, le bouton répond « bientôt disponible ».
+- Reste à Stéphane: créer dans Drift&Grain le produit « MeteoShoot complet » (abonnement mensuel, variantes
+  « Fondateur » 12,99 $ et « Standard », prix à décider) et le webhook vers `lemon-webhook` (événements
+  `subscription_*`, secret = `LEMON_WEBHOOK_SECRET`). Ensuite: lire les identifiants des variantes dans dieu, poser les
+  deux secrets, tester un achat en mode test.
