@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { useIsMobile } from '../hooks/useIsMobile.js';
 import { useLang } from '../i18n/LangProvider.jsx';
+import { useSubscription } from '../subscription/SubscriptionProvider.jsx';
 import { formatTime, getDayAbbrev, getDayMonth, isToday } from '../utils/dates.js';
 import { SHOOT_OPP_MIN, SUN_DIRECT_COLOR, cloudcoverToIcon, dayIcon, veilIcon } from '../weather/iconsLogic.js';
 import { SMOKE_TINT, WeatherIcon } from './icons/WeatherIcon.jsx';
@@ -22,6 +23,9 @@ export const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9, orientation
   const orient = ['AM', 'PM'].filter((o) => (orientation || []).includes(o));
   const shootSlots = daytime && !orient.length ? ['AM', 'PM'] : orient;
   const { t } = useLang();
+  // Gratuit: la prévision s'arrête au nombre de jours réglé dans dieu; une cellule discrète dit ce que le complet ajoute.
+  const sub = useSubscription();
+  const dayCap = Math.min(maxDays, sub?.forecastDays ?? maxDays);
   const [hoveredIdx, setHoveredIdx] = useState(null);
   const [cellCenterX, setCellCenterX] = useState(0);
   const [displayX, setDisplayX] = useState(0);
@@ -65,7 +69,8 @@ export const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9, orientation
   
   const todayIndex = daily.findIndex(d => isToday(d.date));
   const startIndex = todayIndex >= 0 ? todayIndex : 0;
-  const sortedDaily = daily.slice(startIndex, startIndex + maxDays);
+  const sortedDaily = daily.slice(startIndex, startIndex + dayCap);
+  const hiddenDays = Math.max(0, Math.min(maxDays, daily.length - startIndex) - dayCap);
   
   // Choix de l'icône du jour: logique partagée avec le widget iPhone (iconsLogic.dayIcon). La fumée de feux
   // est signalée par la teinte de fond (SMOKE_TINT) seulement; l'icône reste la vraie météo.
@@ -157,6 +162,16 @@ export const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9, orientation
           </div>
         );
       })}
+      {hiddenDays > 0 && (
+        <div
+          onClick={(e) => { e.stopPropagation(); sub.openUpgrade(); }}
+          title={t('moreDaysFull').replace('{n}', hiddenDays)}
+          className="day-cell relative flex flex-col items-center justify-center min-w-[48px] px-0 py-0 rounded cursor-pointer"
+          style={{ opacity: 0.35, borderLeft: '1px dashed rgba(255,255,255,0.25)' }}
+        >
+          <span className="font-bebas-regular" style={{ fontSize: '13px', letterSpacing: '0.06em', color: '#ffffff' }}>+{hiddenDays} J</span>
+        </div>
+      )}
       </div>
       {!isMobile && hoveredDay && ReactDOM.createPortal(
         <div 

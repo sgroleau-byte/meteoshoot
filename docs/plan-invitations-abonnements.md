@@ -189,3 +189,20 @@ dieu.meteoshoot.com.
   la page d'acceptation de bout en bout.
 - Phase 3 (bascule dans l'application: palier effectif, bridage du gratuit selon `app_settings`, compte à rebours,
   modal de forfaits) et phase 4 (paiement réel, App Store et Lemon Squeezy) restent à faire.
+
+## Phase 3 faite (v633.248, 25 octobre 2026)
+
+- `SubscriptionProvider`: palier effectif calculé côté client (abonnement actif ou gratuité en cours = complet;
+  sinon gratuit), limites du gratuit lues dans `app_settings.free_limits` (réglables dans dieu), rien de bridé tant
+  que le profil n'est pas lu, relecture horaire pour une fin de gratuité qui tombe l'app ouverte.
+- Bridage du gratuit: projets actifs (compteur et blocage existants), vue 3D (le bouton 3D ouvre le modal des
+  forfaits), jours de prévision (rangée météo coupée au nombre réglé, cellule pointillée « +N J » qui ouvre le modal).
+- Pastille de compte à rebours (`TrialBanner`): à 30, 7 et 1 jours, chaque palier se ferme d'un geste et revient au
+  suivant; « période gratuite terminée » en orange tant que l'abonnement n'est pas pris. Un toucher ouvre le modal.
+- Modal des forfaits en deux colonnes (GRATUIT avec les limites réelles, COMPLET à 12,99 $ par mois, mention « prix
+  fondateur garanti à vie » pour les fondateurs). Dans l'app iPhone et iPad: ni prix ni bouton d'achat (règles
+  d'Apple), seulement « l'abonnement se gère depuis ton compte sur le web ». Le bouton web ouvre encore l'ancienne
+  page de paiement Lemon Squeezy (boutique driftandgrain): à remplacer en phase 4 avant la première fin de gratuité.
+- Préférences: date de fin de gratuité et mention fondateur sous le forfait; « SHOOTER » s'appelle maintenant
+  « COMPLET » dans l'interface.
+- Testé en local avec le compte de test dans les deux états (gratuité terminée, essai à 5 jours).

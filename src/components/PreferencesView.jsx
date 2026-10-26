@@ -45,7 +45,7 @@ export const PreferencesView = () => {
   const { prefs, setPrefs } = useStore();
   const editPrefs = getEditListPrefs(prefs);
   const { user, signOut } = useAuth();
-  const { tier, isActive, profile, isShooterUser } = useSubscription();
+  const { tier, isActive, profile, isShooterUser, inTrial, trialEndsAt, isFounder } = useSubscription();
   const { t, lang, setLang } = useLang();
   const isMobile = useIsMobile();
   const [showUpgradePref, setShowUpgradePref] = useState(false);
@@ -161,6 +161,11 @@ export const PreferencesView = () => {
                   {isActive ? t('active') : (profile?.subscription_status || '').toUpperCase()}
                 </span>
               </div>
+              {inTrial && trialEndsAt && (
+                <div className="font-bebas-light" style={{ marginTop: '6px', fontSize: '15px', letterSpacing: '0.04em', color: 'rgba(255,255,255,0.45)' }}>
+                  {t('trialUntil').replace('{date}', `${trialEndsAt.getDate()} ${t('monthAbbrev')[trialEndsAt.getMonth()]} ${trialEndsAt.getFullYear()}`)}{isFounder ? ` | ${t('founderLocked')}` : ''}
+                </div>
+              )}
               {tier === 'free' && (
                 <button onClick={() => setShowUpgradePref(true)} style={{
                   marginTop: '12px', background: 'none', border: '1px solid #E07A2B',
@@ -267,7 +272,7 @@ export const PreferencesView = () => {
 
           <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
             <div style={{ textAlign: 'center' }}>
-              <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.247</div>
+              <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.248</div>
               <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
             </div>
           </div>

@@ -7,6 +7,8 @@ import { useLang } from '../i18n/LangProvider.jsx';
 import { geocodeAddress, getTravelTime } from '../maps/google.js';
 import { StoreProvider, useStore } from '../projects/StoreProvider.jsx';
 import { SubscriptionProvider } from '../subscription/SubscriptionProvider.jsx';
+import { TrialBanner } from '../subscription/TrialBanner.jsx';
+import { GlobalUpgradeModal } from '../subscription/UpgradeModal.jsx';
 import { attachSmoothWheel } from '../utils/smoothWheel.js';
 import { isNative } from '../native/platform.js';
 import { WeatherStatusProvider } from '../weather/WeatherStatusProvider.jsx';
@@ -467,6 +469,9 @@ export const App = () => {
       {!isMobile && view === 'todo' && !selectedId && plusRect && <NewProjectModal isOpen={showNew} origin={plusRect} onClose={() => { setShowNew(false); }} onCreated={() => { setShowNew(false); }} onOpen={() => setShowNew(true)}/>}
       {/* Undo delete toast */}
       {lastDeleted && <UndoToast key={lastDeleted.id} onUndo={undoDelete} projectName={lastDeleted.name} />}
+      {/* Période gratuite: compte à rebours, et modal des forfaits ouvert depuis la rangée météo ou la vue 3D */}
+      {!(isMobile && showNew) && !selectedId && <TrialBanner />}
+      <GlobalUpgradeModal />
     </div>
   );
 };
