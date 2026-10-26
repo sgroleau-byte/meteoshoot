@@ -8,6 +8,7 @@ import { useIsMobile } from '../hooks/useIsMobile.js';
 import { useLang } from '../i18n/LangProvider.jsx';
 import { ProjectStatus } from '../projects/constants.js';
 import { useStore } from '../projects/StoreProvider.jsx';
+import { useAuth } from '../auth/AuthProvider.jsx';
 import { useSubscription } from '../subscription/SubscriptionProvider.jsx';
 import { UpgradeModal } from '../subscription/UpgradeModal.jsx';
 import { formatTimeSince } from '../utils/dates.js';
@@ -288,7 +289,8 @@ export const useFolderDnD = ({ listRef, groupedItems, applyTodoOrder, moveToFold
 };
 
 export const TodoView = ({ onSelect, onAddProject, addingProject, plusRef }) => {
-  const { projects, reorderProjects, applyTodoOrder, moveToFolder, folderStates, setFolderState } = useStore();
+  const { projects, samples, reorderProjects, applyTodoOrder, moveToFolder, folderStates, setFolderState } = useStore();
+  const { user } = useAuth();
   const isMobile = useIsMobile();
   // iPad: comme au téléphone, la liste annonce au navigateur que seul le défilement vertical est à lui (les glissements
   // horizontaux ouvrent le tiroir).
@@ -433,7 +435,20 @@ export const TodoView = ({ onSelect, onAddProject, addingProject, plusRef }) => 
           </React.Fragment>
         );
       })()}
-      {todoProjects.length === 0 ? (isMobile ? (
+      {samples.length > 0 ? (
+        <div style={{ padding: isMobile ? '0 12px' : '0 16px' }}>
+          {/* Compte sans projet: un mot de bienvenue et trois exemples (lieux publics) qui s'effacent au premier projet */}
+          <div style={{ padding: isMobile ? '8px 12px 28px' : '8px 0 32px', maxWidth: '720px' }}>
+            <div className="font-bebas-book" style={{ fontSize: isMobile ? '30px' : '38px', letterSpacing: '0.04em', color: '#ffffff', lineHeight: 1 }}>
+              {t('welcomeSamplesTitle').replace('{name}', (() => { const n = (user?.user_metadata?.full_name || '').trim().split(/\s+/)[0]; return n ? ` ${n}` : ''; })()).toUpperCase()}
+            </div>
+            <div style={{ marginTop: '12px', fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: isMobile ? '15px' : '16px', lineHeight: 1.6, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.01em' }}>
+              {t('welcomeSamplesText')}
+            </div>
+          </div>
+          {samples.map((p, i) => <div key={p.id}><ProjectCard project={p} index={i} onSelect={onSelect} actionsOpen={false} setOpenActionsId={() => {}} readOnly/></div>)}
+        </div>
+      ) : todoProjects.length === 0 ? (isMobile ? (
         <div ref={el => {
           if (!el) return;
           const flare = document.getElementById('persistentFlare');

@@ -21,7 +21,7 @@ import { dayIcon } from '../weather/iconsLogic.js';
 
 // React.memo + actionsOpen (booléen): ouvrir ou fermer un tiroir ne redessine que la carte concernée, pas toute la liste
 // (sur iPad, redessiner les cartes larges à la fin du glissement le faisait accrocher).
-export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDownDrag, actionsOpen, setOpenActionsId }) => {
+export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDownDrag, actionsOpen, setOpenActionsId, readOnly = false }) => {
   const { advanceProject, deleteProject, prefs } = useStore();
   const { t } = useLang();
   const { reportWeather, clearWeather } = useWeatherStatus();
@@ -180,7 +180,7 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
   const contentRef = useRef(null);
   const actionsRef = useRef(null);
   const haloWhiteRef = useRef(null);
-  const setActionsOpen = (v) => setOpenActionsId(v ? project.id : null);
+  const setActionsOpen = (v) => { if (!readOnly) setOpenActionsId(v ? project.id : null); };
   const actionW = 160;
   // iPad (interface large au doigt, sans survol): le tiroir de suppression se révèle en glissant la carte vers la
   // gauche, comme sur téléphone (corbeille seule; « Passer en édition » reste dans la fiche).
@@ -237,7 +237,7 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
             )}
             <div style={{ flex: 1, textAlign: 'left', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start' }}>
               <span className="font-bebas-book text-charcoal" style={{ letterSpacing: '0.04em', fontSize: '24px', lineHeight: '0.9', opacity: project.onHold ? 0.4 : 1, transition: 'opacity 0.3s' }}>
-                {project.name} {project.isContest && <StarIcon/>}{isShootOfDay && <ShootCheckIcon/>}
+                {project.name} {project.isContest && <StarIcon/>} {project.isSample && <span className="font-bebas-regular" style={{ fontSize: '12px', letterSpacing: '0.12em', color: 'rgba(125,211,198,0.75)', border: '1px solid rgba(125,211,198,0.35)', padding: '3px 6px 2px', lineHeight: 1, position: 'relative', top: '1px' }}>{t('sampleTag')}</span>}{isShootOfDay && <ShootCheckIcon/>}
               </span>
             </div>
           </div>
@@ -286,7 +286,7 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
       <div ref={swipeWide ? haloWhiteRef : undefined} style={slideWide} onClick={() => onSelect(project)} className="cursor-pointer" onMouseEnter={() => { if (weatherRowDismiss.current) { weatherRowDismiss.current(); weatherRowDismiss.current = null; } }}>
         <div className="flex items-start justify-between gap-4" style={{ marginBottom: '-10px' }}>
           <h3 className="font-bebas-book text-charcoal flex items-center gap-2" style={{ letterSpacing: '0.04em', fontSize: '35px', opacity: project.onHold ? 0.4 : 1, transition: 'opacity 0.3s' }}>
-            {project.name} {project.isContest && <StarIcon/>}
+            {project.name} {project.isContest && <StarIcon/>} {project.isSample && <span className="font-bebas-regular" style={{ fontSize: '12px', letterSpacing: '0.12em', color: 'rgba(125,211,198,0.75)', border: '1px solid rgba(125,211,198,0.35)', padding: '3px 6px 2px', lineHeight: 1, position: 'relative', top: '1px' }}>{t('sampleTag')}</span>}
           </h3>
         </div>
       </div>
@@ -351,7 +351,7 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
   return (
     <div className="card-glow-wrap" ref={swipeWide ? cardRef : undefined} data-open={swipeWide ? actionsOpen : undefined}>
     {desktopCard}
-    {swipeWide && (
+    {swipeWide && !readOnly && (
       <div ref={actionsRef} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: `${actionW}px`, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '28px', transform: `translateX(${actionW - txWide}px)`, transition: easeWide, zIndex: 1, willChange: 'transform' }}>
         {/* Halo rouge du tiroir, comme sur téléphone (il suit le glissement). Halo et boutons descendent de 29 px: centrés
             sur la rangée météo et les colonnes plutôt que sur toute la carte (titre compris), comme le décalage du téléphone. */}
@@ -359,10 +359,10 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
         {confirmDelete ? <button className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '16px', cursor: 'pointer', letterSpacing: '0.03em', textShadow: '0 0 12px rgba(255,59,48,0.4)', padding: '6px 2px', whiteSpace: 'nowrap', position: 'relative', top: '29px' }} onClick={() => { deleteProject(project.id); }}>{t('deleteConfirm')}</button> : <button style={{ background: 'none', border: 'none', padding: '6px 2px', cursor: 'pointer', color: '#FF3B30', filter: 'drop-shadow(0 0 4px rgba(255,59,48,0.3))', position: 'relative', top: '29px' }} onClick={() => { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }}><TrashIcon/></button>}
       </div>
     )}
-    <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
+    {!readOnly && <div className="hidden lg:flex items-center gap-4 card-actions" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)' }}>
       <button onClick={handleDone} className="font-bebas-bold uppercase" style={{ background: 'none', border: 'none', color: confirmDone ? '#d83152' : colorCharcoal, fontSize: '16px', cursor: 'pointer', padding: '6px 2px', letterSpacing: '0.03em', transition: 'text-shadow 0.2s, color 0.2s', textShadow: confirmDone ? '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)' : 'none' }} onMouseEnter={e => { e.target.style.color = '#FAF9F7'; e.target.style.textShadow = '0 0 12px rgba(255,255,255,0.25), 0 0 30px rgba(255,255,255,0.1)'; }} onMouseLeave={e => { if (!confirmDone) { e.target.style.color = colorCharcoal; e.target.style.textShadow = 'none'; } else { e.target.style.color = '#d83152'; e.target.style.textShadow = '0 0 12px rgba(216,49,82,0.4), 0 0 30px rgba(216,49,82,0.15)'; } }}>{confirmDone ? t('moveToEditingConfirm') : t('moveToEditing')}</button>
       {confirmDelete ? <button onClick={handleDelete} className="font-bebas-bold" style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: '16px', cursor: confirmReady ? 'pointer' : 'default', letterSpacing: '0.03em', transition: 'color 0.3s', textShadow: confirmReady ? '0 0 12px rgba(255,59,48,0.4)' : 'none', padding: '6px 2px' }}>{t('deleteConfirm')}</button> : <button onClick={handleDelete} className="p-2 trash-btn text-red-500" title={t('delete')}><TrashIcon/></button>}
-    </div>
+    </div>}
     </div>
   );
 });

@@ -28,10 +28,10 @@ import { rtOpenMap } from './route/RouteView.jsx';
 import { WeatherRow } from './WeatherRow.jsx';
 
 export const ProjectDetail = ({ projectId, onClose }) => {
-  const { projects, updateProject, advanceProject, revertProject, deleteProject, prefs } = useStore();
+  const { projects, updateProject, advanceProject, revertProject, deleteProject, prefs, samples } = useStore();
   const { user } = useAuth();
   const { t } = useLang();
-  const project = projects.find(p => p.id === projectId);
+  const project = projects.find(p => p.id === projectId) || (samples || []).find(p => p.id === projectId);
   const [weather, setWeather] = useState(null);
   const [confirm, setConfirm] = useState(false);
   const [confirmDone, setConfirmDone] = useState(false);

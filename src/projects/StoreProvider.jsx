@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider.jsx';
 import { TBL_PREFS, TBL_PROJECTS, TBL_ROUTES, supabase } from '../lib/supabase.js';
 import { useSubscription } from '../subscription/SubscriptionProvider.jsx';
+import { useLang } from '../i18n/LangProvider.jsx';
+import { isSampleId, sampleProjects } from './samples.js';
 import { ProjectStatus } from './constants.js';
 import { fileHelpers } from './files.js';
 import { cloudDelete } from '../scene3d/modelCloud.js';
@@ -60,6 +62,7 @@ export const ROUTE_TO_ROW = {
 export const StoreProvider = ({ children }) => {
   const { user } = useAuth();
   const { canCreateProject, getProjectLimit } = useSubscription();
+  const { lang } = useLang();
   const [projects, setProjects] = useState(() => JSON.parse(localStorage.getItem('sp-projects') || '[]'));
   const [prefs, setPrefsState] = useState(() => {
     const p = JSON.parse(localStorage.getItem('sp-prefs') || '{"homeAddress":"","homeLat":null,"homeLng":null,"prepTime":60}');
@@ -264,6 +267,7 @@ export const StoreProvider = ({ children }) => {
   };
 
   const updateProject = (id, upd) => {
+    if (isSampleId(id)) return; // projet exemple: rien ne s'enregistre
     setProjects(p => p.map(x => x.id === id ? {...x, ...upd} : x));
     if (user) {
       // Map camelCase to snake_case
@@ -369,7 +373,7 @@ export const StoreProvider = ({ children }) => {
       .then(({ error }) => { if (error) console.error('Route delete error:', error); });
   };
 
-  const advanceProject = (id) => setProjects(p => p.map(x => {
+  const advanceProject = (id) => isSampleId(id) ? undefined : setProjects(p => p.map(x => {
     if (x.id !== id) return x;
     if (x.status === ProjectStatus.TODO) {
       const upd = { status: ProjectStatus.RETOUCHING, shotAt: new Date().toISOString() };
@@ -389,7 +393,7 @@ export const StoreProvider = ({ children }) => {
     return x;
   }));
   
-  const revertProject = (id) => setProjects(p => p.map(x => {
+  const revertProject = (id) => isSampleId(id) ? undefined : setProjects(p => p.map(x => {
     if (x.id !== id) return x;
     if (x.status === ProjectStatus.DONE) {
       const upd = { status: ProjectStatus.RETOUCHING, completedAt: null };
@@ -474,5 +478,8 @@ export const StoreProvider = ({ children }) => {
     });
   };
 
-  return <StoreContext.Provider value={{ projects, routes, synced, prefs, view, selectedId, setView, setSelectedId, addProject, updateProject, deleteProject, addRoute, updateRoute, deleteRoute, advanceProject, revertProject, reorderProjects, applyTodoOrder, moveToFolder, setPrefs, lastDeleted, undoDelete, folderStates, setFolderState }}>{children}</StoreContext.Provider>;
+  // Trois exemples (lieux publics) tant que le compte n'a aucun projet; effacés au premier projet créé.
+  const samples = user && synced && projects.length === 0 ? sampleProjects(lang) : [];
+
+  return <StoreContext.Provider value={{ projects, samples, routes, synced, prefs, view, selectedId, setView, setSelectedId, addProject, updateProject, deleteProject, addRoute, updateRoute, deleteRoute, advanceProject, revertProject, reorderProjects, applyTodoOrder, moveToFolder, setPrefs, lastDeleted, undoDelete, folderStates, setFolderState }}>{children}</StoreContext.Provider>;
 };
