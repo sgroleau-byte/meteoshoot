@@ -258,3 +258,14 @@ subscription_payment_*, et le même secret que `LEMON_WEBHOOK_SECRET`; puis me d
 - Webhook Lemon posé par Stéphane vers `lemon-webhook`, nouveau secret de signature dans les deux endroits.
 - `create-checkout` vérifié: compte ordinaire → 19,99 $, fondateur → 12,99 $. Reste le test d'un vrai achat
   (webhook, profil, portail client).
+
+## Phase 4 vérifiée de bout en bout (26 octobre 2026, nuit)
+
+- Achat réel par Stéphane avec son compte gmail (fondateur): 12,99 $ plus taxes, abonnement Lemon 2636893,
+  variante Fondateur. Les trois premiers envois du webhook avaient été refusés 401 par la porte Supabase (fonction
+  redéployée sans `--no-verify-jwt`); corrigé, renvoi depuis Lemon Squeezy: le profil passe à complet, fondateur,
+  avec abonnement, variante et renouvellement, prod et dev. Règle consignée dans `CLAUDE.md`.
+- Comptes gratuits sans essai (v633.252): lien « Passer à la version complète » toujours visible à côté du compteur
+  de projets, pastille « GRATUIT » en bas; le modal des forfaits mène au paiement.
+- Reste: le portail client (« Gérer mon abonnement » sur la page compte) à essayer par Stéphane; supprimer la
+  variante brouillon « Default » dans Lemon; l'App Store (achat intégré) plus tard.
