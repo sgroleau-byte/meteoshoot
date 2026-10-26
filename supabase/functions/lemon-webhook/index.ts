@@ -109,6 +109,9 @@ Deno.serve(async (req: Request) => {
       // Échec, reprise ou succès d'un paiement: le statut suit (l'événement subscription_updated arrive aussi).
       if (eventName === "subscription_payment_failed") await apply({ subscription_status: "past_due" });
       else if (eventName === "subscription_payment_success" || eventName === "subscription_payment_recovered") await apply({ subscription_status: "active" });
+      // Paiement remboursé: l'accès se ferme tout de suite (l'abonnement reste connu pour le portail; un événement
+      // subscription_* ultérieur, par exemple une reprise, rouvre).
+      else if (eventName === "subscription_payment_refunded") await apply({ subscription_tier: "free", subscription_status: "expired", current_period_end: null });
     } else {
       console.log("Événement non traité:", eventName);
     }
