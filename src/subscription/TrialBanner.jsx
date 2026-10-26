@@ -10,7 +10,7 @@ const KEY = 'ms-trial-dismissed';
 const bucketOf = (days) => (days <= 1 ? 1 : days <= 7 ? 7 : 30);
 
 export const TrialBanner = () => {
-  const { inTrial, trialEnded, trialDaysLeft, openUpgrade, subLoading, profile } = useSubscription();
+  const { tier, inTrial, trialEnded, trialDaysLeft, openUpgrade, subLoading, profile } = useSubscription();
   const { t } = useLang();
   const isMobile = useIsMobile();
   const [dismissed, setDismissed] = useState(() => { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } });
@@ -19,14 +19,17 @@ export const TrialBanner = () => {
   useEffect(() => { setHiddenNow(false); }, [inTrial, trialEnded, trialDaysLeft]);
 
   if (subLoading || !profile || hiddenNow) return null;
-  const ended = trialEnded;
+  // Compte gratuit sans période d'essai (anciens comptes): même pastille, texte neutre.
+  const plainFree = tier === 'free' && !profile.trial_ends_at;
+  const ended = trialEnded || plainFree;
   const countdown = inTrial && trialDaysLeft <= 30;
   if (!ended && !countdown) return null;
   const bucket = countdown ? bucketOf(trialDaysLeft) : 0;
   if (countdown && dismissed && dismissed.bucket === bucket) return null;
 
-  const text = ended
-    ? t('trialEndedTitle')
+  const text = plainFree
+    ? t('freePlan')
+    : ended ? t('trialEndedTitle')
     : trialDaysLeft <= 1 ? t('trialLastDay') : t('trialDaysLeftN').replace('{n}', trialDaysLeft);
   const close = (e) => {
     e.stopPropagation();

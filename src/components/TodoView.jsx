@@ -358,7 +358,7 @@ export const TodoView = ({ onSelect, onAddProject, addingProject, plusRef }) => 
             <span className="font-bebas-light" style={{ fontSize: '15px', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.06em' }}>
               {activeCount}/{limit} {t('projectsCount')}
             </span>
-            {activeCount >= limit && (
+            {(
               <span onClick={() => setShowUpgradeFromTodo(true)} className="font-bebas-regular" style={{ fontSize: '14px', color: '#7dd3c6', cursor: 'pointer', letterSpacing: '0.04em' }}>
                 {t('upgradeToShooter')}
               </span>
