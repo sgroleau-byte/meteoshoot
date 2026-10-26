@@ -46,7 +46,7 @@ const LangProvider = ({ children }) => {
 // --- Tier helpers ---
 const tierDotColor = (tier) => {
   switch (tier) {
-    case 'shooter': return '#E07A2B';
+    case 'shooter': return '#7dd3c6';
     case 'god': return '#ffffff';
     default: return '#7dd3c6';
   }
@@ -82,7 +82,7 @@ const statusColor = (status) => {
   switch (status) {
     case 'active': return 'rgba(125,211,198,0.7)';
     case 'canceled': return 'rgba(255,255,255,0.35)';
-    case 'past_due': return '#E07A2B';
+    case 'past_due': return '#d83152';
     case 'expired': return 'rgba(255,255,255,0.2)';
     default: return 'rgba(125,211,198,0.7)';
   }
@@ -193,11 +193,11 @@ const PricingCards = ({ profile, user, freeLimits }) => {
         {/* COMPLET */}
         <div className={`pricing-card ${isFull ? 'active-shooter' : ''}`}>
           <div style={{ marginBottom: '24px' }}>
-            <div className="font-bebas-regular" style={{ fontSize: '22px', color: isFull ? '#E07A2B' : 'rgba(255,255,255,0.7)', marginBottom: '2px' }}>{t('shooterPlan')}</div>
+            <div className="font-bebas-regular" style={{ fontSize: '22px', color: isFull ? '#7dd3c6' : 'rgba(255,255,255,0.7)', marginBottom: '2px' }}>{t('shooterPlan')}</div>
             <div style={small}>{t('shooterTagline')}</div>
           </div>
           <div style={{ marginBottom: founder ? '6px' : '24px' }}>
-            <span className="font-bebas-light" style={{ fontSize: '48px', lineHeight: 1, color: isFull ? '#E07A2B' : 'rgba(255,255,255,0.6)' }}>{t('priceAmount')}</span>
+            <span className="font-bebas-light" style={{ fontSize: '48px', lineHeight: 1, color: isFull ? '#7dd3c6' : 'rgba(255,255,255,0.6)' }}>{t('priceAmount')}</span>
             <span className="font-bebas-light" style={{ fontSize: '18px', color: 'rgba(255,255,255,0.4)', marginLeft: '8px' }}>{t('priceUnit')}</span>
           </div>
           {founder && <div style={{ ...small, color: 'rgba(125,211,198,0.7)', fontSize: '12px', marginBottom: '18px' }}>{t('founderLocked')}</div>}

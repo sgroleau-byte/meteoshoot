@@ -95,8 +95,8 @@
       border-color: rgba(125,211,198,0.4);
     }
     .pricing-card.active-shooter {
-      border-color: rgba(224,122,43,0.6);
-      box-shadow: 0 0 30px rgba(224,122,43,0.08);
+      border-color: rgba(125,211,198,0.6);
+      box-shadow: 0 0 30px rgba(125,211,198,0.08);
     }
     .pricing-card.active-god {
       border-color: rgba(255,255,255,0.3);
@@ -107,8 +107,8 @@
 
     .upgrade-btn {
       background: none;
-      border: 1px solid #E07A2B;
-      color: #E07A2B;
+      border: 1px solid #7dd3c6;
+      color: #7dd3c6;
       padding: 12px 24px;
       font-family: 'Bebas Neue', sans-serif;
       font-weight: 400;
@@ -120,7 +120,7 @@
       text-align: center;
     }
     .upgrade-btn:hover {
-      background: #E07A2B;
+      background: #7dd3c6;
       color: #181b1e;
     }
 

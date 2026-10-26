@@ -154,7 +154,7 @@ export const PreferencesView = () => {
             <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>{t('plan')}</label>
             <div style={{ marginTop: '8px', maxWidth: '600px' }}>
               <div className="flex items-center gap-3">
-                <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: tier === 'shooter' ? '#E07A2B' : '#7dd3c6', boxShadow: tier === 'shooter' ? '0 0 6px rgba(224,122,43,0.5)' : '0 0 6px rgba(125,211,198,0.5)', flexShrink: 0 }}/>
+                <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#7dd3c6', boxShadow: '0 0 6px rgba(125,211,198,0.5)', flexShrink: 0 }}/>
                 <span className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '18px', color: 'rgba(255,255,255,0.7)' }}>
                   {tier === 'free' ? t('freePlan') : tier === 'shooter' ? t('shooterPlan') : t('godPlan')}
                   {' | '}
@@ -168,8 +168,8 @@ export const PreferencesView = () => {
               )}
               {tier === 'free' && (
                 <button onClick={() => setShowUpgradePref(true)} style={{
-                  marginTop: '12px', background: 'none', border: '1px solid #E07A2B',
-                  color: '#E07A2B', padding: '8px 20px', cursor: 'pointer',
+                  marginTop: '12px', background: 'none', border: '1px solid #7dd3c6',
+                  color: '#7dd3c6', padding: '8px 20px', cursor: 'pointer',
                   fontFamily: "'Bebas Neue', sans-serif", fontWeight: 700, fontSize: '16px',
                   letterSpacing: '0.04em'
                 }}>{t('upgradeToShooter')}</button>
@@ -272,7 +272,7 @@ export const PreferencesView = () => {
 
           <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
             <div style={{ textAlign: 'center' }}>
-              <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.250</div>
+              <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.251</div>
               <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
             </div>
           </div>

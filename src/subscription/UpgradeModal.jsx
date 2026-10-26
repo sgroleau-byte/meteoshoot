@@ -37,7 +37,7 @@ export const UpgradeModal = ({ isOpen, onClose }) => {
   const taglineStyle = { fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '14px', color: 'rgba(255,255,255,0.35)', fontStyle: 'italic', marginTop: '4px', letterSpacing: '0.02em' };
   const featureStyle = { color: 'rgba(255,255,255,0.5)', fontSize: '14px', marginBottom: '8px', fontFamily: "'Montserrat', sans-serif", fontWeight: 300 };
   const featureFull = { ...featureStyle, color: 'rgba(255,255,255,0.75)' };
-  const current = <div style={{ ...titleStyle, fontSize: '15px', color: '#7dd3c6' }}>{t('currentPlan')}</div>;
+  const current = <div style={{ ...titleStyle, fontSize: '15px', color: 'rgba(255,255,255,0.7)' }}>{t('currentPlan')}</div>;
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }} onClick={onClose}>
@@ -46,7 +46,7 @@ export const UpgradeModal = ({ isOpen, onClose }) => {
 
         <div style={{ display: 'flex', gap: '16px', flexDirection: isMobile ? 'column' : 'row' }}>
           {/* GRATUIT */}
-          <div style={{ ...cardStyle, borderColor: !isFull ? '#7dd3c6' : 'rgba(255,255,255,0.12)' }}>
+          <div style={{ ...cardStyle, borderColor: !isFull ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.12)' }}>
             <div style={{ ...titleStyle, fontSize: '22px', color: '#8B9B99' }}>{t('freePlan')}</div>
             <div style={taglineStyle}>{t('freeTagline')}</div>
             <div style={{ ...titleStyle, fontSize: '44px', color: '#ffffff', margin: '16px 0 4px' }}>0 $</div>
@@ -59,8 +59,8 @@ export const UpgradeModal = ({ isOpen, onClose }) => {
           </div>
 
           {/* COMPLET */}
-          <div style={{ ...cardStyle, borderColor: '#E07A2B', boxShadow: '0 0 30px rgba(224,122,43,0.1)' }}>
-            <div style={{ ...titleStyle, fontSize: '22px', color: '#E07A2B' }}>{t('shooterPlan')}</div>
+          <div style={{ ...cardStyle, borderColor: '#7dd3c6', boxShadow: '0 0 30px rgba(125,211,198,0.1)' }}>
+            <div style={{ ...titleStyle, fontSize: '22px', color: '#7dd3c6' }}>{t('shooterPlan')}</div>
             <div style={taglineStyle}>{t('shooterTagline')}</div>
             {!isNative && (
               <div style={{ margin: '16px 0 4px' }}>
@@ -79,14 +79,14 @@ export const UpgradeModal = ({ isOpen, onClose }) => {
             </div>
             {isFull ? (
               <div>
-                <div style={{ ...titleStyle, fontSize: '15px', color: '#E07A2B' }}>{t('currentPlan')}</div>
+                <div style={{ ...titleStyle, fontSize: '15px', color: '#7dd3c6' }}>{t('currentPlan')}</div>
                 {inTrial && !isPaid && <div style={{ ...featureStyle, marginTop: '6px', marginBottom: 0 }}>{t('trialUntil').replace('{date}', fmtDate(trialEndsAt, t))}</div>}
               </div>
             ) : isNative ? (
               <div style={{ ...featureStyle, marginBottom: 0 }}>{t('manageOnWeb')}</div>
             ) : (
               <button onClick={openCheckout} disabled={busy} style={{
-                background: '#E07A2B', color: '#ffffff', border: 'none', opacity: busy ? 0.6 : 1,
+                background: '#7dd3c6', color: '#181b1e', border: 'none', opacity: busy ? 0.6 : 1,
                 padding: '12px 24px', cursor: 'pointer', width: '100%',
                 fontFamily: "'Bebas Neue', sans-serif", fontWeight: 700, fontSize: '16px',
                 letterSpacing: '0.04em'
