@@ -4,8 +4,6 @@
 // gratuité, marquer fondateur, changer le palier, notes, désactiver, supprimer. Réglages: ce que garde un compte
 // gratuit, défauts d'invitation, clés d'accès. Journal: toutes les actions.
 import './dieu.css';
-import '@fontsource/montserrat/300.css';
-import '@fontsource/montserrat/400.css';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createClient } from '@supabase/supabase-js';
