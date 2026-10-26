@@ -28,7 +28,7 @@ import { rtOpenMap } from './route/RouteView.jsx';
 import { WeatherRow } from './WeatherRow.jsx';
 
 export const ProjectDetail = ({ projectId, onClose }) => {
-  const { projects, updateProject, advanceProject, revertProject, deleteProject, prefs, samples } = useStore();
+  const { projects, updateProject, advanceProject, revertProject, deleteProject, prefs, samples, visibleMandates } = useStore();
   const { user } = useAuth();
   const { t } = useLang();
   const project = projects.find(p => p.id === projectId) || (samples || []).find(p => p.id === projectId);
@@ -2311,7 +2311,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
             <div className="py-5 border-b border-adaptive">
               <label className="font-bebas-book text-charcoal-muted" style={{ letterSpacing: '0.04em', fontSize: '22px' }}>MANDAT</label>
               <div className="flex gap-4 flex-wrap mt-1">
-                {Object.values(MandateType).map(m => <button key={m} onClick={() => updateProject(project.id, { mandates: toggleMandate(project.mandates, m) })} className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '22px', color: project.mandates?.includes(m) ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)' }}>{m === 'DRONE+C' ? (project.mandates?.includes(m) ? <span>DRONE.<span style={{color:'#d83152'}}>C</span></span> : 'DRONE.C') : m}</button>)}
+                {visibleMandates(project.mandates || []).map(m => <button key={m} onClick={() => updateProject(project.id, { mandates: toggleMandate(project.mandates, m) })} className="font-bebas-bold" style={{ letterSpacing: '0.04em', fontSize: '22px', color: project.mandates?.includes(m) ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)' }}>{m === 'DRONE+C' ? (project.mandates?.includes(m) ? <span>DRONE.<span style={{color:'#d83152'}}>C</span></span> : 'DRONE.C') : m}</button>)}
               </div>
             </div>
             <div className="py-5 border-b border-adaptive">

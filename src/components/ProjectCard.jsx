@@ -303,7 +303,7 @@ export const ProjectCard = React.memo(({ project, index = 0, onSelect, onMouseDo
           <div className="flex flex-col justify-center pl-2 border-l border-adaptive" style={{ width: '75px' }}>
             {Object.values(MandateType).map(m => {
               const active = project.mandates?.includes(m);
-              const alwaysShow = m === 'INT' || m === 'EXT' || m === 'DRONE';
+              const alwaysShow = m === 'INT' || m === 'EXT' || (m === 'DRONE' && prefs?.doesDrone !== false);
               if (!alwaysShow && !active) return null;
               return <React.Fragment key={m}>{renderMandate(m, active ? colorActive : colorInactive)}</React.Fragment>;
             })}

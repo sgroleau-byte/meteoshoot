@@ -139,6 +139,14 @@ export const PreferencesView = () => {
             </div>
           </div>
 
+          <div className="py-5 border-b border-adaptive">
+            <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>{t('mandatesSection')}</label>
+            <div style={{ marginTop: '10px', maxWidth: '600px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <EditPrefToggle label={t('droneLabel')} value={prefs.doesDrone !== false} onChange={v => setPrefs({ doesDrone: v })}/>
+              <EditPrefToggle label={t('videoLabel')} value={prefs.doesVideo !== false} onChange={v => setPrefs({ doesVideo: v })}/>
+            </div>
+          </div>
+
           {announceAvailable && (
             <div className="py-5 border-b border-adaptive">
               <label className="font-bebas-regular text-charcoal-muted" style={{ fontSize: '22px', letterSpacing: '0.04em' }}>{t('liveSection')}</label>
@@ -272,7 +280,7 @@ export const PreferencesView = () => {
 
           <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
             <div style={{ textAlign: 'center' }}>
-              <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.257</div>
+              <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.258</div>
               <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
             </div>
           </div>

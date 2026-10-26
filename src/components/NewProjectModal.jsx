@@ -8,7 +8,7 @@ import { useStore } from '../projects/StoreProvider.jsx';
 import { FolderCombo } from './pickers.jsx';
 
 export const NewProjectModal = ({ isOpen, onClose, onCreated, origin, onOpen }) => {
-  const { addProject, prefs } = useStore();
+  const { addProject, prefs, visibleMandates } = useStore();
   const { t } = useLang();
   const [form, setForm] = useState({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false, clientFolder: '' });
   const [loading, setLoading] = useState(false);
@@ -135,7 +135,7 @@ export const NewProjectModal = ({ isOpen, onClose, onCreated, origin, onOpen }) 
               <div className="mb-5">
                 <label className="newproj-label font-bebas-book">MANDAT</label>
                 <div className="flex gap-4 flex-wrap">
-                  {Object.values(MandateType).map(m => (
+                  {visibleMandates(form.mandates).map(m => (
                     <button key={m} type="button" onClick={() => setForm({...form, mandates: toggleMandate(form.mandates, m)})} className={`newproj-toggle font-bebas-bold ${form.mandates.includes(m) ? 'active' : ''}`} style={form.mandates.includes(m) && m === 'DRONE+C' ? {} : {}}>{m === 'DRONE+C' ? (form.mandates.includes(m) ? React.createElement('span', null, 'DRONE.', React.createElement('span', {style:{color:'#d83152'}}, 'C')) : 'DRONE.C') : m}</button>
                   ))}
                 </div>
@@ -212,7 +212,7 @@ export const NewProjectModal = ({ isOpen, onClose, onCreated, origin, onOpen }) 
             <div className="mb-5">
               <label className="newproj-label font-bebas-book">MANDAT</label>
               <div className="flex gap-5">
-                {Object.values(MandateType).map(m => (
+                {visibleMandates(form.mandates).map(m => (
                   <button key={m} type="button" onClick={() => setForm({...form, mandates: toggleMandate(form.mandates, m)})} className={`newproj-toggle font-bebas-bold ${form.mandates.includes(m) ? 'active' : ''}`} style={form.mandates.includes(m) && m === 'DRONE+C' ? {} : {}}>{m === 'DRONE+C' ? (form.mandates.includes(m) ? React.createElement('span', null, 'DRONE.', React.createElement('span', {style:{color:'#d83152'}}, 'C')) : 'DRONE.C') : m}</button>
                 ))}
               </div>

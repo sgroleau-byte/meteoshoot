@@ -4,6 +4,7 @@ import { TBL_PREFS, TBL_PROJECTS, TBL_ROUTES, supabase } from '../lib/supabase.j
 import { useSubscription } from '../subscription/SubscriptionProvider.jsx';
 import { useLang } from '../i18n/LangProvider.jsx';
 import { isSampleId, sampleProjects } from './samples.js';
+import { MandateType } from './constants.js';
 import { ProjectStatus } from './constants.js';
 import { fileHelpers } from './files.js';
 import { cloudDelete } from '../scene3d/modelCloud.js';
@@ -161,7 +162,8 @@ export const StoreProvider = ({ children }) => {
           setPrefsState(p => ({
             ...p,
             homeAddress: dbPrefs.home_address || '', homeLat: dbPrefs.home_lat,
-            homeLng: dbPrefs.home_lng, prepTime: dbPrefs.prep_time || 60
+            homeLng: dbPrefs.home_lng, prepTime: dbPrefs.prep_time || 60,
+            doesDrone: dbPrefs.does_drone !== false, doesVideo: dbPrefs.does_video !== false, onboardingDone: dbPrefs.onboarding_done === true
           }));
           // État des dossiers depuis le compte (partagé web + PWA). Absent/null sur les
           // anciens comptes ou si la migration n'a pas tourné: on garde {} (défaut appliqué à l'affichage).
@@ -215,7 +217,8 @@ export const StoreProvider = ({ children }) => {
         supabase.from(TBL_PREFS).upsert({
           user_id: user.id, home_address: next.homeAddress,
           home_lat: next.homeLat, home_lng: next.homeLng,
-          prep_time: typeof next.prepTime === 'number' ? next.prepTime : 60
+          prep_time: typeof next.prepTime === 'number' ? next.prepTime : 60,
+          does_drone: next.doesDrone !== false, does_video: next.doesVideo !== false, onboarding_done: next.onboardingDone === true
         }).then(({ error }) => { if (error) console.error('Prefs save error:', error); });
       }
       return next;
@@ -479,8 +482,14 @@ export const StoreProvider = ({ children }) => {
     });
   };
 
+  // Mandats proposés dans l'interface: DRONE et DRONE.C seulement si le photographe fait du drone, VID s'il fait de la
+  // vidéo (questions de la première ouverture, réactivables dans les préférences). Ceux déjà posés sur un projet
+  // restent visibles pour ce projet (keep).
+  const visibleMandates = (keep = []) => Object.values(MandateType).filter((m) =>
+    keep.includes(m) || !((prefs.doesDrone === false && (m === MandateType.DRONE || m === MandateType.DRONE_C)) || (prefs.doesVideo === false && m === MandateType.VID)));
+
   // Trois exemples (lieux publics) tant que le compte n'a aucun projet; effacés au premier projet créé.
   const samples = user && synced && projects.length === 0 ? sampleProjects(lang).map((p) => (sampleOverrides[p.id] ? { ...p, ...sampleOverrides[p.id] } : p)) : [];
 
-  return <StoreContext.Provider value={{ projects, samples, routes, synced, prefs, view, selectedId, setView, setSelectedId, addProject, updateProject, deleteProject, addRoute, updateRoute, deleteRoute, advanceProject, revertProject, reorderProjects, applyTodoOrder, moveToFolder, setPrefs, lastDeleted, undoDelete, folderStates, setFolderState }}>{children}</StoreContext.Provider>;
+  return <StoreContext.Provider value={{ projects, samples, visibleMandates, routes, synced, prefs, view, selectedId, setView, setSelectedId, addProject, updateProject, deleteProject, addRoute, updateRoute, deleteRoute, advanceProject, revertProject, reorderProjects, applyTodoOrder, moveToFolder, setPrefs, lastDeleted, undoDelete, folderStates, setFolderState }}>{children}</StoreContext.Provider>;
 };

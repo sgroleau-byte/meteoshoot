@@ -9,7 +9,7 @@ import { FolderCombo } from './pickers.jsx';
 
 // === Mobile New Project Screen (slides in from right) ===
 export const MobileNewProjectScreen = ({ isOpen, onClose, onCreated }) => {
-  const { addProject, prefs } = useStore();
+  const { addProject, prefs, visibleMandates } = useStore();
   const { t } = useLang();
   const [form, setForm] = useState({ name: '', address: '', lat: null, lng: null, mandates: [], orientation: [], isContest: false, clientFolder: '' });
   const [loading, setLoading] = useState(false);
@@ -114,7 +114,7 @@ export const MobileNewProjectScreen = ({ isOpen, onClose, onCreated }) => {
       <div style={{ marginBottom: '24px' }}>
         <label className="newproj-label font-bebas-book">MANDAT</label>
         <div className="flex gap-3 flex-wrap">
-          {Object.values(MandateType).map(m => (
+          {visibleMandates(form.mandates).map(m => (
             <button key={m} type="button" onClick={() => setForm({...form, mandates: toggleMandate(form.mandates, m)})} className={`newproj-toggle font-bebas-bold ${form.mandates.includes(m) ? 'active' : ''}`} style={form.mandates.includes(m) && m === 'DRONE+C' ? {} : {}}>{m === 'DRONE+C' ? (form.mandates.includes(m) ? React.createElement('span', null, 'DRONE.', React.createElement('span', {style:{color:'#d83152'}}, 'C')) : 'DRONE.C') : m}</button>
           ))}
         </div>

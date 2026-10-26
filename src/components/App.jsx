@@ -15,6 +15,7 @@ import { WeatherStatusProvider } from '../weather/WeatherStatusProvider.jsx';
 import { Header } from './Header.jsx';
 import { MobileNewProjectScreen } from './MobileNewProjectScreen.jsx';
 import { NewProjectModal } from './NewProjectModal.jsx';
+import { OnboardingQuestions } from './OnboardingQuestions.jsx';
 import { PreferencesView } from './PreferencesView.jsx';
 import { ProjectDetail } from './ProjectDetail.jsx';
 import { RetouchingView } from './RetouchingView.jsx';
@@ -471,6 +472,7 @@ export const App = () => {
       {lastDeleted && <UndoToast key={lastDeleted.id} onUndo={undoDelete} projectName={lastDeleted.name} />}
       {/* Période gratuite: compte à rebours, et modal des forfaits ouvert depuis la rangée météo ou la vue 3D */}
       {!(isMobile && showNew) && !selectedId && <TrialBanner />}
+      {synced && prefs.onboardingDone !== true && <OnboardingQuestions />}
       <GlobalUpgradeModal />
     </div>
   );
