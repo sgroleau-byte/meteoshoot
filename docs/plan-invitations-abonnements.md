@@ -252,8 +252,8 @@ subscription_payment_*, et le même secret que `LEMON_WEBHOOK_SECRET`; puis me d
 
 - Produit « MeteoShoot complet » (id 1472971) dans Drift&Grain, retiré de la vitrine: variante Fondateur
   **2296693** (12,99 $ par mois) et Standard **2296696** (19,99 $ par mois), posées dans les secrets
-  `LEMON_FOUNDER_VARIANT_ID` et `LEMON_STANDARD_VARIANT_ID`. Une troisième variante (2296700, 12,99 $, « en
-  attente ») est un brouillon à supprimer dans Lemon Squeezy. Les variantes s'appellent encore « Default »: à renommer
+  `LEMON_FOUNDER_VARIANT_ID` et `LEMON_STANDARD_VARIANT_ID`. Une troisième variante (2296700, « Default », en
+  attente) apparaît par l'API seulement: gabarit interne de Lemon, invisible dans le tableau de bord, rien à faire. Les variantes s'appellent encore « Default »: à renommer
   Fondateur et Standard dans Lemon (reçus, dieu).
 - Webhook Lemon posé par Stéphane vers `lemon-webhook`, nouveau secret de signature dans les deux endroits.
 - `create-checkout` vérifié: compte ordinaire → 19,99 $, fondateur → 12,99 $. Reste le test d'un vrai achat
@@ -267,8 +267,7 @@ subscription_payment_*, et le même secret que `LEMON_WEBHOOK_SECRET`; puis me d
   avec abonnement, variante et renouvellement, prod et dev. Règle consignée dans `CLAUDE.md`.
 - Comptes gratuits sans essai (v633.252): lien « Passer à la version complète » toujours visible à côté du compteur
   de projets, pastille « GRATUIT » en bas; le modal des forfaits mène au paiement.
-- Reste: le portail client (« Gérer mon abonnement » sur la page compte) à essayer par Stéphane; supprimer la
-  variante brouillon « Default » dans Lemon; l'App Store (achat intégré) plus tard.
+- Reste: le portail client (« Gérer mon abonnement » sur la page compte) à essayer par Stéphane;  l'App Store (achat intégré) plus tard.
 - Cycle complet vérifié à 02:48: remboursement et annulation dans Lemon → événements `subscription_cancelled`,
   `subscription_updated`, `subscription_expired` reçus et journalisés → le gmail revient au gratuit (statut expiré),
   reste fondateur, abonnement détaché. Un paiement remboursé ferme aussi l'accès tout de suite (webhook).
