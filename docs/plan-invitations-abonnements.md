@@ -269,3 +269,6 @@ subscription_payment_*, et le même secret que `LEMON_WEBHOOK_SECRET`; puis me d
   de projets, pastille « GRATUIT » en bas; le modal des forfaits mène au paiement.
 - Reste: le portail client (« Gérer mon abonnement » sur la page compte) à essayer par Stéphane; supprimer la
   variante brouillon « Default » dans Lemon; l'App Store (achat intégré) plus tard.
+- Cycle complet vérifié à 02:48: remboursement et annulation dans Lemon → événements `subscription_cancelled`,
+  `subscription_updated`, `subscription_expired` reçus et journalisés → le gmail revient au gratuit (statut expiré),
+  reste fondateur, abonnement détaché. Un paiement remboursé ferme aussi l'accès tout de suite (webhook).
