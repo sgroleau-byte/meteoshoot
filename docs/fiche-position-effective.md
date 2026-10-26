@@ -17,7 +17,8 @@ suivait pas (par exemple un projet exemple qui refuse la modification), le repè
 - **Sans position ajustée, la carte est centrée sur le projet.** Un effet le vérifie à chaque changement de
   `adjustedPos`, de la position du projet ou de la carte, et recentre sinon. Un « Mettre à jour » refusé ou un
   état intermédiaire ne peuvent plus laisser le repère d'un côté et les lignes de l'autre.
-- Un projet exemple n'a pas de bouton « Mettre à jour » (il ne se modifie pas).
+- Un projet exemple accepte « Mettre à jour » comme un vrai projet: la modification vit en mémoire (session) et
+  n'est jamais enregistrée; le repère et les lignes suivent donc exactement comme pour un vrai projet.
 
 ## Le test
 

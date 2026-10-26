@@ -79,6 +79,7 @@ export const StoreProvider = ({ children }) => {
   const [view, setView] = useState('todo');
   const [selectedId, setSelectedId] = useState(null);
   const [synced, setSynced] = useState(false);
+  const [sampleOverrides, setSampleOverrides] = useState({}); // retouches faites sur les projets exemples (session seulement)
 
   // Cache to localStorage (always, for offline)
   useEffect(() => { localStorage.setItem('sp-projects', JSON.stringify(projects)); }, [projects]);
@@ -267,7 +268,7 @@ export const StoreProvider = ({ children }) => {
   };
 
   const updateProject = (id, upd) => {
-    if (isSampleId(id)) return; // projet exemple: rien ne s'enregistre
+    if (isSampleId(id)) { setSampleOverrides((o) => ({ ...o, [id]: { ...(o[id] || {}), ...upd } })); return; } // exemple: en mémoire seulement
     setProjects(p => p.map(x => x.id === id ? {...x, ...upd} : x));
     if (user) {
       // Map camelCase to snake_case
@@ -479,7 +480,7 @@ export const StoreProvider = ({ children }) => {
   };
 
   // Trois exemples (lieux publics) tant que le compte n'a aucun projet; effacés au premier projet créé.
-  const samples = user && synced && projects.length === 0 ? sampleProjects(lang) : [];
+  const samples = user && synced && projects.length === 0 ? sampleProjects(lang).map((p) => (sampleOverrides[p.id] ? { ...p, ...sampleOverrides[p.id] } : p)) : [];
 
   return <StoreContext.Provider value={{ projects, samples, routes, synced, prefs, view, selectedId, setView, setSelectedId, addProject, updateProject, deleteProject, addRoute, updateRoute, deleteRoute, advanceProject, revertProject, reorderProjects, applyTodoOrder, moveToFolder, setPrefs, lastDeleted, undoDelete, folderStates, setFolderState }}>{children}</StoreContext.Provider>;
 };
