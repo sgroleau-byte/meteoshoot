@@ -11,5 +11,25 @@ export function publicOrigin() {
   return native ? SITE_ORIGIN : window.location.origin;
 }
 
-// Lemon Squeezy (abonnement web)
-export const LEMON_CHECKOUT_URL = 'https://driftandgrain.lemonsqueezy.com/checkout/buy/62706175-0f3d-4cfa-a1e5-d7c4cc7f80c8';
+// Lemon Squeezy (abonnement web). Une seule boutique, en dollars canadiens; deux variantes du produit « MeteoShoot
+// complet »: Fondateur (12,99 $ par mois, prix garanti à vie, par lien direct seulement) et Standard. Les adresses
+// de paiement viennent du tableau de bord Lemon Squeezy (Partager > lien de paiement de la variante); tant qu'elles
+// sont vides, le bouton de paiement est inactif. Le portail client (changer de carte, annuler) passe par la fonction
+// edge billing-portal, qui renvoie l'adresse signée de l'abonnement de l'utilisateur.
+export const LEMON_STORE = 'meteoshoot';
+export const LEMON_CHECKOUT_FOUNDER = '';
+export const LEMON_CHECKOUT_STANDARD = '';
+export const LEMON_CHECKOUT_URL = LEMON_CHECKOUT_STANDARD; // compatibilité
+export function lemonCheckoutUrl(user, isFounder) {
+  const base = isFounder ? (LEMON_CHECKOUT_FOUNDER || LEMON_CHECKOUT_STANDARD) : LEMON_CHECKOUT_STANDARD;
+  if (!base || !user) return '';
+  return base + (base.includes('?') ? '&' : '?') + 'checkout[custom][user_id]=' + encodeURIComponent(user.id) + '&checkout[email]=' + encodeURIComponent(user.email || '');
+}
+export function openLemonCheckout(user, isFounder) {
+  const url = lemonCheckoutUrl(user, isFounder);
+  if (!url) return false;
+  if (typeof window.createLemonSqueezy === 'function') window.createLemonSqueezy();
+  if (window.LemonSqueezy && window.LemonSqueezy.Url) window.LemonSqueezy.Url.Open(url + '&embed=1');
+  else window.open(url, '_blank');
+  return true;
+}

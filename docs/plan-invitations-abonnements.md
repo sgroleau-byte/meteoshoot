@@ -206,3 +206,29 @@ dieu.meteoshoot.com.
 - Préférences: date de fin de gratuité et mention fondateur sous le forfait; « SHOOTER » s'appelle maintenant
   « COMPLET » dans l'interface.
 - Testé en local avec le compte de test dans les deux états (gratuité terminée, essai à 5 jours).
+
+## Phase 4, côté code (v633.249, 26 octobre 2026)
+
+- **Constat**: la clé d'API Lemon Squeezy gardée dans les secrets Supabase est expirée (« Your API key has expired »);
+  la lecture du catalogue, des abonnements et du portail client ne marchera qu'après son remplacement.
+- Migration `20261026120000_paiements_lemon.sql`: table privée `billing_events` (chaque événement du webhook),
+  colonnes `lemon_variant_id`, `lemon_variant_name`, `subscription_ends_at` sur les profils, liste des comptes de dieu
+  enrichie.
+- Webhook `lemon-webhook` réécrit: fondateur reconnu par la variante (secret `LEMON_FOUNDER_VARIANT_ID`, ou nom de
+  variante contenant « fondateur »), statuts Lemon traduits (past_due, cancelled avec accès jusqu'à `ends_at`,
+  expired qui ferme), paiements échoués et repris, comparaison de signature à temps constant, journal.
+- Fonction `billing-portal`: renvoie l'adresse signée du portail client de l'abonnement de l'utilisateur connecté
+  (la page compte l'ouvre d'un clic; plus de lien fixe vers la boutique).
+- `src/shared/config.js`: `LEMON_CHECKOUT_FOUNDER` et `LEMON_CHECKOUT_STANDARD` (vides tant que le produit n'existe
+  pas: bouton inactif « bientôt disponible »), `openLemonCheckout(user, isFounder)` choisit la variante.
+- Page compte: statut effectif (gratuité en cours = complet), date de fin de gratuité, variante et renouvellement,
+  accès jusqu'au pour un abonnement annulé, deux colonnes de prix alignées sur le modal de l'app.
+- Dieu, onglet Revenus: boutiques avec devise, variantes avec prix, abonnements, alerte si la clé est expirée.
+
+**À faire par Stéphane chez Lemon Squeezy (boutique `meteoshoot`)**: nouvelle clé d'API (Settings > API) à coller
+dans Supabase (Edge Functions > Secrets > `LEMON_API_KEY`); devise de la boutique en CAD (Settings > General, aucune
+vente à ce jour); produit « MeteoShoot complet » avec deux variantes mensuelles: « Fondateur » 12,99 $ (lien direct
+seulement) et « Standard » (prix à décider); webhook (Settings > Webhooks) pointant sur
+`https://mioiieshhjqpakdlsfzw.supabase.co/functions/v1/lemon-webhook` avec les événements subscription_* et
+subscription_payment_*, et le même secret que `LEMON_WEBHOOK_SECRET`; puis me donner les deux liens de paiement
+(« Share » de chaque variante) et l'identifiant de la variante Fondateur.

@@ -7,7 +7,7 @@ import '@fontsource/montserrat/700.css';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_KEY, LEMON_CHECKOUT_URL } from '../shared/config.js';
+import { SUPABASE_URL, SUPABASE_KEY, lemonCheckoutUrl, openLemonCheckout } from '../shared/config.js';
 import { TRANSLATIONS, getDefaultLang } from '../shared/translations.js';
 
 
@@ -15,8 +15,9 @@ import { TRANSLATIONS, getDefaultLang } from '../shared/translations.js';
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const TBL_PROFILES = isDev ? 'user_profiles_dev' : 'user_profiles';
 
-// --- LemonSqueezy customer portal base ---
-const LEMON_PORTAL_URL = 'https://meteoshoot.lemonsqueezy.com/billing';
+// --- Portail client Lemon Squeezy: adresse signée renvoyée par la fonction edge billing-portal ---
+const BILLING_PORTAL_FN = `${SUPABASE_URL}/functions/v1/billing-portal`;
+const fmtDate = (d, t) => { if (!d) return ''; const x = new Date(d); return `${x.getDate()} ${t('monthAbbrev')[x.getMonth()]} ${x.getFullYear()}`; };
 
 // --- Lang context ---
 const LangContext = createContext();
@@ -114,10 +115,16 @@ const Header = () => {
 };
 
 // --- Subscription Status ---
+const isPaidProfile = (p) => !!p && ['shooter', 'god'].includes(p.subscription_tier) && ['active', 'past_due', 'trialing'].includes(p.subscription_status);
+const inTrialProfile = (p) => !!p?.trial_ends_at && !isPaidProfile(p) && new Date(p.trial_ends_at) > new Date();
+const effectiveTier = (p) => (isPaidProfile(p) ? p.subscription_tier : inTrialProfile(p) ? 'shooter' : 'free');
+
 const SubscriptionStatus = ({ profile }) => {
   const { t } = useLang();
-  const tier = profile?.subscription_tier || 'free';
-  const status = profile?.subscription_status || (tier === 'free' ? 'active' : 'active');
+  const tier = effectiveTier(profile);
+  const paid = isPaidProfile(profile);
+  const status = paid ? (profile.subscription_status || 'active') : 'active';
+  const sub = { fontFamily: "'Montserrat', sans-serif", fontWeight: 300, fontSize: '14px', color: 'rgba(255,255,255,0.35)', margin: 0, letterSpacing: '0.02em' };
 
   return (
     <div style={{ marginBottom: '56px' }}>
@@ -126,147 +133,83 @@ const SubscriptionStatus = ({ profile }) => {
         <span className="font-bebas-regular" style={{ fontSize: '32px', lineHeight: 1 }}>
           {tierLabel(tier, t)}
         </span>
-        {tier !== 'free' && (
-          <span
-            className="status-badge"
-            style={{ borderColor: statusColor(status), color: statusColor(status), marginLeft: '8px' }}
-          >
+        {paid && (
+          <span className="status-badge" style={{ borderColor: statusColor(status), color: statusColor(status), marginLeft: '8px' }}>
             {statusLabel(status, t)}
           </span>
         )}
       </div>
-      <p style={{
-        fontFamily: "'Montserrat', sans-serif",
-        fontWeight: 300,
-        fontSize: '14px',
-        color: 'rgba(255,255,255,0.35)',
-        margin: 0,
-        letterSpacing: '0.02em'
-      }}>
-        {tierTagline(tier, t)}
-      </p>
+      <p style={sub}>{tierTagline(tier, t)}</p>
+      {inTrialProfile(profile) && <p style={{ ...sub, color: 'rgba(125,211,198,0.7)', marginTop: '8px' }}>{t('trialUntil').replace('{date}', fmtDate(profile.trial_ends_at, t))}</p>}
+      {paid && profile.lemon_variant_name && <p style={{ ...sub, marginTop: '8px' }}>{profile.lemon_variant_name}{profile.current_period_end && status === 'active' ? `, ${t('renewsOn').replace('{date}', fmtDate(profile.current_period_end, t))}` : ''}</p>}
+      {paid && status === 'canceled' && profile.subscription_ends_at && <p style={{ ...sub, marginTop: '8px' }}>{t('accessUntil').replace('{date}', fmtDate(profile.subscription_ends_at, t))}</p>}
+      {profile?.is_founder && <p style={{ ...sub, color: 'rgba(125,211,198,0.7)', marginTop: '8px' }}>{t('founderLocked')}</p>}
     </div>
   );
 };
 
 // --- Pricing Cards ---
-const PricingCards = ({ profile, user }) => {
+const PricingCards = ({ profile, user, freeLimits }) => {
   const { t } = useLang();
-  const currentTier = profile?.subscription_tier || 'free';
-
-  const handleUpgradeShooter = () => {
-    if (!user) return;
-    window.createLemonSqueezy && window.createLemonSqueezy();
-    window.LemonSqueezy.Url.Open(
-      LEMON_CHECKOUT_URL +
-      '?checkout[custom][user_id]=' + user.id +
-      '&checkout[email]=' + encodeURIComponent(user.email) +
-      '&embed=1'
-    );
-  };
+  const tier = effectiveTier(profile);
+  const isFull = tier === 'shooter' || tier === 'god';
+  const founder = !!profile?.is_founder;
+  const ready = !!lemonCheckoutUrl(user, founder);
+  const small = { fontFamily: "'Montserrat', sans-serif", fontWeight: 300, fontSize: '11px', color: 'rgba(255,255,255,0.25)', letterSpacing: '0.02em' };
 
   const freeFeatures = [
-    t('maxProjectsFree'),
-    t('basicWeather'),
-    t('storagePerProject'),
+    t('freeProjectsN').replace('{n}', freeLimits.maxProjects),
+    t('forecastDaysN').replace('{n}', freeLimits.forecastDays),
+    freeLimits.scene3d ? t('with3d') : t('no3d'),
   ];
-
-  const shooterFeatures = [
-    t('unlimitedProjects'),
-    t('allFeatures'),
-    t('continuousUpdates'),
-  ];
-
-  const godFeatures = [
-    t('shooterPlus'),
-    t('premiumWeather'),
-    t('advancedFeatures'),
-  ];
+  const fullFeatures = [t('unlimitedProjects'), t('forecast10'), t('with3d'), t('continuousUpdates')];
 
   return (
     <div style={{ marginBottom: '48px' }}>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: '16px',
-      }}>
-        {/* FREE card */}
-        <div className={`pricing-card ${currentTier === 'free' ? 'active-free' : ''}`}>
+      <div className="pricing-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+        {/* GRATUIT */}
+        <div className={`pricing-card ${!isFull ? 'active-free' : ''}`}>
           <div style={{ marginBottom: '24px' }}>
-            <div className="font-bebas-regular" style={{ fontSize: '22px', color: 'rgba(255,255,255,0.7)', marginBottom: '2px' }}>
-              {t('freePlan')}
-            </div>
-            <div style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 300, fontSize: '11px', color: 'rgba(255,255,255,0.25)', letterSpacing: '0.02em' }}>
-              {t('freeTagline')}
-            </div>
+            <div className="font-bebas-regular" style={{ fontSize: '22px', color: 'rgba(255,255,255,0.7)', marginBottom: '2px' }}>{t('freePlan')}</div>
+            <div style={small}>{t('freeTagline')}</div>
           </div>
           <div className="font-bebas-light" style={{ fontSize: '48px', lineHeight: 1, marginBottom: '24px', color: 'rgba(255,255,255,0.6)' }}>
-            0<span style={{ fontSize: '24px' }}>$</span>
+            0<span style={{ fontSize: '24px' }}> $</span>
           </div>
           <ul className="feature-list" style={{ marginBottom: '24px', flex: 1 }}>
             {freeFeatures.map((f, i) => <li key={i}>{f}</li>)}
           </ul>
-          {currentTier === 'free' ? (
-            <div className="current-plan-badge">{t('currentPlan')}</div>
-          ) : (
-            <div style={{ height: '40px' }} />
-          )}
+          {!isFull ? <div className="current-plan-badge">{t('currentPlan')}</div> : <div style={{ height: '40px' }} />}
         </div>
 
-        {/* SHOOTER card */}
-        <div className={`pricing-card ${currentTier === 'shooter' ? 'active-shooter' : ''}`}>
+        {/* COMPLET */}
+        <div className={`pricing-card ${isFull ? 'active-shooter' : ''}`}>
           <div style={{ marginBottom: '24px' }}>
-            <div className="font-bebas-regular" style={{ fontSize: '22px', color: currentTier === 'shooter' ? '#E07A2B' : 'rgba(255,255,255,0.7)', marginBottom: '2px' }}>
-              {t('shooterPlan')}
-            </div>
-            <div style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 300, fontSize: '11px', color: 'rgba(255,255,255,0.25)', letterSpacing: '0.02em' }}>
-              {t('shooterTagline')}
-            </div>
+            <div className="font-bebas-regular" style={{ fontSize: '22px', color: isFull ? '#E07A2B' : 'rgba(255,255,255,0.7)', marginBottom: '2px' }}>{t('shooterPlan')}</div>
+            <div style={small}>{t('shooterTagline')}</div>
           </div>
-          <div className="font-bebas-light" style={{ fontSize: '48px', lineHeight: 1, marginBottom: '24px', color: currentTier === 'shooter' ? '#E07A2B' : 'rgba(255,255,255,0.6)' }}>
-            ---
+          <div style={{ marginBottom: founder ? '6px' : '24px' }}>
+            <span className="font-bebas-light" style={{ fontSize: '48px', lineHeight: 1, color: isFull ? '#E07A2B' : 'rgba(255,255,255,0.6)' }}>{t('priceAmount')}</span>
+            <span className="font-bebas-light" style={{ fontSize: '18px', color: 'rgba(255,255,255,0.4)', marginLeft: '8px' }}>{t('priceUnit')}</span>
           </div>
+          {founder && <div style={{ ...small, color: 'rgba(125,211,198,0.7)', fontSize: '12px', marginBottom: '18px' }}>{t('founderLocked')}</div>}
           <ul className="feature-list" style={{ marginBottom: '24px', flex: 1 }}>
-            {shooterFeatures.map((f, i) => <li key={i}>{f}</li>)}
+            {fullFeatures.map((f, i) => <li key={i}>{f}</li>)}
           </ul>
-          {currentTier === 'shooter' ? (
+          {isPaidProfile(profile) ? (
             <div className="current-plan-badge">{t('currentPlan')}</div>
           ) : (
-            <button className="upgrade-btn" onClick={handleUpgradeShooter}>
-              {t('upgradeToShooter')}
+            <button className="upgrade-btn" disabled={!ready} style={ready ? undefined : { opacity: 0.4, cursor: 'default' }} onClick={() => openLemonCheckout(user, founder)}>
+              {ready ? t('upgradeToShooter') : t('comingSoon')}
             </button>
           )}
         </div>
-
-        {/* GOD card */}
-        <div className="pricing-card dimmed">
-          <div style={{ marginBottom: '24px' }}>
-            <div className="font-bebas-regular" style={{ fontSize: '22px', color: 'rgba(255,255,255,0.7)', marginBottom: '2px' }}>
-              {t('godPlan')}
-            </div>
-            <div style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 300, fontSize: '11px', color: 'rgba(255,255,255,0.25)', letterSpacing: '0.02em' }}>
-              {t('godTagline')}
-            </div>
-          </div>
-          <div className="font-bebas-light" style={{ fontSize: '48px', lineHeight: 1, marginBottom: '24px', color: 'rgba(255,255,255,0.6)' }}>
-            ---
-          </div>
-          <ul className="feature-list" style={{ marginBottom: '24px', flex: 1 }}>
-            {godFeatures.map((f, i) => <li key={i}>{f}</li>)}
-          </ul>
-          <div className="coming-soon-badge">{t('comingSoon')}</div>
-        </div>
       </div>
 
-      {/* Responsive override for mobile */}
       <style>{`
         @media (max-width: 768px) {
-          .pricing-card {
-            padding: 28px 20px;
-          }
-          div[style*="gridTemplateColumns"] {
-            grid-template-columns: 1fr !important;
-          }
+          .pricing-card { padding: 28px 20px; }
+          .pricing-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </div>
@@ -276,19 +219,28 @@ const PricingCards = ({ profile, user }) => {
 // --- Manage Subscription ---
 const ManageSubscription = ({ profile }) => {
   const { t } = useLang();
-
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
   if (!profile?.lemon_subscription_id) return null;
+
+  const open = async () => {
+    setBusy(true); setErr('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(BILLING_PORTAL_FN, { headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY } });
+      const data = await res.json();
+      if (!res.ok || !data.portal) throw new Error(data.error || 'portail indisponible');
+      window.open(data.portal, '_blank', 'noopener');
+    } catch (e) {
+      setErr(t('portalUnavailable'));
+    }
+    setBusy(false);
+  };
 
   return (
     <div style={{ marginBottom: '48px' }}>
-      <a
-        href={LEMON_PORTAL_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="manage-btn"
-      >
-        {t('manageSub')}
-      </a>
+      <button className="manage-btn" onClick={open} disabled={busy}>{t('manageSub')}</button>
+      {err && <p style={{ fontFamily: "'Montserrat', sans-serif", fontWeight: 300, fontSize: '13px', color: 'rgba(255,255,255,0.35)', marginTop: '10px' }}>{err}</p>}
     </div>
   );
 };
@@ -358,6 +310,7 @@ const AccountPage = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
+  const [freeLimits, setFreeLimits] = useState({ maxProjects: 3, scene3d: false, forecastDays: 3 });
 
   // Auth check
   useEffect(() => {
@@ -401,6 +354,12 @@ const AccountPage = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Réglages du gratuit (décidés dans dieu)
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('app_settings').select('value').eq('key', 'free_limits').maybeSingle().then(({ data }) => { if (data?.value) setFreeLimits((f) => ({ ...f, ...data.value })); }, () => {});
+  }, [user]);
+
   // Realtime subscription to profile changes
   useEffect(() => {
     if (!user) return;
@@ -434,7 +393,7 @@ const AccountPage = () => {
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '48px 24px', paddingBottom: '80px' }}>
       <Header />
       <SubscriptionStatus profile={profile} />
-      <PricingCards profile={profile} user={user} />
+      <PricingCards profile={profile} user={user} freeLimits={freeLimits} />
       <ManageSubscription profile={profile} />
       <LanguageToggle />
       <SignOutButton />

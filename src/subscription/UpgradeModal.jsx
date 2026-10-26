@@ -2,7 +2,7 @@ import { useAuth } from '../auth/AuthProvider.jsx';
 import { useIsMobile } from '../hooks/useIsMobile.js';
 import { useLang } from '../i18n/LangProvider.jsx';
 import { isNative } from '../native/platform.js';
-import { LEMON_CHECKOUT_URL } from '../shared/config.js';
+import { lemonCheckoutUrl, openLemonCheckout } from '../shared/config.js';
 import { useSubscription } from './SubscriptionProvider.jsx';
 
 // ===== MODAL DES FORFAITS =====
@@ -17,12 +17,8 @@ export const UpgradeModal = ({ isOpen, onClose }) => {
   const { t } = useLang();
   const isMobile = useIsMobile();
 
-  const openCheckout = () => {
-    const url = LEMON_CHECKOUT_URL + '?checkout[custom][user_id]=' + user.id + '&checkout[email]=' + encodeURIComponent(user.email);
-    if (typeof window.createLemonSqueezy === 'function') window.createLemonSqueezy();
-    if (window.LemonSqueezy && window.LemonSqueezy.Url) window.LemonSqueezy.Url.Open(url + '&embed=1');
-    else window.open(url, '_blank');
-  };
+  const checkoutReady = !!lemonCheckoutUrl(user, isFounder);
+  const openCheckout = () => { openLemonCheckout(user, isFounder); };
 
   if (!isOpen) return null;
 
@@ -80,9 +76,9 @@ export const UpgradeModal = ({ isOpen, onClose }) => {
             ) : isNative ? (
               <div style={{ ...featureStyle, marginBottom: 0 }}>{t('manageOnWeb')}</div>
             ) : (
-              <button onClick={openCheckout} style={{
-                background: '#E07A2B', color: '#ffffff', border: 'none',
-                padding: '12px 24px', cursor: 'pointer', width: '100%',
+              <button onClick={openCheckout} disabled={!checkoutReady} title={checkoutReady ? '' : t('comingSoon')} style={{
+                background: '#E07A2B', color: '#ffffff', border: 'none', opacity: checkoutReady ? 1 : 0.45,
+                padding: '12px 24px', cursor: checkoutReady ? 'pointer' : 'default', width: '100%',
                 fontFamily: "'Bebas Neue', sans-serif", fontWeight: 700, fontSize: '16px',
                 letterSpacing: '0.04em'
               }}>{t('upgradeToShooter')}</button>

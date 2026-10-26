@@ -421,7 +421,7 @@ const UserDetail = ({ u, st, run, me }) => {
             <dt>INSCRIT</dt><dd>{fmtDate(u.created_at)}{u.invited_at ? `, invité le ${fmtDate(u.invited_at)}` : ''}</dd>
             <dt>CONNEXION</dt><dd>{u.last_sign_in_at ? fmtDateTime(u.last_sign_in_at) : 'jamais'}{u.last_seen_at ? `, vu ${relative(u.last_seen_at)}` : ''}</dd>
             <dt>SECTEUR</dt><dd>{u.sector || '-'}</dd>
-            <dt>ABONNEMENT</dt><dd>{u.lemon_subscription_id ? `Lemon Squeezy ${u.lemon_subscription_id}, ${u.subscription_status}${u.current_period_end ? `, renouvellement ${fmtDate(u.current_period_end)}` : ''}` : `${TIER_LABEL[u.subscription_tier] || u.subscription_tier} (${u.subscription_status})`}</dd>
+            <dt>ABONNEMENT</dt><dd>{u.lemon_subscription_id ? `Lemon Squeezy ${u.lemon_variant_name || ''} ${u.lemon_subscription_id}, ${u.subscription_status}${u.current_period_end ? `, renouvellement ${fmtDate(u.current_period_end)}` : ''}${u.subscription_ends_at ? `, accès jusqu\u2019au ${fmtDate(u.subscription_ends_at)}` : ''}` : `${TIER_LABEL[u.subscription_tier] || u.subscription_tier} (${u.subscription_status})`}</dd>
           </dl>
 
           <div className="field">
@@ -559,7 +559,7 @@ const LogView = () => {
   );
 };
 
-// ----- Revenus (fonction admin-revenue, Lemon Squeezy) -----
+// ----- Revenus (fonction admin-revenue, Lemon Squeezy): chiffres, catalogue, abonnements -----
 const RevenueView = () => {
   const [rev, setRev] = useState(null);
   const [err, setErr] = useState('');
@@ -573,16 +573,66 @@ const RevenueView = () => {
       } catch (e) { setErr(e.message); }
     })();
   }, []);
-  const money = (n) => new Intl.NumberFormat('fr-CA', { style: 'currency', currency: rev?.currency || 'CAD' }).format(n || 0);
+  const money = (n, cur) => new Intl.NumberFormat('fr-CA', { style: 'currency', currency: cur || rev?.currency || 'CAD' }).format(n || 0);
   if (err) return <div className="t-muted">{err}</div>;
   if (!rev) return <div className="t-muted">Chargement</div>;
+  const c = rev.catalog || {};
+  const storeById = Object.fromEntries((c.stores || []).map(s => [String(s.id), s]));
+  const productById = Object.fromEntries((c.products || []).map(p => [String(p.id), p]));
   return (
     <div>
+      {(c.errors || []).length > 0 && (
+        <div className="panel" style={{ borderColor: 'rgba(178,58,72,0.35)' }}>
+          <div className="t-section" style={{ color: 'var(--red)' }}>LEMON SQUEEZY NE RÉPOND PAS</div>
+          <div style={{ fontSize: '15px', color: 'var(--ink-2)', lineHeight: 1.5 }}>
+            {/expired/i.test(c.errors.join(' ')) ? 'La clé d\u2019API enregistrée dans Supabase est expirée. Dans Lemon Squeezy: Settings, API, créer une nouvelle clé; puis dans Supabase: Edge Functions, Secrets, remplacer LEMON_API_KEY.' : c.errors[0]}
+          </div>
+        </div>
+      )}
       <div className="stats">
         <div className="stat-card"><div className="stat-number">{money(rev.total_revenue)}</div><div className="stat-label">REVENU TOTAL</div></div>
         <div className="stat-card"><div className="stat-number">{rev.active_subscriptions || 0}</div><div className="stat-label">ABONNEMENTS ACTIFS</div></div>
         <div className="stat-card"><div className="stat-number">{rev.total_orders || 0}</div><div className="stat-label">COMMANDES</div></div>
       </div>
+
+      <div className="panel">
+        <div className="t-section">BOUTIQUES ET VARIANTES</div>
+        {(c.stores || []).length === 0 && <div className="t-muted">Aucune boutique lue.</div>}
+        {(c.stores || []).map(s => (
+          <div key={s.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--line)', fontSize: '15px' }}>
+            <span style={{ fontWeight: 600 }}>{s.name}</span>
+            <span className="t-muted" style={{ marginLeft: '12px' }}>{s.url}, devise {s.currency}, {s.country}</span>
+          </div>
+        ))}
+        {(c.variants || []).map(v => {
+          const p = productById[String(v.product_id)] || {};
+          const st = storeById[String(p.store_id)] || {};
+          return (
+            <div key={v.id} className="log-row" style={{ gridTemplateColumns: '1.4fr 1.6fr 0.8fr 1fr 0.6fr' }}>
+              <div>{p.name || 'produit ?'}</div>
+              <div>{v.name}<span className="t-muted" style={{ marginLeft: '8px' }}>variante {v.id}</span></div>
+              <div className="t-mono">{money(v.price / 100, st.currency)}{v.is_subscription ? ` / ${v.interval_count > 1 ? v.interval_count + ' ' : ''}${v.interval === 'month' ? 'mois' : v.interval}` : ''}</div>
+              <div className="t-muted">{v.status}{v.test_mode ? ', mode test' : ''}</div>
+              <div className="t-muted">{st.currency || ''}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {(c.subscriptions || []).length > 0 && (
+        <div className="panel">
+          <div className="t-section">ABONNEMENTS</div>
+          {c.subscriptions.map(s => (
+            <div key={s.id} className="log-row" style={{ gridTemplateColumns: '2fr 1.4fr 1fr 1fr' }}>
+              <div style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.email}</div>
+              <div>{s.variant_name}</div>
+              <div style={{ color: s.status === 'active' ? 'var(--teal)' : 'var(--amber)' }}>{(s.status || '').toUpperCase()}</div>
+              <div className="t-muted">{s.renews_at ? `renouv. ${fmtDate(s.renews_at)}` : s.ends_at ? `fin ${fmtDate(s.ends_at)}` : ''}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {(rev.orders || []).length > 0 && (
         <div>
           <div className="t-section">DERNIÈRES COMMANDES</div>

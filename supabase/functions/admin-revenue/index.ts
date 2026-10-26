@@ -16,6 +16,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const apiErrors: string[] = [];
 async function fetchAllPages(endpoint: string): Promise<any[]> {
   let results: any[] = [];
   let url: string | null = `${LEMON_API}/${endpoint}`;
@@ -25,7 +26,9 @@ async function fetchAllPages(endpoint: string): Promise<any[]> {
       headers: { Authorization: `Bearer ${LEMON_API_KEY}`, Accept: "application/vnd.api+json" },
     });
     if (!res.ok) {
-      console.error(`LemonSqueezy API error: ${res.status} ${await res.text()}`);
+      const txt = await res.text();
+      console.error(`LemonSqueezy API error: ${res.status} ${txt}`);
+      apiErrors.push(`${endpoint}: ${res.status} ${txt.slice(0, 200)}`);
       break;
     }
     const json = await res.json();
@@ -74,10 +77,23 @@ serve(async (req: Request) => {
   }
 
   try {
-    const [orders, subscriptions] = await Promise.all([
+    const [orders, subscriptions, stores, products, variants] = await Promise.all([
       fetchAllPages("orders"),
       fetchAllPages("subscriptions"),
+      fetchAllPages("stores"),
+      fetchAllPages("products"),
+      fetchAllPages("variants"),
     ]);
+
+    // Catalogue (phase 4): boutiques avec leur devise, produits et variantes avec leurs prix, pour dieu.
+    const catalog = {
+      stores: stores.map((s: any) => ({ id: s.id, name: s.attributes.name, slug: s.attributes.slug, url: s.attributes.url, currency: s.attributes.currency, country: s.attributes.country, plan: s.attributes.plan })),
+      products: products.map((p: any) => ({ id: p.id, store_id: p.attributes.store_id, name: p.attributes.name, status: p.attributes.status, price: p.attributes.price, price_formatted: p.attributes.price_formatted, buy_now_url: p.attributes.buy_now_url, test_mode: p.attributes.test_mode })),
+      variants: variants.map((v: any) => ({ id: v.id, product_id: v.attributes.product_id, name: v.attributes.name, status: v.attributes.status, price: v.attributes.price, is_subscription: v.attributes.is_subscription, interval: v.attributes.interval, interval_count: v.attributes.interval_count, test_mode: v.attributes.test_mode })),
+      errors: apiErrors.splice(0),
+      key_present: !!LEMON_API_KEY,
+      subscriptions: subscriptions.map((s: any) => ({ id: s.id, status: s.attributes.status, email: s.attributes.user_email, variant_id: s.attributes.variant_id, product_name: s.attributes.product_name, variant_name: s.attributes.variant_name, renews_at: s.attributes.renews_at, ends_at: s.attributes.ends_at, test_mode: s.attributes.test_mode, portal: s.attributes.urls?.customer_portal || null })),
+    };
 
     // Calculate total revenue from orders
     let totalRevenue = 0;
@@ -110,6 +126,7 @@ serve(async (req: Request) => {
       orders: orderList.sort(
         (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       ),
+      catalog,
     };
 
     return new Response(JSON.stringify(result), {
