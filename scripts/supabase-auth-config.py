@@ -32,7 +32,7 @@ def call(method, body=None):
     with urllib.request.urlopen(req) as r:
         return json.load(r)
 
-KEYS = ["disable_signup", "site_url", "uri_allow_list", "passkey_enabled", "webauthn_rp_id", "webauthn_rp_origins",
+KEYS = ["disable_signup", "mailer_otp_exp", "site_url", "uri_allow_list", "passkey_enabled", "webauthn_rp_id", "webauthn_rp_origins",
         "mailer_subjects_invite", "smtp_host", "smtp_sender_name", "smtp_admin_email", "password_min_length"]
 
 def show(cfg):
@@ -49,6 +49,7 @@ if __name__ == "__main__":
         if u not in allow: allow.append(u)
     patch = {
         "disable_signup": True,
+        "mailer_otp_exp": 86400,  # liens de courriel (invitation, mot de passe oublié) valables 24 h, le maximum de Supabase
         "passkey_enabled": True,
         "webauthn_rp_display_name": "MeteoShoot",
         "webauthn_rp_id": "meteoshoot.com",
