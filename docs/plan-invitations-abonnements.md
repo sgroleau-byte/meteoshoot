@@ -271,3 +271,12 @@ subscription_payment_*, et le même secret que `LEMON_WEBHOOK_SECRET`; puis me d
 - Cycle complet vérifié à 02:48: remboursement et annulation dans Lemon → événements `subscription_cancelled`,
   `subscription_updated`, `subscription_expired` reçus et journalisés → le gmail revient au gratuit (statut expiré),
   reste fondateur, abonnement détaché. Un paiement remboursé ferme aussi l'accès tout de suite (webhook).
+
+## Accueil d'un compte vide (v633.253, 26 octobre 2026)
+
+- Un compte sans projet voit « Bienvenue {prénom} », un mot d'explication, et trois projets exemples
+  (`src/projects/samples.js`): lieux publics de Québec aux noms génériques (pavillon du musée, église de la place,
+  hôtel de ville), jamais un client. Ils vivent dans l'app seulement, s'ouvrent en fiche (météo, soleil, 3D), ne se
+  modifient pas (le store ignore toute mutation sur un identifiant `exemple-`), ne comptent pas dans la limite du
+  gratuit, et s'effacent au premier projet créé (ils reviennent si la liste redevient vide).
+- Première impression à revoir en SF Pro avec les maquettes Photoshop de Stéphane; ceci est la version provisoire.
