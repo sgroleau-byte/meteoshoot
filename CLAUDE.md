@@ -22,6 +22,10 @@
 - TestFlight (depuis le 16 octobre 2026, app MeteoShoot 6823657367 dans App Store Connect): `sh scripts/testflight.sh` recompile, numérote le build d'après la version du splash (v633.217 donne 633217) et l'envoie; l'iPhone et l'iPad de Stéphane se mettent à jour par l'app TestFlight, sans câble. Signature automatique avec le compte Apple connecté dans Xcode.
 - Dans l'app native, `isDev` est faux (données de production) même si l'origine est `capacitor://localhost`.
 
+## Fonctions edge Supabase
+
+- Déploiement: `supabase functions deploy <nom>`. **Deux fonctions sont appelées sans jeton et doivent être déployées avec `--no-verify-jwt`**: `lemon-webhook` (appelée par Lemon Squeezy, protégée par la signature) et `cloud-verif` (appelée par pg_cron). Sans ce drapeau, la porte Supabase renvoie 401 avant notre code (c'est arrivé le 26 octobre 2026: un premier achat non enregistré). Les autres (`admin-users`, `admin-revenue`, `billing-portal`, `create-checkout`) vérifient le jeton de l'utilisateur et se déploient normalement.
+
 ## Workflow de déploiement
 
 - **Publier directement en prod par défaut.** Quand Stéphane demande un changement, après l'avoir codé: `npm run build` doit passer sans erreur, bump version `v633.X`, commit sur `dev`, puis `git push origin dev && git push origin dev:main`. Vercel détecte Vite (commande `npm run build`, dossier `dist`) et déploie le push sur `main`.
