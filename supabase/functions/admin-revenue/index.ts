@@ -77,12 +77,13 @@ serve(async (req: Request) => {
   }
 
   try {
-    const [orders, subscriptions, stores, products, variants] = await Promise.all([
+    const [orders, subscriptions, stores, products, variants, webhooks] = await Promise.all([
       fetchAllPages("orders"),
       fetchAllPages("subscriptions"),
       fetchAllPages("stores"),
       fetchAllPages("products"),
       fetchAllPages("variants"),
+      fetchAllPages("webhooks"),
     ]);
 
     // Catalogue (phase 4): boutiques avec leur devise, produits et variantes avec leurs prix, pour dieu.
@@ -90,6 +91,7 @@ serve(async (req: Request) => {
       stores: stores.map((s: any) => ({ id: s.id, name: s.attributes.name, slug: s.attributes.slug, url: s.attributes.url, currency: s.attributes.currency, country: s.attributes.country, plan: s.attributes.plan })),
       products: products.map((p: any) => ({ id: p.id, store_id: p.attributes.store_id, name: p.attributes.name, status: p.attributes.status, price: p.attributes.price, price_formatted: p.attributes.price_formatted, buy_now_url: p.attributes.buy_now_url, test_mode: p.attributes.test_mode })),
       variants: variants.map((v: any) => ({ id: v.id, product_id: v.attributes.product_id, name: v.attributes.name, status: v.attributes.status, price: v.attributes.price, is_subscription: v.attributes.is_subscription, interval: v.attributes.interval, interval_count: v.attributes.interval_count, test_mode: v.attributes.test_mode })),
+      webhooks: webhooks.map((w: any) => ({ id: w.id, url: w.attributes.url, events: w.attributes.events, test_mode: w.attributes.test_mode, last_sent_at: w.attributes.last_sent_at, created_at: w.attributes.created_at })),
       errors: apiErrors.splice(0),
       key_present: !!LEMON_API_KEY,
       subscriptions: subscriptions.map((s: any) => ({ id: s.id, status: s.attributes.status, email: s.attributes.user_email, variant_id: s.attributes.variant_id, product_name: s.attributes.product_name, variant_name: s.attributes.variant_name, renews_at: s.attributes.renews_at, ends_at: s.attributes.ends_at, test_mode: s.attributes.test_mode, portal: s.attributes.urls?.customer_portal || null })),

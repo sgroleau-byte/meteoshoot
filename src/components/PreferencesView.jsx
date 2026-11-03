@@ -285,7 +285,7 @@ export const PreferencesView = () => {
               <div className="font-bebas-light" style={{ marginTop: '22px', fontSize: '15px', letterSpacing: '0.06em', display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '6px 16px' }}>
                 <a href="site/conditions.html" style={{ color: 'rgba(255,255,255,0.35)', textDecoration: 'none' }}>{t('legalTerms')}</a>
                 <a href="site/confidentialite.html" style={{ color: 'rgba(255,255,255,0.35)', textDecoration: 'none' }}>{t('legalPrivacy')}</a>
-                <a href="mailto:support@meteoshoot.com" style={{ color: 'rgba(255,255,255,0.35)', textDecoration: 'none' }}>{t('supportLabel')}: support@meteoshoot.com</a>
+                <a href="mailto:info@driftgrain.app" style={{ color: 'rgba(255,255,255,0.35)', textDecoration: 'none' }}>{t('supportLabel')}: info@driftgrain.app</a>
               </div>
             </div>
           </div>

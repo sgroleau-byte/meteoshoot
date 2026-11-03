@@ -294,6 +294,6 @@ subscription_payment_*, et le même secret que `LEMON_WEBHOOK_SECRET`; puis me d
 - **Textes légaux:** `site/conditions.html` et `site/confidentialite.html` (FR et EN, bouton de langue, typo système),
   liés depuis les préférences (sous la version), la page compte, la page de connexion, la page « Accepter
   l'invitation » (phrase d'acceptation) et la modal des forfaits.
-- **Support:** `support@meteoshoot.com` partout (pages légales, préférences, page compte, courriels d'invitation et de
-  rappel comme adresse de réponse). Le domaine n'a pas de serveur de courriel: la redirection vers la boîte de Stéphane
-  se fait dans Porkbun (Email Forwarding), à activer.
+- **Support:** `info@driftgrain.app` partout (pages légales, préférences, page compte, courriels d'invitation et de
+  rappel comme adresse de réponse): l'adresse existante de Drift&Grain, choisie par Stéphane le 3 novembre 2026
+  (pas de nouvelle adresse support@).

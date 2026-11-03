@@ -14,7 +14,7 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("S
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const SITE = "https://www.meteoshoot.com";
 const FROM = "MeteoShoot <noreply@meteoshoot.com>";
-const SUPPORT = "support@meteoshoot.com";
+const SUPPORT = "info@driftgrain.app";
 const DAY = 86400000;
 
 const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status, headers: { "Content-Type": "application/json" } });

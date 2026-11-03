@@ -303,7 +303,7 @@ const LegalFooter = () => {
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px', marginTop: '-24px' }}>
       <a href="conditions.html" style={link}>{t('legalTerms')}</a>
       <a href="confidentialite.html" style={link}>{t('legalPrivacy')}</a>
-      <a href="mailto:support@meteoshoot.com" style={link}>support@meteoshoot.com</a>
+      <a href="mailto:info@driftgrain.app" style={link}>info@driftgrain.app</a>
     </div>
   );
 };
