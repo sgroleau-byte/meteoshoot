@@ -1072,6 +1072,45 @@ importé, lui, est le fichier de l'architecte.
   - Restent des pistes à part: la cour intérieure des contours à trou (le Parlement est un contour avec un trou dans
     OpenStreetMap et Overture, `polysOf` ne garde que l'extérieur), les parties de bâtiment d'Overture (`type=building_part`,
     non indexé), que Shadowmap dessine.
+- v633.262 (3 novembre 2026), **ajouts LiDAR dans les zones mixtes** (suite de la v633.261: Limoilou et Sillery, où
+  OpenStreetMap fait 53 et 29 % des contours, gardaient 91 et 14 ajouts sans vérification). Environs **version 15**.
+  - **Tri sur l'imagerie Esri** (105 ajouts, planches de zooms par `tools/batiments/planche.py`, dossier
+    `verification_batiments_ville/` à côté du dépôt): à Limoilou, les grandes plaques sont de vrais bâtiments absents
+    d'Overture (rangées de triplex de 350 à 1650 m² à 10 m, maisons de 60 à 200 m²: Microsoft ne les a pas tracées et
+    OpenStreetMap non plus), tout le contraire du Parlement. Limoilou, 91 ajouts: 74 dans l'image, dont 46 vrais
+    bâtiments, 5 arbres (un bouquet de 12 m sur 197 m² dans un parc, un arbre de rue de 11,5 m, trois petits), 2 plaques
+    sur un terrain vague (bâtiment démoli ou construit entre le relevé LiDAR et l'image), 8 doublons (petite plaque à
+    cheval sur un toit déjà tracé) et 13 petites remises ou cases douteuses; 17 hors de l'image. Sillery, 14 ajouts: 4
+    vrais bâtiments (maisons de 70 à 205 m²), 2 arbres (11 m et 6,5 m), 1 véhicule, 4 petites remises ou annexes, 3 hors
+    de l'image. Les erreurs se concentrent sous 45 m² (à Limoilou, moitié remises, moitié doublons, arbres ou véhicules).
+    Hors de l'image (vérifiés sur une image de 920 m): à Limoilou trois « bâtiments » de 4,6 m sur 87 à 791 m² sont des
+    rames de wagons de la gare de triage, les autres sont vrais (9) ou petits (5); à Sillery, un chalet de parc de 170 m²
+    sur une pelouse d'Overture et deux maisons.
+  - **Les mesures de forme ne suffisent pas**: planéité, dôme, chute en bordure, entourage et rectangle ont les mêmes
+    médianes pour les 35 cimes du Parlement et les 42 vraies maisons de Stoneham (dôme 0,20 contre 0,15, planéité 0,58
+    contre 0,62). La part OpenStreetMap locale non plus: à Limoilou, une rangée de triplex réelle a 7 voisins sur 7
+    tracés par OpenStreetMap. Le contexte sépare: au Parlement 17 ajouts sur 35 sont dans un parc ou une pelouse
+    d'Overture, aucun des 42 de Stoneham ni des 154 de Sainte-Adèle.
+  - **Règle** (`api/footprints.js`, `api/scene3d.js`, `builtShare` et `DENSE_SHARE` dans `api/paved.js`), partout où les
+    ajouts restent permis (la coupe à 90 % d'OpenStreetMap de la v633.261 reste): pas d'ajout dont le centre est dans un
+    parc ou une pelouse d'Overture (`green`); pas de cime bombée (pente qui pointe vers le centre à 0,55 au moins, `dome`,
+    et 9 m et plus: un toit en croupe fait 0,4 à 0,5 et un bâtiment de trois étages hors empreinte n'existe pas dans le
+    banc); en zone dense (sol bâti au-dessus de 18 % dans 300 m, même seuil que les surfaces pavées, calculé sur les
+    contours d'Overture avant le LiDAR), pas de plaque sous 45 m²; pas d'ajout à moins de 4 m de l'axe d'une voie ferrée
+    (`rail`, les wagons; aucun autre ajout du banc à moins de 8 m d'une voie). Journal: « N ajouts retenus (parc, wagon,
+    cime, petite plaque en zone dense) ». Le seuil de cime est calé sur cinq cas (quatre arbres coupés, une maison de
+    12,7 m à 0,51 gardée).
+  - **Banc** (avant → après): Stoneham 42 → 42, Parlement 0 → 0, Limoilou 91 → 54 (1 parc, 3 wagons, 1 cime, 32
+    petites), Sillery 14 → 12 (1 parc, 1 cime), Sainte-Adèle 154 → 153 (1 cime vérifiée), Valcartier 13 → 13, Outremont,
+    Ottawa, Toronto, Gaspé, Calgary 0 → 0. Les 54 ajouts gardés à Limoilou sont vérifiés sur l'imagerie.
+  - **Outils** (`tools/batiments/`): `overlay.py` prend le nombre d'ajouts en argument; `planche.py` fait une planche de
+    zooms, un par ajout, sur l'imagerie (l'image embarquée une fois, cases en `<svg viewBox>`); `node api/scene3d.js
+    --test lat lng --out f.json` écrit aussi `f.dbg.json` (mesures de chaque toit hors empreinte avec le motif de la
+    retenue, indices des tracés OpenStreetMap). Image Esri: export ArcGIS World_Imagery, cadre de 640 m en 4326, image en
+    3857 (1280 px, ou 2560 pour lire les petites plaques).
+  - Coût connu: le chalet de parc de Sillery (170 m², 8 m, absent d'OpenStreetMap) est retenu par la règle du parc, comme
+    le seraient les pavillons du Parlement: une absence plutôt qu'un risque de bloc sur des arbres. Pas traité: les deux
+    plaques sur un terrain vague (dates du relevé et de l'image).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

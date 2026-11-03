@@ -16,6 +16,8 @@
 //   (gravel, même forme que paved) recalée sur le LiDAR (imgShift, mètres est et nord); gravelDitch: nombre d'entrées lues
 //   dans le fossé LiDAR (api/driveways.js, v633.238), le reste vient de la couleur de l'image.
 // v14 (3 novembre 2026): plus d'ajouts LiDAR là où OpenStreetMap domine les contours (lidarAdd: 0 quand les ajouts sont coupés).
+// v15 (3 novembre 2026): dans les zones mixtes, plus d'ajout LiDAR dans un parc, sur une voie ferrée, en forme de cime, ni de
+//   petite plaque en zone dense (api/footprints.js, tri sur l'imagerie à Limoilou et Sillery).
 // v6 (8 octobre 2026): arbres mesurés par LiDAR jusqu'à 350 m (api/trees.js): trees[i] = [x, n, h, r, k] (hauteur,
 //   rayon de couronne, k code d'essence (0 feuillu, 1 conifère; depuis le 23 octobre 2026 aussi 2 à 6, voir api/trees.js); près d'un bâtiment, plus dx, dn: centre mesuré de la couronne, et
 //   o: 1 si le relevé montre du feuillage au-dessus du toit voisin); treesSrc { date, res, essences }. Restent au format [x, n] (taille
@@ -30,7 +32,7 @@ import { lidarTrees, readCanopy, R_TREES } from './trees.js';
 import { lidarFootprints } from './footprints.js';
 import { lidarRoofs } from './roofs.js';
 import { appleShift } from './satshift.js';
-import { pavedFromImagery, PAVED_ATTRIBUTION } from './paved.js';
+import { pavedFromImagery, PAVED_ATTRIBUTION, builtShare, DENSE_SHARE } from './paved.js';
 
 export const maxDuration = 60;
 
@@ -162,7 +164,8 @@ function clipRing(r, minx, miny, maxx, maxy) {
 function mulberry(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
 // ---------- construction de la scène
-export async function buildScene(lat, lng) {
+// opts.dbg (banc seulement): objet rempli avec fp (mesures des toits hors empreinte, api/footprints.js) et osm (indices des tracés OpenStreetMap).
+export async function buildScene(lat, lng, opts = {}) {
   const db = await getDb();
   const mLat = 111320, mLng = 111320 * Math.cos(lat * Math.PI / 180);
   const X = (lon, la) => [(lon - lng) * mLng, (la - lat) * mLat];
@@ -311,9 +314,13 @@ export async function buildScene(lat, lng) {
   // était pas). Là où OpenStreetMap domine (tracés à la main, complets en ville), un toit hors empreinte est presque toujours
   // un arbre: Assemblée nationale, 3 novembre 2026, 33 arbres sur 36 ajouts (boulevard, pelouses, talus boisé), dont un
   // « immeuble » de 12 m. Les remplacements (vraie forme d'un carré Microsoft) restent permis partout. Version 14.
-  const osmShare = bld.length ? osmIdx.size / bld.length : 0, noAdd = bld.length >= 20 && osmShare >= 0.9;
-  log(`contours OpenStreetMap: ${Math.round(osmShare * 100)} % de ${bld.length} bâtiments${noAdd ? ', ajouts LiDAR coupés' : ''}`);
-  if (win) { try { const fp = lidarFootprints(win, win.fr, bld, log, bld.map((_, i) => osmIdx.has(i)), { noAdd }); bld = fp.bld; lidarFp = fp.replaced + fp.added; } catch (e) { console.warn('[scene3d] empreintes LiDAR:', e && e.message); } }
+  // Zones mixtes (v633.262, version 15): parmi les ajouts restants, pas de toit dans un parc ou une pelouse d'Overture (une
+  // cime), pas de toit sur une voie ferrée (un wagon), pas de cime bombée, et en zone dense (même critère que les surfaces
+  // pavées) pas de petite plaque (remise aussi souvent fausse que vraie). Voir l'en-tête de footprints.js.
+  const osmShare = bld.length ? osmIdx.size / bld.length : 0, noAdd = bld.length >= 20 && osmShare >= 0.9, dense = builtShare(bld) > DENSE_SHARE;
+  log(`contours OpenStreetMap: ${Math.round(osmShare * 100)} % de ${bld.length} bâtiments${noAdd ? ', ajouts LiDAR coupés' : ''}${dense ? ', zone dense' : ''}`);
+  if (opts.dbg) { opts.dbg.osm = [...osmIdx]; opts.dbg.fp = []; }
+  if (win) { try { const fp = lidarFootprints(win, win.fr, bld, log, bld.map((_, i) => osmIdx.has(i)), { noAdd, dense, green: green.map(g => g.p), rail: roads.filter(r => r.k === 2).map(r => r.p), dbg: opts.dbg ? opts.dbg.fp : null }); bld = fp.bld; lidarFp = fp.replaced + fp.added; } catch (e) { console.warn('[scene3d] empreintes LiDAR:', e && e.message); } }
   // Pentes des toits (v633.179): surface LiDAR ajustée dans chaque empreinte (bld[i][6], voir api/roofs.js).
   let roofs = 0;
   if (win) { try { roofs = lidarRoofs(win, bld, log).n; } catch (e) { console.warn('[scene3d] toits LiDAR:', e && e.message); } }
@@ -340,7 +347,7 @@ export async function buildScene(lat, lng) {
     treesSrc = { date: lt.date, res: lt.res, essences: lt.essences, n: lt.trees.length };
     canopy = lt.canopy;
   }
-  const scene = { v: 14, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, lidarAdd: noAdd ? 0 : 1, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
+  const scene = { v: 15, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, lidarAdd: noAdd ? 0 : 1, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
   if (lidarErr) scene.lidarErr = true;
   if (appleErr) { scene.appleErr = true; scene.lidarErr = true; } // lidarErr aussi: les versions 633.242 et antérieures ne connaissent que lui pour ne pas garder la scène
   return scene;
@@ -368,9 +375,10 @@ export default async function handler(req, res) {
 if (process.argv.includes('--test')) {
   const i = process.argv.indexOf('--test');
   const lat = parseFloat(process.argv[i + 1] || '46.8367'), lng = parseFloat(process.argv[i + 2] || '-71.2336');
-  buildScene(lat, lng).then((s) => {
+  const dbg = {};
+  buildScene(lat, lng, { dbg }).then((s) => {
     const j = JSON.stringify(s);
     console.log({ bld: s.bld.length, lidarFp: s.lidarFp, lidarAdd: s.lidarAdd, roofs: s.roofs, appleShift: s.appleShift, roads: s.roads.length, trees: s.trees.length, lidarTrees: s.treesSrc && s.treesSrc.n, conifers: s.trees.filter(t => t[4] === 1 || t[4] === 5).length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, gravel: s.gravel.length, imgShift: s.imgShift, bytes: j.length, ms: s.ms });
-    if (process.argv.includes('--out')) { import('fs').then(fs => fs.writeFileSync(process.argv[process.argv.indexOf('--out') + 1], j)); }
+    if (process.argv.includes('--out')) { const f = process.argv[process.argv.indexOf('--out') + 1]; import('fs').then(fs => { fs.writeFileSync(f, j); fs.writeFileSync(f.replace(/\.json$/, '') + '.dbg.json', JSON.stringify(dbg)); }); }
   }).catch((e) => { console.error(e); process.exit(1); });
 }

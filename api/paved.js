@@ -28,6 +28,14 @@ import { ditchEntries } from './driveways.js';
 
 const Z = 19, HALF_M = 320, TILE = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile';
 export const PAVED_ATTRIBUTION = 'Esri, Maxar, Earthstar Geographics';
+// Zone dense: part du sol bâti dans 300 m (empreintes d'Overture) au-dessus de DENSE_SHARE. Même critère pour les
+// surfaces pavées (tout est gris) et, depuis le 3 novembre 2026, pour les petits ajouts LiDAR (api/footprints.js).
+export const DENSE_SHARE = 0.18;
+export function builtShare(bld) {
+  const area = (r) => Math.abs(r.reduce((s, p, i) => { const q = r[(i + 1) % r.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2;
+  const built = bld.filter(b => Math.hypot(...b[0].reduce((c, p) => [c[0] + p[0] / b[0].length, c[1] + p[1] / b[0].length], [0, 0])) < 300).reduce((s, b) => s + area(b[0]), 0);
+  return built / (Math.PI * 300 * 300);
+}
 
 const tileXY = (lat, lng) => { const n = 2 ** Z; return [(lng + 180) / 360 * n, (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n]; };
 
@@ -196,9 +204,7 @@ function contourOf(comp, W2, H2, mp2, toM) {
 export async function pavedFromImagery(lat, lng, bld, roads, log = () => {}, opts = {}) {
   const { win = null, water = [], dbg = null } = opts;
   const mLat = 111320, mLng = 111320 * Math.cos(lat * Math.PI / 180);
-  const area = (r) => Math.abs(r.reduce((s, p, i) => { const q = r[(i + 1) % r.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2;
-  const built = bld.filter(b => Math.hypot(...b[0].reduce((c, p) => [c[0] + p[0] / b[0].length, c[1] + p[1] / b[0].length], [0, 0])) < 300).reduce((s, b) => s + area(b[0]), 0);
-  if (built / (Math.PI * 300 * 300) > 0.18) { log('zone dense, surfaces pavées non détectées'); return { paved: [], gravel: [], dense: true, shift: [0, 0] }; }
+  if (builtShare(bld) > DENSE_SHARE) { log('zone dense, surfaces pavées non détectées'); return { paved: [], gravel: [], dense: true, shift: [0, 0] }; }
   const [cx, cy] = tileXY(lat, lng), mpp = 156543.03 * Math.cos(lat * Math.PI / 180) / 2 ** Z, halfT = HALF_M / mpp / 256;
   const x0 = Math.floor(cx - halfT), x1 = Math.floor(cx + halfT), y0 = Math.floor(cy - halfT), y1 = Math.floor(cy + halfT);
   const W = (x1 - x0 + 1) * 256, H = (y1 - y0 + 1) * 256, cxp = (cx - x0) * 256, cyp = (cy - y0) * 256;

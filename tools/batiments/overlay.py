@@ -1,6 +1,10 @@
+# Contours de la scène posés sur l'imagerie Esri (640 m de côté, 1280 px): blanc = Overture, bleu = empreinte LiDAR
+# (carré Microsoft remplacé par sa vraie forme), rouge = ajout LiDAR (toit hors de toute empreinte).
+# Usage: python3 -I overlay.py scene.json esri.jpg overlay.svg [nombre d'ajouts (« N ajoutées » du journal; 0 par défaut)]
 import json, math, sys, base64
 s = json.load(open(sys.argv[1]))
 img = base64.b64encode(open(sys.argv[2], 'rb').read()).decode()
+nAdd = int(sys.argv[4]) if len(sys.argv) > 4 else 0
 R = 320; PX = 1280
 def P(x, n): return (x + R) / (2 * R) * PX, (R - n) / (2 * R) * PX
 def ring(r): return ' '.join(f"{P(x,n)[0]:.1f},{P(x,n)[1]:.1f}" for x, n in r)
@@ -9,7 +13,7 @@ out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{PX}" height="{PX}" view
 for road in s['roads']:
     pts = ' '.join(f"{P(x,n)[0]:.1f},{P(x,n)[1]:.1f}" for x, n in road['p'])
     out.append(f'<polyline points="{pts}" fill="none" stroke="#ffd94a" stroke-width="1" opacity="0.6"/>')
-nOv = len(s['bld']) - 36
+nOv = len(s['bld']) - nAdd
 for i, b in enumerate(s['bld']):
     r, h = b[0], b[1]
     added = i >= nOv

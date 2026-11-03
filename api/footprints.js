@@ -21,6 +21,21 @@
 // main et complets, et un toit hors de toute empreinte est presque toujours un arbre (Assemblée nationale: 33 arbres sur
 // 36 ajouts, boulevard, pelouses et talus boisé, dont un « immeuble » de 12 m sur quatre étages). Les remplacements d'un
 // carré Microsoft par sa vraie forme restent permis partout. Le critère est dans scene3d.js.
+// Zones mixtes (v633.262, 3 novembre 2026; OpenStreetMap entre 10 et 90 % des contours): tri de 105 ajouts sur l'imagerie
+// (Limoilou 91, Sillery 14). Les grandes plaques y sont de vrais bâtiments absents d'Overture (rangées de triplex de 350 à
+// 1650 m², maisons), les arbres pris pour des toits sont rares (5 à Limoilou, 2 à Sillery) et les erreurs se concentrent
+// dans les petites plaques (sous 45 m²: remises, doublons sur un toit déjà tracé, cimes, véhicules, moitié-moitié). Les
+// mesures de forme (planéité, dôme, chute, entourage) ne séparent pas les cimes du Parlement des maisons de Stoneham
+// (mêmes médianes); le contexte, oui. Trois retenues, partout où les ajouts sont permis:
+// - parc ou pelouse (opts.green, polygones verts d'Overture): un toit hors empreinte dans un parc est une cime (Parlement
+//   17 sur 35, Outremont 7 sur 17; Limoilou: le seul cas est un bouquet de 12 m sur 197 m²); un chalet de parc est tracé;
+// - cime bombée (CROWN_DOME, CROWN_H): pente qui pointe vers le centre à 0,55 au moins et 9 m et plus; un toit en croupe
+//   fait 0,4 à 0,5 et jamais trois étages hors empreinte (Stoneham: aucun des 42 ajouts; Sainte-Adèle: un seul des 154);
+// - petite plaque en zone dense (opts.dense, part du sol bâti au-dessus de 18 % dans 300 m, api/paved.js): sous 45 m²,
+//   aussi souvent fausse que vraie, et invisible dans un îlot bâti (Limoilou: 32 des 91 ajouts);
+// - wagon (opts.rail, axes des voies ferrées, RAIL_D): un toit à moins de 4 m de l'axe d'une voie ferrée est un train
+//   (gare de triage de Limoilou: trois rames de 4,6 m, 87 à 791 m²; aucun autre ajout du banc à moins de 8 m d'une voie).
+// Stoneham garde ses 42 ajouts, Sainte-Adèle 153 de 154, Limoilou 54 de 91 (tous vérifiés sur l'imagerie).
 // Un bâtiment d'Overture sans toit reconnu (toit sous les arbres, bâti après le relevé) est gardé tel quel; un toit
 // reconnu dans son empreinte la remplace (sauf s'il n'en fait pas 40 %: un coin de toit vu entre les arbres); un toit
 // hors de toute empreinte devient un bâtiment (remise si moins de 45 m²). Un tracé OpenStreetMap (locked, fait à la main,
@@ -44,6 +59,8 @@ const NEW_MAX_H = 14; // m: toit absent d'Overture
 const TALL_K = 3; // m: un toit absent d'Overture ne dépasse pas TALL_K plus la racine de sa surface (64 m²: 11 m)
 const TALL_FLAT_A = 100; // m²: à partir de cette surface, un toit net et plat peut être plus haut (immeuble étroit)
 const SHED_AREA = 45; // m²: en dessous, remise (comme scene3d.js)
+const CROWN_DOME = 0.55, CROWN_H = 9; // cime bombée: dôme (pente vers le centre) et hauteur d'un toit hors empreinte qui est un arbre
+const RAIL_D = 4; // m: un toit dont le centre est à moins de RAIL_D de l'axe d'une voie ferrée est un wagon
 
 const signedArea = (r) => r.reduce((s, p, i) => { const q = r[(i + 1) % r.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0) / 2;
 const ccw = (r) => (signedArea(r) < 0 ? r.slice().reverse() : r);
@@ -86,6 +103,9 @@ const erode = (m, W, H, r) => { const N = W * H, inv = new Uint8Array(N); for (l
 
 // win: { raw (hauteur de canopée, m), W, H, res }; fr: repère (trees.js frame); bld: [[anneau (m locaux), h, étages, genre, ...]].
 // Retourne { bld, replaced, added }: nouvelle liste (mêmes entrées, certaines remplacées, plus les toits ajoutés).
+// opts: noAdd (pas d'ajouts), dense (zone dense: pas de petite plaque), green (polygones verts, m locaux: pas d'ajout dedans),
+// rail (polylignes des voies ferrées, m locaux: pas d'ajout dessus),
+// dbg (tableau du banc: mesures de chaque toit hors empreinte, gardé ou retenu, avec le motif de la retenue).
 export function lidarFootprints(win, fr, bld, log = () => {}, locked = [], opts = {}) {
   const { raw, W, H, res } = win, N = W * H;
   const px2 = res * res, pxOf = (m) => Math.max(1, Math.round(m / res));
@@ -167,13 +187,15 @@ export function lidarFootprints(win, fr, bld, log = () => {}, locked = [], opts 
     const matched = ov.length === 1;
     const ok = A >= MIN_AREA && A <= MAX_AREA && h >= MIN_H && dome < 0.8 && p15 >= (matched ? 0.3 : 0.35) && chute >= (matched ? 0.25 : 0.35) && rect >= (matched ? 0.5 : 0.6)
       && (matched || (h <= NEW_MAX_H && (h <= TALL_K + Math.sqrt(A) || (A >= TALL_FLAT_A && p15 >= 0.5 && dome <= 0.2)) && (gnd >= 0.2 || env - h >= 4)));
-    if (ok) cands.push({ comp, ring: reg, A, h, ov });
+    if (ok) cands.push({ comp, ring: reg, A, h, ov, p15, dome, chute, gnd, env, rect });
   }
   // Remplacement et ajouts. Un toit par empreinte d'Overture (le plus grand); les autres toits de la même empreinte
   // deviennent des bâtiments à part (maison et garage dans un même carré).
   cands.sort((a, b) => b.A - a.A);
   const out = bld.map(b => b.slice()), taken = new Set();
-  let replaced = 0, added = 0, skipped = 0;
+  let replaced = 0, added = 0; const skip = { osm: 0, parc: 0, wagon: 0, cime: 0, petite: 0 };
+  const segD = (p, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy || 1e-9, t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2)); return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy); };
+  const onRail = (p) => !!opts.rail && opts.rail.some(l => { for (let i = 0; i + 1 < l.length; i++) if (segD(p, l[i], l[i + 1]) < RAIL_D) return true; return false; });
   const heightOf = (c, kind) => {
     const pts = c.comp.map(k => ({ v: raw[k], rough: rough[k] })), area = c.comp.length * px2;
     const maxH = area >= 400 ? Infinity : kind === 2 ? 7 : kind === 1 ? (area < 250 ? 20 : Infinity) : 13;
@@ -190,10 +212,17 @@ export function lidarFootprints(win, fr, bld, log = () => {}, locked = [], opts 
       taken.add(i); out[i] = entry(c, b[3], b); replaced++;
       continue;
     }
-    if (opts.noAdd) { skipped++; continue; } // là où OpenStreetMap domine (voir scene3d.js): un toit hors empreinte est presque toujours un arbre
+    // Toit hors empreinte (ou second toit d'une empreinte déjà prise): retenu là où OpenStreetMap domine (voir scene3d.js),
+    // dans un parc, s'il a la forme d'une cime, ou s'il est petit en zone dense (voir l'en-tête).
+    const cc = centroid(c.ring);
+    const why = opts.noAdd ? 'osm' : opts.green && opts.green.some(g => inRing(cc[0], cc[1], g)) ? 'parc' : onRail(cc) ? 'wagon' : c.dome >= CROWN_DOME && c.h >= CROWN_H ? 'cime' : opts.dense && c.A < SHED_AREA ? 'petite' : null;
+    if (opts.dbg) opts.dbg.push({ i: out.length, x: Math.round(cc[0]), n: Math.round(cc[1]), A: Math.round(c.A), h: c.h, p15: +c.p15.toFixed(2), dome: +c.dome.toFixed(2), chute: +c.chute.toFixed(2), gnd: +c.gnd.toFixed(2), env: +c.env.toFixed(1), rect: +c.rect.toFixed(2), why });
+    if (why) { skip[why]++; continue; }
     const kind = c.ov.length === 1 ? (c.A < SHED_AREA ? 2 : bld[c.ov[0]][3]) : (c.A < SHED_AREA ? 2 : 0);
     out.push(entry(c, kind, null)); added++;
   }
-  log(`empreintes LiDAR: ${replaced} remplacées, ${added} ajoutées (${cands.length} toits reconnus, ${comps.length} plaques)${skipped ? `, ${skipped} ajouts retenus (OpenStreetMap domine)` : ''}`);
+  const skipped = skip.osm + skip.parc + skip.wagon + skip.cime + skip.petite;
+  const why = [skip.osm && `OpenStreetMap domine ${skip.osm}`, skip.parc && `parc ${skip.parc}`, skip.wagon && `wagon ${skip.wagon}`, skip.cime && `cime ${skip.cime}`, skip.petite && `petite plaque en zone dense ${skip.petite}`].filter(Boolean).join(', ');
+  log(`empreintes LiDAR: ${replaced} remplacées, ${added} ajoutées (${cands.length} toits reconnus, ${comps.length} plaques)${skipped ? `, ${skipped} ajouts retenus (${why})` : ''}`);
   return { bld: out, replaced, added, skipped };
 }
