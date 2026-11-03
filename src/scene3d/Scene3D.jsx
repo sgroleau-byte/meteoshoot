@@ -107,7 +107,7 @@ async function doSync(pid, onFetch) {
   return null;
 }
 
-export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, visible, zoomRef, projectId, sunny, onToggleSunny, onHorizon }) => { // sunny: météo coupée (journée ensoleillée) // zoomRef.current(f) : les boutons + et - de la fenêtre
+export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, visible, warm, zoomRef, projectId, sunny, onToggleSunny, onHorizon }) => { // warm: demande anticipée (fiche ouverte, 3D pas encore affichée) // sunny: météo coupée (journée ensoleillée) // zoomRef.current(f) : les boutons + et - de la fenêtre
   const box = useRef(null);
   const eng = useRef(null);
   const [info, setInfo] = useState(null);
@@ -340,6 +340,24 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
     } catch (err) { delete satCache.current[key]; setMdlErr(`Image satellite indisponible (${err.message || err})`); }
     finally { setSatBusy(false); }
   };
+
+  // Demande anticipée (3 novembre 2026, v633.266): la fiche ouverte sur un lieu, et le compte ayant droit à la 3D (warm), le
+  // moteur (280 Ko compressés), les environs et le relief sont demandés sans attendre le clic sur 3D, après un court délai
+  // pour laisser passer la météo et la carte de la fiche. Un lieu jamais calculé (28 s côté serveur) démarre donc pendant
+  // que Stéphane lit la fiche; en cache, tout est déjà là au clic. Ce sont les mêmes promesses gardées en mémoire par
+  // lieu que l'ouverture (loadScene, loadTerrain): rien n'est demandé deux fois; une demande qui échoue est oubliée et
+  // l'ouverture la refait.
+  useEffect(() => {
+    if (visible || !warm || !lat || !lng) return;
+    let off = false;
+    const id = setTimeout(() => {
+      if (off) return;
+      import('./engine.js').catch(() => {});
+      loadScene(lat, lng).catch(() => {});
+      loadTerrain(lat, lng).catch(() => {});
+    }, 1200);
+    return () => { off = true; clearTimeout(id); };
+  }, [visible, warm, lat, lng]);
 
   if (!visible) return null;
   const color = info?.light === false ? '#23282b' : '#f4f4f2';

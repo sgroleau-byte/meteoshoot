@@ -1167,6 +1167,31 @@ importé, lui, est le fichier de l'architecte.
     `verification_batiments_ville/`.
   - Banc du ciel: `harness.html?scene=<adresse d'un JSON>` rejoue une scène enregistrée (planche avant / après sans
     redémarrer l'API: la scène d'avant servie par Vite depuis `public/`, celle d'après par l'API).
+- v633.266 (3 novembre 2026), **chargement: demande anticipée, cache du relief réparé, préchauffage** (Stéphane, capture
+  « environs en préparation » sur le relief nu: « On peut optimiser le loading pour le rendre plus rapide, et plus
+  progressif? »). Chronos en production sur Stoneham, hors cache: environs 28 s (lecture d'Overture par DuckDB 13 s, puis
+  mesures LiDAR, toits, arbres et calage Plans d'Apple 13 s), relief 7 s (755 Ko compressés); en cache, scène vers 1 à 2 s.
+  Chaque changement de `SCENE_V` (quatre le 3 novembre) périmait tout le cache partagé: chaque projet repassait par les 28 s.
+  - **Demande anticipée** (`Scene3D.jsx`, prop `warm` = `canUse3d()` dans `ProjectDetail.jsx`): la fiche ouverte sur un lieu,
+    le moteur (280 Ko compressés), les environs et le relief sont demandés 1,2 s après, sans attendre le clic sur 3D. Mêmes
+    promesses gardées en mémoire par lieu que l'ouverture: rien n'est demandé deux fois; une demande qui échoue est oubliée
+    et l'ouverture la refait. Un lieu jamais calculé démarre donc pendant la lecture de la fiche. Les températures de
+    l'automne (`loadFallTemps`, relais Open-Meteo) ne sont pas anticipées (un appel compté par lieu, rapide).
+  - **Relief jamais gardé dans `scene3d_cache` depuis le 11 octobre** (relief lointain précis, v633.194): une entrée « dem_ »
+    pèse 1,4 Mo et le déclencheur `scene3d_cache_validate` refusait plus de 600 Ko; l'erreur était avalée (try/catch de
+    `terrain.js`), le relief recalculé à chaque ouverture (masqué par le cache du navigateur, 24 h, et de Vercel). Les 5
+    entrées « dem_ » étaient toutes restées en version 1. Migration `20261103150000_cache_scene_3d_relief_2mo.sql`: limite à
+    2 Mo. Rejeté en passant: afficher les bâtiments d'Overture en attendant les mesures LiDAR (Stéphane: « on n'affiche pas
+    de faux bâtiments pour ensuite en afficher des vrais »); une scène plus progressive ne peut jouer que sur ce qui ne
+    trompe pas (relief, rues, eau, arbres), les bâtiments arrivent mesurés ou pas du tout.
+  - **Préchauffage** (`scripts/scene3d-warm.mjs`): après chaque mise en production qui change `SCENE_V` ou `TERRAIN_V`,
+    `node scripts/scene3d-warm.mjs` calcule d'avance les lieux des projets (tables `projects` et `projects_dev`, projets
+    exemples, lieux déjà en cache) et range le résultat dans `scene3d_cache` comme l'app (mêmes règles `usable`); options
+    `--force`, `--dry-run`, `--jobs`, `--base`, `--only lat,lng`. Clé de service par `supabase projects api-keys` (jamais
+    écrite), ou `SUPABASE_SERVICE_KEY`. Trois lieux à la fois: environ 35 s par lieu.
+  - Restent (acceptés le 3 novembre 2026, pas faits): cache en deux couches (lecture d'Overture gardée à part des mesures
+    LiDAR, pour qu'un changement de règle ne refasse plus les 13 s d'Overture); Overture pré-découpé en tuiles Québec et
+    Canada (lecture vers 1 s, gros chantier à refaire à chaque version d'Overture).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
