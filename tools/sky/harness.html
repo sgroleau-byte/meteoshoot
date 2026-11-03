@@ -38,7 +38,8 @@ const status = { terrain: 'en cours', scene: 'en cours', fall: 'en cours' };
 let fallT = null; // gel de l'automne (feuillage); { fall: false } dans une liste rend le calendrier moyen du satellite seul
 const ready = Promise.all([
   q.get('flat') ? Promise.resolve() : loadTerrain(lat, lng).then(t => { e.setTerrain(t); status.terrain = 'ok'; }).catch(err => { status.terrain = 'erreur: ' + err.message; }),
-  q.get('noscene') ? Promise.resolve() : loadScene(lat, lng).then(d => { e.setData(d); status.scene = 'ok (' + (d.bld || []).length + ' bâtiments)'; }).catch(err => { status.scene = 'erreur: ' + err.message; }),
+  // scene=<adresse d'un JSON>: rejoue une scène enregistrée (banc avant / après) au lieu de la demander au serveur.
+  q.get('noscene') ? Promise.resolve() : (q.get('scene') ? fetch(q.get('scene')).then(r => r.json()) : loadScene(lat, lng)).then(d => { e.setData(d); status.scene = 'ok (' + (d.bld || []).length + ' bâtiments' + (q.get('scene') ? ', rejouée' : '') + ')'; }).catch(err => { status.scene = 'erreur: ' + err.message; }),
   q.get('nofall') ? Promise.resolve() : loadFallTemps(lat, lng).then(f => { fallT = f; e.setFallTemps(f); status.fall = 'ok (depuis ' + f.from + ')'; }).catch(err => { status.fall = 'erreur: ' + err.message; }),
 ]).then(() => status);
 

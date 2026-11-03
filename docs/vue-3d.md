@@ -59,7 +59,7 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
 - `api/scene3d.js`: fonction Vercel (Node, paquet `duckdb`). Lit Overture Maps (données ouvertes:
   empreintes Microsoft et OpenStreetMap, hauteurs estimées) en HTTPS direct dans les fichiers Parquet
   publiés sur S3 (pas en s3://: sur Vercel, les identifiants AWS ambiants faussaient les requêtes), cinq
-  requêtes en parallèle (bâtiments, rues avec leur nom, terrain, usage du sol, eau), découpées par un cadre
+  requêtes en parallèle (bâtiments et leurs parties depuis la v633.265, rues avec leur nom, terrain, usage du sol, eau), découpées par un cadre
   autour du lieu, converties en mètres. Environ 80 Ko, 12 secondes avec l'index, 2 minutes sans. Version 2
   depuis le 5 octobre 2026 (noms de rues, gardés pour un usage futur).
 - `api/overture-index.json`: cadre géographique de chaque fichier Parquet d'Overture, par type. À régénérer
@@ -1145,6 +1145,28 @@ importé, lui, est le fichier de l'architecte.
     `verification_batiments_ville/` (vue haute et vue drone, avant par l'ancienne API locale, après par la nouvelle).
   - Reste: le sol de la cour est celui du terrain (gazon; au Parlement, du pavé); les ailes intérieures que Shadowmap
     dessine viennent des parties de bâtiment d'Overture (`type=building_part`, non indexées), une étape à part.
+- v633.265 (3 novembre 2026), **sol des cours et parties de bâtiment d'Overture** (Stéphane: « fait ce qui n'est pas
+  fait »). Environs **version 17**.
+  - Sol des cours (`engine.js`, après les parcs): les anneaux intérieurs sont drapés en pavé (même matière que l'asphalte,
+    un cran sous le pavé des stationnements), sauf bâtiment caché ou sous la maison importée.
+  - Parties de bâtiment (`api/scene3d.js`, `theme=buildings/type=building_part`, trois fichiers dans le monde, ajoutés à
+    `api/overture-index.json` et à `scripts/overture-index.py`): ailes, tours et volumes tracés dans OpenStreetMap pour un
+    même édifice (hauteur ou étages propres, `min_height` ou `min_floor` pour un volume posé sur un autre). Chacune est un
+    bâtiment de la scène, genre du contour parent, `bld[i][8]` = hauteur de sa base (0 au sol); tracé OpenStreetMap, donc
+    jamais remplacée par le LiDAR, mais mesurée par lui comme les autres (`heights.js`, `roofs.js`). Un contour dont les
+    parties au sol couvrent 60 % et plus de la surface (`PART_COVER`) s'efface, les parties le remplacent (les parties
+    sont faites pour cela; sinon murs confondus qui scintillent). Moteur (`blocks()`): contour d'une partie rentré de 5 cm
+    (ses murs longent ceux du parent ou d'une partie voisine), murs à partir de la base quand elle est en hauteur; `hiddenBld`
+    cache déjà une partie basse enfermée dans une plus haute.
+  - Le Parlement n'a pas de parties dans OpenStreetMap (les 14 parties à moins de 450 m sont sur d'autres édifices, à
+    129 m et plus): ses ailes intérieures restent ce qu'Overture en a (un bâtiment dans la cour). Ce que Shadowmap
+    dessine de plus n'est donc pas une donnée d'Overture.
+  - Banc des dix lieux (parties, contours effacés): Calgary 159 et 33, Toronto 52 et 12, Parlement 14 et 2, Sainte-Adèle
+    3 et 1, Outremont 1 et 0, rien ailleurs; ajouts LiDAR inchangés partout. Planches `planche_calgary_parties_avant_apres.png`
+    (tour à couronne de 92 m posée à 76 m, volumes refendus) et `planche_parlement_cour_sol.png` dans
+    `verification_batiments_ville/`.
+  - Banc du ciel: `harness.html?scene=<adresse d'un JSON>` rejoue une scène enregistrée (planche avant / après sans
+    redémarrer l'API: la scène d'avant servie par Vite depuis `public/`, celle d'après par l'API).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

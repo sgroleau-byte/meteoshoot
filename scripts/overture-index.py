@@ -2,7 +2,7 @@ import json, sys, time
 from concurrent.futures import ThreadPoolExecutor
 import pyarrow.dataset as ds, pyarrow.fs as fs
 REL = sys.argv[1] if len(sys.argv) > 1 else '2026-09-23.1'
-TYPES = ['theme=buildings/type=building', 'theme=transportation/type=segment', 'theme=base/type=land', 'theme=base/type=land_use', 'theme=base/type=water']
+TYPES = ['theme=buildings/type=building', 'theme=buildings/type=building_part', 'theme=transportation/type=segment', 'theme=base/type=land', 'theme=base/type=land_use', 'theme=base/type=water']
 s3 = fs.S3FileSystem(anonymous=True, region='us-west-2')
 out = {'release': REL, 'types': {}}
 def one(frag):

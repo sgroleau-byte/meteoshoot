@@ -20,6 +20,9 @@
 //   petite plaque en zone dense (api/footprints.js, tri sur l'imagerie à Limoilou et Sillery).
 // v16 (3 novembre 2026): cours intérieures: bld[i][7] = anneaux intérieurs du contour (m locaux, 30 m² et plus), que le moteur
 //   creuse dans les murs et le toit (le Parlement est un contour à trou dans OpenStreetMap; avant, un bloc plein).
+// v17 (3 novembre 2026): parties de bâtiment d'Overture (type=building_part, tracés OpenStreetMap des ailes, tours et
+//   volumes d'un même édifice): chacune est un bâtiment de la scène avec bld[i][8] = hauteur de sa base (0 au sol, sinon un
+//   volume posé sur un autre); un contour couvert par ses parties au sol (PART_COVER) est retiré, les parties le remplacent.
 // v6 (8 octobre 2026): arbres mesurés par LiDAR jusqu'à 350 m (api/trees.js): trees[i] = [x, n, h, r, k] (hauteur,
 //   rayon de couronne, k code d'essence (0 feuillu, 1 conifère; depuis le 23 octobre 2026 aussi 2 à 6, voir api/trees.js); près d'un bâtiment, plus dx, dn: centre mesuré de la couronne, et
 //   o: 1 si le relevé montre du feuillage au-dessus du toit voisin); treesSrc { date, res, essences }. Restent au format [x, n] (taille
@@ -52,6 +55,7 @@ function filesFor(path, [x0, y0, x1, y1]) {
   return list.filter(([, fx0, fy0, fx1, fy1]) => fx0 <= x1 && fx1 >= x0 && fy0 <= y1 && fy1 >= y0).map(([name]) => `${HTTPS_BASE}/${path}/${name}`);
 }
 const R_BLD = 450, R_ROAD = 500, R_TREE = 340, R_WOOD = 500, R_GREEN = 500, R_WATER = 2500;
+const PART_COVER = 0.6; // part de la surface d'un contour couverte par ses parties au sol à partir de laquelle le contour s'efface (v17)
 
 let dbPromise = null;
 function getDb() {
@@ -183,8 +187,9 @@ export async function buildScene(lat, lng, opts = {}) {
     } finally { con.close(); }
   };
   const t0 = Date.now();
-  const [bRows, sRows, lRows, uRows, wRows] = await Promise.all([
-    query('theme=buildings/type=building', 'height, num_floors, subtype, class, sources[1].dataset AS src', R_BLD),
+  const [bRows, pRows, sRows, lRows, uRows, wRows] = await Promise.all([
+    query('theme=buildings/type=building', 'id, height, num_floors, subtype, class, sources[1].dataset AS src', R_BLD),
+    query('theme=buildings/type=building_part', 'height, num_floors, min_height, min_floor, building_id, sources[1].dataset AS src', R_BLD),
     query('theme=transportation/type=segment', 'class, subclass, names.primary AS name', R_ROAD),
     query('theme=base/type=land', 'subtype, class', R_WOOD),
     query('theme=base/type=land_use', 'subtype, class', R_GREEN),
@@ -195,7 +200,8 @@ export async function buildScene(lat, lng, opts = {}) {
   const loc = (ring) => ring.map(([lon, la]) => X(lon, la));
 
   // Bâtiments: hauteur mesurée si connue, sinon étages, sinon 7,5 m. Remisés (petits, dépendances) en gris.
-  let bld = []; const osmIdx = new Set(); // tracés OpenStreetMap (à la main, exacts): jamais remplacés par le LiDAR
+  let bld = []; let osmIdx = new Set(); // tracés OpenStreetMap (à la main, exacts): jamais remplacés par le LiDAR
+  const outlines = new Map(), outArea = new Map(); // id d'Overture -> indice et genre du contour; indice -> surface au sol (pour les parties)
   for (const row of bRows) {
     for (const rings of polysOf(wkbToGeom(row.geometry))) {
       let r = simplifyRing(loc(rings[0]), 0.3);
@@ -215,8 +221,39 @@ export async function buildScene(lat, lng, opts = {}) {
       if (/OpenStreetMap/i.test(String(row.src || ''))) osmIdx.add(bld.length);
       const entry = [round1(ccw(r)), Math.round(h * 10) / 10, fl, kind];
       if (holes.length) entry[7] = holes; // [4] mesuré, [5] empreinte LiDAR et [6] toit sont posés plus loin
+      if (row.id) { outlines.set(String(row.id), { i: bld.length, kind }); outArea.set(bld.length, area - holes.reduce((sa, hr) => sa + Math.abs(signedArea(hr)), 0)); }
       bld.push(entry);
     }
+  }
+  // Parties de bâtiment (v17): ailes, tours et volumes tracés dans OpenStreetMap pour un même édifice (le Parlement en a
+  // une vingtaine, le contour n'étant que l'enveloppe). Chacune devient un bâtiment (hauteur propre, genre du contour
+  // parent), bld[i][8] = hauteur de sa base (un volume posé sur un autre démarre plus haut). Un contour dont les parties au
+  // sol couvrent PART_COVER de la surface s'efface: les parties le remplacent (sinon, murs confondus qui scintillent).
+  let nParts = 0; const covered = new Map();
+  for (const row of pRows) {
+    const par = row.building_id ? outlines.get(String(row.building_id)) : null;
+    for (const rings of polysOf(wkbToGeom(row.geometry))) {
+      const r = simplifyRing(loc(rings[0]), 0.3);
+      if (r.length < 3) continue;
+      const area = Math.abs(signedArea(r));
+      if (area < 12) continue;
+      const c = centroid(r);
+      if (Math.hypot(c[0], c[1]) > R_BLD) continue;
+      let h = row.height != null ? Number(row.height) : row.num_floors ? Number(row.num_floors) * 3.1 : par ? bld[par.i][1] : 7.5;
+      h = Math.max(2.8, Math.min(h, 120));
+      const base = row.min_height != null ? Math.max(0, Math.min(Number(row.min_height), h - 1)) : row.min_floor ? Math.max(0, Math.min(Number(row.min_floor) * 3.1, h - 1)) : 0;
+      const fl = row.num_floors ? Number(row.num_floors) : Math.max(1, Math.round((h - base) / 3.1));
+      if (/OpenStreetMap/i.test(String(row.src || ''))) osmIdx.add(bld.length);
+      if (par && base === 0) covered.set(par.i, (covered.get(par.i) || 0) + area);
+      const entry = [round1(ccw(r)), Math.round(h * 10) / 10, fl, par ? par.kind : 0]; entry[8] = Math.round(base * 10) / 10;
+      bld.push(entry); nParts++;
+    }
+  }
+  let dropped = 0;
+  if (nParts) {
+    const drop = new Set(); covered.forEach((a, i) => { if (a >= PART_COVER * (outArea.get(i) || Infinity)) drop.add(i); }); dropped = drop.size;
+    if (drop.size) { const old = osmIdx, nb = []; osmIdx = new Set(); bld.forEach((b, i) => { if (drop.has(i)) return; if (old.has(i)) osmIdx.add(nb.length); nb.push(b); }); bld = nb; }
+    console.log(`[scene3d] parties de bâtiment: ${nParts}, ${dropped} contours couverts retirés`);
   }
 
   // Rues: largeur selon la classe; k: 0 asphalte, 1 trottoir ou sentier, 2 voie ferrée.
@@ -353,7 +390,7 @@ export async function buildScene(lat, lng, opts = {}) {
     treesSrc = { date: lt.date, res: lt.res, essences: lt.essences, n: lt.trees.length };
     canopy = lt.canopy;
   }
-  const scene = { v: 16, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, lidarAdd: noAdd ? 0 : 1, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
+  const scene = { v: 17, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, lidarAdd: noAdd ? 0 : 1, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
   if (lidarErr) scene.lidarErr = true;
   if (appleErr) { scene.appleErr = true; scene.lidarErr = true; } // lidarErr aussi: les versions 633.242 et antérieures ne connaissent que lui pour ne pas garder la scène
   return scene;

@@ -1049,11 +1049,14 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
         // Cours intérieures (v633.264, bld[i][7]): murs le long de chaque cour, parcourue en sens horaire pour que le mur
         // regarde la cour, et toit troué (shapeOf avec trous); un toit en pente mesuré n'est pas posé sur un bâtiment à cour.
         const holes = (b.holes || []).map(hr => (signedArea(hr) < 0 ? hr : hr.slice().reverse()));
-        const pts = signedArea(b.p) < 0 ? b.p.slice().reverse() : b.p, h = b.h, lv = Math.max(1, b.fl), col = b.col, rc = b.rc, roof = holes.length ? null : b.roof || null; let u0 = 0; const seed0 = Math.floor(hsh(pts[0][0], pts[0][1], 9) * 900);
+        // Partie de bâtiment (v633.265, bld[i][8] = base): contour rentré de 5 cm (ses murs longent ceux du contour parent ou
+        // d'une partie voisine: confondus, ils scintilleraient), murs à partir de la base quand elle est en hauteur.
+        const inset = (ring, d) => { const c = centroid(ring); return ring.map(([x, n]) => { const dx = c[0] - x, dn = c[1] - n, l = Math.hypot(dx, dn) || 1; return [x + dx / l * d, n + dn / l * d]; }); };
+        const pts0 = signedArea(b.p) < 0 ? b.p.slice().reverse() : b.p, pts = b.base != null ? inset(pts0, 0.05) : pts0, h = b.h, lv = Math.max(1, b.fl), col = b.col, rc = b.rc, roof = holes.length ? null : b.roof || null; let u0 = 0; const seed0 = Math.floor(hsh(pts[0][0], pts[0][1], 9) * 900);
         // Sur une pente: toit à h au-dessus du sol moyen de l'empreinte, murs descendus jusque sous le point le plus bas
         // (rien ne flotte côté aval, le pied s'enterre côté amont); étages recomptés sur la hauteur réelle du mur.
         // Toit en pente mesuré (LiDAR, v633.179): murs jusqu'à l'égout le plus bas, versants et pignons par-dessus (roof.js).
-        const gb = b.g || groundOf(pts), yb = gb.min - 0.5, top = gb.mean + (roof ? roof.he : h), lvw = Math.max(1, Math.round(lv * (top - yb) / h));
+        const gb = b.g || groundOf(pts), yb = b.base > 0 ? gb.mean + b.base - 0.15 : gb.min - 0.5, top = gb.mean + (roof ? roof.he : h), lvw = Math.max(1, Math.round(lv * (top - yb) / Math.max(1, h - (b.base || 0))));
         const cb = centroid(pts), g0 = 0.15 + 0.9 * Math.min(1, Math.hypot(cb[0], cb[1]) / 400); // départ de la pousse: une vague du sujet vers l'extérieur
         const walls = (ring, so) => { for (let i = 0; i < ring.length; i++) {
           const a = ring[i], c = ring[(i + 1) % ring.length]; const ax = a[0], azz = -a[1], bx = c[0], bz = -c[1]; const ex = bx - ax, ez = bz - azz, len = Math.hypot(ex, ez); if (len < 0.05) continue;
@@ -1574,16 +1577,19 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     const others = []; let kept = []; treeEnv = []; othH = new Map(); drawn.forEach(d => othH.set(d.p, d.hEff ?? 9));
     if (data) {
       const hidden = hiddenBld(data.bld);
-      data.bld.forEach(([p, h, fl, k, lid, , roof, holes], bi) => {
+      data.bld.forEach(([p, h, fl, k, lid, , roof, holes, base], bi) => {
         // Un voisin recouvert par un bâtiment dessiné disparaît: c'est le même édifice. Un voisin caché dans un autre aussi.
         const c = centroid(p);
         if (hidden.has(bi) || drawn.some(d => ringsOverlap(d.p, p)) || underModel(p)) return;
         others.push(p);
         const q = p[0], r = hsh(q[0], q[1], 5); const hh = k === 0 && !lid ? Math.max(h, 6.2) : h; // hauteur mesurée (LiDAR): telle quelle
         othH.set(p, roof ? Math.max(hh, roofTop(roof) || 0) : hh);
-        list.push({ p, h: hh, fl: Math.max(1, Math.min(k === 0 ? Math.max(fl, Math.round(hh / 3.1)) : fl, Math.floor(hh / 3.2))), col: L(k === 2 ? '#9a9a94' : k === 1 ? '#cfc7b8' : PAL_RES[Math.floor(r * PAL_RES.length)]), rc: L(ROOF[Math.floor(hsh(q[0], q[1], 6) * ROOF.length)]), roof: roof || null, hTop: roof ? Math.max(hh, roofTop(roof) || 0) : hh, holes: holes || null });
+        list.push({ p, h: hh, fl: Math.max(1, Math.min(k === 0 ? Math.max(fl, Math.round(hh / 3.1)) : fl, Math.floor(hh / 3.2))), col: L(k === 2 ? '#9a9a94' : k === 1 ? '#cfc7b8' : PAL_RES[Math.floor(r * PAL_RES.length)]), rc: L(ROOF[Math.floor(hsh(q[0], q[1], 6) * ROOF.length)]), roof: roof || null, hTop: roof ? Math.max(hh, roofTop(roof) || 0) : hh, holes: holes || null, base: base ?? null });
       });
       Object.keys(GC).forEach(k => addFlat(data.green.filter(p => p.k === k).map(p => ({ o: p.p })), flatMats[k], 0.03, 1));
+      // Sol des cours intérieures (v633.265): pavé, comme une cour de ville (le terrain dessous est le gazon du relief).
+      const cours = data.bld.flatMap((b, bi) => (b[7] && !hidden.has(bi) && !underModel(b[0]) ? b[7] : []).map(h => ({ o: h, h: [] })));
+      if (cours.length) addFlat(cours, flatMats.asphalt, 0.045, 3);
       addFlat(data.asphalt.map(p => ({ o: p })), flatMats.asphalt, 0.05, 2);
       // Surfaces pavées vues sur l'imagerie satellite (stationnements, aires, cours): même gris que l'asphalte, un cran dessous.
       addFlat((data.paved || []).map(p => { const v = p.o ? p : { o: p, h: [] }; return { o: regularizeRing(v.o), h: (v.h || []).map(h => regularizeRing(h)) }; }), flatMats.asphalt, 0.045, 3);

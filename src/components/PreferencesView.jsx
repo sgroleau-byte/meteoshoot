@@ -280,7 +280,7 @@ export const PreferencesView = () => {
 
           <div className="py-5" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
             <div style={{ textAlign: 'center' }}>
-              <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.264</div>
+              <div className="font-bebas-light" style={{ fontSize: '22px', color: '#8A9A98', letterSpacing: '0.08em' }}>METEOSHOOT v633.265</div>
               <div className="font-bebas-bold" style={{ fontSize: '24px', color: '#8A9A98', letterSpacing: '0.15em', marginTop: '6px' }}>DRIFT{'&'}GRAIN</div>
               <div className="font-bebas-light" style={{ marginTop: '22px', fontSize: '15px', letterSpacing: '0.06em', display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '6px 16px' }}>
                 <a href="site/conditions.html" style={{ color: 'rgba(255,255,255,0.35)', textDecoration: 'none' }}>{t('legalTerms')}</a>
