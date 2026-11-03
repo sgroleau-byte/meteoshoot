@@ -1265,8 +1265,9 @@ importé, lui, est le fichier de l'architecte.
     (`sh scripts/overture-tiles-b2.sh`: tuiles d'abord, manifeste en dernier; `--check` compare). Le serveur lit
     `OVERTURE_TILES_URL` (variable Vercel des deux projets: `https://f006.backblazeb2.com/file/meteoshoot-overture`),
     prise au déploiement suivant; sans elle, il lirait le seau Supabase. Gratuit à notre échelle (10 Go de stockage
-    offerts, sortie gratuite jusqu'à trois fois le volume stocké par mois). Le seau Supabase « overture » est vidé
-    ensuite. Les modes `--upload`, `--prune` et `--upload-only` du générateur visent toujours Supabase (gardés en
+    offerts, sortie gratuite jusqu'à trois fois le volume stocké par mois). Mesuré en production après le déploiement
+    (lieux hors cache, hors des anciennes cellules): Sainte-Adèle 14,9 s au total (lecture d'Overture 0,3 s), Gaspé 12,9 s
+    (0,2 s), Trois-Rivières 12,9 s (0,25 s), contre 30 s en DuckDB. Le seau Supabase « overture » a été vidé et supprimé. Les modes `--upload`, `--prune` et `--upload-only` du générateur visent toujours Supabase (gardés en
     secours), le dépôt de référence est Backblaze.
 - v633.269 (3 novembre 2026), **toits à la couleur des murs** (Stéphane, sur une capture du Parlement sous la pluie:
   « peux-tu enlever les tops de bâtiments gris foncé, et les mettre de la même couleur que le reste du bloc? »). Dans
