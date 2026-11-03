@@ -16,6 +16,12 @@ export const sceneKey = (lat, lng) => `${Number(lat).toFixed(5)}_${Number(lng).t
 // d'un essai) est recalculée et remplacée.
 const usable = (d) => (d.v || 1) >= SCENE_V && !d.appleErr && !d.lidarErr && Array.isArray(d.appleRoof);
 
+// Ligne du cache partagé écrite ou remplacée (insertion réservée aux comptes connectés; sur une clé déjà prise, mise à jour).
+async function keepRow(key, lat, lng, version, data) {
+  const { error } = await supabase.from(TBL).insert({ key, lat, lng, version, data });
+  if (error && error.code === '23505') await supabase.from(TBL).update({ version, data }).eq('key', key);
+}
+
 export function loadScene(lat, lng) {
   const key = sceneKey(lat, lng);
   if (mem.has(key)) return mem.get(key);
@@ -35,6 +41,10 @@ export function loadScene(lat, lng) {
     if (scene?.bld && !usable(scene) && !scene.appleErr && !scene.lidarErr) { res = await fetch(url, { cache: 'reload' }); if (res.ok) scene = await res.json(); }
     if (!scene?.bld) throw new Error('scene3d: réponse invalide');
     delete scene.ms;
+    // Couche Overture (v633.267): le serveur la joint quand il vient de la lire (base). Gardée à part (clé ovt_) pour que la
+    // prochaine version des environs n'ait plus à relire Overture (13 s sur 28); jamais dans la scène gardée.
+    const base = scene.base; delete scene.base;
+    if (base && base.v) keepRow('ovt_' + key, la, ln, base.v, base).catch(() => {});
     // Hauteurs LiDAR incomplètes (lecture échouée côté serveur): on s'en sert, sans la garder. Le prochain affichage
     // (même session comprise) la redemande.
     if (scene.lidarErr || scene.appleErr) { setTimeout(() => mem.delete(key), 0); return scene; } // appleErr: calage Plans d'Apple manquant (v633.243)

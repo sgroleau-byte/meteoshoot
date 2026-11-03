@@ -1192,6 +1192,21 @@ importé, lui, est le fichier de l'architecte.
   - Restent (acceptés le 3 novembre 2026, pas faits): cache en deux couches (lecture d'Overture gardée à part des mesures
     LiDAR, pour qu'un changement de règle ne refasse plus les 13 s d'Overture); Overture pré-découpé en tuiles Québec et
     Canada (lecture vers 1 s, gros chantier à refaire à chaque version d'Overture).
+- v633.267 (3 novembre 2026), **couche Overture gardée à part** (suite de la v633.266, « Continue »). La lecture d'Overture
+  (six requêtes DuckDB dans les Parquet, 13 s des 28 s d'un calcul en production) ne dépend que du lieu, de la version
+  d'Overture (`RELEASE`) et des règles de mise en forme de `api/scene3d.js` (`BASE_V`, à bumper seulement quand ces règles
+  changent: parties, largeurs de rues, eau; jamais pour une règle LiDAR). Elle est gardée dans `scene3d_cache` sous la clé
+  « ovt_lat_lng » (migration `20261103170000_cache_scene_3d_couche_overture.sql`): bâtiments avant LiDAR (contour, hauteur,
+  étages, genre, cours, base des parties), indices des tracés OpenStreetMap (`osm`), rues, arbres d'Overture, parcs,
+  stationnements, eau.
+  - Serveur (`overtureBase`, `cachedBase`, `buildScene`): la couche est lue d'abord dans le cache partagé avec la clé publique
+    (lecture ouverte à tous, 4 s au plus, sinon on lit Overture); copie de travail (`structuredClone`) avant les mesures, qui
+    modifient les bâtiments en place; la scène renvoyée porte `base` seulement quand la couche vient d'être lue, et
+    `ms.base` dit « cache » ou « overture ». `GET /api/scene3d?lat&lng&stage=base&b=BASE_V` renvoie la couche seule.
+  - Client (`data.js`, `keepRow`): `base` est retirée de la scène et écrite sous « ovt_ » (insertion, sinon mise à jour sur
+    clé déjà prise), que la scène soit complète ou non. Script de préchauffage: pareil, et pour un lieu dont les environs
+    sont déjà à jour mais sans couche, il la demande seule (`stage=base`) pour que la prochaine version n'ait que les mesures.
+  - Mesuré en local sur Stoneham: couche lue du cache, les environs ne font plus que les mesures LiDAR et l'image.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

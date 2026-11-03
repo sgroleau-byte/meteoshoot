@@ -33,6 +33,7 @@ const ONLY = opt('--only', null);
 
 const SCENE_V = Number(read('src/scene3d/data.js').match(/const SCENE_V = (\d+)/)[1]);
 const TERRAIN_V = Number(read('src/scene3d/terrain.js').match(/TERRAIN_V = (\d+)/)[1]);
+const BASE_V = Number(read('api/scene3d.js').match(/export const BASE_V = (\d+)/)[1]); // couche Overture, gardée à part (clé ovt_)
 const SB_URL = read('src/shared/config.js').match(/https:\/\/[a-z0-9]+\.supabase\.co/)[0];
 const TBL = 'scene3d_cache';
 
@@ -61,6 +62,7 @@ const fmt = (ms) => `${(ms / 1000).toFixed(1).replace('.', ',')} s`;
 // Mêmes règles que l'app pour juger une entrée utilisable (usable dans data.js, loadTerrain dans terrain.js).
 const sceneOk = (d) => !!(d && d.bld && (d.v || 1) >= SCENE_V && !d.appleErr && !d.lidarErr && Array.isArray(d.appleRoof));
 const terrainOk = (t) => !!(t && t.h && (t.v || 1) >= TERRAIN_V);
+const baseOk = (b) => !!(b && b.bld && b.v === BASE_V);
 
 async function lieux() {
   const seen = new Map();
@@ -83,9 +85,9 @@ async function lieux() {
 }
 
 async function cached(key) {
-  const rows = await sb(`${TBL}?select=key,data&key=in.(${key},dem_${key})`);
+  const rows = await sb(`${TBL}?select=key,data&key=in.(${key},dem_${key},ovt_${key})`);
   const m = new Map(rows.map((r) => [r.key, r.data]));
-  return { scene: m.get(key) || null, dem: m.get('dem_' + key) || null };
+  return { scene: m.get(key) || null, dem: m.get('dem_' + key) || null, base: m.get('ovt_' + key) || null };
 }
 async function store(key, lat, lng, version, data) {
   await sb(TBL, { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([{ key, lat, lng, version, data }]) });
@@ -100,7 +102,7 @@ async function getJson(url) {
 
 async function warm(l) {
   const out = [];
-  const c = DRY ? { scene: null, dem: null } : await cached(l.key);
+  const c = DRY ? { scene: null, dem: null, base: null } : await cached(l.key);
   // Environs
   if (!FORCE && sceneOk(c.scene)) out.push('environs en cache');
   else if (DRY) out.push(`environs à calculer (${c.scene ? 'périmés' : 'absents'})`);
@@ -109,9 +111,19 @@ async function warm(l) {
       const { j, ms } = await getJson(`${BASE}/api/scene3d?lat=${l.lat}&lng=${l.lng}&v=${SCENE_V}`);
       if (!j || !j.bld) throw new Error('réponse invalide');
       delete j.ms;
+      if (j.base && j.base.v) { await store('ovt_' + l.key, l.lat, l.lng, j.base.v, j.base); out.push('couche Overture gardée'); } // lue à l'instant: à garder
+      delete j.base;
       if (!sceneOk(j)) out.push(`environs incomplets (${j.appleErr ? 'calage Plans manquant' : j.lidarErr ? 'LiDAR manquant' : 'version ' + j.v}), non gardés, ${fmt(ms)}`);
       else { await store(l.key, l.lat, l.lng, SCENE_V, j); out.push(`environs ${fmt(ms)} (${j.bld.length} bât., ${j.trees.length} arbres)`); }
     } catch (e) { out.push(`environs: ÉCHEC ${e.message}`); }
+  }
+  // Couche Overture seule (les environs sont à jour, la couche manque ou est périmée): prête pour la prochaine version.
+  if (!DRY && !FORCE && sceneOk(c.scene) && !baseOk(c.base)) {
+    try {
+      const { j, ms } = await getJson(`${BASE}/api/scene3d?lat=${l.lat}&lng=${l.lng}&stage=base&b=${BASE_V}`);
+      if (!j || !j.base || !j.base.bld) throw new Error('réponse invalide');
+      await store('ovt_' + l.key, l.lat, l.lng, j.base.v, j.base); out.push(`couche Overture ${fmt(ms)}`);
+    } catch (e) { out.push(`couche Overture: ÉCHEC ${e.message}`); }
   }
   // Relief
   if (!FORCE && terrainOk(c.dem)) out.push('relief en cache');
@@ -129,7 +141,7 @@ async function warm(l) {
 }
 
 const list = await lieux();
-console.log(`${list.length} lieux, environs v${SCENE_V}, relief v${TERRAIN_V}, serveur ${BASE}${DRY ? ' (essai à blanc)' : ''}${FORCE ? ' (tout recalculer)' : ''}`);
+console.log(`${list.length} lieux, environs v${SCENE_V}, couche Overture v${BASE_V}, relief v${TERRAIN_V}, serveur ${BASE}${DRY ? ' (essai à blanc)' : ''}${FORCE ? ' (tout recalculer)' : ''}`);
 let i = 0, fails = 0; const t0 = Date.now();
 await Promise.all(Array.from({ length: Math.min(JOBS, list.length) }, async () => {
   while (i < list.length) {

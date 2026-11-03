@@ -28,7 +28,12 @@
 //   o: 1 si le relevé montre du feuillage au-dessus du toit voisin); treesSrc { date, res, essences }. Restent au format [x, n] (taille
 //   tirée au sort par le client) les arbres d'Overture là où le LiDAR ne voit pas, et les boisés au-delà de 350 m.
 //   canopy: hauteur de la canopée des boisés en grille de 3 m (sous-bois dessiné sous les cimes), voir api/trees.js.
-// Essai local: node api/scene3d.js --test 46.8367 -71.2336
+// Couche Overture gardée à part (3 novembre 2026, v633.267): la lecture d'Overture (13 s sur 28 en production) ne dépend
+//   que du lieu, de la version d'Overture (RELEASE) et des règles de ce fichier (BASE_V); elle est gardée dans le cache partagé
+//   sous la clé « ovt_lat_lng » (écrite par le client ou le script de préchauffage, lue ici avec la clé publique). Une nouvelle
+//   version des environs (SCENE_V, règles LiDAR) ne refait donc que les mesures. La scène renvoyée porte `base` seulement
+//   quand la couche vient d'être lue (à garder), jamais dans la scène mise en cache. GET ...&stage=base renvoie la couche seule.
+// Essai local: node api/scene3d.js --test 46.8367 -71.2336 [--no-cache]
 
 import duckdb from 'duckdb';
 import { readFileSync } from 'fs';
@@ -38,6 +43,7 @@ import { lidarFootprints } from './footprints.js';
 import { lidarRoofs } from './roofs.js';
 import { appleShift } from './satshift.js';
 import { pavedFromImagery, PAVED_ATTRIBUTION, builtShare, DENSE_SHARE } from './paved.js';
+import { SUPABASE_URL, SUPABASE_KEY } from '../src/shared/config.js';
 
 export const maxDuration = 60;
 
@@ -56,6 +62,22 @@ function filesFor(path, [x0, y0, x1, y1]) {
 }
 const R_BLD = 450, R_ROAD = 500, R_TREE = 340, R_WOOD = 500, R_GREEN = 500, R_WATER = 2500;
 const PART_COVER = 0.6; // part de la surface d'un contour couverte par ses parties au sol à partir de laquelle le contour s'efface (v17)
+// Version de la couche Overture (bld avant LiDAR, rues, arbres d'Overture, parcs, stationnements, eau): à bumper quand le
+// traitement d'Overture change (parties, largeurs de rues, eau...), pas pour une règle LiDAR. RELEASE la périme aussi.
+export const BASE_V = 1;
+const log = (m) => console.log('[scene3d]', m);
+const baseKey = (lat, lng) => `ovt_${Number(lat).toFixed(5)}_${Number(lng).toFixed(5)}`;
+// Couche Overture du cache partagé (lecture publique), sinon null: périmée, absente ou cache injoignable (4 s au plus).
+async function cachedBase(lat, lng) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/scene3d_cache?select=data&key=eq.${baseKey(lat, lng)}`, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }, signal: AbortSignal.timeout(4000) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const rows = await r.json(), b = rows[0] && rows[0].data;
+    if (b && b.v === BASE_V && b.release === RELEASE && Array.isArray(b.bld) && Array.isArray(b.osm)) return b;
+    if (b) log(`couche Overture du cache périmée (v${b.v}, ${b.release})`);
+    return null;
+  } catch (e) { log(`couche Overture: cache partagé illisible (${e && e.message})`); return null; }
+}
 
 let dbPromise = null;
 function getDb() {
@@ -169,9 +191,8 @@ function clipRing(r, minx, miny, maxx, maxy) {
 }
 function mulberry(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
-// ---------- construction de la scène
-// opts.dbg (banc seulement): objet rempli avec fp (mesures des toits hors empreinte, api/footprints.js) et osm (indices des tracés OpenStreetMap).
-export async function buildScene(lat, lng, opts = {}) {
+// ---------- couche Overture: lecture des Parquet et mise en forme (bâtiments avant LiDAR, rues, arbres, parcs, stationnements, eau)
+async function overtureBase(lat, lng) {
   const db = await getDb();
   const mLat = 111320, mLng = 111320 * Math.cos(lat * Math.PI / 180);
   const X = (lon, la) => [(lon - lng) * mLng, (la - lat) * mLat];
@@ -338,13 +359,26 @@ export async function buildScene(lat, lng, opts = {}) {
     }
   }
 
+  return { base: { v: BASE_V, release: RELEASE, bld, osm: [...osmIdx], roads, trees, green, asphalt, water }, tq };
+}
+
+// ---------- construction de la scène
+// opts.dbg (banc seulement): objet rempli avec fp (mesures des toits hors empreinte, api/footprints.js) et osm (indices des tracés OpenStreetMap).
+// opts.noCache: ne pas lire la couche Overture du cache partagé.
+export async function buildScene(lat, lng, opts = {}) {
+  const t0 = Date.now();
+  let base = opts.noCache ? null : await cachedBase(lat, lng), fromCache = !!base, tq = 0;
+  if (!base) { const r = await overtureBase(lat, lng); base = r.base; tq = r.tq; }
+  else log(`couche Overture lue du cache partagé (${base.bld.length} bâtiments, ${Date.now() - t0} ms)`);
+  // Copie de travail: la suite modifie bld en place (empreintes, hauteurs, toits); la couche renvoyée reste celle d'Overture.
+  const work = structuredClone(base);
+  let bld = work.bld; const osmIdx = new Set(work.osm), roads = work.roads, trees = work.trees, green = work.green, asphalt = work.asphalt, water = work.water;
   // Surfaces pavées d'après l'imagerie satellite (stationnements, aires, cours), là où les cartes ne les ont pas.
   // En même temps: hauteur réelle des bâtiments par LiDAR (modifie bld en place, après la lecture des surfaces pavées
   // qui n'utilise que les empreintes).
   // lidarErr: lecture LiDAR échouée (catalogue ou mosaïque indisponible): la scène sert quand même, mais n'est gardée
   // ni par le réseau de Vercel ni dans le cache partagé, pour être recalculée au prochain affichage.
   let paved = [], gravel = [], gravelDitch = 0, imgShift = [0, 0], pavedSrc = null, lidarBld = 0, lidarErr = false, lt = null, lidarFp = 0, apple = null, appleRoof = null, appleErr = false;
-  const log = (m) => console.log('[scene3d]', m);
   // Délai global des lectures LiDAR: un serveur de Ressources naturelles Canada bloqué ne doit pas faire échouer toute la
   // scène (60 s pour la fonction, dont 15 à 20 s pour Overture): après 50 s depuis le début, on sert sans ces mesures.
   const deadline = t0 + 50000;
@@ -390,7 +424,8 @@ export async function buildScene(lat, lng, opts = {}) {
     treesSrc = { date: lt.date, res: lt.res, essences: lt.essences, n: lt.trees.length };
     canopy = lt.canopy;
   }
-  const scene = { v: 17, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, lidarAdd: noAdd ? 0 : 1, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
+  const scene = { v: 17, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, lidarAdd: noAdd ? 0 : 1, roofs, ms: { query: tq, base: fromCache ? 'cache' : 'overture', total: Date.now() - t0, indexed: !!INDEX } };
+  if (!fromCache) scene.base = base; // à garder par le client (clé ovt_), jamais dans la scène mise en cache
   if (lidarErr) scene.lidarErr = true;
   if (appleErr) { scene.appleErr = true; scene.lidarErr = true; } // lidarErr aussi: les versions 633.242 et antérieures ne connaissent que lui pour ne pas garder la scène
   return scene;
@@ -404,6 +439,11 @@ export default async function handler(req, res) {
     res.statusCode = 400; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'lat/lng invalides' })); return;
   }
   try {
+    if (url.searchParams.get('stage') === 'base') { // couche Overture seule (script de préchauffage)
+      const base = (await cachedBase(lat, lng)) || (await overtureBase(lat, lng)).base;
+      res.statusCode = 200; res.setHeader('Content-Type', 'application/json'); res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=2592000');
+      res.end(JSON.stringify({ base })); return;
+    }
     const scene = await buildScene(lat, lng);
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
@@ -419,7 +459,7 @@ if (process.argv.includes('--test')) {
   const i = process.argv.indexOf('--test');
   const lat = parseFloat(process.argv[i + 1] || '46.8367'), lng = parseFloat(process.argv[i + 2] || '-71.2336');
   const dbg = {};
-  buildScene(lat, lng, { dbg }).then((s) => {
+  buildScene(lat, lng, { dbg, noCache: process.argv.includes('--no-cache') }).then((s) => {
     const j = JSON.stringify(s);
     console.log({ bld: s.bld.length, lidarFp: s.lidarFp, lidarAdd: s.lidarAdd, roofs: s.roofs, appleShift: s.appleShift, roads: s.roads.length, trees: s.trees.length, lidarTrees: s.treesSrc && s.treesSrc.n, conifers: s.trees.filter(t => t[4] === 1 || t[4] === 5).length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, gravel: s.gravel.length, imgShift: s.imgShift, bytes: j.length, ms: s.ms });
     if (process.argv.includes('--out')) { const f = process.argv[process.argv.indexOf('--out') + 1]; import('fs').then(fs => { fs.writeFileSync(f, j); fs.writeFileSync(f.replace(/\.json$/, '') + '.dbg.json', JSON.stringify(dbg)); }); }
