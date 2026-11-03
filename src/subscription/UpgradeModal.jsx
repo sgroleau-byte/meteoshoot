@@ -96,11 +96,10 @@ export const UpgradeModal = ({ isOpen, onClose }) => {
           </div>
         </div>
 
-        {!isNative && (
-          <div style={{ textAlign: 'center', marginTop: '24px' }}>
-            <a href="site/account.html" style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px', fontFamily: "'Montserrat', sans-serif", textDecoration: 'none' }}>{t('account')}</a>
-          </div>
-        )}
+        <div style={{ textAlign: 'center', marginTop: '24px', display: 'flex', justifyContent: 'center', gap: '18px', flexWrap: 'wrap' }}>
+          {!isNative && <a href="site/account.html" style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px', fontFamily: "'Montserrat', sans-serif", textDecoration: 'none' }}>{t('account')}</a>}
+          <a href="site/conditions.html" style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px', fontFamily: "'Montserrat', sans-serif", textDecoration: 'none' }}>{t('legalTerms')}</a>
+        </div>
       </div>
     </div>
   );

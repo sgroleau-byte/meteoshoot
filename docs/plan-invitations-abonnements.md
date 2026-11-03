@@ -280,3 +280,20 @@ subscription_payment_*, et le même secret que `LEMON_WEBHOOK_SECRET`; puis me d
   modifient pas (le store ignore toute mutation sur un identifiant `exemple-`), ne comptent pas dans la limite du
   gratuit, et s'effacent au premier projet créé (ils reviennent si la liste redevient vide).
 - Première impression à revoir en SF Pro avec les maquettes Photoshop de Stéphane; ceci est la version provisoire.
+
+## Rappels de fin de gratuité et textes légaux (v633.259, 3 novembre 2026)
+
+- **Rappels par courriel:** fonction edge `trial-reminders` appelée chaque jour à 13 h UTC par pg_cron (migration
+  `20261103120000_rappels_fin_gratuite.sql`). Deux rappels par compte en gratuité (invitation acceptée, non payant, non
+  désactivé): « j7 » entre 7 et 2 jours avant la fin (une fois par date de fin), « j0 » le jour même (ou dans les 3 jours
+  qui suivent si le cron a manqué). Courriels FR ou EN par l'API Resend, au design de l'invitation, bouton vers la page
+  compte, prix fondateur tiré du réglage « Prix fondateur (texte) » de dieu pour les fondateurs. Chaque envoi est noté
+  dans `trial_reminders` (jamais deux fois) et dans le journal de dieu (actions `reminder_j7`, `reminder_j0`). Appel
+  `{"dry": true}` pour voir ce qui partirait. Secret `RESEND_API_KEY` à poser (`supabase secrets set RESEND_API_KEY=...`),
+  sans lui la fonction répond 503 et n'envoie rien.
+- **Textes légaux:** `site/conditions.html` et `site/confidentialite.html` (FR et EN, bouton de langue, typo système),
+  liés depuis les préférences (sous la version), la page compte, la page de connexion, la page « Accepter
+  l'invitation » (phrase d'acceptation) et la modal des forfaits.
+- **Support:** `support@meteoshoot.com` partout (pages légales, préférences, page compte, courriels d'invitation et de
+  rappel comme adresse de réponse). Le domaine n'a pas de serveur de courriel: la redirection vers la boîte de Stéphane
+  se fait dans Porkbun (Email Forwarding), à activer.

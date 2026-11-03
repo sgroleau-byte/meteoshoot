@@ -1,0 +1,27 @@
+/* Pages légales de MeteoShoot (conditions, confidentialité): typo système SF Pro, corps 16 px, graisse 400. */
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #181b1e; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', Roboto, sans-serif; font-size: 16px; font-weight: 400; line-height: 1.65; color: #d6d9db; -webkit-font-smoothing: antialiased; padding: 48px 20px 80px; padding-top: calc(48px + env(safe-area-inset-top)); }
+.wrap { max-width: 680px; margin: 0 auto; }
+.top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 40px; }
+.brand { font-size: 15px; font-weight: 400; letter-spacing: 0.18em; color: #ffffff; text-decoration: none; }
+.top a.back { color: rgba(255,255,255,0.5); text-decoration: none; font-size: 15px; }
+.top a.back:hover { color: #ffffff; }
+.langs { display: flex; gap: 14px; margin-bottom: 28px; }
+.langs button { background: none; border: none; padding: 0; cursor: pointer; font: inherit; font-size: 14px; letter-spacing: 0.08em; color: rgba(255,255,255,0.35); }
+.langs button[aria-pressed="true"] { color: #ffffff; }
+h1 { font-size: 28px; font-weight: 500; letter-spacing: 0.01em; color: #ffffff; margin: 0 0 6px; line-height: 1.2; }
+.updated { color: rgba(255,255,255,0.4); font-size: 14px; margin: 0 0 36px; }
+h2 { font-size: 18px; font-weight: 500; color: #ffffff; margin: 36px 0 10px; line-height: 1.3; }
+p { margin: 0 0 14px; }
+ul { margin: 0 0 14px; padding-left: 22px; }
+li { margin-bottom: 6px; }
+a { color: #7dd3c6; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.muted { color: rgba(255,255,255,0.5); }
+[data-lang] { display: none; }
+[data-lang].on { display: block; }
+span[data-lang].on { display: inline; }
+.foot { margin-top: 56px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.4); font-size: 14px; display: flex; gap: 18px; flex-wrap: wrap; }
+.foot a { color: rgba(255,255,255,0.6); }

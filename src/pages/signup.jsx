@@ -223,6 +223,9 @@ const AcceptInvitation = () => {
         </span>
         <span style={{ color: '#ffffff', fontSize: '21px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif", fontWeight: 300, position: 'relative', top: '2px' }}>&#8594;</span>
       </button>
+      <div style={{ ...textStyle, color: 'rgba(255,255,255,0.35)', fontSize: '13px', padding: '0 14px', marginTop: '18px' }}>
+        {t('signupAgree1')}<a href="conditions.html" style={{ color: 'rgba(170,215,208,0.7)', textDecoration: 'none' }}>{t('legalTermsLower')}</a>{t('signupAgree2')}<a href="confidentialite.html" style={{ color: 'rgba(170,215,208,0.7)', textDecoration: 'none' }}>{t('legalPrivacyLower')}</a>{t('signupAgree3')}
+      </div>
     </Page>
   );
 };

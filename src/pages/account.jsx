@@ -295,6 +295,19 @@ const SignOutButton = () => {
   );
 };
 
+// --- Pied de page: conditions, confidentialité, support (3 novembre 2026) ---
+const LegalFooter = () => {
+  const { t } = useLang();
+  const link = { color: 'rgba(255,255,255,0.35)', textDecoration: 'none', fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '13px' };
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px', marginTop: '-24px' }}>
+      <a href="conditions.html" style={link}>{t('legalTerms')}</a>
+      <a href="confidentialite.html" style={link}>{t('legalPrivacy')}</a>
+      <a href="mailto:support@meteoshoot.com" style={link}>support@meteoshoot.com</a>
+    </div>
+  );
+};
+
 // --- Loading State ---
 const LoadingState = () => (
   <div style={{ maxWidth: '800px', margin: '0 auto', padding: '48px 24px' }}>
@@ -406,6 +419,7 @@ const AccountPage = () => {
       <ManageSubscription profile={profile} />
       <LanguageToggle />
       <SignOutButton />
+      <LegalFooter />
     </div>
   );
 };

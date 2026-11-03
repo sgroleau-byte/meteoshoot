@@ -10,7 +10,7 @@
   - `src/projects/` projets (StoreProvider, fichiers, constantes)
   - `src/auth/` comptes, `src/subscription/` abonnements, `src/i18n/` langue
   - `src/shared/` configuration Supabase et Lemon Squeezy, traductions (partagé avec les pages)
-  - `src/pages/` code des pages `site/login.html`, `signup.html` (depuis le 25 octobre 2026: « Accepter l'invitation », l'inscription libre est fermée), `account.html`, `dieu.html` (tableau de bord de Stéphane, servi seulement sur dieu.meteoshoot.com par les routes de `vercel.json` (format `routes`, évalué avant le système de fichiers: les `rewrites` ne le sont pas); entrée par clé d'accès Face ID ou Touch ID dès qu'une clé est enregistrée; toutes les opérations passent par la fonction edge `supabase/functions/admin-users`, journalisées dans `admin_log`). Plan et état: `docs/plan-invitations-abonnements.md`.
+  - `src/pages/` code des pages `site/login.html`, `signup.html` (depuis le 25 octobre 2026: « Accepter l'invitation », l'inscription libre est fermée), `account.html`, `conditions.html` et `confidentialite.html` (pages légales statiques FR/EN, typo système; `legal.css` et `legal.js` partagés), `dieu.html` (tableau de bord de Stéphane, servi seulement sur dieu.meteoshoot.com par les routes de `vercel.json` (format `routes`, évalué avant le système de fichiers: les `rewrites` ne le sont pas); entrée par clé d'accès Face ID ou Touch ID dès qu'une clé est enregistrée; toutes les opérations passent par la fonction edge `supabase/functions/admin-users`, journalisées dans `admin_log`). Plan et état: `docs/plan-invitations-abonnements.md`.
   - `src/styles/app.css` styles de l'application (ancien bloc `<style>`), suivi des directives Tailwind
   - `src/scene3d/` vue 3D de la fiche projet (moteur three.js, environs Overture par `api/scene3d.js`, relief par `api/terrain.js`: LiDAR de Ressources naturelles Canada lu par tuiles avec `api/cog.js`, sinon modèle d'élévation du Canada; cache partagé Supabase `scene3d_cache`)
   - `src/native/` détection de la plateforme, géolocalisation Capacitor (natif seulement), réglages natifs au démarrage, shooting du jour (`shootOfDay.js`) et activité en direct iPhone (`liveActivity.js`)
@@ -25,7 +25,7 @@
 
 ## Fonctions edge Supabase
 
-- Déploiement: `supabase functions deploy <nom>`. **Deux fonctions sont appelées sans jeton et doivent être déployées avec `--no-verify-jwt`**: `lemon-webhook` (appelée par Lemon Squeezy, protégée par la signature) et `cloud-verif` (appelée par pg_cron). Sans ce drapeau, la porte Supabase renvoie 401 avant notre code (c'est arrivé le 26 octobre 2026: un premier achat non enregistré). Les autres (`admin-users`, `admin-revenue`, `billing-portal`, `create-checkout`) vérifient le jeton de l'utilisateur et se déploient normalement.
+- Déploiement: `supabase functions deploy <nom>`. **Trois fonctions sont appelées sans jeton et doivent être déployées avec `--no-verify-jwt`**: `lemon-webhook` (appelée par Lemon Squeezy, protégée par la signature), `cloud-verif` (appelée par pg_cron) et `trial-reminders` (rappels de fin de gratuité, appelée chaque jour à 13 h UTC par pg_cron; courriels par l'API Resend, secret `RESEND_API_KEY`; idempotente par la table `trial_reminders`). Sans ce drapeau, la porte Supabase renvoie 401 avant notre code (c'est arrivé le 26 octobre 2026: un premier achat non enregistré). Les autres (`admin-users`, `admin-revenue`, `billing-portal`, `create-checkout`) vérifient le jeton de l'utilisateur et se déploient normalement.
 
 ## Workflow de déploiement
 

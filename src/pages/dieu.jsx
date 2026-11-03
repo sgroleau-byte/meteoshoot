@@ -537,7 +537,7 @@ const SettingsView = ({ settings, me, run, onMeChange, notify }) => {
 };
 
 // ----- Journal -----
-const ACTION_LABEL = { invite: 'Invitation', resend: 'Invitation renvoyée', update: 'Mise à jour', disable: 'Désactivé', enable: 'Réactivé', delete: 'Supprimé', setting: 'Réglage', passkey_on: 'Face ID activé', passkey_off: 'Face ID retiré', passkey_delete: 'Clé retirée' };
+const ACTION_LABEL = { invite: 'Invitation', resend: 'Invitation renvoyée', update: 'Mise à jour', disable: 'Désactivé', enable: 'Réactivé', delete: 'Supprimé', setting: 'Réglage', passkey_on: 'Face ID activé', passkey_off: 'Face ID retiré', passkey_delete: 'Clé retirée', reminder_j7: 'Rappel: fin de gratuité dans 7 jours', reminder_j0: 'Rappel: fin de gratuité le jour même' };
 const LogView = () => {
   const [rows, setRows] = useState(null);
   useEffect(() => { api('log', { limit: 200 }).then(r => setRows(r.log || [])).catch(() => setRows([])); }, []);

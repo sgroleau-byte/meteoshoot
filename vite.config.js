@@ -78,6 +78,8 @@ export default defineConfig(({ command }) => ({
         signup: resolve(__dirname, 'site/signup.html'),
         account: resolve(__dirname, 'site/account.html'),
         dieu: resolve(__dirname, 'site/dieu.html'),
+        conditions: resolve(__dirname, 'site/conditions.html'),
+        confidentialite: resolve(__dirname, 'site/confidentialite.html'),
       },
     },
   },

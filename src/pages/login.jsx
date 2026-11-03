@@ -440,6 +440,11 @@ const LoginScreen = () => {
               {t('inviteOnly')}
             </span>
           </div>
+          <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'center', gap: '10px', whiteSpace: 'nowrap' }}>
+            <a href="conditions.html" style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '12px', color: '#546262', textDecoration: 'none' }}>{t('legalTerms')}</a>
+            <span style={{ color: '#546262', fontSize: '12px' }}>|</span>
+            <a href="confidentialite.html" style={{ fontFamily: "'Avenir', 'Montserrat', sans-serif", fontWeight: 300, fontSize: '12px', color: '#546262', textDecoration: 'none' }}>{t('legalPrivacy')}</a>
+          </div>
         </div>
       </div>
       {/* Dev indicator */}
