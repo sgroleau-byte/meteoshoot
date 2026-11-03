@@ -17,6 +17,10 @@
 // à Limoilou, 30 arbres de rue de 24 à 95 m² passaient ainsi pour des tours, dont 6 à cime lisse, v633.180). Mesuré à
 // Stoneham (relevé 2024, 1 m): 55 bâtiments d'Overture retrouvés avec leur vraie forme, 46 ajoutés, aucune cime acceptée.
 //
+// Ajouts coupés là où OpenStreetMap domine (opts.noAdd, 3 novembre 2026, v633.261): en ville, les contours sont tracés à la
+// main et complets, et un toit hors de toute empreinte est presque toujours un arbre (Assemblée nationale: 33 arbres sur
+// 36 ajouts, boulevard, pelouses et talus boisé, dont un « immeuble » de 12 m sur quatre étages). Les remplacements d'un
+// carré Microsoft par sa vraie forme restent permis partout. Le critère est dans scene3d.js.
 // Un bâtiment d'Overture sans toit reconnu (toit sous les arbres, bâti après le relevé) est gardé tel quel; un toit
 // reconnu dans son empreinte la remplace (sauf s'il n'en fait pas 40 %: un coin de toit vu entre les arbres); un toit
 // hors de toute empreinte devient un bâtiment (remise si moins de 45 m²). Un tracé OpenStreetMap (locked, fait à la main,
@@ -82,7 +86,7 @@ const erode = (m, W, H, r) => { const N = W * H, inv = new Uint8Array(N); for (l
 
 // win: { raw (hauteur de canopée, m), W, H, res }; fr: repère (trees.js frame); bld: [[anneau (m locaux), h, étages, genre, ...]].
 // Retourne { bld, replaced, added }: nouvelle liste (mêmes entrées, certaines remplacées, plus les toits ajoutés).
-export function lidarFootprints(win, fr, bld, log = () => {}, locked = []) {
+export function lidarFootprints(win, fr, bld, log = () => {}, locked = [], opts = {}) {
   const { raw, W, H, res } = win, N = W * H;
   const px2 = res * res, pxOf = (m) => Math.max(1, Math.round(m / res));
   // Pixels plans et leur pente; rugosité (plus grand écart avec les 4 voisins).
@@ -169,7 +173,7 @@ export function lidarFootprints(win, fr, bld, log = () => {}, locked = []) {
   // deviennent des bâtiments à part (maison et garage dans un même carré).
   cands.sort((a, b) => b.A - a.A);
   const out = bld.map(b => b.slice()), taken = new Set();
-  let replaced = 0, added = 0;
+  let replaced = 0, added = 0, skipped = 0;
   const heightOf = (c, kind) => {
     const pts = c.comp.map(k => ({ v: raw[k], rough: rough[k] })), area = c.comp.length * px2;
     const maxH = area >= 400 ? Infinity : kind === 2 ? 7 : kind === 1 ? (area < 250 ? 20 : Infinity) : 13;
@@ -186,9 +190,10 @@ export function lidarFootprints(win, fr, bld, log = () => {}, locked = []) {
       taken.add(i); out[i] = entry(c, b[3], b); replaced++;
       continue;
     }
+    if (opts.noAdd) { skipped++; continue; } // là où OpenStreetMap domine (voir scene3d.js): un toit hors empreinte est presque toujours un arbre
     const kind = c.ov.length === 1 ? (c.A < SHED_AREA ? 2 : bld[c.ov[0]][3]) : (c.A < SHED_AREA ? 2 : 0);
     out.push(entry(c, kind, null)); added++;
   }
-  log(`empreintes LiDAR: ${replaced} remplacées, ${added} ajoutées (${cands.length} toits reconnus, ${comps.length} plaques)`);
-  return { bld: out, replaced, added };
+  log(`empreintes LiDAR: ${replaced} remplacées, ${added} ajoutées (${cands.length} toits reconnus, ${comps.length} plaques)${skipped ? `, ${skipped} ajouts retenus (OpenStreetMap domine)` : ''}`);
+  return { bld: out, replaced, added, skipped };
 }

@@ -91,7 +91,8 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
 - Les arbres devant une façade donnent une lumière en taches, pas un bloc d'ombre.
 - Heure bleue (20 à 50 minutes après le coucher): ciel bleu profond, façade côté couchant plus claire,
   lumière très diffuse sans ombre, quelques fenêtres allumées avec une lueur douce.
-- Fenêtres sobres et génériques; pas de reproduction du vrai bâtiment.
+- Aucune fenêtre le jour sur les bâtiments générés (mur uni, v633.261): elles ne sont pas celles du vrai bâtiment.
+  Elles apparaissent, allumées, avec la tombée du jour. Les modèles importés gardent leurs propres vitrages.
 
 ## Modèle d'architecte importé (octobre 2026)
 
@@ -1057,6 +1058,20 @@ importé, lui, est le fichier de l'architecte.
     quand le niveau de détail vaut 1 (passe des nuages 15 à 30 % plus rapide).
   - Effet visible au lever: altocumulus plus lumineux, cellules plus visibles (leur forme reste à refaire). Banc: 28
     conditions sans valeur aberrante; nuages bas, cirrus et cas sans nuages moyens inchangés.
+- v633.261 (3 novembre 2026), **bâtiments inventés en ville et fenêtres de jour** (comparaison de Stéphane avec Shadowmap
+  à l'Assemblée nationale: « météoshoot invente des bâtiments et les bâtiments 3D sont vraiment plus basic »).
+  - Diagnostic (scène calculée en local, posée sur l'imagerie Esri, planches dans `verification_batiments_ville/` à côté du
+    dépôt): les contours viennent d'OpenStreetMap par Overture, les mêmes que Shadowmap; les bâtiments inventés étaient les
+    ajouts LiDAR (toit hors de toute empreinte): 36 au Parlement, dont 33 arbres (boulevard, pelouses, talus boisé, un
+    « immeuble » de 12 m sur quatre étages) et deux ou trois vraies petites structures (pavillon d'accueil vitré, kiosque).
+  - Règle (`api/scene3d.js`, `api/footprints.js`, environs version 14): plus d'ajouts là où OpenStreetMap fait 90 % et plus
+    des contours (au moins 20 bâtiments); les remplacements d'un carré Microsoft par sa vraie forme restent permis partout.
+    Hors des villes (Stoneham: contours Microsoft, maison du projet absente), rien ne change.
+  - Fenêtres (`engine.js`, `facadeTex`, `wallMat`): mur uni le jour, la texture de jour « discrète » du 7 octobre est
+    retirée; les fenêtres apparaissent avec la tombée du jour (`uNight`), allumées comme avant. Modèles importés intacts.
+  - Restent des pistes à part: la cour intérieure des contours à trou (le Parlement est un contour avec un trou dans
+    OpenStreetMap et Overture, `polysOf` ne garde que l'extérieur), les parties de bâtiment d'Overture (`type=building_part`,
+    non indexé), que Shadowmap dessine.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

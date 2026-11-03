@@ -15,6 +15,7 @@
 //   du relevé (remplace le carré d'Overture, ou bâtiment ajouté), lidarFp en compte; entrées en gravier d'après l'imagerie
 //   (gravel, même forme que paved) recalée sur le LiDAR (imgShift, mètres est et nord); gravelDitch: nombre d'entrées lues
 //   dans le fossé LiDAR (api/driveways.js, v633.238), le reste vient de la couleur de l'image.
+// v14 (3 novembre 2026): plus d'ajouts LiDAR là où OpenStreetMap domine les contours (lidarAdd: 0 quand les ajouts sont coupés).
 // v6 (8 octobre 2026): arbres mesurés par LiDAR jusqu'à 350 m (api/trees.js): trees[i] = [x, n, h, r, k] (hauteur,
 //   rayon de couronne, k code d'essence (0 feuillu, 1 conifère; depuis le 23 octobre 2026 aussi 2 à 6, voir api/trees.js); près d'un bâtiment, plus dx, dn: centre mesuré de la couronne, et
 //   o: 1 si le relevé montre du feuillage au-dessus du toit voisin); treesSrc { date, res, essences }. Restent au format [x, n] (taille
@@ -305,7 +306,14 @@ export async function buildScene(lat, lng) {
   // D'abord la fenêtre LiDAR (±350 m) et les empreintes réelles des bâtiments qu'on en tire: les surfaces au sol, les
   // hauteurs et les arbres s'appuient ensuite sur ces empreintes.
   const win = await inTime(readCanopy(lat, lng, log), 'LiDAR').catch((e) => { lidarErr = true; console.warn('[scene3d] fenêtre LiDAR indisponible:', e && e.message); return null; });
-  if (win) { try { const fp = lidarFootprints(win, win.fr, bld, log, bld.map((_, i) => osmIdx.has(i))); bld = fp.bld; lidarFp = fp.replaced + fp.added; } catch (e) { console.warn('[scene3d] empreintes LiDAR:', e && e.message); } }
+  // Ajouts LiDAR (toit hors de toute empreinte) seulement là où les contours d'Overture viennent surtout du tracé automatique
+  // sur images (Microsoft, hors des villes: carrés approximatifs, bâtiments manquants; à Stoneham la maison du projet n'y
+  // était pas). Là où OpenStreetMap domine (tracés à la main, complets en ville), un toit hors empreinte est presque toujours
+  // un arbre: Assemblée nationale, 3 novembre 2026, 33 arbres sur 36 ajouts (boulevard, pelouses, talus boisé), dont un
+  // « immeuble » de 12 m. Les remplacements (vraie forme d'un carré Microsoft) restent permis partout. Version 14.
+  const osmShare = bld.length ? osmIdx.size / bld.length : 0, noAdd = bld.length >= 20 && osmShare >= 0.9;
+  log(`contours OpenStreetMap: ${Math.round(osmShare * 100)} % de ${bld.length} bâtiments${noAdd ? ', ajouts LiDAR coupés' : ''}`);
+  if (win) { try { const fp = lidarFootprints(win, win.fr, bld, log, bld.map((_, i) => osmIdx.has(i)), { noAdd }); bld = fp.bld; lidarFp = fp.replaced + fp.added; } catch (e) { console.warn('[scene3d] empreintes LiDAR:', e && e.message); } }
   // Pentes des toits (v633.179): surface LiDAR ajustée dans chaque empreinte (bld[i][6], voir api/roofs.js).
   let roofs = 0;
   if (win) { try { roofs = lidarRoofs(win, bld, log).n; } catch (e) { console.warn('[scene3d] toits LiDAR:', e && e.message); } }
@@ -332,7 +340,7 @@ export async function buildScene(lat, lng) {
     treesSrc = { date: lt.date, res: lt.res, essences: lt.essences, n: lt.trees.length };
     canopy = lt.canopy;
   }
-  const scene = { v: 13, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
+  const scene = { v: 14, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, lidarAdd: noAdd ? 0 : 1, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
   if (lidarErr) scene.lidarErr = true;
   if (appleErr) { scene.appleErr = true; scene.lidarErr = true; } // lidarErr aussi: les versions 633.242 et antérieures ne connaissent que lui pour ne pas garder la scène
   return scene;
@@ -362,7 +370,7 @@ if (process.argv.includes('--test')) {
   const lat = parseFloat(process.argv[i + 1] || '46.8367'), lng = parseFloat(process.argv[i + 2] || '-71.2336');
   buildScene(lat, lng).then((s) => {
     const j = JSON.stringify(s);
-    console.log({ bld: s.bld.length, lidarFp: s.lidarFp, roofs: s.roofs, appleShift: s.appleShift, roads: s.roads.length, trees: s.trees.length, lidarTrees: s.treesSrc && s.treesSrc.n, conifers: s.trees.filter(t => t[4] === 1 || t[4] === 5).length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, gravel: s.gravel.length, imgShift: s.imgShift, bytes: j.length, ms: s.ms });
+    console.log({ bld: s.bld.length, lidarFp: s.lidarFp, lidarAdd: s.lidarAdd, roofs: s.roofs, appleShift: s.appleShift, roads: s.roads.length, trees: s.trees.length, lidarTrees: s.treesSrc && s.treesSrc.n, conifers: s.trees.filter(t => t[4] === 1 || t[4] === 5).length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, gravel: s.gravel.length, imgShift: s.imgShift, bytes: j.length, ms: s.ms });
     if (process.argv.includes('--out')) { import('fs').then(fs => fs.writeFileSync(process.argv[process.argv.indexOf('--out') + 1], j)); }
   }).catch((e) => { console.error(e); process.exit(1); });
 }
