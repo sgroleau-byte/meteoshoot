@@ -1130,6 +1130,21 @@ importé, lui, est le fichier de l'architecte.
     planches `planche_fondu_avant.png`, `planche_fondu_apres.png`, `planche_fondu_zoom_ciel.png` dans
     `verification_batiments_ville/`. Piège: au premier essai, la précompilation de la variante de nuit (lancée dès que la
     vue est posée) mettait `dirty` pendant le fondu et l'abandonnait; les redessins attendent maintenant.
+- v633.264 (3 novembre 2026), **cours intérieures** (Stéphane, Parlement: « toujours pas de détail de la cour
+  intérieure? »). Environs **version 16**.
+  - Serveur (`api/scene3d.js`): les anneaux intérieurs d'un contour (OpenStreetMap trace le Parlement avec son trou) sont
+    gardés, mis au net comme le contour, 30 m² et plus, dans `bld[i][7]`; `polysOf` ne gardait que l'extérieur, d'où un
+    bloc plein. Un carré Microsoft remplacé par sa forme LiDAR perd ses trous (il n'en a jamais). `api/roofs.js` ignore
+    les pixels de la cour dans l'ajustement du toit.
+  - Moteur (`blocks()` dans `engine.js`): murs le long de chaque cour, parcourue en sens horaire pour que le mur regarde
+    la cour (même pousse, mêmes travées, graine de fenêtres décalée), toit troué (`shapeOf(pts, holes)`, triangulation de
+    three.js avec trous); pas de toit en pente mesuré sur un bâtiment à cour. L'aile intérieure du Parlement est un
+    bâtiment Overture à part, elle se dessine dans la cour.
+  - Banc des dix lieux: bâtiments à cour: Parlement 1 (26,5 m), Calgary 1 (14 m, deux cours), Ottawa 1 (12,4 m), aucun
+    ailleurs; ajouts LiDAR inchangés partout. Planche `planche_parlement_cour_avant_apres.png` dans
+    `verification_batiments_ville/` (vue haute et vue drone, avant par l'ancienne API locale, après par la nouvelle).
+  - Reste: le sol de la cour est celui du terrain (gazon; au Parlement, du pavé); les ailes intérieures que Shadowmap
+    dessine viennent des parties de bâtiment d'Overture (`type=building_part`, non indexées), une étape à part.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

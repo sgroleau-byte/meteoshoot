@@ -18,6 +18,8 @@
 // v14 (3 novembre 2026): plus d'ajouts LiDAR là où OpenStreetMap domine les contours (lidarAdd: 0 quand les ajouts sont coupés).
 // v15 (3 novembre 2026): dans les zones mixtes, plus d'ajout LiDAR dans un parc, sur une voie ferrée, en forme de cime, ni de
 //   petite plaque en zone dense (api/footprints.js, tri sur l'imagerie à Limoilou et Sillery).
+// v16 (3 novembre 2026): cours intérieures: bld[i][7] = anneaux intérieurs du contour (m locaux, 30 m² et plus), que le moteur
+//   creuse dans les murs et le toit (le Parlement est un contour à trou dans OpenStreetMap; avant, un bloc plein).
 // v6 (8 octobre 2026): arbres mesurés par LiDAR jusqu'à 350 m (api/trees.js): trees[i] = [x, n, h, r, k] (hauteur,
 //   rayon de couronne, k code d'essence (0 feuillu, 1 conifère; depuis le 23 octobre 2026 aussi 2 à 6, voir api/trees.js); près d'un bâtiment, plus dx, dn: centre mesuré de la couronne, et
 //   o: 1 si le relevé montre du feuillage au-dessus du toit voisin); treesSrc { date, res, essences }. Restent au format [x, n] (taille
@@ -200,6 +202,8 @@ export async function buildScene(lat, lng, opts = {}) {
       if (r.length < 3) continue;
       const area = Math.abs(signedArea(r));
       if (area < 12) continue;
+      // Cours intérieures (v16): anneaux intérieurs de 30 m² et plus, mis au net comme le contour.
+      const holes = []; for (let i = 1; i < rings.length; i++) { const hr = simplifyRing(loc(rings[i]), 0.3); if (hr.length >= 3 && Math.abs(signedArea(hr)) >= 30) holes.push(round1(ccw(hr))); }
       const c = centroid(r);
       if (Math.hypot(c[0], c[1]) > R_BLD) continue;
       let h = row.height != null ? Number(row.height) : row.num_floors ? Number(row.num_floors) * 3.1 : 7.5;
@@ -209,7 +213,9 @@ export async function buildScene(lat, lng, opts = {}) {
       const kind = (st === 'outbuilding' || cl === 'garage' || cl === 'shed' || area < 45) ? 2
         : ['medical', 'education', 'civic', 'commercial', 'industrial', 'service', 'transportation'].includes(st) ? 1 : 0;
       if (/OpenStreetMap/i.test(String(row.src || ''))) osmIdx.add(bld.length);
-      bld.push([round1(ccw(r)), Math.round(h * 10) / 10, fl, kind]);
+      const entry = [round1(ccw(r)), Math.round(h * 10) / 10, fl, kind];
+      if (holes.length) entry[7] = holes; // [4] mesuré, [5] empreinte LiDAR et [6] toit sont posés plus loin
+      bld.push(entry);
     }
   }
 
@@ -347,7 +353,7 @@ export async function buildScene(lat, lng, opts = {}) {
     treesSrc = { date: lt.date, res: lt.res, essences: lt.essences, n: lt.trees.length };
     canopy = lt.canopy;
   }
-  const scene = { v: 15, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, lidarAdd: noAdd ? 0 : 1, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
+  const scene = { v: 16, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, lidarAdd: noAdd ? 0 : 1, roofs, ms: { query: tq, total: Date.now() - t0, indexed: !!INDEX } };
   if (lidarErr) scene.lidarErr = true;
   if (appleErr) { scene.appleErr = true; scene.lidarErr = true; } // lidarErr aussi: les versions 633.242 et antérieures ne connaissent que lui pour ne pas garder la scène
   return scene;

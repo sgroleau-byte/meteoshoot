@@ -1046,20 +1046,24 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       part.forEach(b => {
         // Contour en sens trigonométrique (vu du ciel): l'extérieur est à droite du sens de parcours, ce qui vaut
         // aussi pour les formes concaves (en L, en U), contrairement à un test sur le centre de la forme.
-        const pts = signedArea(b.p) < 0 ? b.p.slice().reverse() : b.p, h = b.h, lv = Math.max(1, b.fl), col = b.col, rc = b.rc, roof = b.roof || null; let u0 = 0; const seed0 = Math.floor(hsh(pts[0][0], pts[0][1], 9) * 900);
+        // Cours intérieures (v633.264, bld[i][7]): murs le long de chaque cour, parcourue en sens horaire pour que le mur
+        // regarde la cour, et toit troué (shapeOf avec trous); un toit en pente mesuré n'est pas posé sur un bâtiment à cour.
+        const holes = (b.holes || []).map(hr => (signedArea(hr) < 0 ? hr : hr.slice().reverse()));
+        const pts = signedArea(b.p) < 0 ? b.p.slice().reverse() : b.p, h = b.h, lv = Math.max(1, b.fl), col = b.col, rc = b.rc, roof = holes.length ? null : b.roof || null; let u0 = 0; const seed0 = Math.floor(hsh(pts[0][0], pts[0][1], 9) * 900);
         // Sur une pente: toit à h au-dessus du sol moyen de l'empreinte, murs descendus jusque sous le point le plus bas
         // (rien ne flotte côté aval, le pied s'enterre côté amont); étages recomptés sur la hauteur réelle du mur.
         // Toit en pente mesuré (LiDAR, v633.179): murs jusqu'à l'égout le plus bas, versants et pignons par-dessus (roof.js).
         const gb = b.g || groundOf(pts), yb = gb.min - 0.5, top = gb.mean + (roof ? roof.he : h), lvw = Math.max(1, Math.round(lv * (top - yb) / h));
         const cb = centroid(pts), g0 = 0.15 + 0.9 * Math.min(1, Math.hypot(cb[0], cb[1]) / 400); // départ de la pousse: une vague du sujet vers l'extérieur
-        for (let i = 0; i < pts.length; i++) {
-          const a = pts[i], c = pts[(i + 1) % pts.length]; const ax = a[0], azz = -a[1], bx = c[0], bz = -c[1]; const ex = bx - ax, ez = bz - azz, len = Math.hypot(ex, ez); if (len < 0.05) continue;
+        const walls = (ring, so) => { for (let i = 0; i < ring.length; i++) {
+          const a = ring[i], c = ring[(i + 1) % ring.length]; const ax = a[0], azz = -a[1], bx = c[0], bz = -c[1]; const ex = bx - ax, ez = bz - azz, len = Math.hypot(ex, ez); if (len < 0.05) continue;
           const nx = -ez / len, nz = ex / len;
           // Nombre entier de travées par mur (fenêtres centrées, jamais coupées dans un coin); mur trop court: plein.
           const nb = Math.round(len / (b.bay || 6.5)); const u1 = u0 + nb; const q = [[ax, yb, azz, u0, 0], [bx, yb, bz, u1, 0], [bx, top, bz, u1, lvw], [ax, top, azz, u0, lvw]];
-          [[0, 1, 2], [0, 2, 3]].forEach(t => t.forEach(k => { const v = q[k]; P.push(v[0], v[1], v[2]); N.push(nx, 0, nz); U.push(v[3], v[4]); C.push(col.r, col.g, col.b); SD.push(b.allLit ? -1 : seed0 + i); GW.push(g0, yb); })); u0 = u1;
-        }
-        const rg = new THREE.ShapeGeometry(shapeOf(pts)); rg.rotateX(-Math.PI / 2); const ra = rg.toNonIndexed().attributes.position.array; for (let i = 0; i < ra.length; i += 3) { RP.push(ra[i], top, ra[i + 2]); RN.push(0, 1, 0); RC.push(rc.r, rc.g, rc.b); GR.push(g0, yb); } rg.dispose();
+          [[0, 1, 2], [0, 2, 3]].forEach(t => t.forEach(k => { const v = q[k]; P.push(v[0], v[1], v[2]); N.push(nx, 0, nz); U.push(v[3], v[4]); C.push(col.r, col.g, col.b); SD.push(b.allLit ? -1 : seed0 + so + i); GW.push(g0, yb); })); u0 = u1;
+        } };
+        walls(pts, 0); holes.forEach((hr, hi) => walls(hr, 100 * (hi + 1)));
+        const rg = new THREE.ShapeGeometry(shapeOf(pts, holes)); rg.rotateX(-Math.PI / 2); const ra = rg.toNonIndexed().attributes.position.array; for (let i = 0; i < ra.length; i += 3) { RP.push(ra[i], top, ra[i + 2]); RN.push(0, 1, 0); RC.push(rc.r, rc.g, rc.b); GR.push(g0, yb); } rg.dispose();
         if (!roof) return;
         roofFaces(pts, roof).forEach(f => {
           const q = f.p.map(([x, n, z]) => [x, gb.mean + z, -n]); // repère du moteur (rotation: le sens des sommets est gardé)
@@ -1570,14 +1574,14 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     const others = []; let kept = []; treeEnv = []; othH = new Map(); drawn.forEach(d => othH.set(d.p, d.hEff ?? 9));
     if (data) {
       const hidden = hiddenBld(data.bld);
-      data.bld.forEach(([p, h, fl, k, lid, , roof], bi) => {
+      data.bld.forEach(([p, h, fl, k, lid, , roof, holes], bi) => {
         // Un voisin recouvert par un bâtiment dessiné disparaît: c'est le même édifice. Un voisin caché dans un autre aussi.
         const c = centroid(p);
         if (hidden.has(bi) || drawn.some(d => ringsOverlap(d.p, p)) || underModel(p)) return;
         others.push(p);
         const q = p[0], r = hsh(q[0], q[1], 5); const hh = k === 0 && !lid ? Math.max(h, 6.2) : h; // hauteur mesurée (LiDAR): telle quelle
         othH.set(p, roof ? Math.max(hh, roofTop(roof) || 0) : hh);
-        list.push({ p, h: hh, fl: Math.max(1, Math.min(k === 0 ? Math.max(fl, Math.round(hh / 3.1)) : fl, Math.floor(hh / 3.2))), col: L(k === 2 ? '#9a9a94' : k === 1 ? '#cfc7b8' : PAL_RES[Math.floor(r * PAL_RES.length)]), rc: L(ROOF[Math.floor(hsh(q[0], q[1], 6) * ROOF.length)]), roof: roof || null, hTop: roof ? Math.max(hh, roofTop(roof) || 0) : hh });
+        list.push({ p, h: hh, fl: Math.max(1, Math.min(k === 0 ? Math.max(fl, Math.round(hh / 3.1)) : fl, Math.floor(hh / 3.2))), col: L(k === 2 ? '#9a9a94' : k === 1 ? '#cfc7b8' : PAL_RES[Math.floor(r * PAL_RES.length)]), rc: L(ROOF[Math.floor(hsh(q[0], q[1], 6) * ROOF.length)]), roof: roof || null, hTop: roof ? Math.max(hh, roofTop(roof) || 0) : hh, holes: holes || null });
       });
       Object.keys(GC).forEach(k => addFlat(data.green.filter(p => p.k === k).map(p => ({ o: p.p })), flatMats[k], 0.03, 1));
       addFlat(data.asphalt.map(p => ({ o: p })), flatMats.asphalt, 0.05, 2);

@@ -132,7 +132,8 @@ export function lidarRoofs(win, bld, log = () => {}, dbg = null) {
     i0 = Math.max(0, Math.floor(i0)); j0 = Math.max(0, Math.floor(j0)); i1 = Math.min(W - 1, Math.ceil(i1)); j1 = Math.min(H - 1, Math.ceil(j1));
     if (i1 < i0 || j1 < j0 || (i1 - i0 + 1) * (j1 - j0 + 1) > MAX_BOX) { st.skipped++; continue; }
     const pts = [];
-    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const k = j * W + i; if (!seen[k]) continue; const [x, n] = fr.toLocal(i + 0.5, j + 0.5); if (!inRing(x, n, r) || ringDist(x, n, r) < INSET) continue; pts.push([x, n, dsm[k]]); }
+    const holes = b[7] || []; // cours intérieures (v16): le sol de la cour ne compte pas
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const k = j * W + i; if (!seen[k]) continue; const [x, n] = fr.toLocal(i + 0.5, j + 0.5); if (!inRing(x, n, r) || ringDist(x, n, r) < INSET || holes.some(hr => inRing(x, n, hr) || ringDist(x, n, hr) < INSET)) continue; pts.push([x, n, dsm[k]]); }
     if (pts.length < MIN_PX) continue;
     const mr = minAreaRect(r); if (!mr.ring) continue;
     const th = mr.th, cs = Math.cos(th), sn = Math.sin(th), toF = ([x, n]) => [x * cs + n * sn, -x * sn + n * cs];
