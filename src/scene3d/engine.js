@@ -485,6 +485,14 @@ export function createScene3D(container, opts = {}) {
   // Accumulation des nuages une fois la vue posée: ACC_N passes avec tramage et décalage sous-pixel différents, moyennées
   // (anticrénelage: plus de grain sur les bords de cellules plus fins qu'un pixel). Deux cibles en alternance.
   const ACC_N = 8; let accK = 0, accA = null, accB = null;
+  // Fondu au changement de météo (v633.263, 3 novembre 2026). Avant, la couverture glissait vers sa cible pendant 2 s et les
+  // nuages étaient dessinés comme en mouvement (une passe tramée, qualité et résolution réduites): du grain pendant 2 s sur
+  // une image immobile (Stéphane, pastille MÉTÉO par ciel nuageux: « super granuleux laid »). Maintenant, quand la vue est
+  // posée (nuages accumulés) et que la météo change (pastille MÉTÉO / SOLEIL, clic sur une autre heure), l'image à l'écran
+  // est gardée (fadeOld), les valeurs sautent à leur cible, le nouveau ciel s'accumule en ACC_N images pendant que
+  // l'ancienne reste affichée, puis les deux images complètes (ciel, sol, ombres) se fondent en FADE_MS (fadeNew), sans
+  // rien redessiner. Un mouvement de la vue ou du curseur pendant le fondu l'abandonne (chemin habituel).
+  const FADE_MS = 800; let fade = null, fadeReq = false, fadeOld = null, fadeNew = null;
   const METRES = new Set(['fogTh', 'l0b', 'l0t', 'm1b', 'm1t', 'ha', 'cbb']); // valeurs interpolées en mètres
   const accMat = new THREE.ShaderMaterial({ uniforms: { tA: { value: null }, tB: { value: null }, uW: { value: 1 } }, vertexShader: QV, fragmentShader: `uniform sampler2D tA,tB;uniform float uW;varying vec2 vUv;void main(){gl_FragColor=mix(texture2D(tA,vUv),texture2D(tB,vUv),uW);}` });
   const halton = (b, i) => { let f = 1, r = 0; i += 1; while (i > 0) { f /= b; r += f * (i % b); i = Math.floor(i / b); } return r; };
@@ -783,6 +791,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     sceneRT = new THREE.WebGLRenderTarget(PW, PH, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthTexture: dt, depthBuffer: true, stencilBuffer: false });
     const o = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, stencilBuffer: false };
     aoRT = new THREE.WebGLRenderTarget(PW, PH, o); aoRT2 = new THREE.WebGLRenderTarget(PW, PH, o); compRT = new THREE.WebGLRenderTarget(PW, PH, o);
+    [fadeOld, fadeNew].forEach(r => r && r.dispose()); fadeOld = new THREE.WebGLRenderTarget(PW, PH, o); fadeNew = new THREE.WebGLRenderTarget(PW, PH, o); fade = null; // fondu de météo: image d'avant, image d'après
     BW = Math.max(2, Math.round(PW / 4)); BH = Math.max(2, Math.round(PH / 4)); const ob = { ...o, type: THREE.HalfFloatType }; bloomA = new THREE.WebGLRenderTarget(BW, BH, ob); bloomB = new THREE.WebGLRenderTarget(BW, BH, ob);
     reflRT = new THREE.WebGLRenderTarget(Math.max(2, Math.round(PW / 2)), Math.max(2, Math.round(PH / 2)), ob); reflRT2 = reflRT.clone(); // reflet des flaques, et passe de flou
     // Nuages: à la résolution des pixels CSS (moitié des pixels sur un écran Retina), les nuages sont doux; lus par la sphère du ciel.
@@ -1710,6 +1719,26 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     if (growing && growT0 >= 0) { const gt = (now - growT0) / 1000; growU.uGrow.value = gt; growU.uReveal.value = 650 * (1 - Math.pow(1 - Math.min(1, gt / 1.1), 2)); treeGrowStep(gt); if (gt >= GROW_TOTAL) finishGrow(); dirty = true; }
     const a = 1 - Math.exp(-dt * 3.5); let moving = false;
     ['cum', 'mid', 'high', 'iv', 'rain', 'wet', 'pud', 'rv', 'cbs', 'cbb', 'fogK', 'fogTh', 'smk', 'storm', 'brk', 'l0b', 'l0t', 'l0c', 'l0k', 'l0w', 'l0s', 'l0d', 'l0n', 'm1b', 'm1t', 'm1c', 'm1k', 'hc', 'hk', 'ha', 'ht', 'shaft'].forEach(k => { const d = tg[k] - cur[k]; if (Math.abs(d) > (METRES.has(k) ? 0.5 : 0.0005)) { cur[k] += d * a; moving = true; } else cur[k] = tg[k]; }); // altitudes en mètres: seuil d'un demi-mètre (sinon la scène restait « en mouvement » 4 s et l'accumulation des nuages attendait)
+    // Fondu de météo (voir FADE_MS): abandonné si la vue a bougé ou si la météo change encore pendant le fondu.
+    const viewSig = () => [az, camH, Rr, ct.x, ct.y, ct.z, dateMs, PW, PH, modelPl ? [modelPl.x, modelPl.n, modelPl.rot, modelPl.dy].join(',') : ''].join('|');
+    if (fade && (viewSig() !== fade.sig || (fade.phase === 'blend' && fadeReq))) { fade = null; accK = 0; dirty = true; } // un autre redessin demandé pendant le fondu (dirty) attend sa fin
+    if (fadeReq) {
+      fadeReq = false;
+      if (!fade && accK >= ACC_N && shown && !growing && compRT && !(import.meta.env.DEV && window.__scene3dCore && window.__scene3dCore.noFade)) {
+        fxMat.uniforms.tDiffuse.value = compRT.texture; fxMat.uniforms.resolution.value.set(1 / PW, 1 / PH); pass(fxMat, fadeOld); // l'image à l'écran, telle quelle
+        Object.assign(cur, tg); moving = false; accK = 0; fade = { phase: 'accum', t0: now, sig: viewSig() };
+      }
+    }
+    if (fade) {
+      if (fade.phase === 'blend') {
+        const k = Math.min(1, (now - fade.t0) / FADE_MS), fw = k * k * (3 - 2 * k);
+        accMat.uniforms.tA.value = fadeOld.texture; accMat.uniforms.tB.value = fadeNew.texture; accMat.uniforms.uW.value = fw; pass(accMat, null);
+        if (import.meta.env.DEV && window.__scene3dCore && window.__scene3dCore.afterFrame) window.__scene3dCore.afterFrame(PW, PH, true);
+        if (k >= 1) fade = null;
+        return;
+      }
+      cloudHi = true; dirty = true; // accumulation du nouveau ciel, une passe par image; l'ancienne image reste à l'écran
+    }
     // Vue posée depuis 220 ms après un rendu en résolution réduite: une image de plus avec les nuages en pleine résolution.
     if (!shown && (terrainIn || now - createdAt > 1200)) { shown = true; shownAt = now; R.domElement.style.opacity = '1'; dirty = true; } // fondu sur le ciel bleu du conteneur
     if (growing && growT0 < 0) dirty = true; // attendre l'apparition en continuant à dessiner
@@ -2025,7 +2054,11 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     if (rainK > 0) { const fl = Math.pow(fog.color.r * 0.2126 + fog.color.g * 0.7152 + fog.color.b * 0.0722, 1 / 2.2); CU.uRainCol.value.setScalar(Math.min(1, fl * 1.5 + 0.1)); }
     const sl = rgb(sc0).map(v => Math.pow(v, 2.2)); CU.uSunC.value.set(sl[0], sl[1], sl[2]);
     compMat.uniforms.tCol.value = sceneRT.texture; compMat.uniforms.tAO.value = aoRT.texture; compMat.uniforms.tBloom.value = bloomA.texture; pass(compMat, compRT);
-    fxMat.uniforms.tDiffuse.value = compRT.texture; fxMat.uniforms.resolution.value.set(1 / PW, 1 / PH); pass(fxMat, null);
+    fxMat.uniforms.tDiffuse.value = compRT.texture; fxMat.uniforms.resolution.value.set(1 / PW, 1 / PH);
+    if (fade && fade.phase === 'accum') { // nouveau ciel en cours d'accumulation: l'image d'avant reste à l'écran; accumulé: l'image d'après est gardée et le fondu commence
+      if (accK >= ACC_N) { pass(fxMat, fadeNew); fade.phase = 'blend'; fade.t0 = now; }
+      accMat.uniforms.tA.value = fadeOld.texture; accMat.uniforms.tB.value = fadeOld.texture; accMat.uniforms.uW.value = 0; pass(accMat, null);
+    } else pass(fxMat, null);
     if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.dbg = { preLit, programs: R.info.programs.length, nWin: winLights.length, idleMs: Math.round(now - lastMoveAt), lastEnvMs: Math.round(lastEnvMs), storm: cur.storm, brk: cur.brk, pSun: tg.pSun, camSun, subjSun, gap: gapS, uExp: compMat.uniforms.uExp.value, wfog: [compMat.uniforms.uRvSig.value, compMat.uniforms.uCbSig.value, compMat.uniforms.uCbBase.value, T0.y], hidden: brkHide.size, cur: { ...cur }, tg: { ...tg }, names: cloudNames.slice(), accK, usedHi, growing }; // vérification en développement
     if (import.meta.env.DEV && window.__scene3dCore && window.__scene3dCore.afterFrame) window.__scene3dCore.afterFrame(PW, PH, usedHi); // mesure en développement (usedHi: nuages en pleine résolution)
     // Légende: condition de lumière, parts de nuages, position du soleil
@@ -2112,6 +2145,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     },
     setWeather(row) {
       weatherRow = row || null;
+      const before = { ...tg }; // pour le fondu: seulement si le ciel ou la lumière change vraiment
       // Heure du lever ou du coucher (v633.194): le rayonnement d'Open-Meteo est la moyenne de l'heure précédente; quand le
       // soleil y est levé trop peu de temps pour être mesuré, on prend la rangée voisine du côté du soleil (la suivante au
       // lever, la précédente au coucher). sunFraction est null sous 50 W/m² (presque toute heure du lever en automne): la
@@ -2198,6 +2232,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       if (!row) { tg.cum = 0; tg.mid = 0; tg.high = 0; tg.iv = 1; tg.rain = 0; tg.wet = 0; tg.pud = 0; tg.rv = 0; tg.cbs = 0; tg.fogK = 0; tg.fogTh = 600; tg.storm = 0; tg.pSun = 1; tg.brk = 0; tg.l0c = 0; tg.m1c = 0; tg.hc = 0; tg.shaft = 0; cloudNames = []; }
       // L'épaisseur ne glisse pas pendant que le brouillard apparaît ou disparaît (sinon la vue drone se noie un instant).
       if (!(tg.fogK > 0)) tg.fogTh = cur.fogTh; else if (cur.fogK < 1e-3) cur.fogTh = tg.fogTh;
+      if (['cum', 'mid', 'high', 'iv', 'rain', 'storm', 'brk', 'fogK', 'l0c', 'l0k', 'l0b', 'l0t', 'm1c', 'm1k', 'hc', 'hk', 'shaft', 'cbs'].some(k => Math.abs(tg[k] - before[k]) > (METRES.has(k) ? 25 : 0.02))) fadeReq = true; // fondu (voir FADE_MS)
       dirty = true;
     },
     resize,
@@ -2227,7 +2262,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     setSatellite(s) { sat = s || null; placeSat(); return !!satObj; },
     dispose() {
       running = false; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); window.removeEventListener('keydown', onKey, true); window.removeEventListener('keyup', onKeyUp, true); clearStatics(); clearTimeout(modelTimer); dropModel(); sat = null; placeSat();
-      [sceneRT, aoRT, aoRT2, compRT, reflRT, reflRT2, cubeRT, skyRT, envRT, cloudRT, cloudRTHi, accA, accB].forEach(r => r && r.dispose()); pmrem.dispose(); noiseTex.dispose();
+      [sceneRT, aoRT, aoRT2, compRT, reflRT, reflRT2, cubeRT, skyRT, envRT, cloudRT, cloudRTHi, accA, accB, fadeOld, fadeNew].forEach(r => r && r.dispose()); pmrem.dispose(); noiseTex.dispose();
       [skyMat, skyMatIn, cloudPassMat, accMat, aoMat, blurMat, compMat, reflMat, rblurMat, brightMat, gblurMat, fxMat, wallMat, roofMat, trunkMat, crownMat, shadowMat, conMat, fillMat, edgeMat, twigMat, litterMat, crownDepthMat, conDepthMat, twigDepthMat, waterMat, cloudMat, ...Object.values(flatMats)].forEach(m => m.dispose()); if (lampU.uLampMap.value) lampU.uLampMap.value.dispose();
       [skyGeo, crownGeo, crownGeoMid, crownGeoFar, crownGeoShadow, limbsGeo, litterGeo, conGeo, conGeoLow, trunkGeo, trunkGeoLow, sg, gnd && gnd.geometry, gndPol && gndPol.geometry, gndFar.geometry, quad.geometry].forEach(g => g && g.dispose()); gndMatPol.dispose(); gndDepthMat.dispose(); hzMat.dispose(); hzRT.dispose(); if (hnTex) hnTex.dispose(); if (hfTex) hfTex.dispose(); FT.map.dispose(); FT.rough.dispose(); FT.emis.dispose(); gndTex.dispose(); gndTexNear.dispose(); gndMat.dispose(); gndMatFar.dispose(); leafMask.dispose(); conMask.dispose(); edgeMask.dispose();
       R.dispose(); R.forceContextLoss(); if (el.parentNode) el.parentNode.removeChild(el);

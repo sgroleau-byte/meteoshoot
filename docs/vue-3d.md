@@ -1111,6 +1111,25 @@ importé, lui, est le fichier de l'architecte.
   - Coût connu: le chalet de parc de Sillery (170 m², 8 m, absent d'OpenStreetMap) est retenu par la règle du parc, comme
     le seraient les pavillons du Parlement: une absence plutôt qu'un risque de bloc sur des arbres. Pas traité: les deux
     plaques sur un terrain vague (dates du relevé et de l'image).
+- v633.263 (3 novembre 2026), **fondu au changement de météo** (Stéphane, pastille MÉTÉO par ciel nuageux: « ça passe
+  par cet état super granuleux laid »).
+  - Cause: la couverture et la lumière glissaient vers leur cible pendant environ 2 s (`cur` vers `tg`, seuil 0,0005) et,
+    tant que ça glisse, les nuages sont dessinés comme quand la vue bouge: une seule passe tramée (décalage au hasard par
+    pixel), qualité 0,65 et résolution réduite. Sur une image immobile, 2 s de tramage, sur des nuages qui s'amincissent,
+    là où il se voit le plus. Au repos, huit passes moyennées (`ACC_N`) l'effacent.
+  - Fondu (`engine.js`, `FADE_MS`, `fadeOld`, `fadeNew`): quand la vue est posée (nuages accumulés, `accK` à 8) et que la
+    météo change assez (`setWeather`, couverture, lumière, pluie, brouillard: seuil 0,02 ou 25 m), l'image à l'écran est
+    gardée (passe des effets vers `fadeOld`), les valeurs sautent à leur cible, le nouveau ciel s'accumule en huit images
+    pendant que l'ancienne reste affichée, puis les deux images complètes (ciel, sol, ombres) se fondent en 0,8 s
+    (`accMat`, courbe lisse) sans rien redessiner. Fin: l'image affichée est identique octet pour octet à l'image posée
+    (vérifié au banc). Un mouvement de la vue, du curseur ou du modèle pendant le fondu l'abandonne (chemin habituel); un
+    autre redessin demandé pendant le fondu (précompilation, calque) attend sa fin. Pendant un glissement du curseur,
+    rien ne change (les nuages ne sont pas accumulés). Deux cibles 8 bits pleine résolution de plus.
+  - Banc (`tools/sky/harness.html`, Chrome sans fenêtre, `fondu.mjs` dans le dossier de travail): Stoneham, 10 h, couvert
+    100 % puis météo coupée; une capture par image pendant 1,7 s, avec et sans le fondu (`window.__scene3dCore.noFade`);
+    planches `planche_fondu_avant.png`, `planche_fondu_apres.png`, `planche_fondu_zoom_ciel.png` dans
+    `verification_batiments_ville/`. Piège: au premier essai, la précompilation de la variante de nuit (lancée dès que la
+    vue est posée) mettait `dirty` pendant le fondu et l'abandonnait; les redessins attendent maintenant.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
