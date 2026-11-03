@@ -68,8 +68,9 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
 - `api/overture-tiles.js` et `scripts/overture-tiles.mjs` (v633.268): Overture pré-découpé en tuiles dans le stockage
   Supabase (seau public « overture », dossier de la version d'Overture); le serveur y lit la couche en moins d'une
   seconde et ne relit les Parquet par DuckDB que hors couverture. À régénérer après l'index quand `RELEASE` change:
-  `node scripts/overture-tiles.mjs --upload` (sud du Québec, quelques heures, reprise possible), puis le préchauffage.
-  Vérification: `node scripts/overture-tiles-check.mjs` (tuiles contre DuckDB sur le banc des dix lieux).
+  `node scripts/overture-tiles.mjs --upload` (sud du Québec, 40 minutes, reprise possible; le seau du forfait gratuit
+  ne tient que les cellules des projets, voir `--prune --cells`), puis le préchauffage. Vérification:
+  `node scripts/overture-tiles-check.mjs` (tuiles contre DuckDB sur le banc des dix lieux).
 - `scripts/scene3d-dev.mjs`: la fonction en local, port 3999 (`npm run api`); le proxy Vite envoie `/api`
   dessus, ou sur un déploiement d'aperçu si `MS_API_PROXY` est donné (`.env.local`, ignoré par git).
 - `supabase/migrations/20261005120000_cache_scene_3d.sql` (table `scene3d_cache`),
@@ -1240,12 +1241,24 @@ importé, lui, est le fichier de l'architecte.
     Valcartier), la couche lue des tuiles est, au bit près, celle que DuckDB lit (bâtiments, rues, arbres, parcs,
     stationnements, eau). `BASE_V` ne change donc pas: le cache partagé reste valable. `ms.base` dit « cache », « tuiles »
     ou « duckdb ». Scène complète du Parlement en local: 4,2 s (lecture 267 ms) au lieu de 17 à 20 s.
-  - **Génération** (`node scripts/overture-tiles.mjs --upload`): morceaux de 1 degré alignés sur les deux grilles, trois à
-    la fois, lecture en flux de DuckDB (`filename`, `file_row_number`), reprise d'où ça s'est arrêté
-    (`avancement.json` dans `_METEOSHOOT/overture-tuiles/<release>`), manifeste écrit à la fin seulement, fusionné avec le
-    précédent (plusieurs cadres possibles: le sud du Québec d'abord, -80 à -57 de longitude, 44,9 à 50,5 de latitude; 4,7
-    millions de bâtiments, 1,7 million de segments, 1,3 million de plans d'eau). Hors couverture (Toronto, Calgary),
-    manifeste illisible ou tuile injoignable: DuckDB comme avant. À refaire à chaque changement de `RELEASE`.
+  - **Génération** (`node scripts/overture-tiles.mjs --upload`): morceaux de 1 degré alignés sur les deux grilles, huit à
+    la fois (le travail attend surtout les lectures S3: à trois, le processeur restait à 6 %), lecture en flux de DuckDB
+    (`filename`, `file_row_number`), reprise d'où ça s'est arrêté (`avancement.json` dans
+    `_METEOSHOOT/overture-tuiles/<release>`), manifeste écrit à la fin seulement, fusionné avec le précédent (plusieurs
+    cadres possibles). Sud du Québec (-80 à -57 de longitude, 44,9 à 50,5 de latitude) fait le 3 novembre 2026 en 39 min:
+    10,6 millions d'entités (4,7 millions de bâtiments), 59 588 tuiles, 1,67 Go; les huit lieux du banc couverts sont
+    identiques (Gaspé: un plan d'eau découpé diffère de 324 m² sur 21,8 km², la découpe double du fleuve). Hors
+    couverture (Toronto, Calgary), manifeste illisible ou tuile injoignable: DuckDB comme avant. À refaire à chaque
+    changement de `RELEASE`.
+  - **Production** (v633.268 déployée): un lieu nouveau de Limoilou se calcule en 12 à 16 s (lecture d'Overture 0,6 s
+    par les tuiles) contre 30 s à Sainte-Adèle hors couverture (DuckDB 15,7 s).
+  - **Forfait Supabase gratuit** (constaté après coup: 1 Go de stockage de fichiers, 5 Go de sortie par mois): le sud du
+    Québec entier (1,67 Go) dépasse la limite. Le soir même, le seau a été ramené aux 13 cellules de 1 degré où se
+    trouvent les projets (`--prune --cells`, environ 400 Mo avec une rangée de tuiles autour de chaque cellule; manifeste
+    réduit envoyé d'abord, suppression du reste onze minutes plus tard, le temps des caches), le reste du Québec
+    repassant par DuckDB. Le jeu complet reste sur le Mac (`_METEOSHOOT/overture-tuiles/2026-09-23.1`, 1,9 Go);
+    `--upload-only --cells` renvoie des cellules sans DuckDB. Décision d'hébergement en attente (Cloudflare R2: 10 Go
+    gratuits sans frais de sortie; S3: quelques cents par mois; Supabase Pro: 25 $ US par mois; ou cellules à la demande).
 - v633.269 (3 novembre 2026), **toits à la couleur des murs** (Stéphane, sur une capture du Parlement sous la pluie:
   « peux-tu enlever les tops de bâtiments gris foncé, et les mettre de la même couleur que le reste du bloc? »). Dans
   `engine.js`, la couleur de toit (`rc`) de chaque bloc est celle de ses murs: bâtiments voisins (palette résidentielle,

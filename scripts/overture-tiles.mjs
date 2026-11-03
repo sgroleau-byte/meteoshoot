@@ -16,12 +16,18 @@
 //   node scripts/overture-tiles.mjs --split-kb 300                   au-delà (gzip), une tuile est subdivisée en quatre
 //   node scripts/overture-tiles.mjs --parallel 3                     morceaux lus en même temps (3 par défaut)
 //   node scripts/overture-tiles.mjs --out /dossier                   dossier des tuiles (_METEOSHOOT/overture-tuiles/<release> par défaut)
+//   node scripts/overture-tiles.mjs --prune --cells "-72,46;-74,45"  ne garde dans le seau que les cellules de 1 degré données
+//        (coin sud-ouest de chacune, plus une rangée de tuiles autour): manifeste réduit envoyé d'abord, puis, après --wait
+//        secondes (660 par défaut, le temps que les caches l'adoptent), suppression des autres tuiles. Forfait Supabase
+//        gratuit: 1 Go de stockage, le sud du Québec entier en fait 1,7.
+//   node scripts/overture-tiles.mjs --upload-only --cells "-75,45"   renvoie les tuiles locales de ces cellules et les
+//        ajoute à la couverture du manifeste (sans DuckDB)
 //
 // Clé de service Supabase pour l'envoi: variable SUPABASE_SERVICE_KEY, sinon demandée au client Supabase connecté
 // (supabase projects api-keys). Jamais affichée ni écrite.
 
 import duckdb from 'duckdb';
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'fs';
 import { gzipSync } from 'zlib';
 import { execSync } from 'child_process';
 import { TILES_V, GRIDS, tileAt, tileBox, expandBox, boxesMeet, boxInside, tileKey, tilePath, f32s, wkbToGeom, polysOf, linesOf, clipRing, clipLine, encodeGeom, nVertices, signedArea } from '../api/overture-tiles.js';
@@ -38,6 +44,8 @@ const SPLIT = (Number(opt('--split-kb', '300')) || 300) * 1024;
 const PAR = Math.max(1, parseInt(opt('--parallel', '3'), 10) || 3);
 const ONLY = opt('--only', null);
 const BBOX = (opt('--bbox', '-80,44.9,-57,50.5')).split(',').map(Number);
+const CELLS = opt('--cells', null), UPLOAD_ONLY = args.includes('--upload-only'), PRUNE = args.includes('--prune');
+const WAIT = Number(opt('--wait', '660')) || 660;
 const RELEASE = opt('--release', read('api/scene3d.js').match(/const RELEASE = '([^']+)'/)[1]);
 const HTTPS_BASE = `https://overturemaps-us-west-2.s3.us-west-2.amazonaws.com/release/${RELEASE}`;
 const INDEX = JSON.parse(read('api/overture-index.json'));
@@ -93,7 +101,7 @@ function serviceKey() {
   if (!k || !k.api_key) throw new Error('clé de service introuvable: se connecter avec `supabase login` ou donner SUPABASE_SERVICE_KEY');
   return k.api_key;
 }
-const KEY = UPLOAD ? serviceKey() : '';
+const KEY = UPLOAD || UPLOAD_ONLY || PRUNE ? serviceKey() : '';
 const H = { apikey: KEY, Authorization: `Bearer ${KEY}` };
 async function ensureBucket() {
   const r = await fetch(`${SB_URL}/storage/v1/bucket/${BUCKET}`, { headers: H });
@@ -247,6 +255,56 @@ async function doChunk(db, grid, cbox) {
   console.log(`  ${grid} ${cbox.join(',')}: ${Object.entries(counts).map(([k, n]) => `${k} ${n}`).join(', ')}, ${written} tuiles (${ko(bytes)}${nSplit ? `, ${nSplit} subdivisées` : ''}), ${fmt(Date.now() - t0)}`);
 }
 
+// ---------- entretien du seau sans DuckDB: cellules de 1 degré gardées (--prune) ou renvoyées (--upload-only)
+function localTiles() {
+  const out = [];
+  for (const grid of ['f', 'w']) {
+    const d = `${OUT}/${grid}`; if (!existsSync(d)) continue;
+    for (const z of readdirSync(d)) for (const f of readdirSync(`${d}/${z}`)) {
+      const m = f.match(/^(-?\d+)_(-?\d+)\.json\.gz$/); if (!m) continue;
+      out.push({ rel: `${grid}/${z}/${f}`, grid, z: Number(z), ix: Number(m[1]), iy: Number(m[2]), file: `${d}/${z}/${f}` });
+    }
+  }
+  return out;
+}
+async function maintain() {
+  if (!CELLS) { console.error('--cells requis: "x,y;x,y" (coin sud-ouest des cellules de 1 degré)'); process.exit(1); }
+  const boxes = CELLS.split(';').map((c) => c.trim().split(',').map(Number)).map(([x, y]) => [x, y, x + 1, y + 1]);
+  const prev = existsSync(MANI) ? JSON.parse(readFileSync(MANI, 'utf8')) : null;
+  if (!prev || prev.release !== RELEASE) { console.error(`manifeste local absent ou d'une autre version (${MANI}): générer d'abord`); process.exit(1); }
+  const ring = 0.04; // une rangée de tuiles autour de la cellule (cadre de lecture de l'eau: 0,032 degré au plus)
+  const all = localTiles(), keep = all.filter((t) => boxes.some((b) => boxesMeet(tileBox(t.grid, t.z, t.ix, t.iy), [b[0] - ring, b[1] - ring, b[2] + ring, b[3] + ring])));
+  const keepBytes = keep.reduce((n, t) => n + statSync(t.file).size, 0);
+  console.log(`${boxes.length} cellules: ${keep.length} tuiles gardées sur ${all.length} (${ko(keepBytes)})`);
+  await ensureBucket();
+  if (UPLOAD_ONLY) {
+    let n = 0;
+    await Promise.all(keep.map((t) => enqueue(async () => { await upload(`${RELEASE}/${t.rel}`, readFileSync(t.file), 'application/gzip', 86400); if (++n % 500 === 0) console.log(`  ${n} / ${keep.length} envoyées`); })));
+    console.log(`${keep.length} tuiles envoyées`);
+  }
+  const covered = PRUNE ? boxes : [...prev.covered, ...boxes.filter((b) => !prev.covered.some((c) => c.join(',') === b.join(',')))];
+  const m = { ...prev, covered, generated: new Date().toISOString() };
+  writeFileSync(MANI, JSON.stringify(m));
+  await upload(`${RELEASE}/manifest.json`, JSON.stringify(m), 'application/json', 600);
+  console.log(`manifeste envoyé (${covered.length} cadre${covered.length > 1 ? 's' : ''})`);
+  if (!PRUNE) return;
+  console.log(`attente ${WAIT} s que les caches adoptent le manifeste réduit avant de supprimer le reste`);
+  await new Promise((r) => setTimeout(r, WAIT * 1000));
+  const keepSet = new Set(keep.map((t) => t.rel)), drop = all.filter((t) => !keepSet.has(t.rel)).map((t) => `${RELEASE}/${t.rel}`);
+  let removed = 0;
+  for (let i = 0; i < drop.length; i += 300) {
+    const batch = drop.slice(i, i + 300);
+    for (let k = 0; ; k++) {
+      const r = await fetch(`${SB_URL}/storage/v1/object/${BUCKET}`, { method: 'DELETE', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ prefixes: batch }), signal: AbortSignal.timeout(120000) }).catch((e) => ({ ok: false, status: 0, text: async () => e.message }));
+      if (r.ok) { removed += (await r.json()).length; break; }
+      if (k === 5) throw new Error(`suppression: HTTP ${r.status} ${(await r.text()).slice(0, 160)}`);
+      await new Promise((res) => setTimeout(res, 2000 * (k + 1)));
+    }
+    if ((i / 300) % 20 === 0) console.log(`  ${Math.min(i + 300, drop.length)} / ${drop.length} supprimées`);
+  }
+  console.log(`${removed} tuiles supprimées du seau; il reste ${keep.length} tuiles (${ko(keepBytes)})`);
+}
+
 // ---------- morceaux du cadre
 function* chunks(bbox, step) {
   const x0 = Math.floor(bbox[0] / step) * step, y0 = Math.floor(bbox[1] / step) * step;
@@ -254,6 +312,7 @@ function* chunks(bbox, step) {
 }
 
 async function main() {
+  if (UPLOAD_ONLY || PRUNE) { await maintain(); return; }
   const t0 = Date.now();
   console.log(`Overture ${RELEASE}, cadre ${BBOX.join(',')}, dossier ${OUT}${UPLOAD ? `, envoi au seau ${BUCKET}` : ' (sans envoi)'}`);
   if (UPLOAD) await ensureBucket();
