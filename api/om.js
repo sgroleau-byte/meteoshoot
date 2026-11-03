@@ -6,9 +6,10 @@
 // rend 500, et l'app se rabat alors sur les serveurs ouverts.
 //
 // GET /api/om?ep=dwd-icon|gfs|forecast|elevation&<paramètres Open-Meteo>
+// past_days (92 au plus): gel de l'automne en cours pour le feuillage de la vue 3D (src/scene3d/fallTemps.js).
 
 const EPS = new Set(['dwd-icon', 'gfs', 'forecast', 'elevation']);
-const PARAMS = new Set(['ep', 'latitude', 'longitude', 'hourly', 'daily', 'timezone', 'forecast_days', 'models']); // ceux de l'app, rien d'autre
+const PARAMS = new Set(['ep', 'latitude', 'longitude', 'hourly', 'daily', 'timezone', 'forecast_days', 'past_days', 'models']); // ceux de l'app, rien d'autre
 const ORIGINS = /^(https:\/\/(www\.)?meteoshoot\.com|https:\/\/meteoshoot(-dev)?(-[a-z0-9-]+)?\.vercel\.app|capacitor:\/\/localhost|https?:\/\/localhost(:\d+)?|https?:\/\/127\.0\.0\.1(:\d+)?)$/;
 
 // Adresse Open-Meteo pour un chemin « endpoint?paramètres »: serveurs réservés avec la clé si elle existe
@@ -46,15 +47,16 @@ export default async function handler(req, res) {
   const one = /^-?\d{1,2}(\.\d{1,15})?$/, oneL = /^-?\d{1,3}(\.\d{1,15})?$/, list = (v, re, max) => !!v && v.split(',').length <= max && v.split(',').every((x) => re.test(x));
   // Noms de variables: majuscules permises (niveaux de pression de la 3D: cloud_cover_1000hPa, aussi refusés jusque-là)
   const word = /^[A-Za-z0-9_]+$/, nVars = (get('hourly') || '').split(',').filter(Boolean).length + (get('daily') || '').split(',').filter(Boolean).length;
-  const nModels = Math.max(1, (get('models') || '').split(',').filter(Boolean).length), days = get('forecast_days');
+  const nModels = Math.max(1, (get('models') || '').split(',').filter(Boolean).length), days = get('forecast_days'), past = get('past_days');
   const ok = EPS.has(ep)
     && (ep === 'elevation' ? list(get('latitude'), one, 200) && list(get('longitude'), oneL, 200) : one.test(get('latitude') || '') && oneL.test(get('longitude') || ''))
     && (days == null || (/^\d{1,2}$/.test(days) && Number(days) <= 16))
+    && (past == null || (/^\d{1,2}$/.test(past) && Number(past) <= 92))
     && ['hourly', 'daily', 'models'].every((k) => get(k) == null || list(get(k), word, 60))
     && (get('timezone') == null || /^[A-Za-z_]+(\/[A-Za-z_]+)?$/.test(get('timezone')))
     && nVars * nModels <= 60;
   if (!ok) { send(res, 400, { error: true, reason: 'demande refusée par le relais' }); return; }
-  const qs = new URLSearchParams(); for (const k of ['latitude', 'longitude', 'hourly', 'daily', 'models', 'timezone', 'forecast_days']) if (get(k) != null) qs.set(k, get(k));
+  const qs = new URLSearchParams(); for (const k of ['latitude', 'longitude', 'hourly', 'daily', 'models', 'timezone', 'forecast_days', 'past_days']) if (get(k) != null) qs.set(k, get(k));
   try {
     const r = await fetch(openMeteoUrl(`${ep}?${qs.toString()}`), { signal: AbortSignal.timeout(20000) });
     const body = await r.text();

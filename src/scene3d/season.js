@@ -12,6 +12,8 @@
 // Essences (api/trees.js, code k de chaque arbre): 0 feuillu quelconque, 1 conifère, 2 érable (rouge et orangé, tôt),
 // 3 feuillu jaune (orme, tilleul, frêne, bouleau, peuplier, érable de Norvège), 4 chêne et hêtre (brun roux, tard, garde
 // ses feuilles), 5 mélèze (conifère qui jaunit tard puis se dénude), 6 érable pourpre (pourpre tout l'été).
+// Automne de l'année en cours (3 novembre 2026): quand les minimums de température du lieu sont connus (fallTemps.js), la
+// fin de la chute suit le gel de l'année (voir fallFromTemps); le pic de couleur reste celui du satellite.
 // Ce module ne touche qu'à la couleur et à la part de feuilles (cover, 0 nu à 1 plein): positions, cimes et formes
 // LiDAR restent telles quelles. Étape 2 (23 octobre 2026): le moteur efface les feuilles dans le motif des couronnes
 // à mesure que cover baisse, fait apparaître un lacis de branches (voir twigTex et coverShader dans engine.js) et
@@ -26,7 +28,7 @@ const KI = { mgd: 3, dor: 4, gup: 5, mgu: 6 };
 const kmBetween = (la1, ln1, la2, ln2) => { const dy = (la2 - la1) * 111.32, dx = (ln2 - ln1) * 111.32 * Math.cos((la1 + la2) * 0.5 * Math.PI / 180); return Math.hypot(dx, dy); };
 
 // Calendrier moyen d'un lieu (jours de l'année, fractionnaires): mgd milieu du brunissement, dor feuilles tombées,
-// gup débourrement, mgu feuillaison, peak pic de couleur. elev en mètres au-dessus de la mer.
+// gup débourrement, mgu feuillaison, peak pic de couleur, end feuilles tombées. elev en mètres au-dessus de la mer.
 export function climatology(lat, lng, elev = 0) {
   const out = {};
   for (const k of Object.keys(KI)) {
@@ -40,10 +42,36 @@ export function climatology(lat, lng, elev = 0) {
     out[k] = a + b * lat + c * elev + (sw ? sr / sw : 0);
   }
   out.peak = out.mgd + Math.min(0.7, 0.3 + 0.06 * Math.max(0, 46 - lat)) * (out.dor - out.mgd);
+  out.end = out.dor - 5; // feuilles tombées: un peu avant la dormance du satellite (Tremblant nu le 23 octobre 2026)
   return out;
 }
 
 export function dayOfYear(ms) { const d = new Date(ms); const y0 = new Date(d.getFullYear(), 0, 1).getTime(); return (ms - y0) / 86400000 + 1; }
+
+// Gel de l'automne en cours (3 novembre 2026), d'après les minimums de chaque jour (temps: { from: 'AAAA-MM-JJ', tmin:
+// [minimums] }): { y, light, hard, last } en jours de l'année: première nuit sous 0 °C, première sous -2 °C depuis le
+// 1er septembre, dernier jour connu. Le pic de couleur reste celui du satellite (juste en forêt: la caméra de la porte
+// de Stéphane à Stoneham, 2026, montre le début de la couleur vers le 21 septembre, le pic du 2 au 10 octobre, la chute
+// du 14 au 21, nu le 28); c'est la chute qui suit l'année:
+// - un gel dur fait tomber les feuilles en une douzaine de jours au plus (Tremblant: gel dur le 10 octobre, nu le 23);
+// - sans gel, elles tiennent jusqu'à une semaine après le premier (Toronto, 3 novembre 2026: aucune nuit sous 0 °C,
+//   arbres encore pleins et colorés au bord du lac, alors que le satellite les voulait presque nus; le satellite y voit
+//   les pelouses et les champs jaunir avant les arbres); sans gel connu, une semaine après la fin des données.
+// Un essai par le froid cumulé (degrés-jours) plaçait mieux les villes américaines en moyenne, mais devançait le pic de
+// Stoneham de dix jours en 2026: abandonné.
+export const FROST = { light: 0, hard: -2, afterLight: 7, afterHard: 12 };
+export function fallFromTemps(temps) {
+  if (!temps || !temps.from || !Array.isArray(temps.tmin) || temps.tmin.length < 14) return null;
+  const [y, m, d] = temps.from.split('-').map(Number), Y0 = Date.UTC(y, 0, 1);
+  const first = (Date.UTC(y, m - 1, d) - Y0) / 86400000 + 1, start = (Date.UTC(y, 8, 1) - Y0) / 86400000 + 1; // 1er septembre
+  const out = { y, light: null, hard: null, last: first + temps.tmin.length - 1 };
+  temps.tmin.forEach((v, i) => {
+    const k = first + i; if (k < start || v == null || !Number.isFinite(v)) return;
+    if (out.light == null && v <= FROST.light) out.light = k;
+    if (out.hard == null && v <= FROST.hard) out.hard = k;
+  });
+  return out;
+}
 
 // Palettes (sRGB). Été: verts de feuillage au soleil. Pic: par essence; feuillu quelconque: le mélange validé dans le
 // moteur depuis le 8 octobre 2026. Nu: gris brun des branches.
@@ -82,14 +110,19 @@ const OFF = {
 
 // État saisonnier d'un lieu à une date: { doy, clim, color(k, c) -> [r, g, b] sRGB, cover(k, c) -> part de feuilles 0..1 }.
 // c: aléa fixe de l'arbre (0..1), qui décale son calendrier de ±9 jours (la webcam de Toronto montre des arbres rouges
-// à côté d'arbres encore verts) et choisit sa teinte.
-export function seasonState(lat, lng, elev, ms) {
+// à côté d'arbres encore verts) et choisit sa teinte. fall: gel de l'année en cours (fallFromTemps), qui avance ou
+// retarde la fin de la chute du satellite cette année-là.
+export function seasonState(lat, lng, elev, ms, fall = null) {
   const clim = climatology(lat, lng, elev), doy = dayOfYear(ms);
+  if (fall && fall.y === new Date(ms).getFullYear()) {
+    if (fall.hard != null) clim.end = Math.min(clim.end, fall.hard + FROST.afterHard);
+    clim.end = Math.max(clim.end, (fall.light ?? fall.last + 1) + FROST.afterLight);
+  }
   const phase = (k, c) => {
     const o = OFF[k] || OFF[ESS.FEUILLU], j = (c - 0.5) * 18;
-    const peak = clim.peak + o.peak + j, dor = clim.dor + o.dor + j * 0.55; // la chute resserre l'écart entre arbres (Tremblant tout nu d'un coup)
+    const peak = clim.peak + o.peak + j;
     const turn = sm(peak - 20, peak, doy); // montée de la couleur sur trois semaines
-    const end = Math.max(dor - 5, peak + 14); // feuilles tombées: un peu avant la dormance du satellite (Tremblant nu le 23 octobre 2026), jamais en moins de deux semaines
+    const end = Math.max(clim.end + o.dor + j * 0.55, peak + 14); // la chute resserre l'écart entre arbres (Tremblant tout nu d'un coup); jamais en moins de deux semaines
     const drop = sm(peak + 3, end, doy); // chute, du pic aux feuilles tombées
     // Part qui s'accroche après la chute (Stéphane: « ça vire jamais brun à 100 % »): chênes et hêtres gardent leurs
     // feuilles cuivrées, et un arbre sur cinq, quelle que soit l'essence, garde un tiers de ses feuilles colorées trois

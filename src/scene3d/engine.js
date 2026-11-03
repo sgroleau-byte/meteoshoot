@@ -23,7 +23,7 @@ import { horizonProfile, curvDrop } from './horizon.js';
 import { prisms, fitTree, reachOf, sheetCellBlocked, sheetTriTooClose, LOBE_PARTS, CON_TIERS, CON_TIERS_LOW } from './clearance.js';
 import { segDist, dpClosed, regularizeRing } from './ring.js';
 import { roofFaces, roofTop } from './roof.js';
-import { seasonState, isConifer, ESS } from './season.js';
+import { seasonState, fallFromTemps, isConifer, ESS } from './season.js';
 import { makeNoiseTextures, CLOUD_GLSL, CLOUD_PASS_FRAG, sunAtAltitude, classifyClouds } from './sky.js';
 
 // Ombres PCSS (percentage-closer soft shadows) greffées sur le mode d'ombre « de base » de three (carte de profondeur en
@@ -335,6 +335,32 @@ function pointInRing(p, r) { let inside = false; for (let i = 0, j = r.length - 
 function segsCross(a, b, c, d) { const o = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])); return o(a, b, c) !== o(a, b, d) && o(c, d, a) !== o(c, d, b); }
 function segHitsRing(a, b, r) { if (pointInRing(a, r) || pointInRing(b, r)) return true; for (let i = 0; i < r.length; i++) if (segsCross(a, b, r[i], r[(i + 1) % r.length])) return true; return false; }
 function ringsOverlap(a, b) { if (pointInRing(centroid(a), b) || pointInRing(centroid(b), a)) return true; if (a.some(p => pointInRing(p, b)) || b.some(p => pointInRing(p, a))) return true; for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) if (segsCross(a[i], a[(i + 1) % a.length], b[j], b[(j + 1) % b.length])) return true; return false; }
+// Voisins cachés dans un autre voisin (3 novembre 2026, Toronto): certaines tours arrivent deux fois, avec deux contours
+// dont l'un tient dans l'autre et la même hauteur LiDAR; leurs façades presque confondues se disputaient l'affichage
+// (fenêtres qui scintillent et se mélangent quand la caméra bouge). Un bâtiment dont 90 % de l'empreinte tient dans un
+// autre au moins aussi haut ne se dessine pas: il est invisible de toute façon. Une tour sur un socle, plus haute que
+// lui, reste. Indices de data.bld, calculés une fois par scène.
+const hiddenMemo = new WeakMap();
+function hiddenBld(bld) {
+  if (hiddenMemo.has(bld)) return hiddenMemo.get(bld);
+  const box = (r) => { const b = [Infinity, Infinity, -Infinity, -Infinity]; for (const [x, n] of r) { if (x < b[0]) b[0] = x; if (n < b[1]) b[1] = n; if (x > b[2]) b[2] = x; if (n > b[3]) b[3] = n; } return b; };
+  const top = ([, h, , , , , roof]) => (roof ? Math.max(h, roofTop(roof) || 0) : h);
+  const B = bld.map((b) => ({ r: b[0], bb: box(b[0]), top: top(b) })), out = new Set();
+  B.forEach((s, i) => {
+    const st = Math.max(0.5, Math.min(2, Math.sqrt((s.bb[2] - s.bb[0]) * (s.bb[3] - s.bb[1])) / 12));
+    const pts = []; for (let x = s.bb[0] + st / 2; x < s.bb[2]; x += st) for (let n = s.bb[1] + st / 2; n < s.bb[3]; n += st) if (pointInRing([x, n], s.r)) pts.push([x, n]);
+    if (!pts.length) return;
+    for (let j = 0; j < B.length; j++) {
+      const o = B[j];
+      if (j === i || out.has(j) || o.top + 0.5 < s.top || o.bb[0] > s.bb[2] || o.bb[2] < s.bb[0] || o.bb[1] > s.bb[3] || o.bb[3] < s.bb[1]) continue;
+      if (o.top === s.top && j > i && (o.bb[2] - o.bb[0]) * (o.bb[3] - o.bb[1]) < (s.bb[2] - s.bb[0]) * (s.bb[3] - s.bb[1])) continue; // deux copies: la plus grande reste
+      let k = 0; for (const p of pts) if (pointInRing(p, o.r)) k++;
+      if (k >= 0.9 * pts.length) { out.add(i); break; }
+    }
+  });
+  hiddenMemo.set(bld, out);
+  return out;
+}
 
 // Tuile de façade (une travée sur un étage): fenêtre moderne, plus large que haute, cadre fin anthracite, un seul
 // meneau décalé au tiers, verre sombre et réfléchissant; carte de rugosité (verre lisse) et carte d'émission
@@ -682,7 +708,8 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   const forestTint = (st) => { const avg = (k) => { const t = [0, 0, 0]; for (let i = 0; i < 9; i++) { const c = seasonColor(st, k, (i + 0.5) / 9); t[0] += c.r; t[1] += c.g; t[2] += c.b; } return t.map(v => v / 9); }; const d = avg(ESS.FEUILLU), c = avg(ESS.CONIFERE); const m = d.map((v, i) => (0.45 * v + 0.55 * c[i]) * 0.45), l = LUM(m); return m.map(v => v + (l - v) * 0.15); };
   const seasonCol = new THREE.Color();
   const seasonColor = (st, k, c) => { const v = st.color(k, c); return seasonCol.setRGB(v[0], v[1], v[2], THREE.SRGBColorSpace); };
-  const seasonNow = () => seasonState(lat, lng, terrain.hTri(0, 0), dateMs);
+  let fallCal = null; // gel de l'automne en cours (setFallTemps): fin de la chute de l'année, sinon celle du satellite
+  const seasonNow = () => seasonState(lat, lng, terrain.hTri(0, 0), dateMs, fallCal);
   const seasonBare = (st, c) => { const v = st.bare(c); return seasonCol.setRGB(v[0], v[1], v[2], THREE.SRGBColorSpace); };
   const seasonLitter = (st, k, c) => { const v = st.litterColor(k, c); return seasonCol.setRGB(v[0], v[1], v[2], THREE.SRGBColorSpace); };
   // Part de feuilles de chaque instance d'un lot (attribut aCover); un lot de branches ne se dessine que s'il a un arbre
@@ -1536,10 +1563,11 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     });
     const others = []; let kept = []; treeEnv = []; othH = new Map(); drawn.forEach(d => othH.set(d.p, d.hEff ?? 9));
     if (data) {
-      data.bld.forEach(([p, h, fl, k, lid, , roof]) => {
-        // Un voisin recouvert par un bâtiment dessiné disparaît: c'est le même édifice.
+      const hidden = hiddenBld(data.bld);
+      data.bld.forEach(([p, h, fl, k, lid, , roof], bi) => {
+        // Un voisin recouvert par un bâtiment dessiné disparaît: c'est le même édifice. Un voisin caché dans un autre aussi.
         const c = centroid(p);
-        if (drawn.some(d => ringsOverlap(d.p, p)) || underModel(p)) return;
+        if (hidden.has(bi) || drawn.some(d => ringsOverlap(d.p, p)) || underModel(p)) return;
         others.push(p);
         const q = p[0], r = hsh(q[0], q[1], 5); const hh = k === 0 && !lid ? Math.max(h, 6.2) : h; // hauteur mesurée (LiDAR): telle quelle
         othH.set(p, roof ? Math.max(hh, roofTop(roof) || 0) : hh);
@@ -2076,6 +2104,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     // terrain » jusqu'à midi en octobre. null sans relief réel.
     horizonProfile() { return !terrain || terrain.flat ? null : horizonProfile(terrain.hTri); },
     setTerrain(t) { terrain = makeTerrain(t); terrainIn = true; rebuild(); },
+    setFallTemps(f) { fallCal = fallFromTemps(f); seasonDay = null; recolorTrees(); }, // gel de l'automne (fallTemps.js): fin de la chute de l'année, couleurs refaites
     setTime(ms) { if (ms !== dateMs) { dateMs = ms; dirty = true; recolorTrees(); } },
     // Fumée de feux au sol à l'heure affichée (FireWork, microgrammes par mètre cube), ou null. Dessinée à partir de
     // 20 seulement (prudence: la couche mêle le fond urbain, 5 à 15 en ville), entière vers 150.

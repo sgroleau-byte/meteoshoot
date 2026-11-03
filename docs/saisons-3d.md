@@ -86,3 +86,28 @@ Retour de Stéphane: « on dirait plus une forêt brûlée qu'une saison d'autom
   du pic assombrie), qui s'étale avec la chute et disparaît sur un mois;
 - lacis gris brun chaud plus clair que les troncs, un sixième de la surface au lieu d'un cinquième; grosses branches
   plus courtes; la palette du pic perd ses deux verts (la montée part déjà du vert d'été).
+
+## Automne de l'année en cours: le gel du lieu (v633.260, 3 novembre 2026)
+
+Constat: le 3 novembre 2026, la webcam de Toronto (Lakeshore, vers la tour CN) montrait des arbres encore pleins et
+colorés, et la 3D des arbres presque nus. Le satellite ne connaît que la moyenne et, hors de la forêt, il voit les
+pelouses et les champs jaunir avant les arbres (centre de Toronto: milieu du brunissement vers le 30 septembre).
+
+- Le pic de couleur reste celui du satellite: il est juste en forêt. Référence: la caméra de la porte de Stéphane à
+  Stoneham en 2026 (début de la couleur vers le 21 septembre, pic du 2 au 10 octobre, chute du 14 au 21, nu le 28),
+  que la 3D suit.
+- La fin de la chute suit le gel de l'année (`fallFromTemps`, season.js): un gel dur (minimum sous -2 °C) fait tomber
+  les feuilles en une douzaine de jours au plus (Tremblant: gel dur le 10 octobre, nu le 23); sans gel, elles tiennent
+  jusqu'à une semaine après le premier (sous 0 °C), ou une semaine après la fin des données s'il n'a pas encore gelé.
+  Toronto n'avait eu aucune nuit sous 0 °C au 3 novembre 2026 (Tremblant le 10 octobre, Québec et Stoneham le 17,
+  Montréal le 27): 76 % des feuilles ce jour-là au lieu de 28 %.
+- `src/scene3d/fallTemps.js` demande, par le relais Open-Meteo de l'app, le minimum de chaque jour des 92 derniers jours
+  et des 16 prochains (`past_days`, permis par `api/om.js` depuis cette version). L'archive d'Open-Meteo demanderait le
+  forfait Professional. Sans réponse (hors ligne, panne), le calendrier du satellite reste tel quel.
+- Essai abandonné: pic et chute par le froid cumulé (degrés-jours sous 18 °C depuis le 1er septembre, calés sur les
+  normales 2012 à 2021 de onze villes). Meilleur en moyenne pour les villes américaines, mais il devançait le pic de
+  Stoneham de dix jours en 2026 (la 3D montrait des arbres à moitié dégarnis le 10 octobre, la caméra le plein pic).
+- Banc: `harness.html` charge le gel; `{ fall: false }` dans une liste de `shoot.mjs` rend le satellite seul. Planches
+  dans `_METEOSHOOT/references_arbres/` (`planche-feuillage-gel-stoneham-2026-11-03.jpg`).
+- À surveiller: à Stoneham, la couleur part peut-être quelques jours trop tôt (21 septembre plus coloré dans la 3D que
+  sur la caméra) et la chute un peu tard (14 octobre plus feuillu).

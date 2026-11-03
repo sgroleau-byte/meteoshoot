@@ -146,7 +146,7 @@ const fetchOpenMeteoOnce = async (url, timeoutMs) => {
       // Corps coupé par le délai maximal: c'est le réseau, pas une réponse invalide.
       return ctl.signal.aborted ? { error: 'network' } : { error: 'api', status: 'invalid' };
     }
-    if (!body || !body.hourly) {
+    if (!body || (!body.hourly && !body.daily)) { // daily seul: gel de l'automne de la vue 3D (fallTemps.js)
       return { error: 'api', status: 'invalid' };
     }
     return { data: body };

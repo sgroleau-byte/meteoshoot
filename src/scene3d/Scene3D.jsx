@@ -6,6 +6,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { loadScene } from './data.js';
 import { loadTerrain } from './terrain.js';
+import { loadFallTemps } from './fallTemps.js';
 import { isChunkLoadError, reloadForUpdate } from '../shared/updateReload.js';
 import { fetchSmokeHour, smokeHourCached } from '../weather/api.js';
 import { loadModel, loadPlacement, loadRetired, localState, saveModel, replaceModel, markSent, takePlacement, dropModel, retireModel, clearRetired, savePlacement, savePlacementIf } from './modelStore.js';
@@ -184,8 +185,8 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
     setStatus({ text: 'Chargement', busy: true });
     // Environs et relief demandés tout de suite, en même temps que le moteur (avant: seulement une fois le moteur chargé,
     // donc en série). Ce sont des promesses gardées en mémoire par lieu: les demander tôt ne coûte rien de plus.
-    const pScene = loadScene(lat, lng), pTerrain = loadTerrain(lat, lng);
-    pScene.catch(() => {}); pTerrain.catch(() => {}); // traitées plus bas; évite l'avertissement si le moteur ne se charge pas
+    const pScene = loadScene(lat, lng), pTerrain = loadTerrain(lat, lng), pFall = loadFallTemps(lat, lng);
+    pScene.catch(() => {}); pTerrain.catch(() => {}); pFall.catch(() => {}); // traitées plus bas; évite l'avertissement si le moteur ne se charge pas
     import('./engine.js').then(m => {
       if (cancelled || !box.current) return;
       // owner: la maison a suivi le nouveau calage de l'image à l'arrivée des environs (engine.js, followSat); gardée pour
@@ -205,6 +206,9 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
         .catch(err => { console.warn('[scene3d] environs indisponibles:', err); failed = true; if (!cancelled) setStatus({ text: 'Environs indisponibles, bâtiments du projet seulement', busy: false }); });
       pTerrain.then(t => { if (!cancelled && eng.current === e) { e.setTerrain(t); if (onHorizon) { const h = e.horizonProfile(); if (h) onHorizon(h); } done(); } }) // profil d'horizon du relief réel vers la fiche (ombre du terrain)
         .catch(err => { console.warn('[scene3d] relief indisponible, sol plat:', err); done(); });
+      // Gel de l'automne en cours (feuillage): sans lui, le calendrier moyen du satellite reste.
+      pFall.then(f => { if (!cancelled && eng.current === e) e.setFallTemps(f); })
+        .catch(err => console.warn('[scene3d] températures de l’automne indisponibles, calendrier moyen:', err));
     }).catch(err => {
       console.error('[scene3d] moteur:', err); if (cancelled) return;
       // Morceau de code introuvable (nouvelle version déployée depuis l'ouverture de la page): on recharge une fois.
