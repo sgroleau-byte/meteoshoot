@@ -326,7 +326,8 @@ if(uSunR>0.0&&texture2D(tDepth,vUv).x>=0.99999)c+=uSunDisc*smoothstep(uSunR,uSun
 c+=texture2D(tBloom,vUv).rgb*uBloom;c+=flare();c=aces(c);gl_FragColor=vec4(rain(desat(pow(c,vec3(1.0/2.2))))+(ign(gl_FragCoord.xy)-0.5)/255.0,1.0);}`;
 
 const PAL_RES = ['#8f4e3a', '#a0624c', '#7a4a3a', '#b07d5e', '#9c7a62', '#6e5a50', '#b8957a', '#d2c2a4', '#8c6b58'];
-const ROOF = ['#57524d', '#5d5a55', '#514e4a', '#625e58'];
+// Toits: même couleur que les murs depuis la v633.269 (3 novembre 2026, demande de Stéphane: plus de dessus gris foncé
+// sur les blocs); la lumière du ciel suffit à distinguer le dessus des façades. L'ancienne palette de gris est retirée.
 // Couleur des arbres: src/scene3d/season.js (depuis le 23 octobre 2026, selon la date, le lieu et l'essence; auparavant
 // une palette d'automne fixe toute l'année).
 const GC = { park: '#66784d', pitch: '#5d8a47', play: '#b8a88e', grass: '#6f8552' };
@@ -650,7 +651,7 @@ export function createScene3D(container, opts = {}) {
     };
     return m;
   };
-  // Gris foncés (rues, surfaces pavées) pour trancher avec le gazon et les toits (#5a5650); trottoirs un peu plus clairs.
+  // Gris foncés (rues, surfaces pavées) pour trancher avec le gazon et les bâtiments; trottoirs un peu plus clairs.
   const flatMats = { road: flat('#383b3e', 3), rail: flat('#7d766c', 3), walk: flat('#9b978d', 4), asphalt: flat('#3a3d40', 2), gravel: flat('#7a756b', 2) }; // gravier: gris chaud, plus clair que l'asphalte, plus sobre que le trottoir
   Object.keys(GC).forEach(k => { flatMats[k] = flat(GC[k], 1); });
   // Matériaux qui reçoivent la lumière des lampadaires (le toit, au-dessus des lampes, n'en reçoit presque pas).
@@ -1562,7 +1563,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       const fl = Math.max(1, Math.floor(h / 3.6)); // une rangée de fenêtres par étage de 3,6 m environ (jamais étirée)
       const wallHex = (projLocal[d.i] && projLocal[d.i].wallColor) || '#7a3f33', base = groundOf(d.p).mean;
       edgesOf(d.p).forEach(e => projInfo.push({ dir: e.dir, len: e.len, mid: e.mid, nrm: e.nrm, label: `Forme ${i + 1}`, h, src, base }));
-      list.push({ p: d.p, h, fl, bay: 8, col: L(wallHex), rc: L('#5a5650'), allLit: true, unmapped: !hits.length }); // l'édifice photographié: toutes les fenêtres allumées la nuit; unmapped: absent d'Overture (clearance.js)
+      list.push({ p: d.p, h, fl, bay: 8, col: L(wallHex), rc: L(wallHex), allLit: true, unmapped: !hits.length }); // l'édifice photographié: toutes les fenêtres allumées la nuit; unmapped: absent d'Overture (clearance.js)
     });
     // Les façades allumées éclairent les alentours: une lumière surfacique chaude par façade (les plus longues d'abord),
     // devant le mur, à mi-hauteur, dirigée vers l'extérieur; intensité suivant celle des fenêtres (voir frame).
@@ -1584,7 +1585,8 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
         others.push(p);
         const q = p[0], r = hsh(q[0], q[1], 5); const hh = k === 0 && !lid ? Math.max(h, 6.2) : h; // hauteur mesurée (LiDAR): telle quelle
         othH.set(p, roof ? Math.max(hh, roofTop(roof) || 0) : hh);
-        list.push({ p, h: hh, fl: Math.max(1, Math.min(k === 0 ? Math.max(fl, Math.round(hh / 3.1)) : fl, Math.floor(hh / 3.2))), col: L(k === 2 ? '#9a9a94' : k === 1 ? '#cfc7b8' : PAL_RES[Math.floor(r * PAL_RES.length)]), rc: L(ROOF[Math.floor(hsh(q[0], q[1], 6) * ROOF.length)]), roof: roof || null, hTop: roof ? Math.max(hh, roofTop(roof) || 0) : hh, holes: holes || null, base: base ?? null });
+        const col = L(k === 2 ? '#9a9a94' : k === 1 ? '#cfc7b8' : PAL_RES[Math.floor(r * PAL_RES.length)]);
+        list.push({ p, h: hh, fl: Math.max(1, Math.min(k === 0 ? Math.max(fl, Math.round(hh / 3.1)) : fl, Math.floor(hh / 3.2))), col, rc: col, roof: roof || null, hTop: roof ? Math.max(hh, roofTop(roof) || 0) : hh, holes: holes || null, base: base ?? null });
       });
       Object.keys(GC).forEach(k => addFlat(data.green.filter(p => p.k === k).map(p => ({ o: p.p })), flatMats[k], 0.03, 1));
       // Sol des cours intérieures (v633.265): pavé, comme une cour de ville (le terrain dessous est le gazon du relief).

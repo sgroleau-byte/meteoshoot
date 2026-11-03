@@ -98,6 +98,8 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   lumière très diffuse sans ombre, quelques fenêtres allumées avec une lueur douce.
 - Aucune fenêtre le jour sur les bâtiments générés (mur uni, v633.261): elles ne sont pas celles du vrai bâtiment.
   Elles apparaissent, allumées, avec la tombée du jour. Les modèles importés gardent leurs propres vitrages.
+- Toits à la couleur des murs (v633.269): plus de dessus gris foncé sur les blocs générés; c'est la lumière du ciel qui
+  distingue le dessus des façades. Le bâtiment du projet suit la couleur de mur réglée dans la fiche.
 
 ## Modèle d'architecte importé (octobre 2026)
 
@@ -1244,6 +1246,13 @@ importé, lui, est le fichier de l'architecte.
     précédent (plusieurs cadres possibles: le sud du Québec d'abord, -80 à -57 de longitude, 44,9 à 50,5 de latitude; 4,7
     millions de bâtiments, 1,7 million de segments, 1,3 million de plans d'eau). Hors couverture (Toronto, Calgary),
     manifeste illisible ou tuile injoignable: DuckDB comme avant. À refaire à chaque changement de `RELEASE`.
+- v633.269 (3 novembre 2026), **toits à la couleur des murs** (Stéphane, sur une capture du Parlement sous la pluie:
+  « peux-tu enlever les tops de bâtiments gris foncé, et les mettre de la même couleur que le reste du bloc? »). Dans
+  `engine.js`, la couleur de toit (`rc`) de chaque bloc est celle de ses murs: bâtiments voisins (palette résidentielle,
+  civique ou remise) comme bâtiment du projet (couleur de mur de la fiche, au lieu du gris #5a5650). Toits plats et
+  versants mesurés (roof.js) pareil; la palette de gris `ROOF` est retirée. Le matériau du toit reste distinct (rugosité,
+  pluie, lampadaires). Rien ne change côté serveur ni dans le cache partagé. Planche avant/après (ciel dégagé et ciel
+  couvert sous la pluie) dans `_METEOSHOOT/verification_batiments_ville/planche_toits_avant_apres.png`.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
