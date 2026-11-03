@@ -68,8 +68,8 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
 - `api/overture-tiles.js` et `scripts/overture-tiles.mjs` (v633.268): Overture pré-découpé en tuiles dans le stockage
   Supabase (seau public « overture », dossier de la version d'Overture); le serveur y lit la couche en moins d'une
   seconde et ne relit les Parquet par DuckDB que hors couverture. À régénérer après l'index quand `RELEASE` change:
-  `node scripts/overture-tiles.mjs --upload` (sud du Québec, 40 minutes, reprise possible; le seau du forfait gratuit
-  ne tient que les cellules des projets, voir `--prune --cells`), puis le préchauffage. Vérification:
+  `node scripts/overture-tiles.mjs` (sud du Québec, 40 minutes, reprise possible) puis `sh scripts/overture-tiles-b2.sh`
+  (envoi au seau Backblaze B2 `meteoshoot-overture`, une demi-heure), puis le préchauffage. Vérification:
   `node scripts/overture-tiles-check.mjs` (tuiles contre DuckDB sur le banc des dix lieux).
 - `scripts/scene3d-dev.mjs`: la fonction en local, port 3999 (`npm run api`); le proxy Vite envoie `/api`
   dessus, ou sur un déploiement d'aperçu si `MS_API_PROXY` est donné (`.env.local`, ignoré par git).
@@ -1257,8 +1257,17 @@ importé, lui, est le fichier de l'architecte.
     trouvent les projets (`--prune --cells`, environ 400 Mo avec une rangée de tuiles autour de chaque cellule; manifeste
     réduit envoyé d'abord, suppression du reste onze minutes plus tard, le temps des caches), le reste du Québec
     repassant par DuckDB. Le jeu complet reste sur le Mac (`_METEOSHOOT/overture-tuiles/2026-09-23.1`, 1,9 Go);
-    `--upload-only --cells` renvoie des cellules sans DuckDB. Décision d'hébergement en attente (Cloudflare R2: 10 Go
-    gratuits sans frais de sortie; S3: quelques cents par mois; Supabase Pro: 25 $ US par mois; ou cellules à la demande).
+    `--upload-only --cells` renvoie des cellules sans DuckDB.
+  - **Hébergement Backblaze B2** (le soir même, « Vas-y » de Stéphane; il a déjà un compte, celui d'Archi Ultra Drop et de
+    Backup Central): seau public `meteoshoot-overture` en région ca-east-006 (centre canadien, tout près des serveurs
+    Vercel de Montréal), créé avec la clé de Backup Central lue dans le trousseau du Mac, puis clé d'application limitée
+    au seau (trousseau: `meteoshoot-overture-b2-key-id`, `-key`, `-bucket-id`). Envoi du jeu complet par rclone
+    (`sh scripts/overture-tiles-b2.sh`: tuiles d'abord, manifeste en dernier; `--check` compare). Le serveur lit
+    `OVERTURE_TILES_URL` (variable Vercel des deux projets: `https://f006.backblazeb2.com/file/meteoshoot-overture`),
+    prise au déploiement suivant; sans elle, il lirait le seau Supabase. Gratuit à notre échelle (10 Go de stockage
+    offerts, sortie gratuite jusqu'à trois fois le volume stocké par mois). Le seau Supabase « overture » est vidé
+    ensuite. Les modes `--upload`, `--prune` et `--upload-only` du générateur visent toujours Supabase (gardés en
+    secours), le dépôt de référence est Backblaze.
 - v633.269 (3 novembre 2026), **toits à la couleur des murs** (Stéphane, sur une capture du Parlement sous la pluie:
   « peux-tu enlever les tops de bâtiments gris foncé, et les mettre de la même couleur que le reste du bloc? »). Dans
   `engine.js`, la couleur de toit (`rc`) de chaque bloc est celle de ses murs: bâtiments voisins (palette résidentielle,

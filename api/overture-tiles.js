@@ -1,6 +1,7 @@
 // Tuiles Overture (v633.268, 3 novembre 2026): la lecture d'Overture par DuckDB dans les Parquet (13 s sur 28 d'un
 // calcul d'environs en production) est remplacée, là où elles existent, par quelques petits fichiers pré-découpés lus
-// dans le stockage Supabase (seau public « overture », fichiers gzip). Deux grilles: « f » (bâtiments, parties de
+// dans un seau public (Backblaze B2 « meteoshoot-overture » par la variable OVERTURE_TILES_URL depuis le 3 novembre
+// 2026 au soir; sans la variable, le seau Supabase « overture », trop petit pour le sud du Québec sur le forfait gratuit). Deux grilles: « f » (bâtiments, parties de
 // bâtiment, rues, sol, usage du sol; tuiles de 0,05 degré) et « w » (eau; 0,1 degré). Chaque entité est rangée dans les
 // tuiles que son cadre Overture touche, telle quelle; le serveur lit les tuiles que touche son cadre de lecture (deux à
 // quatre par grille, en même temps), dédoublonne (clé « o »: fichier Parquet puis numéro de ligne), applique le même

@@ -2,9 +2,10 @@
 // Découpage d'Overture en tuiles pour la vue 3D (v633.268, 3 novembre 2026). Voir l'en-tête de api/overture-tiles.js.
 //
 // Lit les Parquet d'Overture (version RELEASE de api/scene3d.js, fichiers désignés par api/overture-index.json) par
-// morceaux de 1 degré, range chaque entité dans les tuiles dont le cadre agrandi la touche, écrit les tuiles (gzip) dans
-// un dossier hors du dépôt et, avec --upload, les envoie dans le seau public « overture » du stockage Supabase, puis le
-// manifeste (couverture, tuiles subdivisées). Un morceau n'est marqué fait qu'une fois ses tuiles envoyées: relancer
+// morceaux de 1 degré, range chaque entité dans les tuiles que touche son cadre, écrit les tuiles (gzip) dans un dossier
+// hors du dépôt et le manifeste (couverture, tuiles subdivisées). L'envoi se fait ensuite au seau Backblaze B2
+// « meteoshoot-overture » par scripts/overture-tiles-b2.sh (rclone). Les options --upload, --prune et --upload-only
+// visent l'ancien seau Supabase « overture » (forfait gratuit, 1 Go: trop petit pour le sud du Québec), gardées en secours. Un morceau n'est marqué fait qu'une fois ses tuiles envoyées: relancer
 // reprend là où ça s'est arrêté. Le manifeste n'est écrit que si tout a réussi. À refaire à chaque changement de RELEASE.
 //
 //   node scripts/overture-tiles.mjs --upload                         sud du Québec (cadre par défaut), envoi au seau
