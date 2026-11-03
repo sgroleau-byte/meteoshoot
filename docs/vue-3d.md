@@ -65,6 +65,11 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
 - `api/overture-index.json`: cadre géographique de chaque fichier Parquet d'Overture, par type. À régénérer
   quand on change de version d'Overture (constante `RELEASE`): `python3 scripts/overture-index.py
   2026-09-23.1` (une minute; demande `pip install pyarrow`).
+- `api/overture-tiles.js` et `scripts/overture-tiles.mjs` (v633.268): Overture pré-découpé en tuiles dans le stockage
+  Supabase (seau public « overture », dossier de la version d'Overture); le serveur y lit la couche en moins d'une
+  seconde et ne relit les Parquet par DuckDB que hors couverture. À régénérer après l'index quand `RELEASE` change:
+  `node scripts/overture-tiles.mjs --upload` (sud du Québec, quelques heures, reprise possible), puis le préchauffage.
+  Vérification: `node scripts/overture-tiles-check.mjs` (tuiles contre DuckDB sur le banc des dix lieux).
 - `scripts/scene3d-dev.mjs`: la fonction en local, port 3999 (`npm run api`); le proxy Vite envoie `/api`
   dessus, ou sur un déploiement d'aperçu si `MS_API_PROXY` est donné (`.env.local`, ignoré par git).
 - `supabase/migrations/20261005120000_cache_scene_3d.sql` (table `scene3d_cache`),
@@ -1207,6 +1212,38 @@ importé, lui, est le fichier de l'architecte.
     clé déjà prise), que la scène soit complète ou non. Script de préchauffage: pareil, et pour un lieu dont les environs
     sont déjà à jour mais sans couche, il la demande seule (`stage=base`) pour que la prochaine version n'ait que les mesures.
   - Mesuré en local sur Stoneham: couche lue du cache, les environs ne font plus que les mesures LiDAR et l'image.
+- v633.268 (3 novembre 2026), **Overture pré-découpé en tuiles** (dernier point du plan du 3 novembre, « Vas-y »; Stéphane
+  sur les versions 266 et 267: « c'est vraiment plus rapide, ça n'a rien à voir »). La lecture d'Overture par DuckDB dans
+  les Parquet (13 s, et jusqu'à 20 s en local) devient une lecture de quelques petits fichiers gzip dans le stockage
+  Supabase (seau public « overture », chemin `<release>/<grille>/<z>/<ix>_<iy>.json.gz`, manifeste
+  `<release>/manifest.json`): 0,2 à 0,8 s. Code partagé dans `api/overture-tiles.js` (découpage, lecture WKB, découpe,
+  lecture côté serveur), générateur `scripts/overture-tiles.mjs`, vérification `scripts/overture-tiles-check.mjs`.
+  - **Deux grilles.** « f » (bâtiments, parties, rues, sol, usage du sol): tuiles de 0,05 degré, subdivisées en quatre
+    au-delà de 300 Ko gzip (centres-villes, jusqu'au niveau z 2, relevé des tuiles subdivisées dans le manifeste); « w »
+    (eau): 0,1 degré. Chaque entité est rangée telle quelle dans les tuiles que touche son cadre Overture (pas de marge:
+    un premier essai avec marge copiait chaque bâtiment dans 4,7 tuiles une fois subdivisé, 185 Mo pour la seule région
+    de Québec; sans marge, 27 Mo). Le serveur lit les tuiles que touche son cadre de lecture (deux à quatre par grille,
+    en même temps), dédoublonne par la clé « o » (rang du fichier Parquet dans l'index, puis numéro de ligne), applique le
+    même filtre par cadre que la requête DuckDB (cadre Overture en float32, écrit court et relu par `Math.fround`) et
+    remet les lignes dans l'ordre d'origine (le tirage des arbres des boisés en dépend; vérifié: DuckDB renvoie toujours
+    cet ordre).
+  - **Grandes entités** (plus de 300 sommets: lacs, fleuve, forêts, autoroutes): rangées avec une marge (600 m pour f,
+    2 600 m pour w, au-delà des rayons de lecture 500 et 2 500 m), découpées au cadre agrandi de la tuile quand elles en
+    débordent (Sutherland-Hodgman pour les contours, Liang-Barsky pour les lignes), et lues seulement dans la tuile du
+    lieu (drapeau « x »): pas de couture. Un boisé découpé garde le cadre et l'aire de son contour d'origine (« ob »,
+    « oa », en degrés) et une souche vide pour chaque polygone entièrement dehors, pour que le tirage des arbres consomme
+    exactement les mêmes nombres aléatoires que sur le contour entier (`overtureBase` les utilise à la place du contour).
+    Identifiant des bâtiments gardé seulement pour ceux auxquels une partie se rattache (36 caractères sinon inutiles).
+  - **Résultat identique**: sur les cinq lieux du banc de la région de Québec (Stoneham, Parlement, Limoilou, Sillery,
+    Valcartier), la couche lue des tuiles est, au bit près, celle que DuckDB lit (bâtiments, rues, arbres, parcs,
+    stationnements, eau). `BASE_V` ne change donc pas: le cache partagé reste valable. `ms.base` dit « cache », « tuiles »
+    ou « duckdb ». Scène complète du Parlement en local: 4,2 s (lecture 267 ms) au lieu de 17 à 20 s.
+  - **Génération** (`node scripts/overture-tiles.mjs --upload`): morceaux de 1 degré alignés sur les deux grilles, trois à
+    la fois, lecture en flux de DuckDB (`filename`, `file_row_number`), reprise d'où ça s'est arrêté
+    (`avancement.json` dans `_METEOSHOOT/overture-tuiles/<release>`), manifeste écrit à la fin seulement, fusionné avec le
+    précédent (plusieurs cadres possibles: le sud du Québec d'abord, -80 à -57 de longitude, 44,9 à 50,5 de latitude; 4,7
+    millions de bâtiments, 1,7 million de segments, 1,3 million de plans d'eau). Hors couverture (Toronto, Calgary),
+    manifeste illisible ou tuile injoignable: DuckDB comme avant. À refaire à chaque changement de `RELEASE`.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

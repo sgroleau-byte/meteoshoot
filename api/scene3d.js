@@ -33,7 +33,9 @@
 //   sous la clé « ovt_lat_lng » (écrite par le client ou le script de préchauffage, lue ici avec la clé publique). Une nouvelle
 //   version des environs (SCENE_V, règles LiDAR) ne refait donc que les mesures. La scène renvoyée porte `base` seulement
 //   quand la couche vient d'être lue (à garder), jamais dans la scène mise en cache. GET ...&stage=base renvoie la couche seule.
-// Essai local: node api/scene3d.js --test 46.8367 -71.2336 [--no-cache]
+// Tuiles Overture (v633.268): la lecture d'Overture se fait d'abord dans des tuiles pré-découpées (api/overture-tiles.js,
+//   stockage Supabase), DuckDB restant le repli hors couverture; ms.base dit d'où vient la couche: 'cache', 'tuiles' ou 'duckdb'.
+// Essai local: node api/scene3d.js --test 46.8367 -71.2336 [--no-cache] [--duckdb]
 
 import duckdb from 'duckdb';
 import { readFileSync } from 'fs';
@@ -44,6 +46,7 @@ import { lidarRoofs } from './roofs.js';
 import { appleShift } from './satshift.js';
 import { pavedFromImagery, PAVED_ATTRIBUTION, builtShare, DENSE_SHARE } from './paved.js';
 import { SUPABASE_URL, SUPABASE_KEY } from '../src/shared/config.js';
+import { wkbToGeom, polysOf, linesOf, pointsOf, signedArea, clipRing, readTiles } from './overture-tiles.js';
 
 export const maxDuration = 60;
 
@@ -102,38 +105,9 @@ function getDb() {
 }
 const run = (con, sql, params = []) => new Promise((res, rej) => con.all(sql, ...params, (e, r) => (e ? rej(e) : res(r))));
 
-// ---------- géométrie (coordonnées locales en mètres: x vers l'est, n vers le nord)
-function wkbToGeom(buf) {
-  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-  let o = 0;
-  const geom = () => {
-    const le = buf[o] === 1; o += 1;
-    let type = dv.getUint32(o, le); o += 4;
-    if (type & 0x20000000) { o += 4; type &= ~0x20000000; } // SRID
-    const dims = type >= 3000 ? 4 : type >= 1000 ? 3 : 2;   // Z / M / ZM
-    type = type % 1000;
-    const pt = () => { const x = dv.getFloat64(o, le), y = dv.getFloat64(o + 8, le); o += 8 * dims; return [x, y]; };
-    const ring = () => { const n = dv.getUint32(o, le); o += 4; const r = []; for (let i = 0; i < n; i++) r.push(pt()); return r; };
-    const rings = () => { const n = dv.getUint32(o, le); o += 4; const r = []; for (let i = 0; i < n; i++) r.push(ring()); return r; };
-    const many = () => { const n = dv.getUint32(o, le); o += 4; const r = []; for (let i = 0; i < n; i++) r.push(geom()); return r; };
-    switch (type) {
-      case 1: return { t: 'Point', c: pt() };
-      case 2: return { t: 'Line', c: ring() };
-      case 3: return { t: 'Poly', c: rings() };
-      case 4: return { t: 'MPoint', c: many().map(g => g.c) };
-      case 5: return { t: 'MLine', c: many().map(g => g.c) };
-      case 6: return { t: 'MPoly', c: many().map(g => g.c) };
-      case 7: return { t: 'Coll', c: many() };
-      default: throw new Error('WKB type ' + type);
-    }
-  };
-  return geom();
-}
-const polysOf = (g) => g.t === 'Poly' ? [g.c] : g.t === 'MPoly' ? g.c : g.t === 'Coll' ? g.c.flatMap(polysOf) : [];
-const linesOf = (g) => g.t === 'Line' ? [g.c] : g.t === 'MLine' ? g.c : g.t === 'Coll' ? g.c.flatMap(linesOf) : [];
-const pointsOf = (g) => g.t === 'Point' ? [g.c] : g.t === 'MPoint' ? g.c : g.t === 'Coll' ? g.c.flatMap(pointsOf) : [];
+// ---------- géométrie (coordonnées locales en mètres: x vers l'est, n vers le nord); lecture WKB, polysOf, linesOf,
+// pointsOf, signedArea et clipRing viennent de overture-tiles.js (partagés avec le découpage en tuiles)
 
-const signedArea = (r) => { let a = 0; for (let i = 0, n = r.length; i < n; i++) { const p = r[i], q = r[(i + 1) % n]; a += p[0] * q[1] - q[0] * p[1]; } return a / 2; };
 const centroid = (r) => { let x = 0, y = 0; for (const p of r) { x += p[0]; y += p[1]; } return [x / r.length, y / r.length]; };
 const dist2 = (p, q) => (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2;
 function segDist2(p, a, b) {
@@ -169,54 +143,51 @@ function pointInRing(p, r) {
   }
   return inside;
 }
-// Découpe d'un anneau par un rectangle (Sutherland-Hodgman)
-function clipRing(r, minx, miny, maxx, maxy) {
-  const edges = [
-    [(p) => p[0] >= minx, (a, b) => [minx, a[1] + (b[1] - a[1]) * (minx - a[0]) / (b[0] - a[0])]],
-    [(p) => p[0] <= maxx, (a, b) => [maxx, a[1] + (b[1] - a[1]) * (maxx - a[0]) / (b[0] - a[0])]],
-    [(p) => p[1] >= miny, (a, b) => [a[0] + (b[0] - a[0]) * (miny - a[1]) / (b[1] - a[1]), miny]],
-    [(p) => p[1] <= maxy, (a, b) => [a[0] + (b[0] - a[0]) * (maxy - a[1]) / (b[1] - a[1]), maxy]],
-  ];
-  let out = r;
-  for (const [inside, inter] of edges) {
-    const inp = out; out = [];
-    if (!inp.length) break;
-    for (let i = 0; i < inp.length; i++) {
-      const cur = inp[i], prev = inp[(i + inp.length - 1) % inp.length];
-      if (inside(cur)) { if (!inside(prev)) out.push(inter(prev, cur)); out.push(cur); }
-      else if (inside(prev)) out.push(inter(prev, cur));
-    }
-  }
-  return out;
-}
 function mulberry(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
 // ---------- couche Overture: lecture des Parquet et mise en forme (bâtiments avant LiDAR, rues, arbres, parcs, stationnements, eau)
-async function overtureBase(lat, lng) {
-  const db = await getDb();
+// Lecture d'abord dans les tuiles pré-découpées (api/overture-tiles.js, v633.268: deux petits fichiers du stockage
+// Supabase, même filtre par cadre et même ordre des lignes que la requête DuckDB), sinon dans les Parquet par DuckDB
+// (lieu hors couverture, tuiles injoignables, ou opts.force = 'duckdb'; opts.force = 'tiles' refuse le repli: vérification).
+export async function overtureBase(lat, lng, opts = {}) {
   const mLat = 111320, mLng = 111320 * Math.cos(lat * Math.PI / 180);
   const X = (lon, la) => [(lon - lng) * mLng, (la - lat) * mLat];
   const bboxFor = (r) => [lng - r / mLng, lat - r / mLat, lng + r / mLng, lat + r / mLat];
-  const query = async (path, cols, radius) => {
-    const [x0, y0, x1, y1] = bboxFor(radius);
-    const files = filesFor(path, [x0, y0, x1, y1]);
-    if (files && files.length === 0) return [];
-    const src = files ? `[${files.map(f => `'${f}'`).join(',')}]` : `'${BASE}/${path}/*'`;
-    const con = db.connect();
-    try {
-      return await run(con, `SELECT ${cols}, geometry FROM read_parquet(${src}, hive_partitioning=0) WHERE bbox.xmin <= ? AND bbox.xmax >= ? AND bbox.ymin <= ? AND bbox.ymax >= ?`, [x1, x0, y1, y0]);
-    } finally { con.close(); }
-  };
   const t0 = Date.now();
-  const [bRows, pRows, sRows, lRows, uRows, wRows] = await Promise.all([
-    query('theme=buildings/type=building', 'id, height, num_floors, subtype, class, sources[1].dataset AS src', R_BLD),
-    query('theme=buildings/type=building_part', 'height, num_floors, min_height, min_floor, building_id, sources[1].dataset AS src', R_BLD),
-    query('theme=transportation/type=segment', 'class, subclass, names.primary AS name', R_ROAD),
-    query('theme=base/type=land', 'subtype, class', R_WOOD),
-    query('theme=base/type=land_use', 'subtype, class', R_GREEN),
-    query('theme=base/type=water', 'subtype, class', R_WATER),
-  ]);
-  const tq = Date.now() - t0;
+  let tiles = null;
+  if (opts.force !== 'duckdb') {
+    try { tiles = await readTiles(lat, lng, RELEASE); } catch (e) { log(`tuiles Overture injoignables (${e && e.message}), lecture des Parquet`); }
+    if (!tiles && opts.force === 'tiles') throw new Error('lieu hors des tuiles Overture');
+  }
+  let bRows, pRows, sRows, lRows, uRows, wRows;
+  if (tiles) {
+    // Même filtre que la requête DuckDB (cadre Overture de chaque entité), même ordre (fichier Parquet, puis ligne).
+    const pick = (rows, radius) => { const [x0, y0, x1, y1] = bboxFor(radius); return rows.filter((r) => r.bb[0] <= x1 && r.bb[2] >= x0 && r.bb[1] <= y1 && r.bb[3] >= y0).sort((a, b) => a.o - b.o); };
+    bRows = pick(tiles.b, R_BLD); pRows = pick(tiles.p, R_BLD); sRows = pick(tiles.s, R_ROAD); lRows = pick(tiles.l, R_WOOD); uRows = pick(tiles.u, R_GREEN); wRows = pick(tiles.w, R_WATER);
+    log(`tuiles Overture ${tiles.paths.join(' + ')} (${Math.round(tiles.bytes / 1024)} Ko, ${tiles.ms} ms)`);
+  } else {
+    const db = await getDb();
+    const query = async (path, cols, radius) => {
+      const [x0, y0, x1, y1] = bboxFor(radius);
+      const files = filesFor(path, [x0, y0, x1, y1]);
+      if (files && files.length === 0) return [];
+      const src = files ? `[${files.map(f => `'${f}'`).join(',')}]` : `'${BASE}/${path}/*'`;
+      const con = db.connect();
+      try {
+        return await run(con, `SELECT ${cols}, geometry FROM read_parquet(${src}, hive_partitioning=0) WHERE bbox.xmin <= ? AND bbox.xmax >= ? AND bbox.ymin <= ? AND bbox.ymax >= ?`, [x1, x0, y1, y0]);
+      } finally { con.close(); }
+    };
+    [bRows, pRows, sRows, lRows, uRows, wRows] = await Promise.all([
+      query('theme=buildings/type=building', 'id, height, num_floors, subtype, class, sources[1].dataset AS src', R_BLD),
+      query('theme=buildings/type=building_part', 'height, num_floors, min_height, min_floor, building_id, sources[1].dataset AS src', R_BLD),
+      query('theme=transportation/type=segment', 'class, subclass, names.primary AS name', R_ROAD),
+      query('theme=base/type=land', 'subtype, class', R_WOOD),
+      query('theme=base/type=land_use', 'subtype, class', R_GREEN),
+      query('theme=base/type=water', 'subtype, class', R_WATER),
+    ]);
+  }
+  const tq = Date.now() - t0, src = tiles ? 'tuiles' : 'duckdb';
+  const geomOf = (row) => row.geom || wkbToGeom(row.geometry);
   { const srcs = new Map(); for (const r of bRows) { const k = String(r.src || '?'); srcs.set(k, (srcs.get(k) || 0) + 1); } console.log('[scene3d] sources des bâtiments:', [...srcs].map(([k, n]) => `${k} ${n}`).join(', ')); }
   const loc = (ring) => ring.map(([lon, la]) => X(lon, la));
 
@@ -224,7 +195,7 @@ async function overtureBase(lat, lng) {
   let bld = []; let osmIdx = new Set(); // tracés OpenStreetMap (à la main, exacts): jamais remplacés par le LiDAR
   const outlines = new Map(), outArea = new Map(); // id d'Overture -> indice et genre du contour; indice -> surface au sol (pour les parties)
   for (const row of bRows) {
-    for (const rings of polysOf(wkbToGeom(row.geometry))) {
+    for (const rings of polysOf(geomOf(row))) {
       let r = simplifyRing(loc(rings[0]), 0.3);
       if (r.length < 3) continue;
       const area = Math.abs(signedArea(r));
@@ -253,7 +224,7 @@ async function overtureBase(lat, lng) {
   let nParts = 0; const covered = new Map();
   for (const row of pRows) {
     const par = row.building_id ? outlines.get(String(row.building_id)) : null;
-    for (const rings of polysOf(wkbToGeom(row.geometry))) {
+    for (const rings of polysOf(geomOf(row))) {
       const r = simplifyRing(loc(rings[0]), 0.3);
       if (r.length < 3) continue;
       const area = Math.abs(signedArea(r));
@@ -285,7 +256,7 @@ async function overtureBase(lat, lng) {
     if (!(cl in W) || ['crosswalk', 'cycle_crossing', 'steps'].includes(sc)) continue;
     let w = W[cl]; if (sc === 'driveway') w = 3; if (sc === 'alley' || sc === 'parking_aisle') w = 4;
     const k = cl === 'standard_gauge' ? 2 : ['footway', 'cycleway', 'path'].includes(cl) ? 1 : 0;
-    for (const line of linesOf(wkbToGeom(row.geometry))) {
+    for (const line of linesOf(geomOf(row))) {
       const p = simplify(loc(line), 0.4);
       if (p.length < 2 || !p.some(q => Math.hypot(q[0], q[1]) <= R_ROAD)) continue;
       const road = { w, k, p: round1(p) };
@@ -297,7 +268,7 @@ async function overtureBase(lat, lng) {
   // Arbres (isolés, alignements, boisés tirés au sort) et pelouses.
   const trees = [], green = [], rnd = mulberry(7);
   for (const row of lRows) {
-    const g = wkbToGeom(row.geometry), cl = row.class;
+    const g = geomOf(row), cl = row.class;
     if (cl === 'tree') {
       for (const pt of pointsOf(g)) { const p = X(pt[0], pt[1]); if (Math.hypot(p[0], p[1]) <= R_TREE) trees.push([Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]); }
     } else if (cl === 'tree_row') {
@@ -310,12 +281,16 @@ async function overtureBase(lat, lng) {
         }
       }
     } else if (cl === 'wood' || cl === 'forest' || cl === 'grass') {
-      for (const rings of polysOf(g)) {
+      for (const [k, rings] of polysOf(g).entries()) {
         const r = loc(rings[0]);
         if (cl === 'grass') { const s = simplifyRing(r, 0.5); if (s.length >= 3) green.push({ k: 'grass', p: round1(ccw(s)) }); continue; }
-        const area = Math.abs(signedArea(r)); let n = Math.min(220, Math.floor(area / 40)), tries = 0;
+        // Boisé découpé à la tuile (row.ob, row.oa: cadre et aire du contour d'origine, en degrés): même nombre de tirages et
+        // même cadre de tirage que sur le contour entier, donc les mêmes arbres; les tirages hors de la tuile agrandie
+        // tombent de toute façon au-delà de R_WOOD.
+        const area = row.oa ? Math.abs(row.oa[k]) * mLng * mLat : Math.abs(signedArea(r)); let n = Math.min(220, Math.floor(area / 40)), tries = 0;
         let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
-        for (const p of r) { minx = Math.min(minx, p[0]); miny = Math.min(miny, p[1]); maxx = Math.max(maxx, p[0]); maxy = Math.max(maxy, p[1]); }
+        if (row.ob) { [minx, miny] = X(row.ob[k][0], row.ob[k][1]); [maxx, maxy] = X(row.ob[k][2], row.ob[k][3]); }
+        else for (const p of r) { minx = Math.min(minx, p[0]); miny = Math.min(miny, p[1]); maxx = Math.max(maxx, p[0]); maxy = Math.max(maxy, p[1]); }
         while (n > 0 && tries < 4000) {
           tries++;
           const q = [minx + rnd() * (maxx - minx), miny + rnd() * (maxy - miny)];
@@ -332,7 +307,7 @@ async function overtureBase(lat, lng) {
     const cl = row.class, k = GK[cl];
     const isParking = cl === 'parking';
     if (!k && !isParking) continue;
-    for (const rings of polysOf(wkbToGeom(row.geometry))) {
+    for (const rings of polysOf(geomOf(row))) {
       const r = simplifyRing(loc(rings[0]), 0.5);
       if (r.length < 3) continue;
       const c = centroid(r);
@@ -346,7 +321,7 @@ async function overtureBase(lat, lng) {
   const wb = R_WATER - 1;
   for (const row of wRows) {
     if (row.class === 'wastewater' || row.subtype === 'wastewater') continue;
-    for (const rings of polysOf(wkbToGeom(row.geometry))) {
+    for (const rings of polysOf(geomOf(row))) {
       let outer = clipRing(loc(rings[0]), -wb, -wb, wb, wb);
       outer = simplifyRing(outer, 2);
       if (outer.length < 3 || Math.abs(signedArea(outer)) < 5000) continue;
@@ -359,16 +334,16 @@ async function overtureBase(lat, lng) {
     }
   }
 
-  return { base: { v: BASE_V, release: RELEASE, bld, osm: [...osmIdx], roads, trees, green, asphalt, water }, tq };
+  return { base: { v: BASE_V, release: RELEASE, bld, osm: [...osmIdx], roads, trees, green, asphalt, water }, tq, src };
 }
 
 // ---------- construction de la scène
 // opts.dbg (banc seulement): objet rempli avec fp (mesures des toits hors empreinte, api/footprints.js) et osm (indices des tracés OpenStreetMap).
-// opts.noCache: ne pas lire la couche Overture du cache partagé.
+// opts.noCache: ne pas lire la couche Overture du cache partagé. opts.force: 'duckdb' ou 'tiles' (voir overtureBase).
 export async function buildScene(lat, lng, opts = {}) {
   const t0 = Date.now();
-  let base = opts.noCache ? null : await cachedBase(lat, lng), fromCache = !!base, tq = 0;
-  if (!base) { const r = await overtureBase(lat, lng); base = r.base; tq = r.tq; }
+  let base = opts.noCache ? null : await cachedBase(lat, lng), fromCache = !!base, tq = 0, src = null;
+  if (!base) { const r = await overtureBase(lat, lng, { force: opts.force }); base = r.base; tq = r.tq; src = r.src; }
   else log(`couche Overture lue du cache partagé (${base.bld.length} bâtiments, ${Date.now() - t0} ms)`);
   // Copie de travail: la suite modifie bld en place (empreintes, hauteurs, toits); la couche renvoyée reste celle d'Overture.
   const work = structuredClone(base);
@@ -424,7 +399,7 @@ export async function buildScene(lat, lng, opts = {}) {
     treesSrc = { date: lt.date, res: lt.res, essences: lt.essences, n: lt.trees.length };
     canopy = lt.canopy;
   }
-  const scene = { v: 17, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, lidarAdd: noAdd ? 0 : 1, roofs, ms: { query: tq, base: fromCache ? 'cache' : 'overture', total: Date.now() - t0, indexed: !!INDEX } };
+  const scene = { v: 17, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, lidarAdd: noAdd ? 0 : 1, roofs, ms: { query: tq, base: fromCache ? 'cache' : src, total: Date.now() - t0, indexed: !!INDEX } };
   if (!fromCache) scene.base = base; // à garder par le client (clé ovt_), jamais dans la scène mise en cache
   if (lidarErr) scene.lidarErr = true;
   if (appleErr) { scene.appleErr = true; scene.lidarErr = true; } // lidarErr aussi: les versions 633.242 et antérieures ne connaissent que lui pour ne pas garder la scène
@@ -459,7 +434,7 @@ if (process.argv.includes('--test')) {
   const i = process.argv.indexOf('--test');
   const lat = parseFloat(process.argv[i + 1] || '46.8367'), lng = parseFloat(process.argv[i + 2] || '-71.2336');
   const dbg = {};
-  buildScene(lat, lng, { dbg, noCache: process.argv.includes('--no-cache') }).then((s) => {
+  buildScene(lat, lng, { dbg, noCache: process.argv.includes('--no-cache'), force: process.argv.includes('--duckdb') ? 'duckdb' : undefined }).then((s) => {
     const j = JSON.stringify(s);
     console.log({ bld: s.bld.length, lidarFp: s.lidarFp, lidarAdd: s.lidarAdd, roofs: s.roofs, appleShift: s.appleShift, roads: s.roads.length, trees: s.trees.length, lidarTrees: s.treesSrc && s.treesSrc.n, conifers: s.trees.filter(t => t[4] === 1 || t[4] === 5).length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, gravel: s.gravel.length, imgShift: s.imgShift, bytes: j.length, ms: s.ms });
     if (process.argv.includes('--out')) { const f = process.argv[process.argv.indexOf('--out') + 1]; import('fs').then(fs => { fs.writeFileSync(f, j); fs.writeFileSync(f.replace(/\.json$/, '') + '.dbg.json', JSON.stringify(dbg)); }); }
