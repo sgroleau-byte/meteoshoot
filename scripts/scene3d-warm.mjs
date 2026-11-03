@@ -48,8 +48,9 @@ const KEY = DRY ? '' : serviceKey();
 const H = { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' };
 async function sb(path, init = {}) {
   const r = await fetch(`${SB_URL}/rest/v1/${path}`, { ...init, headers: { ...H, ...(init.headers || {}) } });
-  if (!r.ok) throw new Error(`Supabase ${r.status}: ${(await r.text()).slice(0, 200)}`);
-  return r.status === 204 ? null : r.json();
+  const txt = await r.text();
+  if (!r.ok) throw new Error(`Supabase ${r.status}: ${txt.slice(0, 200)}`);
+  return txt ? JSON.parse(txt) : null; // écriture avec return=minimal: 201 sans corps
 }
 
 // Même clé que l'app (sceneKey dans src/scene3d/data.js): 5 décimales.
@@ -70,8 +71,8 @@ async function lieux() {
   if (!DRY) {
     for (const t of ['projects', 'projects_dev']) {
       try {
-        const rows = await sb(`${t}?select=lat,lng,archived&lat=not.is.null&lng=not.is.null`);
-        for (const r of rows) if (!r.archived) add(r.lat, r.lng, t);
+        const rows = await sb(`${t}?select=lat,lng&lat=not.is.null&lng=not.is.null`);
+        for (const r of rows) add(r.lat, r.lng, t);
       } catch (e) { console.warn(`  table ${t} illisible: ${e.message}`); }
     }
     // Lieux déjà passés par la 3D (entrées du cache, périmées ou non), sans les préfixes relief et horizon.
