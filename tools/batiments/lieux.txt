@@ -1,0 +1,11 @@
+stoneham 47.01031 -71.37338
+parlement 46.8086 -71.2144
+limoilou 46.8240 -71.2250
+sillery 46.7760 -71.2560
+valcartier 46.90244 -71.50180
+outremont 45.5180 -73.6090
+ottawa 45.4030 -75.6880
+toronto 43.6680 -79.4050
+sainte-adele 45.9510 -74.1330
+gaspe 48.8310 -64.4870
+calgary 51.0400 -114.0800
