@@ -2,8 +2,10 @@
 // puis seulement les tuiles qui touchent la fenêtre demandée, lues par plages d'octets HTTP. Sert au relief
 // (api/terrain.js) pour lire le modèle LiDAR de Ressources naturelles Canada (fichier de 1 To sur S3) sans
 // télécharger son index complet (8 Mo par niveau) ni dépendre d'une bibliothèque.
-// Limites: un seul échantillon par pixel, 32 bits flottants (ou entiers 16/32 bits), tuiles sans prédicteur,
-// compression nulle ou LZW. Le décodage LZW suit celui de geotiff.js (EOX IT Services, licence MIT).
+// Limites: un seul échantillon par pixel, 32 bits flottants (ou entiers 8/16/32 bits), tuiles sans prédicteur,
+// compression nulle, LZW ou deflate (zlib de Node, 4 novembre 2026: cartes de couverture du sol ESA WorldCover et CCI). Le décodage LZW suit celui de geotiff.js (EOX IT Services, licence MIT).
+
+import { inflateSync } from 'zlib';
 
 const TYPE_SIZE = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8, 16: 8, 17: 8, 18: 8 };
 const UA = 'MeteoShoot (www.meteoshoot.com)';
@@ -142,6 +144,7 @@ async function decodeTile(cog, lv, tx, ty, key) {
   if (!raw || !cnt) { out.fill(L.nodata == null ? NaN : L.nodata); bytes = null; }
   else if (L.comp === 1) bytes = raw;
   else if (L.comp === 5) bytes = lzwDecode(raw, n * bpp);
+  else if (L.comp === 8 || L.comp === 32946) bytes = new Uint8Array(inflateSync(raw));
   else throw new Error('cog: compression ' + L.comp + ' non gérée');
   if (L.pred !== 1 && bytes) throw new Error('cog: prédicteur ' + L.pred + ' non géré');
   if (bytes) {
@@ -149,7 +152,7 @@ async function decodeTile(cog, lv, tx, ty, key) {
     const le = cog.le;
     for (let i = 0; i < n; i++) {
       const o = i * bpp; if (o + bpp > bytes.length) { out[i] = NaN; continue; }
-      out[i] = L.fmt === 3 ? (bpp === 4 ? dv.getFloat32(o, le) : dv.getFloat64(o, le)) : L.fmt === 2 ? (bpp === 2 ? dv.getInt16(o, le) : dv.getInt32(o, le)) : (bpp === 2 ? dv.getUint16(o, le) : dv.getUint32(o, le));
+      out[i] = L.fmt === 3 ? (bpp === 4 ? dv.getFloat32(o, le) : dv.getFloat64(o, le)) : L.fmt === 2 ? (bpp === 1 ? dv.getInt8(o) : bpp === 2 ? dv.getInt16(o, le) : dv.getInt32(o, le)) : (bpp === 1 ? dv.getUint8(o) : bpp === 2 ? dv.getUint16(o, le) : dv.getUint32(o, le));
     }
   }
   if (L.nodata != null) for (let i = 0; i < n; i++) if (out[i] === L.nodata || out[i] < -30000) out[i] = NaN;

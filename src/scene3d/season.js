@@ -20,7 +20,7 @@
 // étale un tapis de feuilles (litter) au pied des arbres.
 import { PHENO } from './phenology.js';
 
-export const ESS = { FEUILLU: 0, CONIFERE: 1, ERABLE: 2, JAUNE: 3, CHENE: 4, MELEZE: 5, POURPRE: 6 };
+export const ESS = { FEUILLU: 0, CONIFERE: 1, ERABLE: 2, JAUNE: 3, CHENE: 4, MELEZE: 5, POURPRE: 6, PERSISTANT: 7 }; // 7 (v633.272): feuillu persistant (chêne vert, laurier, eucalyptus, tropiques): couronne de feuillu, vert toute l'année
 export const isConifer = (k) => k === ESS.CONIFERE || k === ESS.MELEZE;
 
 const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -92,6 +92,7 @@ const BARE = ['#5c534c', '#655a52', '#574e47', '#6a5f56', '#60564f']; // branche
 const DULL = ['#9a6b3c', '#a8763f', '#8f6238'];
 const LITTER_DARK = [0.42, 0.29, 0.16];
 const CONIFER = ['#2f4a33', '#3a5638', '#33503a', '#445e3c']; // sapins, épinettes, pins: vert foncé toute l'année
+const EVERGREEN = ['#3f5a2e', '#46602f', '#3a5430', '#4a6436']; // feuillus persistants: vert olive posé, toute l'année
 
 const hsh01 = (c) => { const v = Math.sin(c * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); }; // second aléa tiré de c
 const hex = (h) => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
@@ -137,12 +138,13 @@ export function seasonState(lat, lng, elev, ms, fall = null) {
   };
   return {
     doy, clim,
-    cover(k, c) { if (k === ESS.CONIFERE) return 1; const p = phase(k, c); return p.spring ? p.leaf : 1 - p.fall; },
+    cover(k, c) { if (k === ESS.CONIFERE || k === ESS.PERSISTANT) return 1; const p = phase(k, c); return p.spring ? p.leaf : 1 - p.fall; },
     bare(c) { return pick(BARE, c); },
-    litter(k, c) { if (k === ESS.CONIFERE) return 0; const p = phase(k, c); return p.spring ? 0 : p.litter; },
+    litter(k, c) { if (k === ESS.CONIFERE || k === ESS.PERSISTANT) return 0; const p = phase(k, c); return p.spring ? 0 : p.litter; },
     litterColor(k, c) { const pk = pick(PEAK[k] || PEAK[ESS.FEUILLU], c); return mix(pk, LITTER_DARK, 0.45); },
     color(k, c) {
       if (k === ESS.CONIFERE) return pick(CONIFER, c);
+      if (k === ESS.PERSISTANT) return pick(EVERGREEN, c);
       const p = phase(k, c), bare = pick(BARE, c);
       if (p.spring) { const young = pick(SPRING, c), green = k === ESS.POURPRE ? pick(PURPLE, c) : k === ESS.MELEZE ? mix(pick(SUMMER, c), pick(CONIFER, c), 0.5) : pick(SUMMER, c); return mix(bare, mix(young, green, p.mature), p.leaf); }
       const green = k === ESS.POURPRE ? pick(PURPLE, c) : k === ESS.MELEZE ? mix(pick(SUMMER, c), pick(CONIFER, c), 0.5) : pick(SUMMER, c);

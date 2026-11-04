@@ -1304,6 +1304,26 @@ importé, lui, est le fichier de l'architecte.
 - v633.271 (3 novembre 2026), **toits 25 % plus foncés que les murs**: Stéphane, après la v633.270 (« beaucoup mieux pour
   l'impression de délai! »): « pour les toits, met ça à 35 % », puis, la vue locale sous les yeux, « 25 % ». `ROOF_K`
   passe de 0,7 à 0,53 en linéaire (0,75 ^ 2,2). Rien d'autre ne change.
+- **Couverture du sol mondiale (4 novembre 2026, v633.272, scène v18).** Stéphane, devant un projet à Sedona
+  (Arizona) dessiné en feuillus d'automne sur de l'herbe verte: « tu es certain qu'à Sedona il y a des couleurs
+  d'automne? », puis « il faudrait que ça couvre toute les USA ou encore mieux, mondial ». Deux cartes mondiales,
+  lues par plages d'octets comme le LiDAR (`api/landcover.js`, `api/cog.js` sait maintenant le deflate et les pixels
+  8 bits): ESA WorldCover 2021 (10 m, tuiles de 3° sur S3: arbres, arbustes, herbe, cultures, bâti, sol nu, eau) et
+  ESA CCI Land Cover 2020 (300 m, Planetary Computer avec jeton anonyme: feuillage des arbres de la région dans 15 km,
+  conifères ou feuillus, persistants ou caducs). Dans la scène: `cover { near, far, leaf, ground, src, arid }`.
+  Effets: les arbres sans mesure (Overture, et un arbre semé par pixel « arbres » de WorldCover hors de la vue du LiDAR)
+  portent une essence tirée au sort d'après `leaf` (`[x, n, k]`, nouvelle essence 7 = feuillu persistant, vert toute
+  l'année); en terrain aride (arbustes et sol nu à 20 % et plus dans 1,5 km) ils sont bas (3,5 à 8 m) et les conifères
+  y sont dessinés en couronne ronde (genévriers, pins pignons), pas en cône. Le sol prend la teinte médiane du sol sec
+  vue sur l'imagerie Esri (`groundTint` dans `api/paved.js`, pixels ni verts ni gris hors bâtiments et rues), seulement
+  là où WorldCover voit des arbustes ou du sol nu (5 à 30 % dans 1,5 km: de rien à tout), un peu mêlée à la végétation
+  basse de l'image; le relief lointain mêle de même la forêt (pondérée par `leaf`) et le sol sec. Au Québec en été,
+  l'image est toute verte: rien ne change (Stoneham vérifié). Essai: `node api/landcover.js 34.87 -111.76`.
+  Le miroir Copernicus 100 m est en zstd (non lu); le seau vito.landcover.global n'existe plus.
+- **Forme dessinée et voisin (4 novembre 2026, v633.272).** Un stationnement tracé collé à la chapelle de Sedona la
+  faisait disparaître: tout voisin Overture touché par une forme dessinée, même par un bord, était retiré. Désormais
+  (`coversBld`): retrait seulement si le centre de l'un est dans l'autre ou si le quart de l'empreinte du voisin est
+  sous la forme; un stationnement dessiné ne retire jamais un bâtiment.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

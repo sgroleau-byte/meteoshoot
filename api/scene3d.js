@@ -28,6 +28,13 @@
 //   o: 1 si le relevé montre du feuillage au-dessus du toit voisin); treesSrc { date, res, essences }. Restent au format [x, n] (taille
 //   tirée au sort par le client) les arbres d'Overture là où le LiDAR ne voit pas, et les boisés au-delà de 350 m.
 //   canopy: hauteur de la canopée des boisés en grille de 3 m (sous-bois dessiné sous les cimes), voir api/trees.js.
+// v18 (4 novembre 2026): couverture du sol mondiale (api/landcover.js: ESA WorldCover 10 m et ESA CCI 300 m) dans cover
+//   { near, far: parts du sol (arbres, arbustes, herbe, cultures, bâti, sol nu, eau) dans 350 m et 1,5 km; leaf: parts des
+//   arbres de la région par feuillage (ne conifères persistants, be feuillus persistants, nd mélèzes, bd feuillus caducs);
+//   ground: teinte du sol sec vue sur l'imagerie Esri (api/paved.js) et sa part; src }. Les arbres sans mesure (Overture,
+//   et ceux semés sur les pixels « arbres » de WorldCover hors de la vue du LiDAR) portent une essence tirée au sort
+//   d'après leaf: [x, n, k] ou [x, n, k, h] (h: hauteur en terrain aride, arbustes et sol nu à 20 % et plus dans 1,5 km).
+//   Avant, à Sedona (Arizona), des feuillus en couleurs d'automne sur de l'herbe verte: genévriers et roche rouge en réalité.
 // Couche Overture gardée à part (3 novembre 2026, v633.267): la lecture d'Overture (13 s sur 28 en production) ne dépend
 //   que du lieu, de la version d'Overture (RELEASE) et des règles de ce fichier (BASE_V); elle est gardée dans le cache partagé
 //   sous la clé « ovt_lat_lng » (écrite par le client ou le script de préchauffage, lue ici avec la clé publique). Une nouvelle
@@ -47,6 +54,7 @@ import { appleShift } from './satshift.js';
 import { pavedFromImagery, PAVED_ATTRIBUTION, builtShare, DENSE_SHARE } from './paved.js';
 import { SUPABASE_URL, SUPABASE_KEY } from '../src/shared/config.js';
 import { wkbToGeom, polysOf, linesOf, pointsOf, signedArea, clipRing, readTiles } from './overture-tiles.js';
+import { readLandCover } from './landcover.js';
 
 export const maxDuration = 60;
 
@@ -68,6 +76,8 @@ const PART_COVER = 0.6; // part de la surface d'un contour couverte par ses part
 // Version de la couche Overture (bld avant LiDAR, rues, arbres d'Overture, parcs, stationnements, eau): à bumper quand le
 // traitement d'Overture change (parties, largeurs de rues, eau...), pas pour une règle LiDAR. RELEASE la périme aussi.
 export const BASE_V = 1;
+// Aléa fixe d'un point (0..1): mêmes arbres à chaque calcul.
+const hashOf = (x, n, k) => { const v = Math.sin(x * 127.1 + n * 311.7 + k * 74.7) * 43758.5453; return v - Math.floor(v); };
 const log = (m) => console.log('[scene3d]', m);
 const baseKey = (lat, lng) => `ovt_${Number(lat).toFixed(5)}_${Number(lng).toFixed(5)}`;
 // Couche Overture du cache partagé (lecture publique), sinon null: périmée, absente ou cache injoignable (4 s au plus).
@@ -353,7 +363,7 @@ export async function buildScene(lat, lng, opts = {}) {
   // qui n'utilise que les empreintes).
   // lidarErr: lecture LiDAR échouée (catalogue ou mosaïque indisponible): la scène sert quand même, mais n'est gardée
   // ni par le réseau de Vercel ni dans le cache partagé, pour être recalculée au prochain affichage.
-  let paved = [], gravel = [], gravelDitch = 0, imgShift = [0, 0], pavedSrc = null, lidarBld = 0, lidarErr = false, lt = null, lidarFp = 0, apple = null, appleRoof = null, appleErr = false;
+  let paved = [], gravel = [], gravelDitch = 0, imgShift = [0, 0], pavedSrc = null, lidarBld = 0, lidarErr = false, lt = null, lidarFp = 0, apple = null, appleRoof = null, appleErr = false, ground = null, cover = null;
   // Délai global des lectures LiDAR: un serveur de Ressources naturelles Canada bloqué ne doit pas faire échouer toute la
   // scène (60 s pour la fonction, dont 15 à 20 s pour Overture): après 50 s depuis le début, on sert sans ces mesures.
   const deadline = t0 + 50000;
@@ -377,7 +387,7 @@ export async function buildScene(lat, lng, opts = {}) {
   let roofs = 0;
   if (win) { try { roofs = lidarRoofs(win, bld, log).n; } catch (e) { console.warn('[scene3d] toits LiDAR:', e && e.message); } }
   await Promise.all([
-    pavedFromImagery(lat, lng, bld, roads, log, { win, water }).then((r) => { paved = r.paved; gravel = r.gravel || []; gravelDitch = r.ditch || 0; imgShift = r.shift || [0, 0]; pavedSrc = r.dense ? null : PAVED_ATTRIBUTION; }).catch((e) => console.warn('[scene3d] surfaces pavées indisponibles:', e && e.message)),
+    pavedFromImagery(lat, lng, bld, roads, log, { win, water }).then((r) => { paved = r.paved; gravel = r.gravel || []; gravelDitch = r.ditch || 0; imgShift = r.shift || [0, 0]; pavedSrc = r.dense ? null : PAVED_ATTRIBUTION; ground = r.ground || null; }).catch((e) => console.warn('[scene3d] surfaces pavées indisponibles:', e && e.message)),
     // Calage de l'image Plans d'Apple sur les empreintes (v633.183): appleShift dans la scène, appliqué tel quel par le navigateur.
     // appleShift reste l'ancien critère (les versions 633.242 et avant l'appliquent telles quelles: une pose qu'elles
     // écrivent reste dans ce repère); appleRoof est le calage par les toits (v633.243). Échec (pas de clé, image refusée,
@@ -385,6 +395,8 @@ export async function buildScene(lat, lng, opts = {}) {
     inTime(appleShift(lat, lng, bld, log), 'calage Plans').then((r) => { if (!r) { appleErr = true; return; } apple = r.old; appleRoof = r.shift; }).catch((e) => { appleErr = true; console.warn('[scene3d] calage Plans d\'Apple indisponible:', e && e.message); }),
     inTime(lidarHeights(lat, lng, bld, log), 'hauteurs').then((r) => { lidarBld = r.measured; if (r.failed) lidarErr = true; }).catch((e) => { lidarErr = true; console.warn('[scene3d] hauteurs LiDAR indisponibles:', e && e.message); }),
     // Les empreintes ne changent pas pendant la mesure des hauteurs: le masque des toits peut se faire en même temps.
+    // Couverture du sol mondiale (v18): sans réponse (serveur bloqué), la scène est servie sans elle, comme les mesures LiDAR.
+    inTime(readLandCover(lat, lng, log), 'couverture du sol').then((r) => { cover = r; }).catch((e) => console.warn('[scene3d] couverture du sol indisponible:', e && e.message)),
     inTime(lidarTrees(lat, lng, bld, log, win), 'arbres').then((r) => { lt = r; if (r.failed) lidarErr = true; }).catch((e) => { lidarErr = true; console.warn('[scene3d] arbres LiDAR indisponibles:', e && e.message); }),
   ]);
   lidarBld += bld.filter(b => b[5] === 1).length; // les empreintes LiDAR sont mesurées aussi
@@ -399,7 +411,34 @@ export async function buildScene(lat, lng, opts = {}) {
     treesSrc = { date: lt.date, res: lt.res, essences: lt.essences, n: lt.trees.length };
     canopy = lt.canopy;
   }
-  const scene = { v: 17, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, lidarAdd: noAdd ? 0 : 1, roofs, ms: { query: tq, base: fromCache ? 'cache' : src, total: Date.now() - t0, indexed: !!INDEX } };
+  // Arbres sans mesure (v18): essence d'après le feuillage de la région (CCI), hauteur basse en terrain aride; puis semis
+  // d'un arbre par pixel « arbres » de WorldCover (10 m, un par 100 m²) hors de la vue du LiDAR et loin des arbres déjà là.
+  let seeded = 0, coverOut = null;
+  if (cover) {
+    const leaf = cover.leaf, far = cover.far || {}, arid = (far.shrub || 0) + (far.bare || 0) + (far.moss || 0) >= 0.2;
+    // En terrain aride, les conifères persistants (genévriers, pins pignons) sont bas et ronds: couronne de feuillu persistant
+    // (7) plutôt que le cône d'une épinette; sans arbre connu à 15 km (désert), persistants aussi.
+    const essOf = (x, n) => { if (!leaf) return arid ? 7 : 0; const u = hashOf(x, n, 1); return u < leaf.ne ? (arid ? 7 : 1) : u < leaf.ne + leaf.be ? 7 : u < leaf.ne + leaf.be + leaf.nd ? 5 : 0; };
+    const sized = (x, n, k) => (arid ? [x, n, k, Math.round((3.5 + 4.5 * hashOf(x, n, 2)) * 10) / 10] : k ? [x, n, k] : [x, n]);
+    treesOut = treesOut.map((t) => (t.length === 2 ? sized(t[0], t[1], essOf(t[0], t[1])) : t));
+    if (cover.grid) {
+      const g = Buffer.from(cover.grid.d, 'base64'), N = cover.grid.n, res = cover.grid.res, half = cover.grid.half;
+      const cell = 8, buckets = new Map(), bk = (x, n) => `${Math.floor(x / cell)},${Math.floor(n / cell)}`;
+      const near = (x, n) => { for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const b = buckets.get(`${Math.floor(x / cell) + di},${Math.floor(n / cell) + dj}`); if (b) for (const [qx, qn] of b) if (Math.hypot(qx - x, qn - n) < 7) return true; } return false; };
+      for (const t of treesOut) { const k = bk(t[0], t[1]); if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(t); }
+      for (let j = 0; j < N && treesOut.length < 4500; j++) for (let i = 0; i < N && treesOut.length < 4500; i++) {
+        const v = g[j * N + i]; if (v !== 10 && v !== 95) continue;
+        const x = Math.round((-half + (i + 0.5 + (hashOf(i, j, 3) - 0.5) * 0.8) * res) * 10) / 10, n = Math.round((half - (j + 0.5 + (hashOf(i, j, 4) - 0.5) * 0.8) * res) * 10) / 10;
+        const d = Math.hypot(x, n); if (d > R_WOOD || d < 2) continue;
+        if (lt && lt.trees && d <= R_TREES && lt.covered(x, n)) continue; // le LiDAR a déjà mesuré ce qui pousse ici
+        if (near(x, n) || !clearOfBld([x, n])) continue;
+        const t = sized(x, n, essOf(x, n)); treesOut.push(t); seeded++; const k = bk(x, n); if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(t);
+      }
+    }
+    coverOut = { v: cover.v, near: cover.near || null, far: cover.far || null, leaf, ground, src: cover.src, arid: arid ? 1 : 0 };
+    log(`couverture du sol: ${seeded} arbres semés d'après WorldCover${arid ? ', terrain aride' : ''}${leaf ? `, persistants ${Math.round((leaf.ne + leaf.be) * 100)} %` : ''}`);
+  } else if (ground) coverOut = { v: 1, ground, src: [] };
+  const scene = { v: 18, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, lidarAdd: noAdd ? 0 : 1, roofs, cover: coverOut, ms: { query: tq, base: fromCache ? 'cache' : src, total: Date.now() - t0, indexed: !!INDEX } };
   if (!fromCache) scene.base = base; // à garder par le client (clé ovt_), jamais dans la scène mise en cache
   if (lidarErr) scene.lidarErr = true;
   if (appleErr) { scene.appleErr = true; scene.lidarErr = true; } // lidarErr aussi: les versions 633.242 et antérieures ne connaissent que lui pour ne pas garder la scène
@@ -436,7 +475,7 @@ if (process.argv.includes('--test')) {
   const dbg = {};
   buildScene(lat, lng, { dbg, noCache: process.argv.includes('--no-cache'), force: process.argv.includes('--duckdb') ? 'duckdb' : undefined }).then((s) => {
     const j = JSON.stringify(s);
-    console.log({ bld: s.bld.length, lidarFp: s.lidarFp, lidarAdd: s.lidarAdd, roofs: s.roofs, appleShift: s.appleShift, roads: s.roads.length, trees: s.trees.length, lidarTrees: s.treesSrc && s.treesSrc.n, conifers: s.trees.filter(t => t[4] === 1 || t[4] === 5).length, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, gravel: s.gravel.length, imgShift: s.imgShift, bytes: j.length, ms: s.ms });
+    console.log({ bld: s.bld.length, lidarFp: s.lidarFp, lidarAdd: s.lidarAdd, roofs: s.roofs, appleShift: s.appleShift, roads: s.roads.length, trees: s.trees.length, lidarTrees: s.treesSrc && s.treesSrc.n, conifers: s.trees.filter(t => t[4] === 1 || t[4] === 5 || (t.length <= 4 && (t[2] === 1 || t[2] === 5))).length, cover: s.cover && { ...s.cover, near: undefined, far: s.cover.far && Object.entries(s.cover.far).filter(([k, v]) => k !== 'n' && v >= 0.05).map(([k, v]) => `${k} ${Math.round(v * 100)}`).join(' ') }, green: s.green.length, asphalt: s.asphalt.length, water: s.water.length, paved: s.paved.length, gravel: s.gravel.length, imgShift: s.imgShift, bytes: j.length, ms: s.ms });
     if (process.argv.includes('--out')) { const f = process.argv[process.argv.indexOf('--out') + 1]; import('fs').then(fs => { fs.writeFileSync(f, j); fs.writeFileSync(f.replace(/\.json$/, '') + '.dbg.json', JSON.stringify(dbg)); }); }
   }).catch((e) => { console.error(e); process.exit(1); });
 }

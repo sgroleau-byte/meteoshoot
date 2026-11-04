@@ -201,6 +201,31 @@ function contourOf(comp, W2, H2, mp2, toM) {
 
 // Surfaces pavées en mètres locaux autour de (lat, lng); bld = [[ring, h, fl, kind]], roads = [{w, k, p}] (mètres locaux).
 // opts: win (fenêtre LiDAR de readCanopy, facultative), water (plans d'eau [{o, h}], facultatifs), dbg (objet rempli pour le banc).
+// Teinte du sol d'après l'imagerie (4 novembre 2026): parmi les pixels hors bâtiments et rues, trois sortes: végétation
+// (vert dominant: 2 V - R - B au-dessus de 18, ou V au-dessus de R et de B), gris (saturation sous 0,17: pavé, gravier,
+// toit, neige, ombre dense) et sol sec (le reste: terre, sable, roche, pelouse grillée). Retourne la couleur médiane du sol
+// sec (sRVB), sa part parmi la végétation et le sol sec (dry), et la part de végétation (veg); null si trop peu de pixels.
+// À Sedona la roche rouge domine (dry élevé, médiane rouge brique); à Stoneham l'été, tout est vert (dry presque nul).
+function groundTint(rgb4, W4, H4, rmd, W, log) {
+  const rs = [], gs = [], bs = [], vr = [], vg = [], vb = []; let grey = 0, dark = 0;
+  for (let y = 0; y < H4; y++) for (let x = 0; x < W4; x++) {
+    if (rmd[(y * 4) * W + x * 4]) continue;
+    const i = (y * W4 + x) * 3, r = rgb4[i], g = rgb4[i + 1], b = rgb4[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    if (mx < 40) { dark++; continue; }
+    if (2 * g - r - b > 18 || (g > r && g > b)) { vr.push(r); vg.push(g); vb.push(b); continue; }
+    if ((mx - mn) / mx < 0.17) { grey++; continue; }
+    rs.push(r); gs.push(g); bs.push(b);
+  }
+  const n = rs.length, veg = vr.length, tot = n + veg;
+  if (tot < 2000) return null;
+  const med = (a) => { a.sort((u, v) => u - v); return a[a.length >> 1]; };
+  // vegRgb: médiane de la végétation vue d'en haut (broussaille, pelouse, cimes): le moteur en mêle un peu au sol sec, pour
+  // le sol entre les arbres dessinés (à Sedona, roche rouge piquée de buissons, pas une dune).
+  const out = { rgb: n ? [med(rs), med(gs), med(bs)] : null, vegRgb: veg ? [med(vr), med(vg), med(vb)] : null, dry: Math.round(n / tot * 1000) / 1000, veg: Math.round(veg / (tot + grey + dark) * 1000) / 1000 };
+  log(`teinte du sol: sec ${Math.round(out.dry * 100)} % (${out.rgb ? out.rgb.join(',') : '-'}), végétation ${Math.round(out.veg * 100)} % de l'image`);
+  return out;
+}
+
 export async function pavedFromImagery(lat, lng, bld, roads, log = () => {}, opts = {}) {
   const { win = null, water = [], dbg = null } = opts;
   const mLat = 111320, mLng = 111320 * Math.cos(lat * Math.PI / 180);
@@ -212,7 +237,10 @@ export async function pavedFromImagery(lat, lng, bld, roads, log = () => {}, opt
   const jobs = []; for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) jobs.push([tx, ty]);
   const sat = new Uint8Array(W * H), val = new Uint8Array(W * H); // saturation et clarté (0 à 255) de chaque pixel, pour le gravier
   const rgb = dbg ? new Uint8Array(W * H * 3) : null;
-  let k = 0; const worker = async () => { while (k < jobs.length) { const [tx, ty] = jobs[k++]; let im; try { im = await fetchTile(tx, ty); } catch (e) { continue; } const d = im.data; for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) { const i = (y * 256 + x) * 4, j = (ty - y0) * 256 * W + (tx - x0) * 256 + y * W + x; const r = d[i], g = d[i + 1], b = d[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b); sat[j] = mx ? Math.round(255 * (mx - mn) / mx) : 0; val[j] = mx; if (rgb) { rgb[j * 3] = r; rgb[j * 3 + 1] = g; rgb[j * 3 + 2] = b; } if (isPaved(r, g, b)) mask[j] = 1; } } };
+  // Teinte du sol (4 novembre 2026, couverture du sol hors Québec): couleur RVB d'un pixel sur 4 par axe, pour la couleur
+  // médiane du sol sec (ni végétation verte, ni gris du pavé, ni ombre) une fois bâtiments et rues retirés; voir groundTint.
+  const W4 = W >> 2, H4 = H >> 2, rgb4 = new Uint8Array(W4 * H4 * 3);
+  let k = 0; const worker = async () => { while (k < jobs.length) { const [tx, ty] = jobs[k++]; let im; try { im = await fetchTile(tx, ty); } catch (e) { continue; } const d = im.data; for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) { const i = (y * 256 + x) * 4, j = (ty - y0) * 256 * W + (tx - x0) * 256 + y * W + x; const r = d[i], g = d[i + 1], b = d[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b); sat[j] = mx ? Math.round(255 * (mx - mn) / mx) : 0; val[j] = mx; if (rgb) { rgb[j * 3] = r; rgb[j * 3 + 1] = g; rgb[j * 3 + 2] = b; } if (!(x & 3) && !(y & 3)) { const j4 = ((ty - y0) * 64 + (y >> 2)) * W4 + (tx - x0) * 64 + (x >> 2); rgb4[j4 * 3] = r; rgb4[j4 * 3 + 1] = g; rgb4[j4 * 3 + 2] = b; } if (isPaved(r, g, b)) mask[j] = 1; } } };
   await Promise.all(Array.from({ length: 12 }, worker));
   // Calage de l'image sur les empreintes (LiDAR, Overture): pixels sombres (clarté sous le 25e centile) contre bâtiments,
   // sur une grille au mètre, décalage de ±12 m qui les superpose le mieux. Les polygones tirés de l'image sont ramenés
@@ -236,6 +264,7 @@ export async function pavedFromImagery(lat, lng, bld, roads, log = () => {}, opt
   const rmd = dilate(rm, W, H, Math.round(2.5 / mpp));
   roads.forEach(r => { const pts = r.p.map(toPx); for (let i = 0; i + 1 < pts.length; i++) thickLine(rmd, W, H, pts[i], pts[i + 1], Math.round((r.w / 2 + 1) / mpp), 1); });
   for (let i = 0; i < mask.length; i++) if (rmd[i]) mask[i] = 0;
+  const ground = groundTint(rgb4, W4, H4, rmd, W, log);
   // Demi-résolution (0,4 m) pour la morphologie: fermer 3,5 m, ouvrir 3 m, fermer 2 m
   const W2 = W >> 1, H2 = H >> 1, m2 = new Uint8Array(W2 * H2), mp2 = mpp * 2;
   for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) { const i = (2 * y) * W + 2 * x; m2[y * W2 + x] = (mask[i] + mask[i + 1] + mask[i + W] + mask[i + W + 1]) >= 2 ? 1 : 0; }
@@ -273,7 +302,7 @@ export async function pavedFromImagery(lat, lng, bld, roads, log = () => {}, opt
     // couleur ne sert pas, mais les entrées par le fossé LiDAR restent possibles (elles ne lisent que le relief).
     const colourOK = !(built / (Math.PI * 300 * 300) > 0.10 || sTh < 0.2 * 255);
     if (!colourOK) log(`entrées en gravier: zone urbaine ou image grise (bâti ${(100 * built / (Math.PI * 300 * 300)).toFixed(0)} %, saturation ${sTh}), couleur non utilisée${win ? ', fossé LiDAR seulement' : ''}`);
-    if (!colourOK && !win) return { paved: polys, gravel, dense: false, shift: [Math.round(ox * mpp * 10) / 10, Math.round(-oy * mpp * 10) / 10] };
+    if (!colourOK && !win) return { paved: polys, gravel, dense: false, ground, shift: [Math.round(ox * mpp * 10) / 10, Math.round(-oy * mpp * 10) / 10] };
     // Classe LiDAR de chaque pixel de demi-résolution (0 inconnu, 1 nu et lisse, 2 autre), par le repère local.
     const cls = new Uint8Array(W2 * H2);
     if (win && win.fr) {
@@ -371,5 +400,5 @@ export async function pavedFromImagery(lat, lng, bld, roads, log = () => {}, opt
     }
     log(`entrées en gravier: ${gravel.length} (${nDitch} par le fossé LiDAR, ${nLost} sans bâtiment à 70 m, ${nColor} par la couleur; seuils saturation < ${sTh}, clarté > ${vTh}, ${vTh2} sur sol nu${win ? '' : '; sans relevé'})`);
   } catch (e) { log(`entrées en gravier: ${e && e.message}`); }
-  return { paved: polys, gravel, ditch, dense: false, shift: [Math.round(ox * mpp * 10) / 10, Math.round(-oy * mpp * 10) / 10] }; // [{ o: contour, h: [trous] }] en mètres locaux; ditch: entrées par le fossé LiDAR
+  return { paved: polys, gravel, ditch, dense: false, ground, shift: [Math.round(ox * mpp * 10) / 10, Math.round(-oy * mpp * 10) / 10] }; // [{ o: contour, h: [trous] }] en mètres locaux; ditch: entrées par le fossé LiDAR
 }

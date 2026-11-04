@@ -339,6 +339,17 @@ const GC = { park: '#66784d', pitch: '#5d8a47', play: '#b8a88e', grass: '#6f8552
 function pointInRing(p, r) { let inside = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const a = r[i], b = r[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside; } return inside; }
 function segsCross(a, b, c, d) { const o = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])); return o(a, b, c) !== o(a, b, d) && o(c, d, a) !== o(c, d, b); }
 function segHitsRing(a, b, r) { if (pointInRing(a, r) || pointInRing(b, r)) return true; for (let i = 0; i < r.length; i++) if (segsCross(a, b, r[i], r[(i + 1) % r.length])) return true; return false; }
+// Une forme de bâtiment dessinée remplace un voisin seulement si elle le recouvre vraiment (4 novembre 2026, Sedona: un
+// stationnement tracé au crayon des bâtiments, collé à la chapelle, la faisait disparaître): le centre de l'un dans l'autre
+// (le même édifice retracé, plus petit ou plus grand), ou au moins le quart de l'empreinte du voisin sous la forme. Un simple
+// contact de bord ou de coin ne compte plus; un stationnement dessiné (kind ground) ne retire jamais un bâtiment.
+function overlapShare(a, b) {
+  let x0 = Infinity, n0 = Infinity, x1 = -Infinity, n1 = -Infinity; for (const [x, n] of b) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); n0 = Math.min(n0, n); n1 = Math.max(n1, n); }
+  let inB = 0, both = 0; const N = 14;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const q = [x0 + (i + 0.5) / N * (x1 - x0), n0 + (j + 0.5) / N * (n1 - n0)]; if (!pointInRing(q, b)) continue; inB++; if (pointInRing(q, a)) both++; }
+  return inB ? both / inB : 0;
+}
+function coversBld(drawnRing, bld) { return pointInRing(centroid(drawnRing), bld) || pointInRing(centroid(bld), drawnRing) || overlapShare(drawnRing, bld) >= 0.25; }
 function ringsOverlap(a, b) { if (pointInRing(centroid(a), b) || pointInRing(centroid(b), a)) return true; if (a.some(p => pointInRing(p, b)) || b.some(p => pointInRing(p, a))) return true; for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) if (segsCross(a[i], a[(i + 1) % a.length], b[j], b[(j + 1) % b.length])) return true; return false; }
 // Voisins cachés dans un autre voisin (3 novembre 2026, Toronto): certaines tours arrivent deux fois, avec deux contours
 // dont l'un tient dans l'autre et la même hauteur LiDAR; leurs façades presque confondues se disputaient l'affichage
@@ -521,11 +532,13 @@ export function createScene3D(container, opts = {}) {
   // Sol en deux pièces: le relief (maillage non uniforme de terrain.js: 2 m au centre, 20 km de rayon; plat et maillé à
   // 50 m en attendant les données, voir buildGround), puis la plaine jusqu'à l'horizon, sous le point le plus bas.
   const gndTexNear = gndTex.clone(); gndTexNear.repeat.set(1, 1); // coordonnées de texture en mètres / TEX_PERIOD
-  const gndMat = new THREE.MeshStandardMaterial({ color: L('#5c6b42'), roughness: 1, envMapIntensity: 0.75, map: gndTexNear }), gndMatFar = gndMat.clone(); gndMatFar.map = gndTex;
+  // Couleur du sol: herbe (GND_HEX); mêlée à la teinte du sol sec vue sur l'imagerie satellite en terrain aride (applyCover, v633.272).
+  const GND_HEX = '#5c6b42';
+  const gndMat = new THREE.MeshStandardMaterial({ color: L(GND_HEX), roughness: 1, envMapIntensity: 0.75, map: gndTexNear }), gndMatFar = gndMat.clone(); gndMatFar.map = gndTex;
   let gnd = null;
   // Relief lointain polaire (v633.194, au-delà de terrain.rIn): mêmes réglages que le sol proche, sa propre greffe
   // (lampadaires, soleil des sommets), texture en mètres comme le sol proche.
-  const gndMatPol = new THREE.MeshStandardMaterial({ color: L('#5c6b42'), roughness: 1, envMapIntensity: 0.75, map: gndTexNear });
+  const gndMatPol = new THREE.MeshStandardMaterial({ color: L(GND_HEX), roughness: 1, envMapIntensity: 0.75, map: gndTexNear });
   let gndPol = null;
   const gndFar = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000, 8, 8), gndMatFar); gndFar.rotation.x = -Math.PI / 2; gndFar.position.y = -0.3; gndFar.receiveShadow = true; S.add(gndFar);
   const FT = facadeTex();
@@ -715,7 +728,34 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   // Ville: gris brun.
   // Suit la saison (season.js): recalculée avec les couronnes par recolorTrees.
   let FOREST_LIN = [0.03, 0.04, 0.02];
-  const forestTint = (st) => { const avg = (k) => { const t = [0, 0, 0]; for (let i = 0; i < 9; i++) { const c = seasonColor(st, k, (i + 0.5) / 9); t[0] += c.r; t[1] += c.g; t[2] += c.b; } return t.map(v => v / 9); }; const d = avg(ESS.FEUILLU), c = avg(ESS.CONIFERE); const m = d.map((v, i) => (0.45 * v + 0.55 * c[i]) * 0.45), l = LUM(m); return m.map(v => v + (l - v) * 0.15); };
+  // Couverture du sol (v633.272, scène v18, data.cover): parts des arbres de la région par feuillage (leaf: ne conifères
+  // persistants, be feuillus persistants, nd mélèzes, bd feuillus caducs; sans elles, la forêt mixte québécoise 55 % de
+  // conifères), teinte du sol sec et sa part (ground), parts du sol dans 1,5 km (far). dryK: part de la teinte sèche dans
+  // le sol proche; dryFar: dans le relief lointain; DRY_LIN: albédo linéaire du sol sec (roche, sable, terre).
+  let leafW = { [ESS.FEUILLU]: 0.45, [ESS.CONIFERE]: 0.55 }, dryK = 0, dryFar = 0, DRY_LIN = [0.12, 0.09, 0.06];
+  const forestTint = (st) => { const avg = (k) => { const t = [0, 0, 0]; for (let i = 0; i < 9; i++) { const c = seasonColor(st, k, (i + 0.5) / 9); t[0] += c.r; t[1] += c.g; t[2] += c.b; } return t.map(v => v / 9); }; const m = [0, 0, 0]; let tw = 0; for (const k in leafW) { const w = leafW[k]; if (!(w > 0)) continue; const a = avg(Number(k)); for (let i = 0; i < 3; i++) m[i] += w * a[i]; tw += w; } for (let i = 0; i < 3; i++) m[i] = m[i] / (tw || 1) * 0.45; const l = LUM(m); return m.map(v => v + (l - v) * 0.15); };
+  // Applique data.cover aux matériaux du sol et aux teintes (au rebuild). Sol sec seulement là où WorldCover voit des arbustes,
+  // du sol nu ou des mousses dans 1,5 km (5 à 30 %: de rien à tout), proportionnellement à la part de sol sec de l'image
+  // (deux fois sa part, bornée: à Sedona, 35 % de l'image hors bâtiments est de la roche, le reste des genévriers dessinés à
+  // part). Au Québec en été, tout est vert: rien ne change. Relief lointain: part des arbustes et du sol nu parmi la végétation.
+  function applyCover() {
+    const cv = data && data.cover, far = (cv && cv.far) || null, gr = cv && cv.ground;
+    const gate = far ? smooth(0.05, 0.3, (far.shrub || 0) + (far.bare || 0) + (far.moss || 0)) : 0;
+    dryK = gr && gr.rgb && gate > 0 ? gate * Math.min(1, 2 * gr.dry) : 0;
+    const veg = far ? (far.tree || 0) + (far.shrub || 0) + (far.bare || 0) + (far.grass || 0) + (far.crop || 0) + (far.moss || 0) : 0;
+    dryFar = gate > 0 && veg > 0 ? gate * ((far.shrub || 0) + (far.bare || 0) + (far.moss || 0)) / veg : 0;
+    // Sol sec vu d'en haut, un peu mêlé à la végétation basse de l'image (broussaille entre les arbres dessinés): la moitié
+    // de la part de végétation, bornée à 35 %; assombri de 8 % (l'image est éclairée, le matériau est un albédo).
+    const toC = (rgb, k) => L('#' + rgb.map(v => Math.round(Math.min(255, v * k)).toString(16).padStart(2, '0')).join(''));
+    const dryC = gr && gr.rgb ? toC(gr.rgb, 0.92) : L(GND_HEX);
+    if (gr && gr.rgb && gr.vegRgb) dryC.lerp(toC(gr.vegRgb, 0.92), Math.min(0.35, 0.5 * (1 - gr.dry)));
+    const gc = L(GND_HEX).lerp(dryC, dryK);
+    gndMat.color.copy(gc); gndMatPol.color.copy(gc); gndMatFar.color.copy(gc);
+    GROUND_TINT = GROUND_TINT0.clone().lerp(dryC.clone().multiplyScalar(1.15), dryK);
+    DRY_LIN = [dryC.r * 0.5, dryC.g * 0.5, dryC.b * 0.5];
+    const lf = cv && cv.leaf;
+    leafW = lf ? { [ESS.FEUILLU]: lf.bd || 0, [ESS.CONIFERE]: lf.ne || 0, [ESS.MELEZE]: lf.nd || 0, [ESS.PERSISTANT]: lf.be || 0 } : { [ESS.FEUILLU]: 0.45, [ESS.CONIFERE]: 0.55 };
+  }
   const seasonCol = new THREE.Color();
   const seasonColor = (st, k, c) => { const v = st.color(k, c); return seasonCol.setRGB(v[0], v[1], v[2], THREE.SRGBColorSpace); };
   let fallCal = null; // gel de l'automne en cours (setFallTemps): fin de la chute de l'année, sinon celle du satellite
@@ -768,7 +808,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   // seulement par le bleu; sans ce complément, les ombres de nuages tirent sur le bleu marine.
   // Appoint hémisphérique: le ciel par le haut, et par le bas la lumière renvoyée par le sol et les voisins (teinte herbe et
   // asphalte), plus forte au soleil: le bas des façades à l'ombre n'est plus uniforme.
-  const GROUND_TINT = new THREE.Color(0.46, 0.50, 0.37);
+  const GROUND_TINT0 = new THREE.Color(0.46, 0.50, 0.37); let GROUND_TINT = GROUND_TINT0.clone();
   const fill = new THREE.HemisphereLight(0xffffff, 0x8a9270, 0.2); S.add(fill);
   // Heure bleue: le côté où le soleil s'est couché reste plus clair, comme une grande boîte à lumière.
   const twL = new THREE.DirectionalLight(0xffffff, 0); S.add(twL); S.add(twL.target);
@@ -1190,7 +1230,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       const [x, n] = t; let h, r, con = false, dx = 0, dn = 0, over;
       let ess = ESS.FEUILLU;
       if (t.length >= 5) { h = t[2]; r = t[3]; ess = t[4] || 0; con = isConifer(ess); if (t.length >= 8) { over = t[7]; if (!con) { dx = t[5]; dn = t[6]; } } } // rayon d'après la surface de la couronne mesurée (voir treeShape)
-      else { const cr = 2.1 + 1.5 * hsh(x, n, 2); h = Math.max(2.5, 7 + 6 * hsh(x, n, 1) - cr * 1.4) + 2.08 * cr; r = 1.2 * cr; } // mêmes arbres qu'avant le LiDAR
+      else { const cr = 2.1 + 1.5 * hsh(x, n, 2); h = Math.max(2.5, 7 + 6 * hsh(x, n, 1) - cr * 1.4) + 2.08 * cr; r = 1.2 * cr; if (t.length >= 3) { ess = t[2] || 0; con = isConifer(ess); if (t.length >= 4 && t[3] > 0) { h = t[3]; r = Math.max(1.2, 0.33 * h); } } } // mêmes arbres qu'avant le LiDAR; v18: essence d'après le feuillage de la région, hauteur en terrain aride
       const d = Math.hypot(x, n);
       return { x, n, h: Math.max(2.5, h), r: Math.max(0.8, r), con, ess, d, ring: d < 150 ? 0 : d < 250 ? 1 : 2, y: terrain.hTri(x, n), rot: hsh(x, n, 3) * 6.28, c: hsh(x, n, 4), dx, dn, over, lidar: t.length >= 5, stand: t.length >= 5 && !!cg && cg.at(x, n) > 0 };
     });
@@ -1539,6 +1579,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     const tk = import.meta.env.DEV ? [['début', performance.now()]] : null, mk = (l) => { if (tk) tk.push([l, performance.now(), drapeV]); }; // chronomètre de développement par étape
     drapeV = 0;
     clearStatics();
+    applyCover();
     if (!modelOnly) { terrain.carveWater(data ? data.water : []); buildGround(); } // le relief est creusé sous les plans d'eau connus
     mk('sol');
     if (!origin) return;
@@ -1591,7 +1632,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       data.bld.forEach(([p, h, fl, k, lid, , roof, holes, base], bi) => {
         // Un voisin recouvert par un bâtiment dessiné disparaît: c'est le même édifice. Un voisin caché dans un autre aussi.
         const c = centroid(p);
-        if (hidden.has(bi) || drawn.some(d => ringsOverlap(d.p, p)) || underModel(p)) return;
+        if (hidden.has(bi) || drawn.some(d => d.kind !== 'ground' && coversBld(d.p, p)) || underModel(p)) return;
         others.push(p);
         const q = p[0], r = hsh(q[0], q[1], 5); const hh = k === 0 && !lid ? Math.max(h, 6.2) : h; // hauteur mesurée (LiDAR): telle quelle
         othH.set(p, roof ? Math.max(hh, roofTop(roof) || 0) : hh);
@@ -1829,7 +1870,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       sunVisU.uSunFar.value.set(c2.r * I2, c2.g * I2, c2.b * I2);
       sunVisU.uSigAir.value = 3.912 / Math.max(5000, Math.min(46000, weatherRow?.visibility ?? 25000));
       hzU.uHzOn.value = 1 - smooth(0, 0.03, smk); // fumée de feux: rendu validé, inchangé (fondu au même rythme que la fumée)
-      sunVisU.uFarAlb.value.set(...FOREST_LIN.map((v, i) => v + (CITY_LIN[i] - v) * urban));
+      { const fa = FOREST_LIN.map((v, i) => v + (DRY_LIN[i] - v) * dryFar); sunVisU.uFarAlb.value.set(...fa.map((v, i) => v + (CITY_LIN[i] - v) * urban)); }
     }
     // Niveau du ciel: le modèle donne les couleurs et leur répartition, notre courbe donne la luminance du zénith
     // (0,17 en plein jour, encore 0,04 au ras de l'horizon), sinon le zénith s'éteint au soleil bas et l'horizon blanchit.
@@ -2133,7 +2174,8 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     const satNote = sat && sat.shift ? (sat.shift[0] || sat.shift[1] ? ` (recalée de ${Math.abs(sat.shift[0])} m ${sat.shift[0] >= 0 ? 'est' : 'ouest'} et ${Math.abs(sat.shift[1])} m ${sat.shift[1] >= 0 ? 'nord' : 'sud'})` : ' (non recalée)') : '';
     // Formes dessinées sur la carte: recalées sur l'empreinte LiDAR (v633.241), ou non (diagnostic visible, comme pour l'image au sol)
     const drawnNote = !drawnSh ? '' : (drawnSh[0] || drawnSh[1]) ? `Formes dessinées recalées de ${Math.abs(drawnSh[0]).toFixed(1)} m ${drawnSh[0] >= 0 ? 'est' : 'ouest'} et ${Math.abs(drawnSh[1]).toFixed(1)} m ${drawnSh[1] >= 0 ? 'nord' : 'sud'} sur le LiDAR` : 'Formes dessinées non recalées (aucune empreinte LiDAR ne leur répond)';
-    const srcLine = [relief, treeLine, pavedLine, drawnNote, sat ? SAT_CREDIT + satNote : ''].filter(Boolean).join(' · ');
+    const cvLine = data && data.cover && data.cover.src && data.cover.src.length ? `Couverture du sol ${data.cover.src.join(' et ')}` : '';
+    const srcLine = [relief, treeLine, pavedLine, cvLine, drawnNote, sat ? SAT_CREDIT + satNote : ''].filter(Boolean).join(' · ');
     // Ciel observé (satellite, aéroport) qui a corrigé cette heure (src/weather/nowcast.js)
     const obsLine = w.obsInfo || '';
     const info = cond + '|' + parts + '|' + obsLine + '|' + where + '|' + height + '|' + srcLine + '|' + (est > 0.55 ? 'dark' : 'light');
