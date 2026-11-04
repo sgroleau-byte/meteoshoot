@@ -53,3 +53,19 @@ pas pour tout le continent. Ne règle pas le relief ni le LiDAR, seulement la co
 
 Seulement si des utilisateurs ouvrent beaucoup de lieux nouveaux hors des tuiles du Québec. Tant que les projets sont
 surtout au Québec, le préchauffage après chaque changement de version suffit.
+
+## Environs plus larges en vue de drone (palier retenu par Stéphane, 4 novembre 2026)
+
+Question de Stéphane: dans Shadowmap, les bâtiments et les arbres apparaissent à mesure qu'on se déplace, et
+l'environnement chargé reste en mémoire du projet. Le chargement en marchant (carrés de 500 m demandés à la volée,
+fusionnés dans le moteur sans tout reconstruire, carte d'ombre qui suit la caméra, relief fin là où l'on va) est un
+chantier de trois à cinq jours qui suppose d'abord le cache régional ci-dessus. Palier intermédiaire retenu, environ une
+journée:
+
+- Rayon des environs porté de 450 à 500 m à 800 m pour les bâtiments, rues, boisés et parcs d'Overture, avec moins de
+  détail au-delà de 500 m: pas de LiDAR (hauteurs d'Overture, arbres tirés au sort et semés d'après WorldCover, pas
+  d'empreintes ni de toits mesurés), rues sans trottoirs, arbres en boules du lointain.
+- Rien ne change à moins de 500 m (ni le temps de calcul des mesures LiDAR, qui restent à 350 m).
+- Attention au poids de la scène (environ 100 Ko aujourd'hui; plus de bâtiments et d'arbres en ville) et au plafond
+  d'arbres sur iPad (1500): les arbres du nouvel anneau passent après ceux du centre.
+- À vérifier au banc de dix lieux (Stoneham, Limoilou, Sillery, Outremont, Toronto...) et sur iPad.
