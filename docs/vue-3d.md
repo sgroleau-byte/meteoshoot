@@ -1365,3 +1365,8 @@ importé, lui, est le fichier de l'architecte.
   Remède: `user-select: none` et `-webkit-touch-callout: none` sur tout le bloc de la carte (`ProjectDetail.jsx`: curseur,
   carte, 3D), sur la racine de `Scene3D.jsx` et sur le canevas du moteur. Reproduit puis vérifié au simulateur iPad Air
   (captures dans `verification_selection_ipad/`): plus de sélection, le curseur et la rotation suivent le doigt.
+- v633.277 (4 novembre 2026), **déplacement à deux doigts** (Stéphane: « mettre le déplacement dans le 3D avec drag deux
+  doigts et zoom avec l'action de pinch »). Deux doigts: l'écart pince le zoom (comme avant) et le point milieu déplace la
+  vue comme Option + glisser sur Mac (`panView`: le décor suit les doigts, au plus PAN_MAX du projet), les deux dans le
+  même geste. Un doigt tourne toujours la vue; trois doigts dont un levé: la paire restante repart sans saut. Vérifié au
+  simulateur iPad Air (`verification_selection_ipad/deux_doigts_*.png`).

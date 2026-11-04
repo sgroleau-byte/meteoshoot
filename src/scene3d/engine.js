@@ -1749,7 +1749,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   };
   el.addEventListener('pointerdown', e => {
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); try { el.setPointerCapture(e.pointerId); } catch (err) { /* pointeur déjà parti */ }
-    if (ptrs.size >= 2) { cancelModelDrag(); const [a, b] = [...ptrs.values()]; pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, r0: Rr }; drag = null; return; }
+    if (ptrs.size >= 2) { cancelModelDrag(); const [a, b] = [...ptrs.values()]; pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, r0: Rr, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }; drag = null; return; }
     const hit = e.button === 0 && !e.altKey ? pickModel(e) : null;
     if (hit) { modelDrag = startModelDrag(e, hit); el.style.cursor = 'move'; return; }
     drag = { x: e.clientX, y: e.clientY, id: e.pointerId }; el.style.cursor = e.altKey ? 'move' : 'grabbing';
@@ -1767,7 +1767,13 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       return;
     }
     if (!ptrs.size) el.style.cursor = e.altKey ? 'move' : model && pickModel(e) ? 'move' : 'grab'; // Option enfoncée: la vue se déplace
-    if (pinch && ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y) || 1; zoomTo = null; setR(pinch.r0 * pinch.d0 / d); return; }
+    // Deux doigts (Stéphane, 4 novembre 2026): l'écart pince le zoom, le point milieu déplace la vue comme Option + glisser
+    // (le décor suit les doigts, au plus PAN_MAX du projet). Les deux se font dans le même geste, comme dans Plans.
+    if (pinch && ptrs.size >= 2) {
+      const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y) || 1; zoomTo = null; setR(pinch.r0 * pinch.d0 / d);
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2; panView(mx - pinch.mx, my - pinch.my); pinch.mx = mx; pinch.my = my;
+      return;
+    }
     if (!drag || e.pointerId !== drag.id) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag = { x: e.clientX, y: e.clientY, id: drag.id };
     if (e.altKey) { panView(dx, dy); el.style.cursor = 'move'; return; } // la touche peut être prise ou lâchée en plein geste
@@ -1779,6 +1785,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       else { const moved = modelDrag.moved; modelDrag = null; if (moved) { bindSat(modelPl, sat && sat.shift ? sat.shift : null); rebuild(true, true); onModel({ ...modelPl }); } } // validé seulement s'il a bougé; repère: l'image si elle est allumée
     }
     ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (drag && e.pointerId === drag.id) drag = null;
+    if (ptrs.size >= 2) { const [a, b] = [...ptrs.values()]; pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, r0: Rr, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }; } // trois doigts, un levé: la paire restante repart d'ici, sans saut
     if (ptrs.size === 1 && !drag) { const [[id, p]] = [...ptrs.entries()]; drag = { x: p.x, y: p.y, id }; } // le doigt restant continue à tourner
     if (!ptrs.size) el.style.cursor = 'grab';
   };
