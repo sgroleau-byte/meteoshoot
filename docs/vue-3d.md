@@ -1369,4 +1369,5 @@ importé, lui, est le fichier de l'architecte.
   doigts et zoom avec l'action de pinch »). Deux doigts: l'écart pince le zoom (comme avant) et le point milieu déplace la
   vue comme Option + glisser sur Mac (`panView`: le décor suit les doigts, au plus PAN_MAX du projet), les deux dans le
   même geste. Un doigt tourne toujours la vue; trois doigts dont un levé: la paire restante repart sans saut. Vérifié au
-  simulateur iPad Air (`verification_selection_ipad/deux_doigts_*.png`).
+  simulateur iPad Air (`verification_selection_ipad/deux_doigts_*.png`), puis validé par Stéphane sur son appareil le
+  4 novembre 2026 (« ça fonctionne bien »).
