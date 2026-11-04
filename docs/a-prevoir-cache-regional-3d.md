@@ -54,7 +54,7 @@ pas pour tout le continent. Ne règle pas le relief ni le LiDAR, seulement la co
 Seulement si des utilisateurs ouvrent beaucoup de lieux nouveaux hors des tuiles du Québec. Tant que les projets sont
 surtout au Québec, le préchauffage après chaque changement de version suffit.
 
-## Environs plus larges en vue de drone (palier retenu par Stéphane, 4 novembre 2026)
+## Environs plus larges en vue de drone (palier retenu par Stéphane, 4 novembre 2026; fait en v633.275, voir docs/vue-3d.md)
 
 Question de Stéphane: dans Shadowmap, les bâtiments et les arbres apparaissent à mesure qu'on se déplace, et
 l'environnement chargé reste en mémoire du projet. Le chargement en marchant (carrés de 500 m demandés à la volée,

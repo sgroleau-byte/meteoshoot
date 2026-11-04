@@ -1735,7 +1735,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
   // caméra suit puisqu'elle est posée par rapport à lui. La hauteur de visée reste la même au-dessus du sol (on suit la
   // pente) et on ne s'éloigne pas à plus de PAN_MAX du projet: au-delà, plus d'environs chargés. Option prime sur la maison
   // importée: avec la touche, on déplace la vue même en saisissant la maison.
-  const PAN_MAX = 500;
+  const PAN_MAX = 650; // 500 avant la v633.275 (environs à 800 m: il reste 150 m de décor autour de la visée la plus lointaine)
   const panView = (dx, dy) => {
     const f = el.getBoundingClientRect().height / (2 * Math.tan(cam.fov * Math.PI / 360)); // focale en pixels (CSS)
     const k = Math.max(5, cam.position.distanceTo(ct)) / f;

@@ -37,6 +37,8 @@
 //   Avant, à Sedona (Arizona), des feuillus en couleurs d'automne sur de l'herbe verte: genévriers et roche rouge en réalité.
 // v19 (4 novembre 2026): LiDAR américain (api/lidar3dep.js): aux États-Unis, hauteurs, empreintes, toits et arbres mesurés sur
 //   les tuiles 2 m de l'USGS (Planetary Computer) comme au Canada sur le LiDAR de Ressources naturelles Canada; treesSrc.agency.
+// v20 (4 novembre 2026, v633.275): environs à 800 m (voir R_BLD et R_NEAR): bâtiments, rues, boisés et parcs plus loin pour la
+//   vue de drone, sans trottoirs, entrées, stationnements, parties de bâtiment ni mesures LiDAR au-delà de 450 à 500 m.
 // Couche Overture gardée à part (3 novembre 2026, v633.267): la lecture d'Overture (13 s sur 28 en production) ne dépend
 //   que du lieu, de la version d'Overture (RELEASE) et des règles de ce fichier (BASE_V); elle est gardée dans le cache partagé
 //   sous la clé « ovt_lat_lng » (écrite par le client ou le script de préchauffage, lue ici avec la clé publique). Une nouvelle
@@ -73,11 +75,17 @@ function filesFor(path, [x0, y0, x1, y1]) {
   if (!list) return null;
   return list.filter(([, fx0, fy0, fx1, fy1]) => fx0 <= x1 && fx1 >= x0 && fy0 <= y1 && fy1 >= y0).map(([name]) => `${HTTPS_BASE}/${path}/${name}`);
 }
-const R_BLD = 450, R_ROAD = 500, R_TREE = 340, R_WOOD = 500, R_GREEN = 500, R_WATER = 2500;
+// Rayons de lecture d'Overture (m). Depuis la v633.275 (Stéphane: des environs plus larges pour la vue de drone, comme
+// Shadowmap qui fait apparaître les bâtiments en se déplaçant), bâtiments, rues, boisés et parcs vont jusqu'à 800 m, avec
+// moins de détail au-delà de R_NEAR: ni trottoirs, sentiers, entrées ni stationnements, contours simplifiés au mètre,
+// parties de bâtiment et mesures LiDAR seulement jusqu'à R_LIDAR_BLD (l'ancien rayon), arbres des boisés plus clairsemés.
+const R_BLD = 800, R_ROAD = 800, R_TREE = 340, R_WOOD = 800, R_GREEN = 800, R_WATER = 2500;
+const R_NEAR = 500, R_LIDAR_BLD = 450;
+const FAR_WOOD_KEEP = 0.5; // part des arbres de boisé tirés au-delà de R_NEAR qui sont gardés
 const PART_COVER = 0.6; // part de la surface d'un contour couverte par ses parties au sol à partir de laquelle le contour s'efface (v17)
 // Version de la couche Overture (bld avant LiDAR, rues, arbres d'Overture, parcs, stationnements, eau): à bumper quand le
 // traitement d'Overture change (parties, largeurs de rues, eau...), pas pour une règle LiDAR. RELEASE la périme aussi.
-export const BASE_V = 1;
+export const BASE_V = 2; // 2: environs à 800 m (v633.275)
 // Aléa fixe d'un point (0..1): mêmes arbres à chaque calcul.
 const hashOf = (x, n, k) => { const v = Math.sin(x * 127.1 + n * 311.7 + k * 74.7) * 43758.5453; return v - Math.floor(v); };
 const log = (m) => console.log('[scene3d]', m);
@@ -147,6 +155,7 @@ function simplifyRing(r, tol) {
 }
 const ccw = (r) => (signedArea(r) < 0 ? r.slice().reverse() : r);
 const round1 = (r) => r.map(p => [Math.round(p[0] * 10) / 10, Math.round(p[1] * 10) / 10]);
+const round0 = (r) => r.map(p => [Math.round(p[0]), Math.round(p[1])]); // au mètre: contours lointains, déjà simplifiés au mètre
 function pointInRing(p, r) {
   let inside = false;
   for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
@@ -212,10 +221,12 @@ export async function overtureBase(lat, lng, opts = {}) {
       if (r.length < 3) continue;
       const area = Math.abs(signedArea(r));
       if (area < 12) continue;
-      // Cours intérieures (v16): anneaux intérieurs de 30 m² et plus, mis au net comme le contour.
-      const holes = []; for (let i = 1; i < rings.length; i++) { const hr = simplifyRing(loc(rings[i]), 0.3); if (hr.length >= 3 && Math.abs(signedArea(hr)) >= 30) holes.push(round1(ccw(hr))); }
-      const c = centroid(r);
+      const c = centroid(r), far = Math.hypot(c[0], c[1]) > R_NEAR;
       if (Math.hypot(c[0], c[1]) > R_BLD) continue;
+      if (far) { r = simplifyRing(r, 1); if (r.length < 3) continue; } // au loin: contour au mètre (scène plus légère)
+      // Cours intérieures (v16): anneaux intérieurs de 30 m² et plus, mis au net comme le contour.
+      const rnd_ = far ? round0 : round1;
+      const holes = []; for (let i = 1; i < rings.length; i++) { const hr = simplifyRing(loc(rings[i]), far ? 1 : 0.3); if (hr.length >= 3 && Math.abs(signedArea(hr)) >= 30) holes.push(rnd_(ccw(hr))); }
       let h = row.height != null ? Number(row.height) : row.num_floors ? Number(row.num_floors) * 3.1 : 7.5;
       h = Math.max(2.8, Math.min(h, 120));
       const fl = row.num_floors ? Number(row.num_floors) : Math.max(1, Math.round(h / 3.1));
@@ -223,7 +234,7 @@ export async function overtureBase(lat, lng, opts = {}) {
       const kind = (st === 'outbuilding' || cl === 'garage' || cl === 'shed' || area < 45) ? 2
         : ['medical', 'education', 'civic', 'commercial', 'industrial', 'service', 'transportation'].includes(st) ? 1 : 0;
       if (/OpenStreetMap/i.test(String(row.src || ''))) osmIdx.add(bld.length);
-      const entry = [round1(ccw(r)), Math.round(h * 10) / 10, fl, kind];
+      const entry = [rnd_(ccw(r)), Math.round(h * 10) / 10, fl, kind];
       if (holes.length) entry[7] = holes; // [4] mesuré, [5] empreinte LiDAR et [6] toit sont posés plus loin
       if (row.id) { outlines.set(String(row.id), { i: bld.length, kind }); outArea.set(bld.length, area - holes.reduce((sa, hr) => sa + Math.abs(signedArea(hr)), 0)); }
       bld.push(entry);
@@ -242,7 +253,7 @@ export async function overtureBase(lat, lng, opts = {}) {
       const area = Math.abs(signedArea(r));
       if (area < 12) continue;
       const c = centroid(r);
-      if (Math.hypot(c[0], c[1]) > R_BLD) continue;
+      if (Math.hypot(c[0], c[1]) > R_LIDAR_BLD) continue; // parties (ailes, tours d'un même édifice): près du sujet seulement
       let h = row.height != null ? Number(row.height) : row.num_floors ? Number(row.num_floors) * 3.1 : par ? bld[par.i][1] : 7.5;
       h = Math.max(2.8, Math.min(h, 120));
       const base = row.min_height != null ? Math.max(0, Math.min(Number(row.min_height), h - 1)) : row.min_floor ? Math.max(0, Math.min(Number(row.min_floor) * 3.1, h - 1)) : 0;
@@ -271,6 +282,8 @@ export async function overtureBase(lat, lng, opts = {}) {
     for (const line of linesOf(geomOf(row))) {
       const p = simplify(loc(line), 0.4);
       if (p.length < 2 || !p.some(q => Math.hypot(q[0], q[1]) <= R_ROAD)) continue;
+      // Au-delà de R_NEAR: ni trottoirs, pistes et sentiers, ni entrées, ruelles et allées (invisibles de si loin).
+      if ((k === 1 || w <= 4.5) && !p.some(q => Math.hypot(q[0], q[1]) <= R_NEAR)) continue;
       const road = { w, k, p: round1(p) };
       if (k === 0 && row.name) road.n = String(row.name).slice(0, 60); // nom de la rue: repère d'orientation pour l'analyse des façades
       roads.push(road);
@@ -300,13 +313,18 @@ export async function overtureBase(lat, lng, opts = {}) {
         // même cadre de tirage que sur le contour entier, donc les mêmes arbres; les tirages hors de la tuile agrandie
         // tombent de toute façon au-delà de R_WOOD.
         const area = row.oa ? Math.abs(row.oa[k]) * mLng * mLat : Math.abs(signedArea(r)); let n = Math.min(220, Math.floor(area / 40)), tries = 0;
+        // Au-delà de R_NEAR (v633.275): un compte à part, à demi-densité, pour ne pas appauvrir le boisé près du sujet.
+        let nFar = Math.floor(n * FAR_WOOD_KEEP);
         let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
         if (row.ob) { [minx, miny] = X(row.ob[k][0], row.ob[k][1]); [maxx, maxy] = X(row.ob[k][2], row.ob[k][3]); }
         else for (const p of r) { minx = Math.min(minx, p[0]); miny = Math.min(miny, p[1]); maxx = Math.max(maxx, p[0]); maxy = Math.max(maxy, p[1]); }
-        while (n > 0 && tries < 4000) {
+        while ((n > 0 || nFar > 0) && tries < 4000) {
           tries++;
           const q = [minx + rnd() * (maxx - minx), miny + rnd() * (maxy - miny)];
-          if (pointInRing(q, r) && Math.hypot(q[0], q[1]) <= R_WOOD) { trees.push([Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10]); n--; }
+          const dq = Math.hypot(q[0], q[1]);
+          if (dq > R_WOOD || !pointInRing(q, r)) continue;
+          if (dq <= R_NEAR) { if (n <= 0) continue; n--; } else { if (nFar <= 0) continue; nFar--; }
+          trees.push([Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10]);
         }
       }
     }
@@ -324,6 +342,7 @@ export async function overtureBase(lat, lng, opts = {}) {
       if (r.length < 3) continue;
       const c = centroid(r);
       if (Math.hypot(c[0], c[1]) > R_GREEN) continue;
+      if (isParking && Math.hypot(c[0], c[1]) > R_NEAR) continue; // stationnements: proches seulement
       if (isParking) asphalt.push(round1(ccw(r))); else green.push({ k, p: round1(ccw(r)) });
     }
   }
@@ -395,7 +414,9 @@ export async function buildScene(lat, lng, opts = {}) {
     // écrivent reste dans ce repère); appleRoof est le calage par les toits (v633.243). Échec (pas de clé, image refusée,
     // délai): appleErr, la scène n'est pas gardée et le prochain affichage la redemande.
     inTime(appleShift(lat, lng, bld, log), 'calage Plans').then((r) => { if (!r) { appleErr = true; return; } apple = r.old; appleRoof = r.shift; }).catch((e) => { appleErr = true; console.warn('[scene3d] calage Plans d\'Apple indisponible:', e && e.message); }),
-    inTime(lidarHeights(lat, lng, bld, log), 'hauteurs').then((r) => { lidarBld = r.measured; if (r.failed) lidarErr = true; }).catch((e) => { lidarErr = true; console.warn('[scene3d] hauteurs LiDAR indisponibles:', e && e.message); }),
+    // Hauteurs LiDAR jusqu'à R_LIDAR_BLD seulement (v633.275): au-delà, hauteur d'Overture; la fenêtre lue resterait
+    // sinon trois fois plus grande (1,6 km de côté). Les entrées sont les mêmes objets: la mesure les modifie en place.
+    inTime(lidarHeights(lat, lng, bld.filter((b) => Math.hypot(...centroid(b[0])) <= R_LIDAR_BLD), log), 'hauteurs').then((r) => { lidarBld = r.measured; if (r.failed) lidarErr = true; }).catch((e) => { lidarErr = true; console.warn('[scene3d] hauteurs LiDAR indisponibles:', e && e.message); }),
     // Les empreintes ne changent pas pendant la mesure des hauteurs: le masque des toits peut se faire en même temps.
     // Couverture du sol mondiale (v18): sans réponse (serveur bloqué), la scène est servie sans elle, comme les mesures LiDAR.
     inTime(readLandCover(lat, lng, log), 'couverture du sol').then((r) => { cover = r; }).catch((e) => console.warn('[scene3d] couverture du sol indisponible:', e && e.message)),
@@ -428,8 +449,18 @@ export async function buildScene(lat, lng, opts = {}) {
       const cell = 8, buckets = new Map(), bk = (x, n) => `${Math.floor(x / cell)},${Math.floor(n / cell)}`;
       const near = (x, n) => { for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const b = buckets.get(`${Math.floor(x / cell) + di},${Math.floor(n / cell) + dj}`); if (b) for (const [qx, qn] of b) if (Math.hypot(qx - x, qn - n) < 7) return true; } return false; };
       for (const t of treesOut) { const k = bk(t[0], t[1]); if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(t); }
-      for (let j = 0; j < N && treesOut.length < 4500; j++) for (let i = 0; i < N && treesOut.length < 4500; i++) {
+      // Du plus proche au plus loin (v633.275: le plafond de 5000 arbres coupait du nord au sud et laissait le sud vide);
+      // au-delà de R_NEAR, un pixel sur quatre (un arbre par 400 m² au lieu de 100).
+      const cand = [];
+      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
         const v = g[j * N + i]; if (v !== 10 && v !== 95) continue;
+        const cx = -half + (i + 0.5) * res, cn = half - (j + 0.5) * res, dc = Math.hypot(cx, cn);
+        if (dc > R_WOOD + res || (dc > R_NEAR && (i & 1 || j & 1))) continue;
+        cand.push([dc, i, j]);
+      }
+      cand.sort((a, b) => a[0] - b[0]);
+      for (const [, i, j] of cand) {
+        if (treesOut.length >= 5000) break;
         const x = Math.round((-half + (i + 0.5 + (hashOf(i, j, 3) - 0.5) * 0.8) * res) * 10) / 10, n = Math.round((half - (j + 0.5 + (hashOf(i, j, 4) - 0.5) * 0.8) * res) * 10) / 10;
         const d = Math.hypot(x, n); if (d > R_WOOD || d < 2) continue;
         if (lt && lt.trees && d <= R_TREES && lt.covered(x, n)) continue; // le LiDAR a déjà mesuré ce qui pousse ici
@@ -440,7 +471,7 @@ export async function buildScene(lat, lng, opts = {}) {
     coverOut = { v: cover.v, near: cover.near || null, far: cover.far || null, leaf, ground, src: cover.src, arid: arid ? 1 : 0 };
     log(`couverture du sol: ${seeded} arbres semés d'après WorldCover${arid ? ', terrain aride' : ''}${leaf ? `, persistants ${Math.round((leaf.ne + leaf.be) * 100)} %` : ''}`);
   } else if (ground) coverOut = { v: 1, ground, src: [] };
-  const scene = { v: 19, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, lidarAdd: noAdd ? 0 : 1, roofs, cover: coverOut, ms: { query: tq, base: fromCache ? 'cache' : src, total: Date.now() - t0, indexed: !!INDEX } };
+  const scene = { v: 20, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, lidarAdd: noAdd ? 0 : 1, roofs, cover: coverOut, ms: { query: tq, base: fromCache ? 'cache' : src, total: Date.now() - t0, indexed: !!INDEX } };
   if (!fromCache) scene.base = base; // à garder par le client (clé ovt_), jamais dans la scène mise en cache
   if (lidarErr) scene.lidarErr = true;
   if (appleErr) { scene.appleErr = true; scene.lidarErr = true; } // lidarErr aussi: les versions 633.242 et antérieures ne connaissent que lui pour ne pas garder la scène

@@ -15,7 +15,7 @@
 import { openCog, readWindow } from './cog.js';
 
 const UA = 'MeteoShoot (www.meteoshoot.com)';
-export const R_GRID = 500; // m: grille WorldCover gardée dans la scène
+export const R_GRID = 800; // m: grille WorldCover pour le semis des arbres (500 avant la v633.275, environs à 800 m)
 const R_NEAR = 350, R_FAR = 1500;
 const WC = 'https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map';
 const CCI_TOKEN = 'https://planetarycomputer.microsoft.com/api/sas/v1/token/landcoverdata/esa-cci-lc';

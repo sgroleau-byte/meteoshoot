@@ -1341,6 +1341,16 @@ importé, lui, est le fichier de l'architecte.
   Étiquettes: « Relief LiDAR 1 m (USGS 3DEP) », « modèle d'élévation de l'USGS (10 m) » hors LiDAR. Vérifié: Sedona (relief
   1 m, buttes et chapelle), Cambridge (tout), Stoneham et Toronto inchangés. Essais: `node api/lidar3dep.js lat lng`,
   `node api/terrain.js --test lat lng --png relief.png`.
+- **Environs à 800 m (v633.275, 4 novembre 2026, scène v20, BASE_V 2).** Stéphane, à propos de Shadowmap (les bâtiments
+  et les arbres apparaissent en se déplaçant): palier retenu plutôt que le chargement en marchant. Bâtiments, rues, boisés
+  et parcs d'Overture lus jusqu'à 800 m (450 à 500 m avant); au-delà de 500 m (R_NEAR): ni trottoirs, sentiers, entrées,
+  ruelles ni stationnements, contours simplifiés et arrondis au mètre, arbres de boisé à demi-densité (compte à part, le
+  boisé proche garde sa densité), semis WorldCover un pixel sur quatre, plafond de 5000 arbres appliqué du plus proche au
+  plus loin (il coupait du nord au sud). Parties de bâtiment et hauteurs LiDAR jusqu'à 450 m seulement (la fenêtre lue
+  serait trois fois plus grande). Visée déplaçable (touche Option) jusqu'à 650 m au lieu de 500. Tuiles Overture
+  régénérées avec une marge de 900 m (grille f, rayon 800 m dans `api/overture-tiles.js`); le manifeste à marge 600 est
+  refusé par ce code (lecture DuckDB en attendant les nouvelles tuiles). Mesuré à Limoilou: 542 à 1889 bâtiments, scène
+  190 à 340 Ko (120 Ko compressés), construction dans le navigateur 800 à 880 ms.
 - À prévoir (4 novembre 2026): cache régional (couche Overture et fenêtres LiDAR par carré de 1 km, partagées entre
   lieux voisins), voir `docs/a-prevoir-cache-regional-3d.md`. Aujourd'hui le cache est par lieu exact.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,

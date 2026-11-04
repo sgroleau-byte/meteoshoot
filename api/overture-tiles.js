@@ -7,8 +7,8 @@
 // quatre par grille, en même temps), dédoublonne (clé « o »: fichier Parquet puis numéro de ligne), applique le même
 // filtre par cadre que la requête DuckDB et remet les lignes dans l'ordre d'origine: le résultat est celui de la lecture
 // directe (le tirage des arbres des boisés suit cet ordre). Les grandes entités (lac, forêt, autoroute: plus de 300
-// sommets) sont à part: rangées, découpées, dans chaque tuile dont le cadre agrandi de la marge (600 m pour f, dont les
-// rayons de lecture vont jusqu'à 500 m; 2 600 m pour w, rayon 2 500 m) touche leur cadre, et lues seulement dans la
+// sommets) sont à part: rangées, découpées, dans chaque tuile dont le cadre agrandi de la marge (900 m pour f, dont les
+// rayons de lecture vont jusqu'à 800 m depuis la v633.275; 2 600 m pour w, rayon 2 500 m) touche leur cadre, et lues seulement dans la
 // tuile du lieu (drapeau « x »), ce qui évite les coutures; les boisés gardent le cadre et l'aire de leur contour
 // d'origine (« ob », « oa ») pour que le tirage reste le même. Tuiles trop lourdes (centre-ville) subdivisées en quatre
 // (quadtree, niveau z) d'après le manifeste. Hors couverture, manifeste illisible ou tuile injoignable: lecture DuckDB.
@@ -22,7 +22,7 @@ export const TILES_V = 1; // format des tuiles et du manifeste
 // Grilles: taille de la tuile de base (degrés), rayon de lecture le plus grand (m), marge de découpe des grandes
 // entités (m, au-delà du rayon), subdivision la plus fine (z).
 export const GRIDS = {
-  f: { deg: 0.05, radius: 500, margin: 600, maxZ: 2 },   // bâtiments, parties, rues, sol, usage du sol (rayons 340 à 500 m)
+  f: { deg: 0.05, radius: 800, margin: 900, maxZ: 2 },   // bâtiments, parties, rues, sol, usage du sol (rayons 340 à 800 m; 500 et 600 avant la v633.275)
   w: { deg: 0.1, radius: 2500, margin: 2600, maxZ: 1 },  // eau (rayon 2 500 m)
 };
 export const TILES_URL = (process.env.OVERTURE_TILES_URL || `${SUPABASE_URL}/storage/v1/object/public/overture`).replace(/\/$/, '');
