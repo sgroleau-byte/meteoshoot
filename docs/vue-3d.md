@@ -1353,6 +1353,7 @@ importé, lui, est le fichier de l'architecte.
   190 à 340 Ko (120 Ko compressés), construction dans le navigateur 800 à 880 ms. Tuiles à marge 900 m générées
   (29 min, 47 347 tuiles f, 1,4 Go), identiques à DuckDB sur le banc de dix lieux, envoyées à Backblaze le 4 novembre 2026
   (l'ancien jeu gardé en local: `overture-tuiles/2026-09-23.1-m600`). En prod: lieu neuf à Québec, Overture 0,4 s, scène 12,7 s.
+  Vérifié par Stéphane sur son iPad Pro M1 à Limoilou (« ça fonctionne bien »); un iPad plus ancien n'a pas été essayé.
 - À prévoir (4 novembre 2026): cache régional (couche Overture et fenêtres LiDAR par carré de 1 km, partagées entre
   lieux voisins), voir `docs/a-prevoir-cache-regional-3d.md`. Aujourd'hui le cache est par lieu exact.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,

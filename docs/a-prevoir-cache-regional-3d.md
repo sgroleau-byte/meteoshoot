@@ -86,4 +86,5 @@ journée:
 - Rien ne change à moins de 500 m (ni le temps de calcul des mesures LiDAR, qui restent à 350 m).
 - Attention au poids de la scène (environ 100 Ko aujourd'hui; plus de bâtiments et d'arbres en ville) et au plafond
   d'arbres sur iPad (1500): les arbres du nouvel anneau passent après ceux du centre.
-- À vérifier au banc de dix lieux (Stoneham, Limoilou, Sillery, Outremont, Toronto...) et sur iPad.
+- Vérifié au banc de dix lieux (Stoneham, Limoilou, Sillery, Outremont, Toronto...) et par Stéphane sur son iPad Pro M1
+  à Limoilou le 4 novembre 2026.
