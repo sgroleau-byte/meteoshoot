@@ -1324,6 +1324,23 @@ importé, lui, est le fichier de l'architecte.
   faisait disparaître: tout voisin Overture touché par une forme dessinée, même par un bord, était retiré. Désormais
   (`coversBld`): retrait seulement si le centre de l'un est dans l'autre ou si le quart de l'empreinte du voisin est
   sous la forme; un stationnement dessiné ne retire jamais un bâtiment.
+- **Sol sec: relief et broussaille (v633.273 et v633.274).** Bump procédural de la normale du sol là où le sol est sec
+  (masses de roche à 11, 4,2, 1,6 et 0,6 m sur un domaine tordu, arêtes cassées, aucune période: Stéphane, « ça doit
+  être organique, pas de lignes alignées »; une première version à strates en gradins a été retirée), chaque échelle
+  effacée sous deux pixels. Broussaille en moucheté diffus (bruits doux à 6 et 14 m) après « les points verts font trop
+  picoté ». Tout proportionnel à `uDry`: nul sur l'herbe.
+- **LiDAR américain (v633.274, 4 novembre 2026, `api/lidar3dep.js`, TERRAIN_V 4, scène v19).** Stéphane devant Google
+  Earth: « pour le relief, est-ce que ça peut être plus précis? ». Deux sources de l'USGS (3DEP), lues par plages d'octets:
+  le modèle de terrain 1 m (sol nu, GeoTIFF LZW à prédicteur flottant sur le seau S3 prd-tnm, index TNM Access, tuiles de
+  10 km en UTM, aperçus 2 à 32 m, tous les relevés gardés par tuile car un récent laisse parfois un coin vide) pour le
+  relief, et les tuiles 2 m du Planetary Computer (sol et surface, LERC + zstd, jeton anonyme, UTM) pour les hauteurs,
+  empreintes, toits et arbres, là où elles existent (Boston, Austin, Denver oui; Phoenix, Seattle, Miami, Burlington non;
+  Sedona: tuile présente mais vide à la chapelle). `api/cog.js` sait maintenant le deflate, le prédicteur flottant, le LERC
+  (décodeur Esri) et le zstd (fzstd, JS pur). Frontière: au nord de 41,6° le LiDAR canadien est lu d'abord, l'USGS
+  seulement s'il n'a aucun pixel ici (le catalogue canadien répond jusqu'à Boston avec des tuiles vides de 500 km).
+  Étiquettes: « Relief LiDAR 1 m (USGS 3DEP) », « modèle d'élévation de l'USGS (10 m) » hors LiDAR. Vérifié: Sedona (relief
+  1 m, buttes et chapelle), Cambridge (tout), Stoneham et Toronto inchangés. Essais: `node api/lidar3dep.js lat lng`,
+  `node api/terrain.js --test lat lng --png relief.png`.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

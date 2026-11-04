@@ -3,9 +3,12 @@
 // (api/terrain.js) pour lire le modèle LiDAR de Ressources naturelles Canada (fichier de 1 To sur S3) sans
 // télécharger son index complet (8 Mo par niveau) ni dépendre d'une bibliothèque.
 // Limites: un seul échantillon par pixel, 32 bits flottants (ou entiers 8/16/32 bits), tuiles sans prédicteur,
-// compression nulle, LZW ou deflate (zlib de Node, 4 novembre 2026: cartes de couverture du sol ESA WorldCover et CCI). Le décodage LZW suit celui de geotiff.js (EOX IT Services, licence MIT).
+// compression nulle, LZW, deflate (zlib de Node, 4 novembre 2026: cartes de couverture du sol ESA WorldCover et CCI) ou
+// LERC (décodeur d'Esri, licence Apache 2.0, 4 novembre 2026: LiDAR américain USGS 3DEP servi par le Planetary Computer). Le décodage LZW suit celui de geotiff.js (EOX IT Services, licence MIT).
 
 import { inflateSync } from 'zlib';
+import * as Lerc from 'lerc';
+import { decompress as zstdDecompress } from 'fzstd';
 
 const TYPE_SIZE = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8, 16: 8, 17: 8, 18: 8 };
 const UA = 'MeteoShoot (www.meteoshoot.com)';
@@ -145,8 +148,16 @@ async function decodeTile(cog, lv, tx, ty, key) {
   else if (L.comp === 1) bytes = raw;
   else if (L.comp === 5) bytes = lzwDecode(raw, n * bpp);
   else if (L.comp === 8 || L.comp === 32946) bytes = new Uint8Array(inflateSync(raw));
+  else if (L.comp === 34887 || L.comp === 34925 || L.comp === 34926) { // LERC (3DEP: blob LERC compressé en zstd, fzstd en JS pur): flottants décodés directement, masque de validité
+    if (!Lerc.isLoaded()) await Lerc.load();
+    const blob = raw[0] === 0x28 && raw[1] === 0xb5 && raw[2] === 0x2f && raw[3] === 0xfd ? zstdDecompress(raw) : raw[0] === 0x78 ? new Uint8Array(inflateSync(raw)) : raw;
+    const d = Lerc.decode(blob), px = d.pixels[0], m = d.mask;
+    for (let i = 0; i < n; i++) out[i] = i < px.length && (!m || m[i]) ? px[i] : NaN;
+    bytes = null;
+  }
   else throw new Error('cog: compression ' + L.comp + ' non gérée');
-  if (L.pred !== 1 && bytes) throw new Error('cog: prédicteur ' + L.pred + ' non géré');
+  if (L.pred === 3 && bytes) fpPredictor(bytes, L.tw, bpp, cog.le); // prédicteur flottant (USGS 1 m, 4 novembre 2026)
+  else if (L.pred !== 1 && bytes) throw new Error('cog: prédicteur ' + L.pred + ' non géré');
   if (bytes) {
     const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const le = cog.le;
@@ -158,6 +169,19 @@ async function decodeTile(cog, lv, tx, ty, key) {
   if (L.nodata != null) for (let i = 0; i < n; i++) if (out[i] === L.nodata || out[i] < -30000) out[i] = NaN;
   tileCache.set(key, out); if (tileCache.size > TILE_CACHE_MAX) tileCache.delete(tileCache.keys().next().value);
   return out;
+}
+
+// Prédicteur flottant du TIFF (3): dans chaque rangée de la tuile, les octets sont d'abord des différences (chaque octet
+// s'ajoute au précédent), puis rangés par plans (tous les octets de poids fort des pixels, puis les suivants, gros-boutiste).
+// On remet les pixels dans l'ordre d'octets du fichier (comme geotiff.js). Modifie bytes en place.
+function fpPredictor(bytes, tw, bpp, le) {
+  const rowLen = tw * bpp, rows = Math.floor(bytes.length / rowLen), copy = new Uint8Array(rowLen);
+  for (let r = 0; r < rows; r++) {
+    const o = r * rowLen;
+    for (let i = 1; i < rowLen; i++) bytes[o + i] = (bytes[o + i] + bytes[o + i - 1]) & 255;
+    copy.set(bytes.subarray(o, o + rowLen));
+    for (let i = 0; i < tw; i++) for (let b = 0; b < bpp; b++) bytes[o + bpp * i + b] = copy[(le ? bpp - 1 - b : b) * tw + i];
+  }
 }
 
 // Fenêtre en pixels d'un niveau [c0, r0, c1, r1) -> { w, h, data: Float32Array, c0, r0 }, lue par tuiles en parallèle.

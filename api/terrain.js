@@ -4,8 +4,12 @@
 //     GeoTIFF optimisés pour le nuage sur S3, lus par tuiles avec api/cog.js): 1 m jusqu'à 200 m du lieu (depuis la
 //     v633.237, TERRAIN_V 3: bordures, fossés, murets et talus autour du bâtiment), 2 m jusqu'à 640 m, 4 m jusqu'à
 //     1,3 km, 32 m jusqu'à 6 km;
-//   - modèle numérique d'élévation du Canada (20 m) par les tuiles Terrain Tiles d'AWS (format terrarium): 13 m par
-//     pixel jusqu'à 5 km, 100 m par pixel jusqu'à 20 km, et partout où le LiDAR manque.
+//   - aux États-Unis (TERRAIN_V 4, 4 novembre 2026, api/lidar3dep.js): modèle de terrain 1 m de l'USGS (3DEP, sol nu,
+//     tuiles de 10 km sur S3, aperçus à 2, 4, 8, 16 et 32 m), sinon les tuiles 2 m du Planetary Computer, aux mêmes rayons
+//     que le LiDAR canadien (1 m jusqu'à 200 m, 2 m jusqu'à 640 m, 4 m jusqu'à 1,3 km, 32 m jusqu'à 6 km, lointain 8 et 16 m);
+//   - modèle numérique d'élévation du Canada (20 m) par les tuiles Terrain Tiles d'AWS (format terrarium; aux États-Unis,
+//     la même mosaïque porte le modèle USGS à 10 m): 13 m par pixel jusqu'à 5 km, 100 m par pixel jusqu'à 20 km, et
+//     partout où le LiDAR manque.
 // Résultat: une grille non uniforme (même axe en x et en n: 1 m jusqu'à 128 m, 2 m jusqu'à 256 m, pas croissant de 12 % jusqu'à 500 m,
 // 20 km de rayon), hauteurs en décimètres au-dessus du point le plus bas, encodées en base64 (Int16). Le client
 // (src/scene3d/terrain.js) la garde dans le cache partagé Supabase, donc chaque lieu n'est calculé qu'une fois.
@@ -22,9 +26,10 @@
 import { PNG } from 'pngjs';
 import { openCog, readWindow } from './cog.js';
 import { gridSampler } from '../src/scene3d/horizon.js';
+import { source3dep, windowMosaic, inUS, maybeCanada } from './lidar3dep.js';
 
 export const maxDuration = 60;
-export const TERRAIN_V = 3; // 2: relief lointain polaire (far); 3: 1 m autour du bâtiment
+export const TERRAIN_V = 4; // 2: relief lointain polaire (far); 3: 1 m autour du bâtiment; 4: LiDAR américain (USGS 3DEP, api/lidar3dep.js)
 const UA = 'MeteoShoot (www.meteoshoot.com)';
 
 // ---------- grille locale: positions des noeuds le long d'un axe (mètres), symétrique autour de 0
@@ -138,6 +143,26 @@ export async function hrdemLayers(urls, res, lat, lng, half, mLat, mLng, log, ci
   return out.reverse(); // la préférée en dernier: elle recouvre les autres
 }
 
+// Couche LiDAR américaine (api/lidar3dep.js): mosaïque des tuiles 1 m de l'USGS (sinon 2 m du Planetary Computer) sur le
+// cadre, au niveau d'aperçu demandé; même forme que hrdemLayers (une couche, ou aucune).
+// log: erreurs (relief marqué incomplet); info: avancement.
+export async function usgsLayers(src, res, lat, lng, half, mLat, mLng, log, circle = false, info = () => {}) {
+  let E0, E1, N0, N1;
+  if (circle) { const [Ec, Nc] = src.proj(lat, lng), R = half * 1.01; E0 = Ec - R; E1 = Ec + R; N0 = Nc - R; N1 = Nc + R; }
+  else {
+    const corners = [[-half, -half], [half, -half], [half, half], [-half, half]].map(([x, n]) => src.proj(lat + n / mLat, lng + x / mLng));
+    E0 = Math.min(...corners.map(c => c[0])); E1 = Math.max(...corners.map(c => c[0])); N0 = Math.min(...corners.map(c => c[1])); N1 = Math.max(...corners.map(c => c[1]));
+  }
+  for (const items of [src.list1m, src.list2m]) {
+    if (!items.length) continue;
+    let win;
+    try { win = await windowMosaic(items, 'dtm', E0, N0, E1, N1, res, log, info); } catch (e) { log(`usgs ${res} m: ${e.message}`); continue; }
+    if (!win) continue;
+    return [finishLayer({ name: `lidar usgs ${win.res} m`, data: win.data, W: win.w, H: win.h, half, tiles: win.tiles, res: win.res, toPx: (la, ln) => { const [E, N] = src.proj(la, ln); return [(E - win.x0) / win.res - 0.5, (win.y0 - N) / win.res - 0.5]; } })];
+  }
+  return [];
+}
+
 // ---------- grille polaire lointaine (v633.194): anneau k au rayon FAR_R0 x FAR_GROW^k, direction j à j x 360 / FAR_DIRS
 // degrés depuis le nord dans le sens horaire (x = r sin, n = r cos, comme horizon.js); rangée k, colonne j.
 export const FAR_R0 = 1000, FAR_GROW = 1.01, FAR_DIRS = 720, FAR_BLEND = 15;
@@ -178,11 +203,12 @@ export async function buildTerrain(lat, lng, log = () => {}) {
   // cache (Supabase et réseau de Vercel): une panne passagère ne doit pas figer un relief sans LiDAR pour toujours.
   let partial = false; const logE = (m) => { partial = true; log(m); };
   const stac = (coll) => hrdemUrls(coll, bbox(23500)).catch((e) => { logE(`catalogue ${coll}: ${e.message}`); return []; });
-  const [urls1, urls2] = await Promise.all([stac('hrdem-mosaic-1m'), stac('hrdem-mosaic-2m')]);
+  // Canada d'abord (au sud de 41,6°, inutile), puis les États-Unis si Ressources naturelles Canada n'a rien ici (voir maybeCanada).
+  const [urls1, urls2] = maybeCanada(lat, lng) ? await Promise.all([stac('hrdem-mosaic-1m'), stac('hrdem-mosaic-2m')]) : [[], []];
   const lidarUrls = [...urls1, ...urls2.filter(u => !urls1.includes(u))];
   // Couches de la plus grossière à la plus fine; chacune recouvre la précédente là où elle a des données, avec un
   // fondu sur ses bords (15 % du demi-côté) et à ses trous. Lointain: fenêtres rondes, résolution proche du pas local.
-  const [t10, t13, l32, l4, l2, l1, t11, f64, f32, f16, f8] = await Promise.all([
+  let [t10, t13, l32, l4, l2, l1, t11, f64, f32, f16, f8] = await Promise.all([
     terrariumLayer(lat, lng, 10, EXTENT * 1.03, mLat, mLng, logE),
     terrariumLayer(lat, lng, 13, 5000, mLat, mLng, logE),
     hrdemLayers(lidarUrls, 32, lat, lng, 6000, mLat, mLng, logE),
@@ -195,6 +221,19 @@ export async function buildTerrain(lat, lng, log = () => {}) {
     hrdemLayers(lidarUrls, 16, lat, lng, 4500, mLat, mLng, logE, true),
     hrdemLayers(lidarUrls, 8, lat, lng, 2300, mLat, mLng, logE, true),
   ]);
+  // États-Unis: LiDAR de l'USGS (api/lidar3dep.js) quand le Canada n'a aucun pixel à moins de 1,3 km (une couche
+  // canadienne sans donnée n'est pas renvoyée). Index interrogés sur 7 km (les tuiles 1 m font 10 km, celles du Planetary
+  // Computer 8 km: le cadre de 6 km du 32 m en touche au plus neuf). Au-delà de 4,5 km: Terrain Tiles (10 m aux États-Unis).
+  let usgs = null;
+  if (!l4.length && !l2.length && !l1.length && inUS(lat, lng)) {
+    usgs = await source3dep(lat, lng, [lng - 7000 / mLng, lat - 7000 / mLat, lng + 7000 / mLng, lat + 7000 / mLat], (m) => log(m)).catch((e) => { logE(`USGS: ${e.message}`); return null; });
+    if (usgs && usgs.failed) partial = true;
+    if (usgs) {
+      const lid = (res, half, circle = false) => usgsLayers(usgs, res, lat, lng, half, mLat, mLng, logE, circle, log);
+      [l32, l4, l2, l1, f16, f8] = await Promise.all([lid(32, 6000), lid(4, 1300), lid(2, 640), lid(1, 200), lid(16, 4500, true), lid(8, 2300, true)]);
+      f64 = []; f32 = [];
+    }
+  }
   const layers = [t10, t13, ...l32, ...l4, ...l2, ...l1].filter(Boolean);
   if (!layers.length) throw new Error('aucune source de relief');
   const tFetch = Date.now() - t0;
@@ -230,7 +269,8 @@ export async function buildTerrain(lat, lng, log = () => {}) {
   const Hq = new Float32Array(N * N); for (let k = 0; k < N * N; k++) Hq[k] = hMin + q[k] / 10;
   const farLayers = [[t10, 20600], [t11, 20500], ...f64.map(L => [L, 23000]), ...f32.map(L => [L, 12000]), ...f16.map(L => [L, 4000]), ...f8.map(L => [L, 2000])].filter(([L]) => L);
   const far = buildFar(farLayers, gridSampler(ax, Hq), lat, lng, mLat, mLng);
-  const src = { lidar: fineN ? Math.round(fineLidar / fineN * 100) / 100 : 0, lidarRes, cdem: !!(t10 || t13), layers: layers.map(L => `${L.name} (${L.tiles} tuiles)`), far: farLayers.map(([L]) => L.name) };
+  // agency: d'où vient le LiDAR (rncan, usgs); region: étiquette du modèle d'élévation de secours (ca, us, other).
+  const src = { lidar: fineN ? Math.round(fineLidar / fineN * 100) / 100 : 0, lidarRes, cdem: !!(t10 || t13), agency: fineLidar ? (usgs ? 'usgs' : 'rncan') : null, region: usgs ? 'us' : lidarUrls.length || maybeCanada(lat, lng) ? 'ca' : inUS(lat, lng) ? 'us' : 'other', layers: layers.map(L => `${L.name} (${L.tiles} tuiles)`), far: farLayers.map(([L]) => L.name) };
   if (partial) src.partial = true;
   return { v: TERRAIN_V, origin: [lat, lng], ax, hMin, hMax: Math.round(hMax * 10) / 10, h: b64, far, src, ms: { fetch: tFetch, total: Date.now() - t0 } };
 }

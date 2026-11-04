@@ -35,6 +35,8 @@
 //   et ceux semés sur les pixels « arbres » de WorldCover hors de la vue du LiDAR) portent une essence tirée au sort
 //   d'après leaf: [x, n, k] ou [x, n, k, h] (h: hauteur en terrain aride, arbustes et sol nu à 20 % et plus dans 1,5 km).
 //   Avant, à Sedona (Arizona), des feuillus en couleurs d'automne sur de l'herbe verte: genévriers et roche rouge en réalité.
+// v19 (4 novembre 2026): LiDAR américain (api/lidar3dep.js): aux États-Unis, hauteurs, empreintes, toits et arbres mesurés sur
+//   les tuiles 2 m de l'USGS (Planetary Computer) comme au Canada sur le LiDAR de Ressources naturelles Canada; treesSrc.agency.
 // Couche Overture gardée à part (3 novembre 2026, v633.267): la lecture d'Overture (13 s sur 28 en production) ne dépend
 //   que du lieu, de la version d'Overture (RELEASE) et des règles de ce fichier (BASE_V); elle est gardée dans le cache partagé
 //   sous la clé « ovt_lat_lng » (écrite par le client ou le script de préchauffage, lue ici avec la clé publique). Une nouvelle
@@ -408,7 +410,7 @@ export async function buildScene(lat, lng, opts = {}) {
   let treesOut = trees.filter(clearOfBld), treesSrc = null, canopy = null;
   if (lt && lt.trees) {
     treesOut = lt.trees.concat(treesOut.filter(([x, n]) => Math.hypot(x, n) > R_TREES || !lt.covered(x, n)));
-    treesSrc = { date: lt.date, res: lt.res, essences: lt.essences, n: lt.trees.length };
+    treesSrc = { date: lt.date, res: lt.res, essences: lt.essences, n: lt.trees.length, agency: lt.agency || 'rncan' };
     canopy = lt.canopy;
   }
   // Arbres sans mesure (v18): essence d'après le feuillage de la région (CCI), hauteur basse en terrain aride; puis semis
@@ -438,7 +440,7 @@ export async function buildScene(lat, lng, opts = {}) {
     coverOut = { v: cover.v, near: cover.near || null, far: cover.far || null, leaf, ground, src: cover.src, arid: arid ? 1 : 0 };
     log(`couverture du sol: ${seeded} arbres semés d'après WorldCover${arid ? ', terrain aride' : ''}${leaf ? `, persistants ${Math.round((leaf.ne + leaf.be) * 100)} %` : ''}`);
   } else if (ground) coverOut = { v: 1, ground, src: [] };
-  const scene = { v: 18, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, lidarAdd: noAdd ? 0 : 1, roofs, cover: coverOut, ms: { query: tq, base: fromCache ? 'cache' : src, total: Date.now() - t0, indexed: !!INDEX } };
+  const scene = { v: 19, release: RELEASE, origin: [lat, lng], bld, roads, trees: treesOut, treesSrc, canopy, green, asphalt, water, paved, gravel, gravelDitch, imgShift, appleShift: apple, appleRoof, pavedSrc, lidarBld, lidarFp, lidarAdd: noAdd ? 0 : 1, roofs, cover: coverOut, ms: { query: tq, base: fromCache ? 'cache' : src, total: Date.now() - t0, indexed: !!INDEX } };
   if (!fromCache) scene.base = base; // à garder par le client (clé ovt_), jamais dans la scène mise en cache
   if (lidarErr) scene.lidarErr = true;
   if (appleErr) { scene.appleErr = true; scene.lidarErr = true; } // lidarErr aussi: les versions 633.242 et antérieures ne connaissent que lui pour ne pas garder la scène

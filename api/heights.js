@@ -9,6 +9,7 @@
 // hauteur d'Overture), couverture partielle hors des zones habitées.
 import { openCog, readWindow } from './cog.js';
 import { toLCC } from './terrain.js';
+import { source3dep, windowMosaic, inUS, maybeCanada } from './lidar3dep.js';
 
 const STAC = 'https://datacube.services.geo.ca/stac/api/collections';
 const UA = 'MeteoShoot (www.meteoshoot.com)';
@@ -86,29 +87,38 @@ export async function lidarHeights(lat, lng, bld, log = () => {}) {
   // Cadre des empreintes à mesurer (en mètres locaux), puis en Lambert du Canada.
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const i of todo) for (const [x, n] of bld[i][0]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, n); y1 = Math.max(y1, n); }
-  const toL = (x, n) => toLCC(lat + n / mLat, lng + x / mLng);
-  const corners = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([x, n]) => toL(x, n));
-  const E0 = Math.min(...corners.map((c) => c[0])) - 2, E1 = Math.max(...corners.map((c) => c[0])) + 2;
-  const N0 = Math.min(...corners.map((c) => c[1])) - 2, N1 = Math.max(...corners.map((c) => c[1])) + 2;
   const bbox = [lng + x0 / mLng, lat + y0 / mLat, lng + x1 / mLng, lat + y1 / mLat];
-  // 1 m d'abord, puis 2 m pour les trous de couverture du 1 m (mêmes tuiles de 500 km dans les deux collections).
-  const err = { '1m': false, '2m': false };
-  const [l1, l2] = await Promise.all(['1m', '2m'].map((r) => items(`hrdem-mosaic-${r}`, bbox).catch((e) => { err[r] = true; log(`hauteurs ${r}: ${e.message}`); return []; })));
-  let failed = err['1m']; // le 2 m ne compte que s'il sert (voir plus bas)
-  const list = [...l1, ...l2];
-  if (!list.length) { failed = failed || err['2m']; log(failed ? 'hauteurs: catalogue LiDAR indisponible' : 'hauteurs: pas de LiDAR ici'); return { measured: 0, failed }; }
-
+  // Canada d'abord (Ressources naturelles Canada: 1 m, puis 2 m pour les trous de couverture du 1 m, mêmes tuiles de
+  // 500 km dans les deux collections), puis les États-Unis (4 novembre 2026: surface et sol nu des tuiles 2 m du
+  // Planetary Computer, api/lidar3dep.js, en une mosaïque) si le Canada n'a rien ici (voir maybeCanada).
+  let list = [], failed = false, usgs = null, E0, E1, N0, N1, toL;
+  const frame = (proj) => {
+    toL = (x, n) => proj(lat + n / mLat, lng + x / mLng);
+    const corners = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([x, n]) => toL(x, n));
+    E0 = Math.min(...corners.map((c) => c[0])) - 2; E1 = Math.max(...corners.map((c) => c[0])) + 2;
+    N0 = Math.min(...corners.map((c) => c[1])) - 2; N1 = Math.max(...corners.map((c) => c[1])) + 2;
+  };
+  if (maybeCanada(lat, lng)) {
+    const err = { '1m': false, '2m': false };
+    const [l1, l2] = await Promise.all(['1m', '2m'].map((r) => items(`hrdem-mosaic-${r}`, bbox).catch((e) => { err[r] = true; log(`hauteurs ${r}: ${e.message}`); return []; })));
+    failed = err['1m']; // le 2 m ne compte que s'il sert (voir plus bas)
+    frame(toLCC);
+    list = [...l1, ...l2].map((it) => ({ ...it, read: () => Promise.all([window1m(it.dsm, E0, N0, E1, N1), window1m(it.dtm, E0, N0, E1, N1)]) }));
+    list.last1m = l1.length ? list[l1.length - 1] : null; list.err2m = err['2m'];
+    if (!list.length) failed = failed || err['2m'];
+  }
   const done = bld.map(b => b[4] === 1);
   const missing = new Array(bld.length).fill(true); // pas encore couvert par une mosaïque lue
-  let measured = 0;
-  for (const it of list) {
+  let measured = 0, seenPx = 0; // seenPx: pixels valides lus (le catalogue canadien répond près de la frontière avec des tuiles vides)
+  const measure = async (list) => { for (const it of list) {
     // Mosaïque à 2 m: seulement s'il reste des bâtiments que le 1 m ne couvrait pas.
     if (it.coll === 'hrdem-mosaic-2m' && !bld.some((_, bi) => !done[bi] && missing[bi])) break;
-    if (it === l1[l1.length - 1] && err['2m'] && bld.some((_, bi) => !done[bi] && missing[bi])) failed = true;
+    if (it === list.last1m && list.err2m && bld.some((_, bi) => !done[bi] && missing[bi])) failed = true;
     let dsm, dtm;
-    try { [dsm, dtm] = await Promise.all([window1m(it.dsm, E0, N0, E1, N1), window1m(it.dtm, E0, N0, E1, N1)]); } catch (e) { failed = true; log(`hauteurs: ${e.message}`); continue; }
+    try { [dsm, dtm] = await it.read(); } catch (e) { failed = true; log(`hauteurs: ${e.message}`); continue; }
     if (!dsm || !dtm || dsm.c0 !== dtm.c0 || dsm.r0 !== dtm.r0 || dsm.w !== dtm.w || dsm.h !== dtm.h || dsm.res !== dtm.res) continue;
     const { w, h, c0, r0, res } = dsm;
+    for (let k = 0; k < dsm.data.length; k += 7) if (dsm.data[k] === dsm.data[k]) seenPx++;
     const px = (E, N) => [(E - dsm.x0) / res - c0 - 0.5, (dsm.y0 - N) / res - r0 - 0.5]; // centre du pixel (0,0) en (0,0)
     const hAt = (i, j) => { if (i < 0 || j < 0 || i >= w || j >= h) return NaN; const k = j * w + i; return dsm.data[k] - dtm.data[k]; };
     bld.forEach((b, bi) => {
@@ -150,7 +160,17 @@ export async function lidarHeights(lat, lng, bld, log = () => {}) {
       measured++;
     });
     if (done.every(Boolean)) break;
+  } };
+  if (list.length) await measure(list);
+  if (!seenPx && inUS(lat, lng)) { // rien lu au Canada: les tuiles 2 m de l'USGS, en une mosaïque
+    usgs = await source3dep(lat, lng, bbox, log).catch((e) => { log(`hauteurs USGS: ${e.message}`); return { failed: true, list2m: [] }; });
+    failed = failed || !!(usgs && usgs.failed);
+    if (usgs && usgs.list2m.length) {
+      frame(usgs.proj);
+      await measure([{ coll: 'usgs-2m', read: () => Promise.all([windowMosaic(usgs.list2m, 'dsm', E0, N0, E1, N1, 2, log), windowMosaic(usgs.list2m, 'dtm', E0, N0, E1, N1, 2, log)]) }]);
+    }
   }
+  if (!seenPx) { log(failed ? 'hauteurs: catalogue LiDAR indisponible' : 'hauteurs: pas de LiDAR ici'); return { measured: 0, failed }; }
   log(`hauteurs LiDAR: ${measured}/${bld.length} bâtiments${failed ? ' (lecture incomplète)' : ''}`);
   return { measured, failed };
 }

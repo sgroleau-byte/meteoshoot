@@ -20,6 +20,7 @@
 // tout code autre que 1 et 5 comme un feuillu: les scènes en cache (k 0 ou 1) restent valables.
 import { toLCC } from './terrain.js';
 import { items, window1m } from './heights.js';
+import { source3dep, windowMosaic, inUS, maybeCanada } from './lidar3dep.js';
 
 export const R_TREES = 350; // m autour du projet
 const UA = 'MeteoShoot (www.meteoshoot.com)';
@@ -35,9 +36,9 @@ const VDQ_RES = '13a51853-a5b5-4add-8791-02ccba5c1be7'; // Arbres répertoriés 
 // Repère local (x est, n nord, en mètres autour de lat, lng) vers les pixels d'une fenêtre LiDAR (Lambert du Canada),
 // et retour. Sur 350 m, la projection est affine à quelques millimètres près (la rotation, d'environ 15 degrés au
 // Québec, est comprise).
-export function frame(lat, lng, win) {
+export function frame(lat, lng, win, proj = toLCC) {
   const mLat = 111320, mLng = 111320 * Math.cos(lat * Math.PI / 180), d = 100;
-  const P = (x, n) => { const [E, N] = toLCC(lat + n / mLat, lng + x / mLng); return [(E - win.x0) / win.res - win.c0 - 0.5, (win.y0 - N) / win.res - win.r0 - 0.5]; };
+  const P = (x, n) => { const [E, N] = proj(lat + n / mLat, lng + x / mLng); return [(E - win.x0) / win.res - win.c0 - 0.5, (win.y0 - N) / win.res - win.r0 - 0.5]; };
   const o = P(0, 0), ex = P(d, 0), en = P(0, d);
   const a = (ex[0] - o[0]) / d, b = (en[0] - o[0]) / d, c = (ex[1] - o[1]) / d, e = (en[1] - o[1]) / d, det = a * e - b * c;
   return {
@@ -385,21 +386,32 @@ const hsh = (x, n, k) => { const s = Math.sin(x * 12.9898 + n * 78.233 + k * 37.
 export async function readCanopy(lat, lng, log = () => {}) {
   const R = R_TREES + 8, mLat = 111320, mLng = 111320 * Math.cos(lat * Math.PI / 180);
   const bbox = [lng - R / mLng, lat - R / mLat, lng + R / mLng, lat + R / mLat];
-  const [E, N] = toLCC(lat, lng);
   const again = (f) => f().catch(() => f()); // une erreur réseau passagère (ou un service lent) ne doit pas coûter le relevé
-  let list = await again(() => items('hrdem-mosaic-1m', bbox));
-  if (!list.length) list = await again(() => items('hrdem-mosaic-2m', bbox));
-  if (!list.length) { log('LiDAR: pas de relevé ici'); return null; }
-  const it = list[0];
-  // Fenêtre carrée en Lambert (±R plus la rotation du repère: le cercle de R mètres y tient).
-  const [dsm, dtm] = await Promise.all([again(() => window1m(it.dsm, E - R, N - R, E + R, N + R)), again(() => window1m(it.dtm, E - R, N - R, E + R, N + R))]);
-  if (!dsm || !dtm || dsm.w !== dtm.w || dsm.h !== dtm.h || dsm.c0 !== dtm.c0 || dsm.r0 !== dtm.r0) { log('LiDAR: fenêtre vide'); return null; }
-  const { w: W, h: H, res } = dsm;
-  const raw = new Float32Array(W * H), seen = new Uint8Array(W * H);
-  let nSeen = 0;
-  for (let k = 0; k < raw.length; k++) { const v = dsm.data[k] - dtm.data[k]; if (v === v) { raw[k] = Math.max(0, v); seen[k] = 1; nSeen++; } }
-  if (nSeen < raw.length * 0.05) { log('LiDAR: absent de la fenêtre'); return null; }
-  return { raw, seen, W, H, res, fr: frame(lat, lng, dsm), date: it.date, bbox, dsm: dsm.data, dtm: dtm.data };
+  // Canada d'abord (Ressources naturelles Canada), puis les États-Unis (4 novembre 2026: tuiles 2 m du Planetary Computer,
+  // surface et sol nu, en mosaïque, repère UTM, api/lidar3dep.js) si le Canada n'a rien ici (voir maybeCanada).
+  // Fenêtre carrée en Lambert ou en UTM (±R plus la rotation du repère: le cercle de R mètres y tient); null si vide.
+  const readWin = async (dsmP, dtmP) => {
+    const [dsm, dtm] = await Promise.all([dsmP, dtmP]);
+    if (!dsm || !dtm || dsm.w !== dtm.w || dsm.h !== dtm.h || dsm.c0 !== dtm.c0 || dsm.r0 !== dtm.r0) return null;
+    const { w: W, h: H, res } = dsm, raw = new Float32Array(W * H), seen = new Uint8Array(W * H);
+    let nSeen = 0;
+    for (let k = 0; k < raw.length; k++) { const v = dsm.data[k] - dtm.data[k]; if (v === v) { raw[k] = Math.max(0, v); seen[k] = 1; nSeen++; } }
+    return nSeen < raw.length * 0.05 ? null : { raw, seen, W, H, res, dsm, dtm };
+  };
+  let win = null, it = null, usgs = null;
+  if (maybeCanada(lat, lng)) {
+    let list = await again(() => items('hrdem-mosaic-1m', bbox));
+    if (!list.length) list = await again(() => items('hrdem-mosaic-2m', bbox));
+    if (list.length) { it = list[0]; const [E, N] = toLCC(lat, lng); win = await readWin(again(() => window1m(it.dsm, E - R, N - R, E + R, N + R)), again(() => window1m(it.dtm, E - R, N - R, E + R, N + R))); }
+  }
+  if (!win && inUS(lat, lng)) { // rien au Canada (ou tuile canadienne vide près de la frontière): l'USGS
+    usgs = await again(() => source3dep(lat, lng, bbox, log));
+    if (usgs && usgs.list2m.length) { const [E, N] = usgs.proj(lat, lng); win = await readWin(again(() => windowMosaic(usgs.list2m, 'dsm', E - R, N - R, E + R, N + R, 2, log)), again(() => windowMosaic(usgs.list2m, 'dtm', E - R, N - R, E + R, N + R, 2, log))); }
+    if (!win) usgs = null;
+  }
+  if (!win) { log(it || usgs ? 'LiDAR: fenêtre vide' : 'LiDAR: pas de relevé ici'); return null; }
+  const { raw, seen, W, H, res, dsm, dtm } = win, proj = usgs ? usgs.proj : toLCC;
+  return { raw, seen, W, H, res, fr: frame(lat, lng, dsm, proj), date: usgs ? usgs.date : it.date, bbox, dsm: dsm.data, dtm: dtm.data, agency: usgs ? 'usgs' : 'rncan' };
 }
 
 export async function lidarTrees(lat, lng, bld, log = () => {}, win = undefined) {
@@ -490,5 +502,5 @@ export async function lidarTrees(lat, lng, bld, log = () => {}, win = undefined)
   const covered = (x, n) => { const [i, j] = fr.toPx(x, n), u = Math.round(i), v = Math.round(j); return u >= 0 && v >= 0 && u < W && v < H && seen[v * W + u] === 1; };
   const nCon = trees.filter((t) => t[4] === 1 || t[4] === 5).length, nEss = trees.filter((t) => t[4] >= 2).length;
   log(`arbres LiDAR: ${trees.length} (${nCon} conifères, ${nEss} feuillus d'essence connue, ${tops.filter((t) => t.src === 'vdq').length} de l'inventaire, ${inStands} dans un peuplement), relevé ${it.date || '?'}, ${res} m`);
-  return { trees, covered, canopy, date: it.date, res, essences: used, failed };
+  return { trees, covered, canopy, date: it.date, res, essences: used, failed, agency: win.agency || 'rncan' };
 }
