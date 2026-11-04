@@ -1341,6 +1341,8 @@ importé, lui, est le fichier de l'architecte.
   Étiquettes: « Relief LiDAR 1 m (USGS 3DEP) », « modèle d'élévation de l'USGS (10 m) » hors LiDAR. Vérifié: Sedona (relief
   1 m, buttes et chapelle), Cambridge (tout), Stoneham et Toronto inchangés. Essais: `node api/lidar3dep.js lat lng`,
   `node api/terrain.js --test lat lng --png relief.png`.
+- À prévoir (4 novembre 2026): cache régional (couche Overture et fenêtres LiDAR par carré de 1 km, partagées entre
+  lieux voisins), voir `docs/a-prevoir-cache-regional-3d.md`. Aujourd'hui le cache est par lieu exact.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
