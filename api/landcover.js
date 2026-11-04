@@ -34,14 +34,20 @@ function cciTile(lat, lng) {
   return `${CCI}/${name}/2020/C3S-LC-L4-LCCS-Map-300m-P1Y-2020-v2.1.1-${name}-lccs_class.tif`;
 }
 // Jeton de lecture anonyme du Planetary Computer (valable environ une journée, renouvelé une heure avant sa fin).
-let token = null;
-async function cciToken() {
-  if (token && token.exp - Date.now() > 3600e3) return token.t;
-  const r = await fetch(CCI_TOKEN, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(8000) });
-  if (!r.ok) throw new Error(`jeton CCI ${r.status}`);
-  const j = await r.json();
-  token = { t: j.token, exp: Date.parse(j['msft:expiry']) || Date.now() + 3600e3 };
-  return token.t;
+let token = null, tokenP = null;
+function cciToken() { // une demande à la fois, trois essais sur 429 (voir token3dep dans api/lidar3dep.js)
+  if (token && token.exp - Date.now() > 3600e3) return Promise.resolve(token.t);
+  if (tokenP) return tokenP;
+  tokenP = (async () => {
+    for (let k = 0; ; k++) {
+      const r = await fetch(CCI_TOKEN, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(8000) });
+      if (r.ok) { const j = await r.json(); token = { t: j.token, exp: Date.parse(j['msft:expiry']) || Date.now() + 3600e3 }; return token.t; }
+      if (r.status !== 429 || k >= 3) throw new Error(`jeton CCI ${r.status}`);
+      await new Promise((res) => setTimeout(res, 700 * (k + 1)));
+    }
+  })();
+  tokenP.catch(() => {}).finally(() => { tokenP = null; });
+  return tokenP;
 }
 
 // Fenêtre de classes d'une carte en degrés (WGS84, pixels carrés en degrés): grille autour de (lat, lng) sur ±half m.

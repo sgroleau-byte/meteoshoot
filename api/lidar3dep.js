@@ -24,14 +24,22 @@ export const inUS = (lat, lng) => lat >= 24 && lat <= 49.6 && lng >= -125 && lng
 // se règle par les pixels lus, pas par le catalogue ni par un tracé approximatif.
 export const maybeCanada = (lat, lng) => lat >= 41.6 && lng > -141 && lng < -52;
 
-let token = null;
-export async function token3dep() {
-  if (token && token.exp - Date.now() > 3600e3) return token.t;
-  const r = await fetch(TOKEN, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(8000) });
-  if (!r.ok) throw new Error(`jeton 3DEP ${r.status}`);
-  const j = await r.json();
-  token = { t: j.token, exp: Date.parse(j['msft:expiry']) || Date.now() + 3600e3 };
-  return token.t;
+// Jeton anonyme du Planetary Computer: une seule demande à la fois (six couches partent ensemble au démarrage d'une
+// fonction: six demandes simultanées valaient un 429 en production le 4 novembre 2026), et trois essais espacés sur 429.
+let token = null, tokenP = null;
+export function token3dep() {
+  if (token && token.exp - Date.now() > 3600e3) return Promise.resolve(token.t);
+  if (tokenP) return tokenP;
+  tokenP = (async () => {
+    for (let k = 0; ; k++) {
+      const r = await fetch(TOKEN, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(8000) });
+      if (r.ok) { const j = await r.json(); token = { t: j.token, exp: Date.parse(j['msft:expiry']) || Date.now() + 3600e3 }; return token.t; }
+      if (r.status !== 429 || k >= 3) throw new Error(`jeton 3DEP ${r.status}`);
+      await new Promise((res) => setTimeout(res, 700 * (k + 1)));
+    }
+  })();
+  tokenP.catch(() => {}).finally(() => { tokenP = null; });
+  return tokenP;
 }
 
 // ---------- UTM (NAD83 sur GRS80, assimilé à WGS84: l'écart est centimétrique)
@@ -90,9 +98,14 @@ export function items2m(bbox) {
 export function items1m(bbox) {
   return cached('1m:' + bbox.map((v) => v.toFixed(3)).join(','), async () => {
     const q = `${TNM}?datasets=${encodeURIComponent('Digital Elevation Model (DEM) 1 meter')}&bbox=${bbox.map((v) => v.toFixed(5)).join(',')}&prodFormats=GeoTIFF&max=60`;
-    const r = await fetchAgain(q, { headers: { 'User-Agent': UA } });
+    const r = await fetchAgain(q, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
     if (!r.ok) throw new Error(`index USGS ${r.status}`);
-    const j = await r.json(), out = [];
+    const text = await r.text(); let j;
+    try { j = JSON.parse(text); } catch (e) { throw new Error(`index USGS: réponse non JSON (${r.headers.get('content-type')}, ${text.slice(0, 80).replace(/\s+/g, ' ')})`); }
+    // Service dégradé (vu le 4 novembre 2026: HTTP 200 avec { error: « Expecting value » } pour toute requête): une erreur,
+    // pas une absence de tuiles, sinon le relief à 10 m serait mis en cache pour de bon.
+    if (j.error || !Array.isArray(j.items)) throw new Error(`index USGS: ${j.error || j.toastMessage || 'réponse sans liste'}`);
+    const out = [];
     for (const it of j.items || []) {
       const m = /USGS 1 Meter (\d+) (x\d+y\d+) (\S+)/.exec(it.title || ''); if (!m || !it.downloadURL) continue;
       out.push({ id: `${m[3]} ${m[2]}`, zone: Number(m[1]), dtm: it.downloadURL, date: String(it.publicationDate || it.lastUpdated || '').slice(0, 10), pip: false });
