@@ -691,6 +691,8 @@ export function createScene3D(container, opts = {}) {
     uSunFar: { value: new THREE.Vector3() }, uSunV: { value: new THREE.Vector3(0, 1, 0) }, uSigAir: { value: 3.912 / 25000 },
     uFarAlb: { value: new THREE.Vector3(0.1, 0.1, 0.05) }, uAlbR: { value: new THREE.Vector2(700, 1000) }, uRin: { value: 1e9 },
     uSubj: { value: new THREE.Vector2() },
+    // Sol sec (v633.273): part de la teinte sèche (uDry), couleur linéaire de la broussaille (uScrub) et sa densité (uBush).
+    uDry: { value: 0 }, uScrub: { value: new THREE.Vector3(0.05, 0.06, 0.03) }, uBush: { value: 0 },
   };
   // Hauteur du relief (relative à terrain.hMin) au point p = (est, nord); marche vers le soleil depuis un sommet du maillage,
   // pas croissant de 8,5 % (12 m au départ, 2 % de la distance au loin), arrêt dès que le disque est caché.
@@ -708,8 +710,19 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       if (prev) prev.call(mat, sh, r);
       Object.assign(sh.uniforms, sunVisU);
       if (opts.sun) sh.vertexShader = SUN_VIS_V + 'varying float vSunVis;\n' + sh.vertexShader.replace('#include <fog_vertex>', 'vSunVis=sunVis(vLampW);\n#include <fog_vertex>');
-      sh.fragmentShader = 'uniform vec3 uSunFar,uSunV,uFarAlb;uniform float uSigAir,uRin;uniform vec2 uAlbR,uSubj;\nfloat fhs(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}\nfloat fvn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(fhs(i),fhs(i+vec2(1.0,0.0)),f.x),mix(fhs(i+vec2(0.0,1.0)),fhs(i+vec2(1.0,1.0)),f.x),f.y);}\n' + (opts.sun ? SUN_VIS_V + 'varying float vSunVis;float gSunVis=1.0;float gSunSh=-1.0;bool gSunRef=false;\nfloat sunVisPx(vec3 P){if(!gSunRef){gSunRef=true;if(gSunVis>0.02&&gSunVis<0.98)gSunVis=sunVis(P);}return gSunVis;}\n#define SUN_VIS\n' : '') + (opts.near ? '#define NEAR_CLIP\n' : '') + sh.fragmentShader
+      sh.fragmentShader = 'uniform vec3 uSunFar,uSunV,uFarAlb,uScrub;uniform float uSigAir,uRin,uDry,uBush;uniform vec2 uAlbR,uSubj;\nfloat fhs(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}\nfloat fvn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(fhs(i),fhs(i+vec2(1.0,0.0)),f.x),mix(fhs(i+vec2(0.0,1.0)),fhs(i+vec2(1.0,1.0)),f.x),f.y);}\n'
+        // Relief du sol sec (v633.273, Stéphane: « un genre de bump map », puis « ça doit être organique, pas de lignes
+        // alignées »): hauteur procédurale en mètres, sans image ni période. Masses de roche: bruit déformé (domaine tordu
+        // par un bruit de 31 m) à 11 m, 4,2 m, 1,6 m et 0,6 m, plus des arêtes cassées (bruit en crête à 6,5 m); chaque
+        // octave s'efface quand elle devient plus petite que deux pixels (dw: taille d'un pixel au sol en mètres).
+        + 'float dryH(vec2 p,float y,float dw){vec2 w=p+vec2(fvn(p/31.0+2.1),fvn(p/31.0+7.4))*9.0-4.5;float h=1.3*fvn(w/11.0)*(1.0-smoothstep(5.0,30.0,dw))+0.6*fvn(w/4.2+1.3)*(1.0-smoothstep(2.0,8.0,dw))+0.3*fvn(w/1.6+4.1)*(1.0-smoothstep(0.7,3.0,dw))+0.12*fvn(w/0.6+8.7)*(1.0-smoothstep(0.3,1.2,dw));float r=1.0-abs(fvn(w/6.5+5.5)*2.0-1.0);h+=0.5*r*r*(1.0-smoothstep(3.0,12.0,dw));return h;}\n'
+        + 'vec3 dryNormal(vec3 sp,vec3 sn,vec2 dH){vec3 sx=dFdx(sp),sy=dFdy(sp);vec3 r1=cross(sy,sn),r2=cross(sn,sx);float det=dot(sx,r1)*(float(gl_FrontFacing)*2.0-1.0);vec3 g=sign(det)*(dH.x*r1+dH.y*r2);return normalize(abs(det)*sn-g);}\n' + (opts.sun ? SUN_VIS_V + 'varying float vSunVis;float gSunVis=1.0;float gSunSh=-1.0;bool gSunRef=false;\nfloat sunVisPx(vec3 P){if(!gSunRef){gSunRef=true;if(gSunVis>0.02&&gSunVis<0.98)gSunVis=sunVis(P);}return gSunVis;}\n#define SUN_VIS\n' : '') + (opts.near ? '#define NEAR_CLIP\n' : '') + sh.fragmentShader
+        .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nif(uDry>0.001){vec2 bp=vLampW.xz;float bdw=length(fwidth(bp));float bh=dryH(bp,vLampW.y,bdw);vec2 dH=vec2(dFdx(bh),dFdy(bh))*(1.6*uDry);normal=dryNormal(-vViewPosition,normal,dH);}')
         .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n#ifdef NEAR_CLIP\nif(dot(vLampW.xz,vLampW.xz)>uRin*uRin)discard;\n#endif\n#ifdef SUN_VIS\ngSunVis=vSunVis;\n#endif')
+        // Sol sec (v633.273): roche par plaques (37 m et 9 m: dalles plus claires et plus sombres), stries fines (2,6 m) et
+        // broussaille par points (2 à 3 m, densité uBush, teinte uScrub) qui s'effacent dès qu'ils deviennent plus petits
+        // qu'un pixel; tout proportionnel à uDry (nul sur un sol d'herbe: rien ne change au Québec).
+        .replace('#include <color_fragment>', '#include <color_fragment>\nif(uDry>0.001){vec2 dp=vLampW.xz;float dw=length(fwidth(dp));float big=fvn(dp/37.0+3.3),str=fvn(vec2(dp.x/2.6,dp.y/11.0)+7.9);float rock=0.86+0.2*big+0.08*(str-0.5);float pres=clamp(uBush*1.5,0.0,0.9);vec2 cc=floor(dp/3.0);float bush=0.0;for(int j=-1;j<=1;j++)for(int i=-1;i<=1;i++){vec2 c=cc+vec2(float(i),float(j));float h=fhs(c+0.37);if(h>pres)continue;vec2 q=c*3.0+vec2(0.4+2.2*fhs(c+1.1),0.4+2.2*fhs(c+2.3));float r=0.55+0.5*fhs(c+3.7);bush=max(bush,1.0-smoothstep(r-0.25-dw,r+dw*0.5,distance(dp,q)));}float far=smoothstep(1.0,4.0,dw);bush=mix(bush,0.22*pres,far);vec3 dryc=diffuseColor.rgb*rock;diffuseColor.rgb=mix(diffuseColor.rgb,mix(dryc,uScrub,bush),uDry);}')
         .replace('#include <color_fragment>', '#include <color_fragment>\n{float rr=min(length(vLampW.xz),length(vLampW.xz-uSubj));vec2 fp=vLampW.xz;float nz=0.55*fvn(fp/180.0)+0.3*fvn(fp/60.0+7.3)+0.15*fvn(fp/700.0-3.1),nh=fvn(fp/260.0+19.7);float fw=length(fwidth(fp)),nc=mix(0.5,0.6*fvn(fp/6.5)+0.4*fvn(fp/15.0+3.7),1.0-smoothstep(1.5,6.0,fw));vec3 fa=uFarAlb*(0.68+0.64*nz)*(0.6+0.8*nc)*mix(vec3(0.78,1.04,1.12),vec3(1.14,0.98,0.86),nh);diffuseColor.rgb=mix(diffuseColor.rgb,fa,smoothstep(uAlbR.x,uAlbR.y,rr));}')
         .replace('#include <fog_fragment>', '#include <fog_fragment>\n#ifdef USE_FOG\n{'
           + (opts.sun ? 'if(fogFactor>0.001){float shF=gSunSh>=0.0?gSunSh:sunVisPx(vLampW);gl_FragColor.rgb+=fogFactor*exp(-uSigAir*vFogDepth)*shF*max(dot(normal,uSunV),0.0)*diffuseColor.rgb*0.31830989*uSunFar;}' : '') + '}\n#endif');
@@ -753,6 +766,8 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     gndMat.color.copy(gc); gndMatPol.color.copy(gc); gndMatFar.color.copy(gc);
     GROUND_TINT = GROUND_TINT0.clone().lerp(dryC.clone().multiplyScalar(1.15), dryK);
     DRY_LIN = [dryC.r * 0.5, dryC.g * 0.5, dryC.b * 0.5];
+    sunVisU.uDry.value = dryK;
+    { const sc = gr && gr.vegRgb ? toC(gr.vegRgb, 0.7) : L('#3f5a2e'); sunVisU.uScrub.value.set(sc.r, sc.g, sc.b); sunVisU.uBush.value = gr ? Math.min(0.6, gr.veg || 0) : 0; }
     const lf = cv && cv.leaf;
     leafW = lf ? { [ESS.FEUILLU]: lf.bd || 0, [ESS.CONIFERE]: lf.ne || 0, [ESS.MELEZE]: lf.nd || 0, [ESS.PERSISTANT]: lf.be || 0 } : { [ESS.FEUILLU]: 0.45, [ESS.CONIFERE]: 0.55 };
   }
