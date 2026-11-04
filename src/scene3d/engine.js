@@ -326,8 +326,11 @@ if(uSunR>0.0&&texture2D(tDepth,vUv).x>=0.99999)c+=uSunDisc*smoothstep(uSunR,uSun
 c+=texture2D(tBloom,vUv).rgb*uBloom;c+=flare();c=aces(c);gl_FragColor=vec4(rain(desat(pow(c,vec3(1.0/2.2))))+(ign(gl_FragCoord.xy)-0.5)/255.0,1.0);}`;
 
 const PAL_RES = ['#8f4e3a', '#a0624c', '#7a4a3a', '#b07d5e', '#9c7a62', '#6e5a50', '#b8957a', '#d2c2a4', '#8c6b58'];
-// Toits: même couleur que les murs depuis la v633.269 (3 novembre 2026, demande de Stéphane: plus de dessus gris foncé
-// sur les blocs); la lumière du ciel suffit à distinguer le dessus des façades. L'ancienne palette de gris est retirée.
+// Toits: la couleur des murs, un peu assombrie (v633.270). Historique: palette de gris foncés jusqu'à la v633.268 (dessus
+// gris sur tous les blocs), même couleur que les murs en v633.269 (3 novembre 2026); le même jour, Stéphane: « mieux avec les
+// toits un peu plus foncés finalement, plus subtil qu'avant ». Facteur en linéaire (0,7, soit environ 15 % de moins à
+// l'écran); le dessus, qui reçoit plus de lumière du ciel que les façades, reste lisible sans redevenir gris.
+const ROOF_K = 0.7, roofOf = (c) => c.clone().multiplyScalar(ROOF_K);
 // Couleur des arbres: src/scene3d/season.js (depuis le 23 octobre 2026, selon la date, le lieu et l'essence; auparavant
 // une palette d'automne fixe toute l'année).
 const GC = { park: '#66784d', pitch: '#5d8a47', play: '#b8a88e', grass: '#6f8552' };
@@ -1023,7 +1026,9 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     const n = parts.reduce((t, p) => t + p.pos.length, 0), pos = new Float32Array(n), nrm = new Float32Array(n); let o = 0; parts.forEach(p => { pos.set(p.pos, o); nrm.set(p.nrm, o); o += p.pos.length; });
     const dist = new Float32Array(n / 3); for (let i = 0, k = 0; i < n; i += 3, k++) dist[k] = Math.hypot(pos[i], pos[i + 2]);
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); g.setAttribute('aDist', new THREE.BufferAttribute(dist, 1)); addMesh(g, mat, y, near, false, order);
+    if (import.meta.env.DEV) drapeV += n / 3;
   }
+  let drapeV = 0; // sommets drapés depuis la dernière reconstruction (développement)
   function addFlat(items, mat, y, order = 0) {
     [true, false].forEach(near => {
       const part = items.filter(it => { const c = centroid(it.o); return nearXY(c[0], c[1]) === near; });
@@ -1530,8 +1535,11 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     return sh;
   }
   function rebuild(keepView, modelOnly) {
+    const tk = import.meta.env.DEV ? [['début', performance.now()]] : null, mk = (l) => { if (tk) tk.push([l, performance.now(), drapeV]); }; // chronomètre de développement par étape
+    drapeV = 0;
     clearStatics();
     if (!modelOnly) { terrain.carveWater(data ? data.water : []); buildGround(); } // le relief est creusé sous les plans d'eau connus
+    mk('sol');
     if (!origin) return;
     if (model) placeModel();
     // La maison importée remplace la forme dessinée et l'édifice Overture qu'elle recouvre; les arbres sous elle disparaissent.
@@ -1563,7 +1571,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       const fl = Math.max(1, Math.floor(h / 3.6)); // une rangée de fenêtres par étage de 3,6 m environ (jamais étirée)
       const wallHex = (projLocal[d.i] && projLocal[d.i].wallColor) || '#7a3f33', base = groundOf(d.p).mean;
       edgesOf(d.p).forEach(e => projInfo.push({ dir: e.dir, len: e.len, mid: e.mid, nrm: e.nrm, label: `Forme ${i + 1}`, h, src, base }));
-      list.push({ p: d.p, h, fl, bay: 8, col: L(wallHex), rc: L(wallHex), allLit: true, unmapped: !hits.length }); // l'édifice photographié: toutes les fenêtres allumées la nuit; unmapped: absent d'Overture (clearance.js)
+      list.push({ p: d.p, h, fl, bay: 8, col: L(wallHex), rc: roofOf(L(wallHex)), allLit: true, unmapped: !hits.length }); // l'édifice photographié: toutes les fenêtres allumées la nuit; unmapped: absent d'Overture (clearance.js)
     });
     // Les façades allumées éclairent les alentours: une lumière surfacique chaude par façade (les plus longues d'abord),
     // devant le mur, à mi-hauteur, dirigée vers l'extérieur; intensité suivant celle des fenêtres (voir frame).
@@ -1575,6 +1583,7 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       const l = new THREE.RectAreaLight(0xffd9a0, 0, e.len * 0.9, e.h * 0.7); const nx = e.nrm[0], nz = -e.nrm[1];
       l.position.set(e.mid[0] + nx * 0.4, e.base + e.h * 0.5, -e.mid[1] + nz * 0.4); l.lookAt(l.position.x + nx, l.position.y, l.position.z + nz); l.visible = false; S.add(l); winLights.push(l);
     });
+    mk('projet');
     const others = []; let kept = []; treeEnv = []; othH = new Map(); drawn.forEach(d => othH.set(d.p, d.hEff ?? 9));
     if (data) {
       const hidden = hiddenBld(data.bld);
@@ -1586,8 +1595,9 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
         const q = p[0], r = hsh(q[0], q[1], 5); const hh = k === 0 && !lid ? Math.max(h, 6.2) : h; // hauteur mesurée (LiDAR): telle quelle
         othH.set(p, roof ? Math.max(hh, roofTop(roof) || 0) : hh);
         const col = L(k === 2 ? '#9a9a94' : k === 1 ? '#cfc7b8' : PAL_RES[Math.floor(r * PAL_RES.length)]);
-        list.push({ p, h: hh, fl: Math.max(1, Math.min(k === 0 ? Math.max(fl, Math.round(hh / 3.1)) : fl, Math.floor(hh / 3.2))), col, rc: col, roof: roof || null, hTop: roof ? Math.max(hh, roofTop(roof) || 0) : hh, holes: holes || null, base: base ?? null });
+        list.push({ p, h: hh, fl: Math.max(1, Math.min(k === 0 ? Math.max(fl, Math.round(hh / 3.1)) : fl, Math.floor(hh / 3.2))), col, rc: roofOf(col), roof: roof || null, hTop: roof ? Math.max(hh, roofTop(roof) || 0) : hh, holes: holes || null, base: base ?? null });
       });
+      mk('voisins');
       Object.keys(GC).forEach(k => addFlat(data.green.filter(p => p.k === k).map(p => ({ o: p.p })), flatMats[k], 0.03, 1));
       // Sol des cours intérieures (v633.265): pavé, comme une cour de ville (le terrain dessous est le gazon du relief).
       const cours = data.bld.flatMap((b, bi) => (b[7] && !hidden.has(bi) && !underModel(b[0]) ? b[7] : []).map(h => ({ o: h, h: [] })));
@@ -1600,22 +1610,25 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
       // n'atteignait ni la rue ni la maison, retour de Stéphane du 24 octobre 2026).
       addFlat((data.gravel || []).map(v => ({ o: v.o.length <= 6 ? v.o : regularizeRing(v.o, 1.0, 15), h: (v.h || []).map(h => regularizeRing(h, 1.0, 15)) })), flatMats.gravel, 0.042, 3);
     }
+    mk('surfaces');
     // Stationnements dessinés dans le projet (outil de la carte): même gris que le gravier, par-dessus tout le reste au sol.
     if (groundRings.length) addFlat(groundRings.map(p => ({ o: p, h: [] })), flatMats.gravel, 0.05, 4);
     if (data) {
       addFlat(data.water.map(w => ({ o: w.o, h: w.h, hFn: terrain.waterSurface(w), nFn: terrain.upNormal })), waterMat, 0.05); // surface lisse calée sur les rives
+      mk('eau');
       ribbons(data.roads.filter(r => r.k === 2), 0.1, flatMats.rail, 4); ribbons(data.roads.filter(r => r.k === 0), 0.08, flatMats.road, 5); ribbons(data.roads.filter(r => r.k === 1), 0.12, flatMats.walk, 6);
+      mk('rues');
       // Formes du projet et voisins, tels que blocks() les dessine, plus la maison importée (prisme de son enveloppe, de sa
       // pose à son faîte, sans surplomb permis): ni arbre ni sous-bois ne la traversent.
       const mPrism = mRing ? [{ p: signedArea(mRing) < 0 ? mRing.slice().reverse() : mRing, h: model.h, g: { min: model.group.position.y, mean: model.group.position.y }, unmapped: true }] : [];
-      const P = prisms([...list, ...mPrism], groundOf);
+      const P = prisms([...list, ...mPrism], groundOf); mk('prismes');
       if (import.meta.env.DEV && window.__scene3dCore) window.__scene3dCore.P = P; // vérification en développement
       const cg = data.canopy ? decodeCanopy(data.canopy) : null; // peuplements de la carte écoforestière (sous-bois, forme des couronnes)
       kept = trees(mRing ? data.trees.filter(treeFree) : data.trees, P, cg);
-      treeEnv = kept;
-      lamps(data.roads, data.bld);
+      treeEnv = kept; mk('arbres');
+      lamps(data.roads, data.bld); mk('lampes');
     }
-    blocks(list);
+    blocks(list); mk('blocs');
     // Pousse: lancée une fois à l'arrivée des environs; un relief qui arrive pendant la pousse ne la relance pas (les maisons
     // s'enfonçaient et remontaient).
     if (growNext && data && !modelOnly && !growing) startGrow(); else if (!growing) { growU.uGrow.value = 1e4; growU.uReveal.value = 1e6; }
@@ -1632,8 +1645,10 @@ return smoothstep(-0.0047,0.0047,uTanSun-m);}
     const subj = focus ? drawn.map(d => d.p).filter(r => r !== focus && ringsOverlap(r, focus)) : [];
     if (!keepView) pickView(focus || [], [...others, ...drawn.map(d => d.p)].filter(r => r !== focus && !subj.includes(r)), data ? data.roads : [], kept, subj, focusH);
     if (sat) { if (!modelOnly || !satObj) placeSat(); else satTrees(); }
+    mk('vue');
     cloudLift = Math.max(150, terrain.maxWithin(1000) - T0.y + 60); // les nuages passent au-dessus des collines voisines
     dirty = true;
+    if (tk && performance.now() - tk[0][1] > 150) console.debug(`[scene3d] rebuild ${(performance.now() - tk[0][1]).toFixed(0)} ms: ` + tk.slice(1).map((e, i) => `${e[0]} ${(e[1] - tk[i][1]).toFixed(0)}${e[2] !== (tk[i][2] || 0) ? ` (${((e[2] - (tk[i][2] || 0)) / 1000).toFixed(0)}k sommets)` : ''}`).join(', '));
   }
 
   // ---- interaction: un doigt (ou la souris) tourne et monte, deux doigts pincent pour s'approcher, molette ou

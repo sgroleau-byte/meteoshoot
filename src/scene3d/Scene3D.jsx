@@ -15,6 +15,13 @@ import { loadSatImage } from './satDrape.js';
 import { useIsMobile } from '../hooks/useIsMobile.js';
 import { satKey } from './poseRef.js';
 
+// Chronomètre de développement: durée de chaque étape du clic sur 3D (moteur, projet, environs, relief) dans la console,
+// pour voir où passe le temps avant la première image (voir l'ouverture en étapes, v633.270).
+const timed = import.meta.env.DEV ? (label, fn) => { const t0 = performance.now(); const r = fn(); console.debug(`[scene3d] ${label}: ${(performance.now() - t0).toFixed(0)} ms`); return r; } : (label, fn) => fn();
+// Après la prochaine image à l'écran (requestAnimationFrame puis un tour de boucle); onglet caché (pas d'image): au plus
+// 120 ms, pour que la scène se construise quand même.
+const nextPaint = () => new Promise(res => { let once = false; const go = () => { if (!once) { once = true; setTimeout(res, 0); } }; requestAnimationFrame(go); setTimeout(go, 120); });
+
 // Origine du moteur arrondie comme sceneKey (data.js). Un placement gardé porte o: [lat, lng], l'origine du moment:
 // si la position du projet a été corrigée depuis, l'écart est rendu en mètres pour que la maison reste au même endroit
 // du terrain (sous sa forme). Trop loin (adresse changée): pose par défaut. o et t (heure du déplacement, pour savoir
@@ -187,24 +194,41 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
     // donc en série). Ce sont des promesses gardées en mémoire par lieu: les demander tôt ne coûte rien de plus.
     const pScene = loadScene(lat, lng), pTerrain = loadTerrain(lat, lng), pFall = loadFallTemps(lat, lng);
     pScene.catch(() => {}); pTerrain.catch(() => {}); pFall.catch(() => {}); // traitées plus bas; évite l'avertissement si le moteur ne se charge pas
-    import('./engine.js').then(m => {
+    import('./engine.js').then(async m => {
       if (cancelled || !box.current) return;
+      // Une image d'abord (v633.270). Le clic sur 3D est un événement discret: React vide l'effet tout de suite, et le moteur
+      // préchargé, les environs et le relief en cache (promesses déjà résolues) s'enchaînaient dans la même tâche, avant
+      // toute image: 2 à 4 s sans rien à l'écran, « l'effet d'un bouton qui ne fonctionne pas » (Stéphane, 3 novembre 2026).
+      // Ici le ciel et l'anneau d'attente s'affichent, puis le moteur se crée; relief et environs suivent, chacun après une
+      // image (voir enqueue plus bas).
+      await nextPaint(); if (cancelled || !box.current) return;
       // owner: la maison a suivi le nouveau calage de l'image à l'arrivée des environs (engine.js, followSat); gardée pour
       // son projet même si la fiche en montre déjà un autre.
-      const e = m.createScene3D(box.current, { onInfo: setInfo, onModel: (pl, owner, migrated) => {
+      const e = timed('moteur', () => m.createScene3D(box.current, { onInfo: setInfo, onModel: (pl, owner, migrated) => {
         if (migrated) { keepMigrated(owner, pl); if (owner && owner === mdlFor.current) setMdl(v => v && { ...v, pl }); return; }
         setMdl(v => v && { ...v, pl }); keep(pl);
-      } });
+      } }));
       eng.current = e; org.current = [r5(lat), r5(lng)]; mdlFor.current = null; if (zoomRef) zoomRef.current = (f) => e.zoom(f);
       if (import.meta.env.DEV) window.__scene3d = e; // inspection en développement seulement
-      e.setProject({ lat, lng, buildings, orientation });
+      timed('projet', () => e.setProject({ lat, lng, buildings, orientation }));
       e.setTime(timeMs); e.setWeather(weatherRow); setEngReady(n => n + 1); // le modèle du projet suit (effet plus bas)
       setStatus({ text: 'Environs en préparation', busy: true });
       // Environs (Overture) et relief (LiDAR) arrivent chacun de leur côté; l'anneau d'attente reste tant qu'il en manque un.
       let pending = 2, failed = false; const done = () => { pending--; if (pending <= 0 && !failed && !cancelled && eng.current === e) setStatus(null); };
-      pScene.then(d => { if (!cancelled && eng.current === e) { e.setData(d); done(); } })
+      // Chaque arrivée s'applique après une image, une à la fois; les deux déjà là (cache), le relief passe en premier: sa
+      // reconstruction est légère et fait apparaître le sol et le bâtiment du projet (fondu), celle des environs porte tout
+      // (voisins, arbres, rues, eau) et les fait pousser ensuite.
+      const steps = []; let draining = false;
+      const drain = async () => {
+        if (draining) return; draining = true;
+        try {
+          while (steps.length) { steps.sort((a, b) => a.pri - b.pri); const s = steps.shift(); await nextPaint(); if (cancelled || eng.current !== e) return; try { s.run(); } catch (err) { console.error('[scene3d] étape de construction:', err); } } // une étape qui échoue ne bloque pas la suivante
+        } finally { draining = false; }
+      };
+      const enqueue = (pri, run) => { steps.push({ pri, run }); drain(); };
+      pScene.then(d => { if (!cancelled && eng.current === e) enqueue(2, () => { timed('environs', () => e.setData(d)); done(); }); })
         .catch(err => { console.warn('[scene3d] environs indisponibles:', err); failed = true; if (!cancelled) setStatus({ text: 'Environs indisponibles, bâtiments du projet seulement', busy: false }); });
-      pTerrain.then(t => { if (!cancelled && eng.current === e) { e.setTerrain(t); if (onHorizon) { const h = e.horizonProfile(); if (h) onHorizon(h); } done(); } }) // profil d'horizon du relief réel vers la fiche (ombre du terrain)
+      pTerrain.then(t => { if (!cancelled && eng.current === e) enqueue(1, () => { timed('relief', () => e.setTerrain(t)); if (onHorizon) { const h = e.horizonProfile(); if (h) onHorizon(h); } done(); }); }) // profil d'horizon du relief réel vers la fiche (ombre du terrain)
         .catch(err => { console.warn('[scene3d] relief indisponible, sol plat:', err); done(); });
       // Gel de l'automne en cours (feuillage): sans lui, le calendrier moyen du satellite reste.
       pFall.then(f => { if (!cancelled && eng.current === e) e.setFallTemps(f); })

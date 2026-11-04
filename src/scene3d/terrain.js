@@ -151,18 +151,39 @@ function terrainFrom(ax, H0, src, flat, far0 = null) {
       // Relief d'origine des rives: grille carrée en deçà de far.r0, relief lointain précis au-delà.
       const hOrig = (x, n) => (farFn0 && x * x + n * n >= R0sq ? farFn0(x, n) : hTriOf(H0, x, n));
       const pts = []; [o, ...holes].forEach(r => r.forEach(p => pts.push([p[0], p[1], hOrig(p[0], p[1])])));
-      const surf = (x, n) => {
-        let dmin = Infinity; for (const p of pts) { const d = Math.hypot(p[0] - x, p[1] - n); if (d < dmin) dmin = d; }
-        const R = Math.max(3 * dmin, 40); let s = 0, ws = 0;
-        for (const p of pts) { const d = Math.hypot(p[0] - x, p[1] - n); if (d > R) continue; const wt = 1 / (d * d + 1); s += p[2] * wt; ws += wt; }
+      // Hauteur de l'eau en un point: moyenne des rives pondérée par l'inverse du carré de la distance (voir plus haut).
+      // Mémoire par point (v633.270): les sommets drapés de la surface sont les noeuds de la grille, les mêmes que ceux du
+      // creusement juste avant, et chaque noeud est demandé jusqu'à six fois par le drapage (coins de cellules partagés).
+      // Avant, chaque demande reparcourait deux fois tous les points de rive: 3 s de gel au clic sur 3D au Pavillon du
+      // musée (le fleuve). Deux niveaux de Map à clés numériques (x puis n): mêmes doubles, aucune conversion en texte.
+      // Points de rive en tableaux typés et distances au carré (Math.hypot est lent, et la pondération 1 / (d² + 1) n'a
+      // pas besoin de la racine): même moyenne, à l'arrondi près.
+      const memo = new Map(), NP = pts.length, PX = new Float64Array(NP), PN = new Float64Array(NP), PH = new Float64Array(NP);
+      pts.forEach((p, i) => { PX[i] = p[0]; PN[i] = p[1]; PH[i] = p[2]; });
+      const surfRaw = (x, n) => {
+        let d2min = Infinity; for (let i = 0; i < NP; i++) { const dx = PX[i] - x, dn = PN[i] - n, d2 = dx * dx + dn * dn; if (d2 < d2min) d2min = d2; }
+        const R = Math.max(3 * Math.sqrt(d2min), 40), R2 = R * R; let s = 0, ws = 0;
+        for (let i = 0; i < NP; i++) { const dx = PX[i] - x, dn = PN[i] - n, d2 = dx * dx + dn * dn; if (d2 > R2) continue; const wt = 1 / (d2 + 1); s += PH[i] * wt; ws += wt; }
         return (ws ? s / ws : hOrig(x, n)) - 0.3;
+      };
+      const surf = (x, n) => {
+        let row = memo.get(x); if (!row) { row = new Map(); memo.set(x, row); }
+        let v = row.get(n); if (v === undefined) { v = surfRaw(x, n); row.set(n, v); }
+        return v;
       };
       surfaces.set(w, surf);
       let minx = Infinity, maxx = -Infinity, minn = Infinity, maxn = -Infinity; o.forEach(p => { if (p[0] < minx) minx = p[0]; if (p[0] > maxx) maxx = p[0]; if (p[1] < minn) minn = p[1]; if (p[1] > maxn) maxn = p[1]; });
       const i0 = idx(minx), i1 = Math.min(N - 1, idx(maxx) + 1), j0 = idx(minn), j1 = Math.min(N - 1, idx(maxn) + 1);
-      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
-        const p = [ax[i], ax[j]]; if (!pointInRing(p, o) || holes.some(h => pointInRing(p, h))) continue;
-        const k = j * N + i, y = surf(p[0], p[1]) - 0.6; if (H[k] > y) H[k] = y;
+      // Appartenance par rangée (v633.270): les croisements du contour et de chaque trou avec la rangée n = ax[j] sont
+      // calculés une fois par rangée (même règle pair-impair et même formule que pointInRing: résultat identique), puis
+      // chaque noeud se classe par le nombre de croisements à sa droite. Avant, pointInRing reparcourait tout le contour
+      // pour chacun des noeuds du cadre du plan d'eau.
+      for (let j = j0; j <= j1; j++) {
+        const n = ax[j], co = rowCrossings(o, n); if (!co.length) continue; const ch = holes.map(h => rowCrossings(h, n));
+        for (let i = i0; i <= i1; i++) {
+          const x = ax[i]; if (!oddRight(co, x) || ch.some(c => oddRight(c, x))) continue;
+          const k = j * N + i, y = surf(x, n) - 0.6; if (H[k] > y) H[k] = y;
+        }
       }
       // Même creusage sur le relief lointain (plans d'eau jusqu'à 2,5 km): noeuds polaires dans le contour.
       if (far) {
@@ -182,6 +203,11 @@ function terrainFrom(ax, H0, src, flat, far0 = null) {
     // apparaissait devant les plans d'eau dont une cellule de la grille chevauche le cercle.
     if (far) for (let jd = 0; jd < far.dirs; jd++) { const b = jd * 2 * Math.PI / far.dirs; far.H[jd] = hTriOf(H, far.r0 * Math.sin(b), far.r0 * Math.cos(b)); }
   }
+  // Croisements d'un contour avec la rangée n (abscisses, croissantes), règle de pointInRing: arête comptée si ses deux
+  // bouts sont de part et d'autre de n (comparaison stricte d'un côté), abscisse par la même formule.
+  function rowCrossings(r, n) { const xs = []; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const a = r[i], b = r[j]; if ((a[1] > n) !== (b[1] > n)) xs.push(((b[0] - a[0]) * (n - a[1])) / (b[1] - a[1]) + a[0]); } return xs.sort((u, v) => u - v); }
+  // Nombre impair de croisements strictement à droite de x (recherche dichotomique dans la liste triée).
+  function oddRight(xs, x) { let lo = 0, hi = xs.length; while (lo < hi) { const m = (lo + hi) >> 1; if (xs[m] > x) hi = m; else lo = m + 1; } return ((xs.length - lo) & 1) === 1; }
   // Statistiques dans un rayon (mètres) autour de l'origine: plus haut point, utile pour placer les nuages.
   function maxWithin(r) { let m = -Infinity; for (let j = 0; j < N; j++) { if (Math.abs(ax[j]) > r) continue; for (let i = 0; i < N; i++) { if (Math.abs(ax[i]) > r) continue; const h = H[j * N + i]; if (h > m) m = h; } } return m === -Infinity ? 0 : m; }
   let hMin = Infinity, hMax = -Infinity; for (let k = 0; k < N * N; k++) { if (H[k] < hMin) hMin = H[k]; if (H[k] > hMax) hMax = H[k]; }

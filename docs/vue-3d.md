@@ -99,8 +99,10 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   lumière très diffuse sans ombre, quelques fenêtres allumées avec une lueur douce.
 - Aucune fenêtre le jour sur les bâtiments générés (mur uni, v633.261): elles ne sont pas celles du vrai bâtiment.
   Elles apparaissent, allumées, avec la tombée du jour. Les modèles importés gardent leurs propres vitrages.
-- Toits à la couleur des murs (v633.269): plus de dessus gris foncé sur les blocs générés; c'est la lumière du ciel qui
-  distingue le dessus des façades. Le bâtiment du projet suit la couleur de mur réglée dans la fiche.
+- Toits à la couleur des murs, un peu assombrie (v633.270, facteur 0,7 en linéaire, `ROOF_K` dans engine.js): plus de
+  dessus gris foncé sur les blocs générés (v633.269), mais pas non plus la couleur exacte des murs, que la lumière du ciel
+  rendait trop claire vue d'en haut (Stéphane: « mieux un peu plus foncés finalement, plus subtil qu'avant »). Le
+  bâtiment du projet suit la couleur de mur réglée dans la fiche, toit assombri de la même façon.
 
 ## Modèle d'architecte importé (octobre 2026)
 
@@ -1276,6 +1278,28 @@ importé, lui, est le fichier de l'architecte.
   versants mesurés (roof.js) pareil; la palette de gris `ROOF` est retirée. Le matériau du toit reste distinct (rugosité,
   pluie, lampadaires). Rien ne change côté serveur ni dans le cache partagé. Planche avant/après (ciel dégagé et ciel
   couvert sous la pluie) dans `_METEOSHOOT/verification_batiments_ville/planche_toits_avant_apres.png`.
+- v633.270 (3 novembre 2026), **le clic sur 3D répond tout de suite, et toits un peu plus foncés**. Stéphane: « quand
+  je clique sur le 3D, il y a un délai d'environ 3 secondes avant qu'il se passe quelque chose », puis « l'impression
+  donne l'effet d'un bouton qui fonctionne pas parce qu'il ne se passe rien ». Cause mesurée en développement (chronomètre
+  `timed` dans Scene3D.jsx et chronomètre par étape dans `rebuild`, console, développement seulement): le clic est un
+  événement discret, React vide l'effet aussitôt, et comme le moteur est préchargé et les environs et le relief déjà en
+  cache (v633.266), tout s'enchaînait dans une seule tâche de 4,1 s avant la première image: création du moteur 0,15 s,
+  relief 0,1 s, et surtout la reconstruction avec les environs 4,06 s. Dans celle-ci, l'eau prenait 3,1 s et le creusement
+  du sol 0,6 s: la hauteur de l'eau (moyenne des rives pondérée par la distance, terrain.js) reparcourait les 602 points
+  de rive du fleuve pour chacun des quelque 400 000 sommets drapés et noeuds creusés. Trois changements, même résultat
+  à l'arrondi près: mémoire des hauteurs par point (les sommets drapés sont les noeuds de la grille, déjà calculés au
+  creusement), appartenance au plan d'eau par rangée (croisements du contour calculés une fois par rangée, même règle
+  que `pointInRing`, vérifiée sur 60 000 points aléatoires) et distances au carré en tableaux typés (plus de Math.hypot).
+  Un index spatial des rives a été essayé d'abord et retiré: 1,8 fois plus lent (peu de points, beaucoup de demandes).
+  Reconstruction au Pavillon du musée: 4,06 s puis 1,0 s (sol 0,18, eau 0,18, rues 0,29, choix de la vue 0,28). Puis
+  l'ouverture en étapes dans Scene3D.jsx: une image avant tout calcul (`nextPaint`: le ciel et l'anneau d'attente
+  s'affichent au clic), le moteur, puis relief et environs chacun après une image, le relief d'abord quand les deux
+  sont là (sa reconstruction est légère et fait apparaître le sol et le bâtiment du projet en fondu; les environs
+  poussent ensuite). Tâches longues au clic: 0,14, 0,10 et 0,10 s, puis la reconstruction des environs (1,0 s en
+  développement) pendant le fondu du relief. Restes connus: en ville (Hôtel de ville) les rues drapées font 1,7 million
+  de sommets (0,47 s) et le choix de la vue 0,28 s à chaque reconstruction; les jonctions rondes des rues ne pèsent
+  rien (essai retiré). Toits: voir la règle plus haut (facteur 0,7); planche
+  `_METEOSHOOT/verification_batiments_ville/planche_toits_v633-270.jpg` (Hôtel de ville à midi, pluie du jour).
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
