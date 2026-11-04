@@ -99,10 +99,11 @@ Règle posée avec Stéphane le 5 octobre 2026: la 3D ne doit jamais tromper.
   lumière très diffuse sans ombre, quelques fenêtres allumées avec une lueur douce.
 - Aucune fenêtre le jour sur les bâtiments générés (mur uni, v633.261): elles ne sont pas celles du vrai bâtiment.
   Elles apparaissent, allumées, avec la tombée du jour. Les modèles importés gardent leurs propres vitrages.
-- Toits à la couleur des murs, un peu assombrie (v633.270, facteur 0,7 en linéaire, `ROOF_K` dans engine.js): plus de
-  dessus gris foncé sur les blocs générés (v633.269), mais pas non plus la couleur exacte des murs, que la lumière du ciel
-  rendait trop claire vue d'en haut (Stéphane: « mieux un peu plus foncés finalement, plus subtil qu'avant »). Le
-  bâtiment du projet suit la couleur de mur réglée dans la fiche, toit assombri de la même façon.
+- Toits à la couleur des murs, assombrie de 25 % à l'écran (v633.271, facteur 0,53 en linéaire, `ROOF_K` dans engine.js):
+  plus de dessus gris foncé sur les blocs générés (v633.269), mais pas non plus la couleur exacte des murs, que la lumière
+  du ciel rendait trop claire vue d'en haut (Stéphane: « mieux un peu plus foncés finalement, plus subtil qu'avant »,
+  puis 15 % en v633.270, 35 % essayé en direct, « 25 % » retenu). Le bâtiment du projet suit la couleur de mur réglée
+  dans la fiche, toit assombri de la même façon.
 
 ## Modèle d'architecte importé (octobre 2026)
 
@@ -1300,6 +1301,9 @@ importé, lui, est le fichier de l'architecte.
   de sommets (0,47 s) et le choix de la vue 0,28 s à chaque reconstruction; les jonctions rondes des rues ne pèsent
   rien (essai retiré). Toits: voir la règle plus haut (facteur 0,7); planche
   `_METEOSHOOT/verification_batiments_ville/planche_toits_v633-270.jpg` (Hôtel de ville à midi, pluie du jour).
+- v633.271 (3 novembre 2026), **toits 25 % plus foncés que les murs**: Stéphane, après la v633.270 (« beaucoup mieux pour
+  l'impression de délai! »): « pour les toits, met ça à 35 % », puis, la vue locale sous les yeux, « 25 % ». `ROOF_K`
+  passe de 0,7 à 0,53 en linéaire (0,75 ^ 2,2). Rien d'autre ne change.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).

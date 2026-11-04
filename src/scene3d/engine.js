@@ -328,9 +328,10 @@ c+=texture2D(tBloom,vUv).rgb*uBloom;c+=flare();c=aces(c);gl_FragColor=vec4(rain(
 const PAL_RES = ['#8f4e3a', '#a0624c', '#7a4a3a', '#b07d5e', '#9c7a62', '#6e5a50', '#b8957a', '#d2c2a4', '#8c6b58'];
 // Toits: la couleur des murs, un peu assombrie (v633.270). Historique: palette de gris foncés jusqu'à la v633.268 (dessus
 // gris sur tous les blocs), même couleur que les murs en v633.269 (3 novembre 2026); le même jour, Stéphane: « mieux avec les
-// toits un peu plus foncés finalement, plus subtil qu'avant ». Facteur en linéaire (0,7, soit environ 15 % de moins à
-// l'écran); le dessus, qui reçoit plus de lumière du ciel que les façades, reste lisible sans redevenir gris.
-const ROOF_K = 0.7, roofOf = (c) => c.clone().multiplyScalar(ROOF_K);
+// toits un peu plus foncés finalement, plus subtil qu'avant »: 0,7 en linéaire (15 % de moins à l'écran) en v633.270,
+// puis « met ça à 35 % », vu en direct et ramené à « 25 % » (v633.271): 0,53 en linéaire, soit 25 % de moins à l'écran
+// (0,75 ^ 2,2). Le dessus, qui reçoit plus de lumière du ciel que les façades, garde la teinte du mur sans redevenir gris.
+const ROOF_K = 0.53, roofOf = (c) => c.clone().multiplyScalar(ROOF_K);
 // Couleur des arbres: src/scene3d/season.js (depuis le 23 octobre 2026, selon la date, le lieu et l'essence; auparavant
 // une palette d'automne fixe toute l'année).
 const GC = { park: '#66784d', pitch: '#5d8a47', play: '#b8a88e', grass: '#6f8552' };
