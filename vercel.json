@@ -4,13 +4,16 @@
   "outputDirectory": "dist",
   "functions": {
     "api/scene3d.js": {
-      "maxDuration": 90
+      "maxDuration": 90,
+      "includeFiles": "node_modules/lerc/lerc-wasm.wasm"
     },
     "api/terrain.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "node_modules/lerc/lerc-wasm.wasm"
     },
     "api/horizon.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "node_modules/lerc/lerc-wasm.wasm"
     },
     "api/goes.js": {
       "maxDuration": 30

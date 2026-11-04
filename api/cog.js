@@ -7,8 +7,12 @@
 // LERC (décodeur d'Esri, licence Apache 2.0, 4 novembre 2026: LiDAR américain USGS 3DEP servi par le Planetary Computer). Le décodage LZW suit celui de geotiff.js (EOX IT Services, licence MIT).
 
 import { inflateSync } from 'zlib';
-import * as Lerc from 'lerc';
-import { decompress as zstdDecompress } from 'fzstd';
+import { createRequire } from 'module';
+// lerc et fzstd en CommonJS: leur version ESM est un .js dans un paquet sans « type: module », que le Node de Vercel refuse
+// (SyntaxError à l'import, FUNCTION_INVOCATION_FAILED sur toute la 3D le 4 novembre 2026; en local, Node devine le module).
+const require = createRequire(import.meta.url);
+const Lerc = require('lerc');
+const { decompress: zstdDecompress } = require('fzstd');
 
 const TYPE_SIZE = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8, 16: 8, 17: 8, 18: 8 };
 const UA = 'MeteoShoot (www.meteoshoot.com)';
