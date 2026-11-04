@@ -164,7 +164,7 @@ export async function lidarHeights(lat, lng, bld, log = () => {}) {
   if (list.length) await measure(list);
   if (!seenPx && inUS(lat, lng)) { // rien lu au Canada: les tuiles 2 m de l'USGS, en une mosaïque
     usgs = await source3dep(lat, lng, bbox, log).catch((e) => { log(`hauteurs USGS: ${e.message}`); return { failed: true, list2m: [] }; });
-    failed = failed || !!(usgs && usgs.failed);
+    failed = failed || !!(usgs && usgs.failed2m);
     if (usgs && usgs.list2m.length) {
       frame(usgs.proj);
       await measure([{ coll: 'usgs-2m', read: () => Promise.all([windowMosaic(usgs.list2m, 'dsm', E0, N0, E1, N1, 2, log), windowMosaic(usgs.list2m, 'dtm', E0, N0, E1, N1, 2, log)]) }]);

@@ -164,7 +164,9 @@ export async function source3dep(lat, lng, bbox, log = () => {}) {
   if (!l1.length && !l2.length) { log('USGS: pas de LiDAR ici'); return null; }
   const zone = (l1[0] || l2[0]).zone;
   const list1m = l1.filter((it) => it.zone === zone), list2m = l2.filter((it) => it.zone === zone);
-  return { zone, proj: (la, ln) => toUTM(zone, la, ln), list1m, list2m, date: (list1m[0] || list2m[0]).date, failed: a.status === 'rejected' || b.status === 'rejected' };
+  // failed: un des deux index en panne (le relief, qui préfère le 1 m, ne se met alors pas en cache); failed2m: seulement
+  // celui des tuiles 2 m, le seul qui compte pour les bâtiments et les arbres. date2m: relevé des tuiles 2 m.
+  return { zone, proj: (la, ln) => toUTM(zone, la, ln), list1m, list2m, date: (list1m[0] || list2m[0]).date, date2m: list2m.length ? list2m[0].date : null, failed: a.status === 'rejected' || b.status === 'rejected', failed2m: b.status === 'rejected' };
 }
 
 if (process.argv[1] && process.argv[1].endsWith('lidar3dep.js')) {

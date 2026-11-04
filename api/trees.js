@@ -411,7 +411,7 @@ export async function readCanopy(lat, lng, log = () => {}) {
   }
   if (!win) { log(it || usgs ? 'LiDAR: fenêtre vide' : 'LiDAR: pas de relevé ici'); return null; }
   const { raw, seen, W, H, res, dsm, dtm } = win, proj = usgs ? usgs.proj : toLCC;
-  return { raw, seen, W, H, res, fr: frame(lat, lng, dsm, proj), date: usgs ? usgs.date : it.date, bbox, dsm: dsm.data, dtm: dtm.data, agency: usgs ? 'usgs' : 'rncan' };
+  return { raw, seen, W, H, res, fr: frame(lat, lng, dsm, proj), date: usgs ? usgs.date2m : it.date, bbox, dsm: dsm.data, dtm: dtm.data, agency: usgs ? 'usgs' : 'rncan' };
 }
 
 export async function lidarTrees(lat, lng, bld, log = () => {}, win = undefined) {
