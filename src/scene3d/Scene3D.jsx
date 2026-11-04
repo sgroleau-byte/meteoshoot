@@ -390,7 +390,7 @@ export const Scene3D = ({ lat, lng, buildings, orientation, timeMs, weatherRow, 
   const whitePill = { background: '#fff', borderRadius: '13px', padding: '4px 8px 1px 8px', userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'none' };
   const bebas = { fontSize: '17px', letterSpacing: '0.04em', lineHeight: '1' };
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 6, background: 'linear-gradient(180deg, #7397c2 0%, #9cb8d6 38%, #c3d3e2 62%, #cdd6de 100%)', overflow: 'hidden' }}>{/* ciel clair en attendant la première image; le moteur apparaît en fondu par-dessus */}
+    <div style={{ position: 'absolute', inset: 0, zIndex: 6, background: 'linear-gradient(180deg, #7397c2 0%, #9cb8d6 38%, #c3d3e2 62%, #cdd6de 100%)', overflow: 'hidden', WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}>{/* ciel clair en attendant la première image; le moteur apparaît en fondu par-dessus */}
       <div ref={box} style={{ position: 'absolute', inset: 0 }}/>
       {/* Modèle d'architecte (.kmz de SketchUp): import, puis placement. La maison se glisse dans la vue pour la déplacer
           tant que le cadenas est ouvert (fixée à chaque retour).

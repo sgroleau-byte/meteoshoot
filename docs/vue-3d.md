@@ -1359,3 +1359,9 @@ importé, lui, est le fichier de l'architecte.
 - Idée notée par Stéphane (5 octobre 2026): les saisons (feuillage l'hiver, neige au sol et sur les toits,
   idéalement d'après la hauteur de neige d'Open-Meteo).
 - iPhone et iPad: la 3D fonctionne dans la vue web; le survol n'existe pas au doigt (à valider).
+- v633.276 (4 novembre 2026), **plus de sélection de texte au doigt** (Stéphane, iPad et iPhone: « on sélectionne, ça se
+  transforme en sélection, alors que c'est comme l'outil drag »). Un appui long sur le curseur de l'heure ou la 3D, puis un
+  glisser, lançait la sélection d'iOS (loupe, poignée bleue, 3D teintée de bleu, menu Copier / Traduire) au lieu du geste.
+  Remède: `user-select: none` et `-webkit-touch-callout: none` sur tout le bloc de la carte (`ProjectDetail.jsx`: curseur,
+  carte, 3D), sur la racine de `Scene3D.jsx` et sur le canevas du moteur. Reproduit puis vérifié au simulateur iPad Air
+  (captures dans `verification_selection_ipad/`): plus de sélection, le curseur et la rotation suivent le doigt.

@@ -2437,7 +2437,10 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                 ...(showMapFull ? { position: 'fixed', top: 'env(safe-area-inset-top, 50px)', left: 0, width: '100vw', height: 'calc(100vh - env(safe-area-inset-top, 50px))', zIndex: 51, overflow: 'hidden' } : { position: 'relative', overflow: 'hidden', flex: 1 }),
                 clipPath: mapRevealed || showMapFull ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
                 WebkitClipPath: mapRevealed || showMapFull ? 'inset(0 0% 0 0)' : 'inset(0 100% 0 0)',
-                transition: 'clip-path 1.2s cubic-bezier(0.25, 0.1, 0.25, 1), -webkit-clip-path 1.2s cubic-bezier(0.25, 0.1, 0.25, 1)'
+                transition: 'clip-path 1.2s cubic-bezier(0.25, 0.1, 0.25, 1), -webkit-clip-path 1.2s cubic-bezier(0.25, 0.1, 0.25, 1)',
+                // Doigt posé ou glissé sur la carte, la 3D ou le curseur de l'heure: un geste, jamais une sélection de texte
+                // ni le menu Copier / Traduire d'iOS (iPad et iPhone, 4 novembre 2026).
+                WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none'
               }}>
                 {/* Sun time slider - new design */}
                 {(() => {

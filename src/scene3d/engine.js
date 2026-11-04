@@ -484,7 +484,7 @@ export function createScene3D(container, opts = {}) {
   R.setPixelRatio(DPR); R.setSize(W, H); R.shadowMap.enabled = true; R.shadowMap.type = PCSS_OK ? THREE.BasicShadowMap : THREE.PCFShadowMap;
   R.outputColorSpace = THREE.LinearSRGBColorSpace; R.toneMapping = THREE.NoToneMapping; R.autoClear = true;
   // Invisible jusqu'à la première image utile, puis fondu (voir frame): le conteneur montre un ciel bleu en attendant.
-  R.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none;opacity:0;transition:opacity 0.7s ease';
+  R.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;opacity:0;transition:opacity 0.7s ease';
   const createdAt = performance.now(); let terrainIn = false, shown = false, shownAt = 0;
   container.appendChild(R.domElement);
 
