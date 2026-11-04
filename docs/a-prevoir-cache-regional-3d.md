@@ -49,6 +49,24 @@ un cadre quelconque: une région américaine se découpe en une à deux heures, 
 Backblaze). À faire région par région, là où il y a vraiment des projets (Ontario, Nouvelle-Angleterre, Arizona...),
 pas pour tout le continent. Ne règle pas le relief ni le LiDAR, seulement la couche Overture.
 
+## Zones des clients: déduites des projets (décision de Stéphane, 4 novembre 2026)
+
+Idée de Stéphane: préparer d'avance la zone d'action la plus fréquente de chaque client. Deux façons envisagées; il a
+retenu la déduction plutôt qu'une question:
+
+- **Retenu: déduire la zone des projets.** Quand un client crée un projet hors des zones couvertes par les tuiles
+  Overture (manifeste: `covered`), la région (cellule de 1 degré, ou le cadre de sa ville) s'ajoute à une liste visible
+  dans le tableau de bord dieu, avec le nombre de projets et de clients qui y travaillent. On découpe ensuite les tuiles
+  de cette région (`node scripts/overture-tiles.mjs --bbox ...` puis envoi à Backblaze, une à deux heures, quelques
+  centaines de mégaoctets). Aucune question de plus à l'inscription, et la zone est toujours juste.
+- Écarté pour l'instant: un troisième écran à la première ouverture (après drone et vidéo), « Où fais-tu la plupart de
+  tes shootings? ». Prépare la zone avant le premier projet, mais la réponse est souvent vague.
+- Ce qui se prépare par zone, ce sont les données brutes (tuiles Overture; avec le cache régional, aussi les fenêtres
+  LiDAR et l'imagerie d'une ville), pas les scènes, qui restent calculées au point exact du projet. Gain attendu hors
+  Québec: environ 30 s à 10 à 15 s au premier chargement avec les tuiles seules, quelques secondes avec le cache régional.
+- Limite: la découpe tourne sur le Mac de Stéphane (DuckDB, au-delà des 5 minutes d'une fonction Vercel). Au début, la
+  liste dans dieu et une découpe lancée à la main; un serveur de calcul à part seulement si les régions se multiplient.
+
 ## Quand s'en occuper
 
 Seulement si des utilisateurs ouvrent beaucoup de lieux nouveaux hors des tuiles du Québec. Tant que les projets sont
