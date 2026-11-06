@@ -365,7 +365,8 @@ export const fetchWeather = async (lat, lng) => {
   const membersP = fetchOpenMeteoModel('forecast', `latitude=${lat}&longitude=${lng}&hourly=cloud_cover,cloud_cover_low&models=${BLEND_MEMBERS.map((m) => MEMBER_API[m]).filter(Boolean).join(',')}&timezone=America/Toronto&forecast_days=4`);
   const [iconRes, gfsRes, smokeMap, observed, blendModel] = await Promise.all([
     fetchOpenMeteoModel('dwd-icon', qs),
-    fetchOpenMeteoModel('gfs', qs),
+    // GFS demande en plus la visibilité (brouillard): seul modèle qui la donne au Québec, voir FOG_KEYS_GFS
+    fetchOpenMeteoModel('gfs', qs.replace('cloudcover_low&', 'cloudcover_low,visibility&')),
     fetchSmoke(lat, lng),   // ne rejette jamais: {} si pas de fumee / hors saison / panne
     getWeatherSim() ? Promise.resolve(null) : fetchObserved(lat, lng),   // satellite et aéroports; ne rejette jamais: null
     loadBlendModel(),
@@ -434,6 +435,7 @@ export const fetchWeather = async (lat, lng) => {
   HOURLY_KEYS.forEach((k) => { data.hourly[k] = []; });
   DAILY_KEYS.forEach((k) => { data.daily[k] = []; });
   data.daily.model = []; // 'icon' ou 'gfs' par jour: l'indice d'opportunite ne sort que sur ICON.
+  data.hourly.visibility = [];
   data.hourly.model = []; // idem par heure: les données de la 3D d'une heure viennent du même modèle (fetchSceneWeather)
 
   hourlyTimes.forEach((t) => {
@@ -446,6 +448,9 @@ export const fetchWeather = async (lat, lng) => {
       const arr = src && src.hourly ? src.hourly[k] : null;
       data.hourly[k].push(arr && si != null ? (arr[si] ?? null) : null);
     });
+    // Visibilité toujours de GFS (ICON ne la donne pas), quel que soit le modèle de l'heure
+    const gi = gfsOk ? gfsHourIdx[t] : null;
+    data.hourly.visibility.push(gi != null ? (gfs.hourly.visibility?.[gi] ?? null) : null);
   });
 
   dailyTimes.forEach((t) => {
@@ -526,13 +531,23 @@ export const fetchWeather = async (lat, lng) => {
   // 90 % du temps quand les autres modèles (GEM, GFS, ECMWF, AIFS, UKMO) voient en moyenne moins de 50 % de nuages, 58 %
   // sinon; une bande éteinte donne quand même du soleil 68 % du temps quand ils voient au plus 50 %, contre 23 % sinon.
   // Ces deux cas sont marqués « incertain » (uncertain), sauf quand le ciel observé pèse déjà sur la fenêtre (obsW >= 0,3).
+  // Brouillard (6 novembre 2026): visibilité de GFS (HRRR à 3 km) sous 1 km, sans pluie ni neige à l'heure (elles font aussi
+  // chuter la visibilité). Banc, 84 matins à l'aéroport de Québec (15 août au 6 novembre 2026): les 5 matins de brouillard vus,
+  // une seule fausse alerte, mais en prévision du jour même; justesse plus tôt inconnue, d'où les 48 premières heures
+  // seulement. Le brouillard local des creux (air saturé et calme, un matin sur trois) n'est pas signalé: aucune preuve.
+  const fogUntil = Date.now() + 48 * 3600000;
+  const isFogHour = (i) => {
+    const v = data.hourly.visibility?.[i], wc = data.hourly.weathercode?.[i];
+    return v != null && v < 1000 && !(wc != null && wc >= 51) && !((data.hourly.precipitation?.[i] ?? 0) >= 0.1) && new Date(data.hourly.time[i]).getTime() <= fogUntil;
+  };
   const shootWindowStats = (centerISO, beforeMin, afterMin) => {
     if (!centerISO) return null;
     const c = new Date(centerISO).getTime();
     const start = c - beforeMin * 60000, end = c + afterMin * 60000;
-    let sumDirect = 0, sumTot = 0, cloudSum = 0, cloudN = 0, othSum = 0, othN = 0, obsSum = 0, obsN = 0, precip = false, any = false;
+    let sumDirect = 0, sumTot = 0, cloudSum = 0, cloudN = 0, othSum = 0, othN = 0, obsSum = 0, obsN = 0, precip = false, any = false, fog = false;
     for (let i = 0; i < data.hourly.time.length; i++) {
       const tt = new Date(data.hourly.time[i]).getTime();
+      if (tt >= start && tt <= end && isFogHour(i)) fog = true;  // visibilité: valeur à l'heure même, pas une moyenne
       if (tt - 3600000 < end && tt > start) {  // rayonnement Open-Meteo = moyenne de l'heure precedente [tt-1h, tt]
         any = true;
         const dr = data.hourly.direct_radiation?.[i], df = data.hourly.diffuse_radiation?.[i];
@@ -550,11 +565,11 @@ export const fetchWeather = async (lat, lng) => {
     const frac = sumTot >= 50 ? sumDirect / sumTot : null, others = othN ? othSum / othN : null;
     const lit = frac != null && frac * 100 >= SHOOT_OPP_MIN;
     const uncertain = !precip && frac != null && others != null && obsSum / obsN < 0.3 && (lit ? others >= 50 : others <= 50);
-    return { frac, cloud: cloudN ? Math.round(cloudSum / cloudN) : null, precip, uncertain };
+    return { frac, cloud: cloudN ? Math.round(cloudSum / cloudN) : null, precip, uncertain, fog };
   };
 
   const formatted = {
-    hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), gust: data.hourly.windgusts_10m?.[i] != null ? Math.round(data.hourly.windgusts_10m[i]) : null, cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, precipProb: data.hourly.precipitation_probability?.[i] ?? null, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), cloudLow: data.hourly.cloudcover_low?.[i] ?? null, smoke: smokeMap[dateOf(t)] || 0, icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]), ...radiation(data.hourly, i), model: data.hourly.model[i], ...extraCloudFields(data.hourly, i) })),
+    hourly: data.hourly.time.map((t,i) => ({ time: t, temp: Math.round(data.hourly.temperature_2m[i]), wind: Math.round(data.hourly.windspeed_10m[i]), gust: data.hourly.windgusts_10m?.[i] != null ? Math.round(data.hourly.windgusts_10m[i]) : null, cloudcover: data.hourly.cloudcover[i], precip: data.hourly.precipitation?.[i] ?? 0, precipProb: data.hourly.precipitation_probability?.[i] ?? null, sunFraction: sunlitFraction(data.hourly.direct_radiation?.[i], data.hourly.diffuse_radiation?.[i]), cloudLow: data.hourly.cloudcover_low?.[i] ?? null, smoke: smokeMap[dateOf(t)] || 0, icon: weatherCodeIcon[data.hourly.weathercode[i]] || 'cloudy', isGood: isGoodWeather(data.hourly.weathercode[i]), ...radiation(data.hourly, i), model: data.hourly.model[i], visibility: data.hourly.visibility?.[i] ?? null, fog: isFogHour(i), ...extraCloudFields(data.hourly, i) })),
     daily: data.daily.time.map((t,i) => {
       const stats = getDailyStats(t);
       // Use hourly-derived icon when available, fallback to daily weathercode

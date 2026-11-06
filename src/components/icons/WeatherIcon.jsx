@@ -106,6 +106,10 @@ export const WeatherIcon = ({ type, className = "w-6 h-6" }) => {
     'cloudy': <svg className={className} viewBox="0 0 32 32" fill="none" stroke="#808080" strokeWidth="1.5">
       <path d="M8 18c0-4 3-7 7-7s7 3 7 7c2 0 4 2 4 4s-2 4-4 4H8c-3 0-5-2.5-5-5s2-5 5-5z"/>
     </svg>,
+    // Brouillard: tracé de Lucide (cloud-fog), cadré comme le nuage voisin
+    'fog': <svg className={className} viewBox="-3 -4 30 30" fill="none" stroke="#808080" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M16 17H7"/><path d="M17 21H9"/>
+    </svg>,
     // Soleil voile (ciel couvert en altitude mais soleil qui filtre) - 5 niveaux selon la lumiere directe
     'sunny-veil-1': <SunVeil className={className} level={1}/>,
     'sunny-veil-2': <SunVeil className={className} level={2}/>,

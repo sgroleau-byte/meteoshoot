@@ -8,5 +8,6 @@ export const TBL_PREFS = isDev ? 'preferences_dev' : 'preferences';
 export const TBL_FILES = isDev ? 'project_files_dev' : 'project_files';
 export const TBL_ROUTES = isDev ? 'routes_dev' : 'routes';
 export const TBL_MODELS = isDev ? 'project_models_dev' : 'project_models'; // modèle 3D importé: une ligne par projet
+export const TBL_SKY = isDev ? 'sky_reports_dev' : 'sky_reports'; // témoins du ciel (src/weather/skyReports.js)
 export const TBL_ELEVATION = 'elevation_cache'; // shared global: no dev/prod split
 export const STORAGE_BUCKET = 'project-files';

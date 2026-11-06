@@ -6,6 +6,7 @@ import { reverseGeocode } from '../maps/google.js';
 import { formatTime } from '../utils/dates.js';
 import { fetchWeather } from '../weather/api.js';
 import { cloudcoverToIcon, veilIcon } from '../weather/iconsLogic.js';
+import { CameraIcon, SkyReportSheet } from './SkyReportSheet.jsx';
 import { fetchKp } from '../weather/kp.js';
 import { SMOKE_TINT, WeatherIcon } from './icons/WeatherIcon.jsx';
 
@@ -48,6 +49,7 @@ export const GeoHourColumn = ({ h, dailyMap }) => {
   const ssH = sun && sun.sunset ? new Date(sun.sunset).getHours() : null;
   const isNight = srH !== null && ssH !== null && (hr < srH || hr >= ssH);
   const icon = (h.icon === 'thunderstorm' || h.icon === 'snow' || h.icon === 'rain') ? h.icon
+    : h.fog ? 'fog'
     : ((!isNight && veilIcon(h.cloudcover, h.cloudLow, h.sunFraction)) || cloudcoverToIcon(h.cloudcover, isNight));
   const sunPct = h.sunFraction != null ? Math.round(h.sunFraction * 100) : null;
   const sunColor = geoSunTint(sunPct);
@@ -74,6 +76,7 @@ export const GeoHourColumn = ({ h, dailyMap }) => {
 export const GeoWeatherCard = () => {
   const { t } = useLang();
   const [geoData, setGeoData] = useState(null);
+  const [skyOpen, setSkyOpen] = useState(false);
   // Web: comportement inchangé (drapeau local). Natif: 'checking' le temps de lire la permission système.
   const [status, setStatus] = useState(() => isNative ? 'checking' : (localStorage.getItem('geo-permission') === 'granted' ? 'loading' : 'prompt'));
   // Indice Kp (activité géomagnétique), chargé une fois la météo affichée.
@@ -207,12 +210,17 @@ export const GeoWeatherCard = () => {
   // annule les 16 px de la liste en dessous; les 25 px de padding sont la respiration demandée (v633.118).
   return (
     <div className="ms-enter-geo" style={{ position: 'relative', zIndex: 2, marginTop: '-16px', marginBottom: '-16px', paddingTop: 25, paddingBottom: 25, width: '100%', overflow: 'hidden' }}>
+      <SkyReportSheet open={skyOpen} onClose={() => setSkyOpen(false)}/>
       <div style={{ zoom: scale, width: GEO_CARD_W, height: GEO_CARD_H }}>
         <div className="hour-scroll" style={{ width: GEO_CARD_W, height: GEO_CARD_H, overflowX: 'auto', overflowY: 'hidden' }}>
           <div style={{ display: 'flex', width: 'max-content', height: GEO_CARD_H }}>
             {/* Page « météo actuelle »: glisse vers la gauche au défilement. */}
             <div style={{ position: 'relative', width: GEO_CARD_W, height: GEO_CARD_H, flexShrink: 0 }}>
               <div className="font-bebas-book" style={{ position: 'absolute', left: 0, right: 0, top: 5.36, textAlign: 'center', fontSize: 18.73, letterSpacing: '0.2em', paddingLeft: '0.2em', color: '#ffffff', lineHeight: 1, whiteSpace: 'nowrap', textTransform: 'uppercase' }}>{geoData.city}</div>
+              {/* Témoin du ciel: coin haut droit, à la hauteur du nom de la ville */}
+              <button onClick={() => setSkyOpen(true)} aria-label={t('skyReport')} style={{ position: 'absolute', right: 6, top: -4, zIndex: 2, background: 'none', border: 'none', padding: 6, cursor: 'pointer', color: '#8D9898', display: 'flex', WebkitTapHighlightColor: 'transparent' }}>
+                <CameraIcon size={22}/>
+              </button>
               {/* Courbe du soleil, ton sur ton, extrémités fondues. */}
               <svg width={GEO_CARD_W} height={GEO_CARD_H} viewBox={`0 0 ${GEO_CARD_W} ${GEO_CARD_H}`} style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none' }}>
                 <defs>

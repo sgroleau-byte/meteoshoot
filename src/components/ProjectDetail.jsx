@@ -25,6 +25,7 @@ import { StarIcon } from './icons/misc.jsx';
 import { SMOKE_TINT, WeatherIcon } from './icons/WeatherIcon.jsx';
 import { DateWheelPicker, FolderCombo, TimeWheelPicker } from './pickers.jsx';
 import { rtOpenMap } from './route/RouteView.jsx';
+import { CameraIcon, SkyReportSheet } from './SkyReportSheet.jsx';
 import { WeatherRow } from './WeatherRow.jsx';
 
 export const ProjectDetail = ({ projectId, onClose }) => {
@@ -135,6 +136,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
   }, [sunHour, project?.lat, project?.lng, sunDate]);
   const mapIsNight = nightOpacity >= 1;
   const [editingName, setEditingName] = useState(false);
+  const [skyOpen, setSkyOpen] = useState(false);
   const [addressCopied, setAddressCopied] = useState(false);
   const addressCopiedTimer = React.useRef(null);
   const addressInputRef = React.useRef(null);
@@ -1991,6 +1993,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     if (origIcon === 'thunderstorm') return 'thunderstorm';
     if (origIcon === 'snow') return 'snow';
     if (origIcon === 'rain') return 'rain';
+    if (origIcon === 'fog') return 'fog';  // brouillard prévu (visibilité de GFS sous 1 km, src/weather/api.js)
     if (!isNight) {
       // Fumee de feux: signalee par la teinte de fond seulement; l'icone reste la vraie meteo.
       const veil = veilIcon(cc, cloudLow, sunFraction);
@@ -2067,7 +2070,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                       const isSunrise = sunriseH === hr;
                       const isSunset = sunsetH === hr;
                       const isNight = sunriseH !== null && sunsetH !== null && (hr < sunriseH || hr >= sunsetH);
-                      const icon = getIconFromCloudcover(h.cloudcover, h.icon, isNight, h.sunFraction, h.cloudLow, h.smoke);
+                      const icon = getIconFromCloudcover(h.cloudcover, h.fog ? 'fog' : h.icon, isNight, h.sunFraction, h.cloudLow, h.smoke);
                       // Soleil direct (lumiere qui filtre reellement): % + teinte calee sur l'echelle des icones de voile.
                       const sunPct = h.sunFraction != null ? Math.round(h.sunFraction * 100) : null;
                       const sunColor = sunPct == null ? '#6f7d7b' : sunPct >= 60 ? '#E9D27A' : sunPct >= 45 ? '#E4CB78' : sunPct >= 32 ? '#DBCD92' : sunPct >= 20 ? '#CFC8A4' : sunPct >= 10 ? '#C3BDAA' : '#A7A99C';
@@ -2133,9 +2136,16 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     <div className="pt-6 animate-fade-in" style={isMobile ? { paddingTop: 'calc(24px + 25px)', paddingBottom: 'calc(130px + env(safe-area-inset-bottom))' } : { paddingTop: 'calc(75px + env(safe-area-inset-top))', paddingBottom: '32px' }}>
       {/* Bande météo + infos: même layout que l'accueil */}
       <div className={`border-b border-adaptive py-4 ${isMobile ? 'px-4' : 'px-8'} overflow-hidden`}>
-        <button onClick={onClose} className="text-charcoal-muted hover:text-charcoal transition-colors mb-4" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
+        <div className="mb-4" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <button onClick={onClose} className="text-charcoal-muted hover:text-charcoal transition-colors" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          {/* Témoin du ciel rattaché à ce projet */}
+          <button onClick={() => setSkyOpen(true)} title={t('skyReport')} aria-label={t('skyReport')} className="text-charcoal-muted hover:text-charcoal transition-colors" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', display: 'flex' }}>
+            <CameraIcon size={28}/>
+          </button>
+        </div>
+        <SkyReportSheet open={skyOpen} onClose={() => setSkyOpen(false)} project={project}/>
         <div style={{ marginBottom: isMobile ? '8px' : '5px' }}>
           <h3 className="font-bebas-book text-charcoal flex items-center gap-2" style={{ letterSpacing: '0.04em', fontSize: isMobile ? '24px' : '35px', lineHeight: '1.1', marginBottom: '0' }}>
             {editingName ? (
@@ -2641,7 +2651,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                       {sceneWeatherRow && (() => {
                         const h = sceneWeatherRow, tt = new Date(sceneTimeMs);
                         const night = !!(st?.sunrise && st?.sunset && (tt < st.sunrise || tt >= st.sunset));
-                        const icon = getIconFromCloudcover(h.cloudcover, h.icon, night, h.sunFraction, h.cloudLow, h.smoke);
+                        const icon = getIconFromCloudcover(h.cloudcover, h.fog ? 'fog' : h.icon, night, h.sunFraction, h.cloudLow, h.smoke);
                         const sunPct = h.sunFraction != null ? Math.round(h.sunFraction * 100) : null;
                         const sunColor = sunPct == null ? '#6f7d7b' : sunPct >= 60 ? '#E9D27A' : sunPct >= 45 ? '#E4CB78' : sunPct >= 32 ? '#DBCD92' : sunPct >= 20 ? '#CFC8A4' : sunPct >= 10 ? '#C3BDAA' : '#A7A99C';
                         const pct = { fontSize: `${Math.round(16 * S)}px`, lineHeight: '1', letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center', gap: '4px' };

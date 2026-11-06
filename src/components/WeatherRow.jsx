@@ -13,6 +13,8 @@ export const weatherRowDismiss = { current: null };
 
 // Créneau incertain: boîte coupée en diagonale, jaune et orange
 const UNCERTAIN_ORANGE = '#E8823A';
+// Brouillard prévu dans le créneau: boîte gris pâle (passe avant le doré: le soleil reste caché au sol)
+const FOG_GREY = '#B4BDBB';
 
 
 export const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9, orientation = [], tapOpensDetail = false, daytime = false }) => {
@@ -133,21 +135,23 @@ export const WeatherRow = ({ daily, hourly, onDayClick, maxDays = 9, orientation
             {(() => {
               // Bande dorée étiquetée: les segments AM | PM du projet. Doré (intensité graduée) si le créneau s'annonce beau,
               // coupé en diagonale, jaune et orange, s'il est incertain (les autres modèles ne voient pas le même ciel qu'ICON, voir
-              // shootWindowStats), éteint sinon. La bande n'apparaît que si au moins un créneau est beau ou incertain. Signal simple, sans chiffres:
+              // shootWindowStats), gris pâle si du brouillard est prévu, éteint sinon. La bande n'apparaît que si au moins un créneau est
+              // beau, incertain ou dans le brouillard. Signal simple, sans chiffres:
               // Stéphane ne veut pas de statistiques qui compliquent la décision.
               const segs = shootSlots.map((slot) => {
                 const w = daytime ? (slot === 'AM' ? day.dam : day.dpm) : slot === 'AM' ? day.am : day.pm;
                 const pct = w && w.frac != null ? Math.round(w.frac * 100) : null;
                 const good = w && !w.precip && pct != null && pct >= SHOOT_OPP_MIN;
-                const unc = !!(w && w.uncertain);
+                const fog = !!(w && w.fog);
+                const unc = !fog && !!(w && w.uncertain);
                 // incertain: boîte jaune et orange (même sous une bande éteinte, le soleil peut venir)
-                return { slot, good, unc, col: good || unc ? SUN_DIRECT_COLOR(Math.max(pct ?? 0, SHOOT_OPP_MIN)) : null };
+                return { slot, good: good && !fog, unc, fog, col: fog ? FOG_GREY : good || unc ? SUN_DIRECT_COLOR(Math.max(pct ?? 0, SHOOT_OPP_MIN)) : null };
               });
-              if (!segs.some((s) => s.good || s.unc)) return null;
+              if (!segs.some((s) => s.good || s.unc || s.fog)) return null;
               return (
                 <div style={{ marginTop: '3px', display: 'flex', gap: '1.5px', width: segs.length > 1 ? '40px' : '24px' }}>
                   {segs.map((s) => (
-                    <div key={s.slot} className="font-bebas-bold" title={s.unc ? t('slotUncertain') : undefined} style={{ flex: 1, height: '12px', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', background: s.unc ? `linear-gradient(135deg, ${s.col} 50%, ${UNCERTAIN_ORANGE} 50%)` : s.good || s.unc ? s.col : 'rgba(255,255,255,0.08)', color: s.good || s.unc ? '#412402' : 'rgba(255,255,255,0.3)', fontSize: '11px', letterSpacing: '0.02em', lineHeight: 1, whiteSpace: 'nowrap' }}>
+                    <div key={s.slot} className="font-bebas-bold" title={s.fog ? t('slotFog') : s.unc ? t('slotUncertain') : undefined} style={{ flex: 1, height: '12px', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', background: s.unc ? `linear-gradient(135deg, ${s.col} 50%, ${UNCERTAIN_ORANGE} 50%)` : s.col || 'rgba(255,255,255,0.08)', color: s.fog ? '#1c2322' : s.good || s.unc ? '#412402' : 'rgba(255,255,255,0.3)', fontSize: '11px', letterSpacing: '0.02em', lineHeight: 1, whiteSpace: 'nowrap' }}>
                       <span style={{ position: 'relative', top: '1px' }}>{s.slot}</span>
                     </div>
                   ))}

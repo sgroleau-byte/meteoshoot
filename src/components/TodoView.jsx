@@ -14,6 +14,7 @@ import { UpgradeModal } from '../subscription/UpgradeModal.jsx';
 import { formatTimeSince } from '../utils/dates.js';
 import { useWeatherStatus } from '../weather/WeatherStatusProvider.jsx';
 import { GeoWeatherCard } from './GeoWeatherCard.jsx';
+import { CameraIcon, SkyReportSheet } from './SkyReportSheet.jsx';
 import { ProjectCard } from './ProjectCard.jsx';
 import { weatherRowDismiss } from './WeatherRow.jsx';
 
@@ -297,6 +298,7 @@ export const TodoView = ({ onSelect, onAddProject, addingProject, plusRef }) => 
   const [touchOnly] = useState(() => window.matchMedia('(hover: none)').matches);
   const { tier, getProjectLimit, canCreateProject } = useSubscription();
   const { t } = useLang();
+  const [skyOpen, setSkyOpen] = useState(false);
   const { bannerError, lastCachedAt } = useWeatherStatus();
   const todoProjects = projects.filter(p => p.status === ProjectStatus.TODO);
   // Regroupement par dossier client. Parcours dans l'ordre (sort_order): projet sans dossier
@@ -369,6 +371,7 @@ export const TodoView = ({ onSelect, onAddProject, addingProject, plusRef }) => 
         );
       })()}
       <UpgradeModal isOpen={showUpgradeFromTodo} onClose={() => setShowUpgradeFromTodo(false)} />
+      <SkyReportSheet open={skyOpen} onClose={() => setSkyOpen(false)}/>
       {(() => {
         // Banniere d'alerte API meteo: alignee verticalement avec le bouton + et
         // commencant horizontalement sur la 1ere stroke verticale des cartes (apres la
@@ -384,6 +387,10 @@ export const TodoView = ({ onSelect, onAddProject, addingProject, plusRef }) => 
           return (
             <div className="px-4 md:px-6" style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
               <div ref={plusRef} style={{ width: '68px', height: '88px', marginLeft: '-6px' }}/>
+              {/* Témoin du ciel (position de l'appareil, projet le plus proche rattaché) */}
+              <button onClick={() => setSkyOpen(true)} title={t('skyReport')} aria-label={t('skyReport')} className="text-charcoal-muted hover:text-charcoal transition-colors" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', marginLeft: '6px', display: 'flex' }}>
+                <CameraIcon size={30}/>
+              </button>
               {showBanner && (
                 <div role="status" aria-live="polite"
                   {...(bannerError !== 'network' ? {
