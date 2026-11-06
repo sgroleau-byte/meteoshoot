@@ -12,6 +12,7 @@ export const RetouchingView = ({ onSelect }) => {
   const { t } = useLang();
   const isMobile = useIsMobile();
   const [openActionsId, setOpenActionsId] = useState(null);
+  const [archivesOpen, setArchivesOpen] = useState(false);
   const editPrefs = getEditListPrefs(prefs);
   // Jours en retouche recalculés à minuit (app laissée ouverte) et au retour au premier plan.
   const [, setDayTick] = useState(0);
@@ -42,8 +43,17 @@ export const RetouchingView = ({ onSelect }) => {
           <div style={{ padding: isMobile ? '0 20px 14px' : '10px 34px 14px', color: '#4d5a54', fontSize: '10px', letterSpacing: '0.16em', textTransform: 'uppercase', fontFamily: EDIT_FONT }}>{legend}</div>
         </div>}
       {done.length > 0 && <>
-        <div className={isMobile ? 'px-6' : 'px-4'} style={{ paddingTop: '16px', paddingBottom: '16px', marginTop: '32px', }}><h2 className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '28px', color: '#8B9B99' }}>{t('archived')}</h2></div>
-        <div style={{ paddingBottom: '80px' }}>{done.map((p, i) => <DoneCard key={p.id} project={p} editPrefs={editPrefs} index={retouching.length + i}/>)}</div>
+        {/* Archives repliées par défaut, comme un dossier fermé; un clic sur l'en-tête les ouvre. */}
+        <div className={isMobile ? 'px-6' : 'px-4'} style={{ paddingTop: '16px', paddingBottom: '16px', marginTop: '32px', }}>
+          <h2 className="font-bebas-light" style={{ letterSpacing: '0.04em', fontSize: '28px' }}>
+            <button type="button" onClick={() => setArchivesOpen(o => !o)} aria-expanded={archivesOpen} style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#8B9B99', font: 'inherit', letterSpacing: 'inherit' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative', top: '-3px', transform: archivesOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}><path d="m9 18 6-6-6-6"/></svg>
+              {t('archived')}
+              <span style={{ color: '#4d5a54' }}>{done.length}</span>
+            </button>
+          </h2>
+        </div>
+        {archivesOpen && <div style={{ paddingBottom: '80px' }}>{done.map((p, i) => <DoneCard key={p.id} project={p} editPrefs={editPrefs} index={retouching.length + i}/>)}</div>}
       </>}
     </div>
   );
