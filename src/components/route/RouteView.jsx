@@ -5,7 +5,7 @@ import { geocodeAddress, getTravelTime } from '../../maps/google.js';
 import { useStore } from '../../projects/StoreProvider.jsx';
 import { formatDuration, formatTime } from '../../utils/dates.js';
 import { fetchWeather } from '../../weather/api.js';
-import { cloudcoverToIcon, veilIcon } from '../../weather/iconsLogic.js';
+import { cloudcoverToIcon, fogIcon, veilIcon } from '../../weather/iconsLogic.js';
 import { SMOKE_TINT, WeatherIcon } from '../icons/WeatherIcon.jsx';
 import { WeatherRow } from '../WeatherRow.jsx';
 
@@ -51,7 +51,7 @@ export const RouteHourly = ({ weather }) => {
     if (origIcon === 'thunderstorm') return 'thunderstorm';
     if (origIcon === 'snow') return 'snow';
     if (origIcon === 'rain') return 'rain';
-    if (origIcon === 'fog') return 'fog';  // brouillard prévu (visibilité de GFS sous 1 km, src/weather/api.js)
+    if (origIcon === 'fog' || origIcon === 'fog-sun') return origIcon;  // brouillard prévu (visibilité de GFS sous 1 km, src/weather/api.js)
     if (!isNight) {
       // Fumee de feux: signalee par la teinte de fond seulement; l'icone reste la vraie meteo.
       const veil = veilIcon(cc, cloudLow, sunFraction);
@@ -92,7 +92,7 @@ export const RouteHourly = ({ weather }) => {
                     const isSunrise = sunriseH === hr;
                     const isSunset = sunsetH === hr;
                     const isNight = sunriseH !== null && sunsetH !== null && (hr < sunriseH || hr >= sunsetH);
-                    const icon = getIconFromCloudcover(h.cloudcover, h.fog ? 'fog' : h.icon, isNight, h.sunFraction, h.cloudLow, h.smoke);
+                    const icon = getIconFromCloudcover(h.cloudcover, fogIcon(h, isNight) || h.icon, isNight, h.sunFraction, h.cloudLow, h.smoke);
                     const sunPct = h.sunFraction != null ? Math.round(h.sunFraction * 100) : null;
                     const sunColor = sunPct == null ? '#6f7d7b' : sunPct >= 60 ? '#E9D27A' : sunPct >= 45 ? '#E4CB78' : sunPct >= 32 ? '#DBCD92' : sunPct >= 20 ? '#CFC8A4' : sunPct >= 10 ? '#C3BDAA' : '#A7A99C';
                     const rainPct = h.precipProb != null ? Math.round(h.precipProb) : null;

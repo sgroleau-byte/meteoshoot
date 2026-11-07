@@ -64,6 +64,9 @@ export const SUN_DIRECT_COLOR = (pct) => pct == null ? '#6f7d7b'
   : pct >= 20 ? '#CFC8A4' : pct >= 10 ? '#C3BDAA' : '#A7A99C';
 // Seuil a partir duquel l'indice "belle opportunite" s'allume (en % de soleil direct). Calibrable.
 export const SHOOT_OPP_MIN = 50;
+// Brouillard d'une heure (7 novembre 2026): demi-soleil posé sur la nappe quand elle est mince sous un ciel dégagé et que
+// le soleil est levé (fogSun, src/weather/api.js), nuage de brouillard sinon; null sans brouillard.
+export const fogIcon = (h, isNight) => (h && h.fog ? (h.fogSun && !isNight ? 'fog-sun' : 'fog') : null);
 // Fenetres de shoot (def. Stephane), en minutes autour du lever / coucher.
 // AM = 1h avant le lever a 1h apres; PM = 1h30 avant le coucher a 1h apres.
 export const SHOOT_WINDOWS = { am: { before: 60, after: 60 }, pm: { before: 90, after: 60 } };

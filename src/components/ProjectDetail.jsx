@@ -20,7 +20,7 @@ import { linkifyPhonesInEditor } from '../utils/linkify.js';
 import { fetchSceneWeather, fetchWeather, mergeSceneWeather, peekWeather, weatherCacheKey } from '../weather/api.js';
 import { calcDeparture, calcDepartureFromShootTime } from '../weather/departure.js';
 import { getElevationProfile, isTerrainShadow } from '../weather/elevation.js';
-import { cloudcoverToIcon, veilIcon } from '../weather/iconsLogic.js';
+import { cloudcoverToIcon, fogIcon, veilIcon } from '../weather/iconsLogic.js';
 import { StarIcon } from './icons/misc.jsx';
 import { SMOKE_TINT, WeatherIcon } from './icons/WeatherIcon.jsx';
 import { DateWheelPicker, FolderCombo, TimeWheelPicker } from './pickers.jsx';
@@ -1993,7 +1993,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
     if (origIcon === 'thunderstorm') return 'thunderstorm';
     if (origIcon === 'snow') return 'snow';
     if (origIcon === 'rain') return 'rain';
-    if (origIcon === 'fog') return 'fog';  // brouillard prévu (visibilité de GFS sous 1 km, src/weather/api.js)
+    if (origIcon === 'fog' || origIcon === 'fog-sun') return origIcon;  // brouillard prévu (visibilité de GFS sous 1 km, src/weather/api.js)
     if (!isNight) {
       // Fumee de feux: signalee par la teinte de fond seulement; l'icone reste la vraie meteo.
       const veil = veilIcon(cc, cloudLow, sunFraction);
@@ -2070,7 +2070,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                       const isSunrise = sunriseH === hr;
                       const isSunset = sunsetH === hr;
                       const isNight = sunriseH !== null && sunsetH !== null && (hr < sunriseH || hr >= sunsetH);
-                      const icon = getIconFromCloudcover(h.cloudcover, h.fog ? 'fog' : h.icon, isNight, h.sunFraction, h.cloudLow, h.smoke);
+                      const icon = getIconFromCloudcover(h.cloudcover, fogIcon(h, isNight) || h.icon, isNight, h.sunFraction, h.cloudLow, h.smoke);
                       // Soleil direct (lumiere qui filtre reellement): % + teinte calee sur l'echelle des icones de voile.
                       const sunPct = h.sunFraction != null ? Math.round(h.sunFraction * 100) : null;
                       const sunColor = sunPct == null ? '#6f7d7b' : sunPct >= 60 ? '#E9D27A' : sunPct >= 45 ? '#E4CB78' : sunPct >= 32 ? '#DBCD92' : sunPct >= 20 ? '#CFC8A4' : sunPct >= 10 ? '#C3BDAA' : '#A7A99C';
@@ -2651,7 +2651,7 @@ export const ProjectDetail = ({ projectId, onClose }) => {
                       {sceneWeatherRow && (() => {
                         const h = sceneWeatherRow, tt = new Date(sceneTimeMs);
                         const night = !!(st?.sunrise && st?.sunset && (tt < st.sunrise || tt >= st.sunset));
-                        const icon = getIconFromCloudcover(h.cloudcover, h.fog ? 'fog' : h.icon, night, h.sunFraction, h.cloudLow, h.smoke);
+                        const icon = getIconFromCloudcover(h.cloudcover, fogIcon(h, night) || h.icon, night, h.sunFraction, h.cloudLow, h.smoke);
                         const sunPct = h.sunFraction != null ? Math.round(h.sunFraction * 100) : null;
                         const sunColor = sunPct == null ? '#6f7d7b' : sunPct >= 60 ? '#E9D27A' : sunPct >= 45 ? '#E4CB78' : sunPct >= 32 ? '#DBCD92' : sunPct >= 20 ? '#CFC8A4' : sunPct >= 10 ? '#C3BDAA' : '#A7A99C';
                         const pct = { fontSize: `${Math.round(16 * S)}px`, lineHeight: '1', letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center', gap: '4px' };

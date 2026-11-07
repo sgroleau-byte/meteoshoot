@@ -156,7 +156,6 @@ export const TRANSLATIONS = {
     // Weather
     weatherUnavailable: 'Météo non disponible',
     slotUncertain: 'Prévision incertaine',
-    slotFog: 'Brouillard',
     skyReport: 'Témoin du ciel', skyWhat: 'Ce que tu vois', skyTakePhoto: 'Prendre la photo du ciel', skyRetake: 'Reprendre',
     skyClear: 'Dégagé', skyClouds: 'Nuages', skyOvercast: 'Couvert', skyFog: 'Brouillard', skyRain: 'Pluie', skySnow: 'Neige',
     skyLocating: 'Recherche de ta position...', skyNoPos: 'Position introuvable : active la localisation pour enregistrer.',
@@ -418,7 +417,6 @@ export const TRANSLATIONS = {
     // Weather
     weatherUnavailable: 'Weather unavailable',
     slotUncertain: 'Uncertain forecast',
-    slotFog: 'Fog',
     skyReport: 'Sky witness', skyWhat: 'What you see', skyTakePhoto: 'Take a photo of the sky', skyRetake: 'Retake',
     skyClear: 'Clear', skyClouds: 'Clouds', skyOvercast: 'Overcast', skyFog: 'Fog', skyRain: 'Rain', skySnow: 'Snow',
     skyLocating: 'Finding your location...', skyNoPos: 'Location unavailable: turn on location to save.',

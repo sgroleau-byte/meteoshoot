@@ -5,7 +5,7 @@ import { useLang } from '../i18n/LangProvider.jsx';
 import { reverseGeocode } from '../maps/google.js';
 import { formatTime } from '../utils/dates.js';
 import { fetchWeather } from '../weather/api.js';
-import { cloudcoverToIcon, veilIcon } from '../weather/iconsLogic.js';
+import { cloudcoverToIcon, fogIcon, veilIcon } from '../weather/iconsLogic.js';
 import { CameraIcon, SkyReportSheet } from './SkyReportSheet.jsx';
 import { fetchKp } from '../weather/kp.js';
 import { SMOKE_TINT, WeatherIcon } from './icons/WeatherIcon.jsx';
@@ -49,8 +49,7 @@ export const GeoHourColumn = ({ h, dailyMap }) => {
   const ssH = sun && sun.sunset ? new Date(sun.sunset).getHours() : null;
   const isNight = srH !== null && ssH !== null && (hr < srH || hr >= ssH);
   const icon = (h.icon === 'thunderstorm' || h.icon === 'snow' || h.icon === 'rain') ? h.icon
-    : h.fog ? 'fog'
-    : ((!isNight && veilIcon(h.cloudcover, h.cloudLow, h.sunFraction)) || cloudcoverToIcon(h.cloudcover, isNight));
+    : (fogIcon(h, isNight) || (!isNight && veilIcon(h.cloudcover, h.cloudLow, h.sunFraction)) || cloudcoverToIcon(h.cloudcover, isNight));
   const sunPct = h.sunFraction != null ? Math.round(h.sunFraction * 100) : null;
   const sunColor = geoSunTint(sunPct);
   const tint = isNight ? 'rgba(250,249,247,0.05)' : (h.smoke ? SMOKE_TINT[h.smoke] : null);
